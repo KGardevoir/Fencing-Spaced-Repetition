@@ -1,0 +1,262 @@
+package com.fencing.spacedrepetition.data.repository
+
+import com.fencing.spacedrepetition.algorithm.FSRSAlgorithm
+import com.fencing.spacedrepetition.algorithm.SM2Algorithm
+import com.fencing.spacedrepetition.data.dao.CardDao
+import com.fencing.spacedrepetition.data.dao.PracticeSessionDao
+import com.fencing.spacedrepetition.data.dao.ReviewLogDao
+import com.fencing.spacedrepetition.data.model.*
+import kotlinx.coroutines.flow.Flow
+
+class CardRepository(
+    private val cardDao: CardDao,
+    private val sessionDao: PracticeSessionDao,
+    private val reviewLogDao: ReviewLogDao
+) {
+    private val fsrsAlgorithm = FSRSAlgorithm()
+    private val sm2Algorithm = SM2Algorithm()
+
+    // Card operations
+    fun getAllCards(): Flow<List<Card>> = cardDao.getAllCards()
+
+    suspend fun getCardById(cardId: Long): Card? = cardDao.getCardById(cardId)
+
+    fun getCardByIdFlow(cardId: Long): Flow<Card?> = cardDao.getCardByIdFlow(cardId)
+
+    suspend fun getDueCards(limit: Int = 100): List<Card> = cardDao.getDueCards(limit = limit)
+
+    fun getDueCardsFlow(limit: Int = 100): Flow<List<Card>> = cardDao.getDueCardsFlow(limit = limit)
+
+    fun getDueCardCount(): Flow<Int> = cardDao.getDueCardCount()
+
+    fun getCardsByCategory(category: String): Flow<List<Card>> = cardDao.getCardsByCategory(category)
+
+    suspend fun insertCard(card: Card): Long = cardDao.insertCard(card)
+
+    suspend fun updateCard(card: Card) = cardDao.updateCard(card)
+
+    suspend fun deleteCard(card: Card) {
+        cardDao.deleteCard(card)
+        reviewLogDao.deleteReviewLogsByCard(card.id)
+    }
+
+    fun getCardCount(): Flow<Int> = cardDao.getCardCount()
+
+    fun getAllCategories(): Flow<List<String>> = cardDao.getAllCategories()
+
+    // Practice session operations
+    suspend fun createPracticeSession(cardIds: List<Long>): Long {
+        val session = PracticeSession(
+            cardIds = cardIds.joinToString(","),
+            completed = false
+        )
+        return sessionDao.insertSession(session)
+    }
+
+    suspend fun getActiveSession(): PracticeSession? = sessionDao.getActiveSession()
+
+    fun getActiveSessionFlow(): Flow<PracticeSession?> = sessionDao.getActiveSessionFlow()
+
+    suspend fun getSessionById(sessionId: Long): PracticeSession? = sessionDao.getSessionById(sessionId)
+
+    suspend fun completeSession(sessionId: Long, grades: List<Grade>) {
+        val session = sessionDao.getSessionById(sessionId) ?: return
+        val updatedSession = session.copy(
+            endTime = System.currentTimeMillis(),
+            completed = true,
+            grades = grades.joinToString(",") { it.value.toString() }
+        )
+        sessionDao.updateSession(updatedSession)
+    }
+
+    fun getAllSessions(): Flow<List<PracticeSession>> = sessionDao.getAllSessions()
+
+    fun getCompletedSessions(): Flow<List<PracticeSession>> = sessionDao.getCompletedSessions()
+
+    // Review operations
+    suspend fun reviewCard(card: Card, grade: Grade, sessionId: Long? = null): Card {
+        val now = System.currentTimeMillis()
+        val elapsedDays = if (card.lastReview == 0L) 0 else
+            ((now - card.lastReview) / (1000 * 60 * 60 * 24)).toInt()
+
+        val updatedCard = when (card.algorithm) {
+            AlgorithmType.FSRS -> reviewWithFSRS(card, grade, now, elapsedDays)
+            AlgorithmType.SM2 -> reviewWithSM2(card, grade, now)
+        }
+
+        // Create review log
+        val reviewLog = ReviewLog(
+            cardId = card.id,
+            sessionId = sessionId,
+            reviewTime = now,
+            grade = grade.value,
+            algorithm = card.algorithm.name,
+            stateBefore = serializeCardState(card),
+            stateAfter = serializeCardState(updatedCard),
+            scheduledDays = updatedCard.fsrsScheduledDays,
+            elapsedDays = elapsedDays
+        )
+
+        reviewLogDao.insertReviewLog(reviewLog)
+        cardDao.updateCard(updatedCard)
+
+        return updatedCard
+    }
+
+    suspend fun reviewMultipleCards(cardsWithGrades: List<Pair<Card, Grade>>, sessionId: Long? = null) {
+        val now = System.currentTimeMillis()
+        val reviewLogs = mutableListOf<ReviewLog>()
+        val updatedCards = mutableListOf<Card>()
+
+        cardsWithGrades.forEach { (card, grade) ->
+            val elapsedDays = if (card.lastReview == 0L) 0 else
+                ((now - card.lastReview) / (1000 * 60 * 60 * 24)).toInt()
+
+            val updatedCard = when (card.algorithm) {
+                AlgorithmType.FSRS -> reviewWithFSRS(card, grade, now, elapsedDays)
+                AlgorithmType.SM2 -> reviewWithSM2(card, grade, now)
+            }
+
+            reviewLogs.add(
+                ReviewLog(
+                    cardId = card.id,
+                    sessionId = sessionId,
+                    reviewTime = now,
+                    grade = grade.value,
+                    algorithm = card.algorithm.name,
+                    stateBefore = serializeCardState(card),
+                    stateAfter = serializeCardState(updatedCard),
+                    scheduledDays = updatedCard.fsrsScheduledDays,
+                    elapsedDays = elapsedDays
+                )
+            )
+
+            updatedCards.add(updatedCard)
+        }
+
+        reviewLogDao.insertReviewLogs(reviewLogs)
+        cardDao.updateCards(updatedCards)
+    }
+
+    private fun reviewWithFSRS(card: Card, grade: Grade, now: Long, elapsedDays: Int): Card {
+        val fsrsCard = FSRSAlgorithm.FSRSCard(
+            stability = card.fsrsStability,
+            difficulty = card.fsrsDifficulty,
+            elapsedDays = elapsedDays,
+            scheduledDays = card.fsrsScheduledDays,
+            reps = card.fsrsReps,
+            lapses = card.fsrsLapses,
+            state = FSRSAlgorithm.CardState.valueOf(card.fsrsState),
+            lastReview = card.lastReview
+        )
+
+        val rating = when (grade) {
+            Grade.AGAIN -> FSRSAlgorithm.Rating.AGAIN
+            Grade.HARD -> FSRSAlgorithm.Rating.HARD
+            Grade.GOOD -> FSRSAlgorithm.Rating.GOOD
+            Grade.EASY -> FSRSAlgorithm.Rating.EASY
+        }
+
+        val schedulingInfo = fsrsAlgorithm.schedule(fsrsCard, rating, now)
+        val newCard = schedulingInfo.card
+
+        return card.copy(
+            fsrsStability = newCard.stability,
+            fsrsDifficulty = newCard.difficulty,
+            fsrsElapsedDays = newCard.elapsedDays,
+            fsrsScheduledDays = newCard.scheduledDays,
+            fsrsReps = newCard.reps,
+            fsrsLapses = newCard.lapses,
+            fsrsState = newCard.state.name,
+            lastReview = now,
+            nextReview = now + (newCard.scheduledDays * 24 * 60 * 60 * 1000L),
+            modified = now
+        )
+    }
+
+    private fun reviewWithSM2(card: Card, grade: Grade, now: Long): Card {
+        val sm2Card = SM2Algorithm.SM2Card(
+            easeFactor = card.sm2EaseFactor,
+            interval = card.sm2Interval,
+            repetitions = card.sm2Repetitions,
+            lastReview = card.lastReview
+        )
+
+        val quality = when (grade) {
+            Grade.AGAIN -> SM2Algorithm.Quality.COMPLETE_BLACKOUT
+            Grade.HARD -> SM2Algorithm.Quality.DIFFICULT
+            Grade.GOOD -> SM2Algorithm.Quality.EASY
+            Grade.EASY -> SM2Algorithm.Quality.PERFECT
+        }
+
+        val schedulingInfo = sm2Algorithm.schedule(sm2Card, quality, now)
+        val newCard = schedulingInfo.card
+
+        return card.copy(
+            sm2EaseFactor = newCard.easeFactor,
+            sm2Interval = newCard.interval,
+            sm2Repetitions = newCard.repetitions,
+            lastReview = now,
+            nextReview = schedulingInfo.nextReviewDate,
+            modified = now,
+            // Update FSRS scheduled days for consistency in UI
+            fsrsScheduledDays = newCard.interval
+        )
+    }
+
+    private fun serializeCardState(card: Card): String {
+        return when (card.algorithm) {
+            AlgorithmType.FSRS -> "S:${card.fsrsStability},D:${card.fsrsDifficulty},ST:${card.fsrsState}"
+            AlgorithmType.SM2 -> "EF:${card.sm2EaseFactor},I:${card.sm2Interval},R:${card.sm2Repetitions}"
+        }
+    }
+
+    // Review log operations
+    fun getReviewLogsByCard(cardId: Long): Flow<List<ReviewLog>> = reviewLogDao.getReviewLogsByCard(cardId)
+
+    fun getAllReviewLogs(): Flow<List<ReviewLog>> = reviewLogDao.getAllReviewLogs()
+
+    // Initialize with sample data
+    suspend fun initializeSampleData() {
+        val sampleCards = listOf(
+            Card(
+                question = "En garde position",
+                answer = "Front foot pointed forward, back foot at 90°, knees bent, weight balanced",
+                category = "Basic Stance",
+                algorithm = AlgorithmType.FSRS
+            ),
+            Card(
+                question = "Advance",
+                answer = "Front foot forward then back foot forward, maintaining en garde position",
+                category = "Footwork",
+                algorithm = AlgorithmType.FSRS
+            ),
+            Card(
+                question = "Retreat",
+                answer = "Back foot backward then front foot backward, maintaining en garde position",
+                category = "Footwork",
+                algorithm = AlgorithmType.FSRS
+            ),
+            Card(
+                question = "Lunge",
+                answer = "Extend front leg forward, back leg straight, rear arm back for balance",
+                category = "Attacks",
+                algorithm = AlgorithmType.SM2
+            ),
+            Card(
+                question = "Parry 4",
+                answer = "Blade sweeps from outside to inside, protecting the inside high line",
+                category = "Defense",
+                algorithm = AlgorithmType.SM2
+            ),
+            Card(
+                question = "Riposte",
+                answer = "Counter-attack immediately after a successful parry",
+                category = "Attacks",
+                algorithm = AlgorithmType.FSRS
+            )
+        )
+
+        cardDao.insertCards(sampleCards)
+    }
+}
