@@ -98,4 +98,10 @@ interface CardDao {
         WHERE cgc.groupId = :groupId AND c.nextReview <= :now
     """)
     fun getDueCardCountByGroup(groupId: Long, now: Long = System.currentTimeMillis()): Flow<Int>
+
+    @Query("SELECT * FROM cards WHERE question = :question LIMIT 1")
+    suspend fun findCardByQuestion(question: String): Card?
+
+    @Query("SELECT * FROM cards")
+    suspend fun getAllCardsAsList(): List<Card>
 }

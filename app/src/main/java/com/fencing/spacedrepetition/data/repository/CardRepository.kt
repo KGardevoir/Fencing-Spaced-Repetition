@@ -83,13 +83,32 @@ class CardRepository(
     ): Int {
         var importedCount = 0
         cards.forEach { (question, answer) ->
-            val card = Card(
-                question = question,
-                answer = answer,
-                algorithm = algorithm
-            )
-            val cardId = cardDao.insertCard(card)
-            groupDao.insertCardGroupCrossRef(CardGroupCrossRef(cardId, groupId))
+            val existingCard = cardDao.findCardByQuestion(question)
+            val cardId: Long
+
+            if (existingCard != null) {
+                // Update existing card's answer (preserve learning state)
+                cardDao.updateCard(existingCard.copy(
+                    answer = answer,
+                    modified = System.currentTimeMillis()
+                ))
+                cardId = existingCard.id
+            } else {
+                // Create new card
+                val card = Card(
+                    question = question,
+                    answer = answer,
+                    algorithm = algorithm
+                )
+                cardId = cardDao.insertCard(card)
+            }
+
+            // Add to group if not already in it (ignore conflict)
+            try {
+                groupDao.insertCardGroupCrossRef(CardGroupCrossRef(cardId, groupId))
+            } catch (e: Exception) {
+                // Card already in group, ignore
+            }
             importedCount++
         }
         return importedCount
@@ -101,12 +120,22 @@ class CardRepository(
     ): Int {
         var importedCount = 0
         cards.forEach { (question, answer) ->
-            val card = Card(
-                question = question,
-                answer = answer,
-                algorithm = algorithm
-            )
-            cardDao.insertCard(card)
+            val existingCard = cardDao.findCardByQuestion(question)
+            if (existingCard != null) {
+                // Update existing card's answer only (preserve learning state)
+                cardDao.updateCard(existingCard.copy(
+                    answer = answer,
+                    modified = System.currentTimeMillis()
+                ))
+            } else {
+                // Create new card
+                val card = Card(
+                    question = question,
+                    answer = answer,
+                    algorithm = algorithm
+                )
+                cardDao.insertCard(card)
+            }
             importedCount++
         }
         return importedCount
@@ -119,7 +148,27 @@ class CardRepository(
     ): Int {
         var importedCount = 0
         cards.forEachIndexed { index, card ->
-            val cardId = cardDao.insertCard(card)
+            val existingCard = cardDao.findCardByQuestion(card.question)
+            val cardId: Long
+
+            if (existingCard != null) {
+                // Update existing card with full state from import
+                val updatedCard = card.copy(
+                    id = existingCard.id,
+                    created = existingCard.created, // Preserve original creation time
+                    modified = System.currentTimeMillis()
+                )
+                cardDao.updateCard(updatedCard)
+                cardId = existingCard.id
+
+                // Clear existing group associations before re-adding
+                groupDao.deleteAllGroupsForCard(cardId)
+            } else {
+                // Create new card
+                cardId = cardDao.insertCard(card)
+            }
+
+            // Add group associations
             val groupNames = groupNamesPerCard.getOrNull(index) ?: emptyList()
             groupNames.forEach { groupName ->
                 existingGroups[groupName]?.let { groupId ->
