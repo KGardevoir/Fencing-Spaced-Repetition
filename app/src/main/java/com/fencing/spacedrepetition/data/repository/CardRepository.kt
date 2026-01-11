@@ -8,6 +8,7 @@ import com.fencing.spacedrepetition.data.dao.PracticeSessionDao
 import com.fencing.spacedrepetition.data.dao.ReviewLogDao
 import com.fencing.spacedrepetition.data.model.*
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 
 class CardRepository(
     private val cardDao: CardDao,
@@ -20,6 +21,8 @@ class CardRepository(
 
     // Card operations
     fun getAllCards(): Flow<List<Card>> = cardDao.getAllCards()
+
+    suspend fun getAllCardsSync(): List<Card> = cardDao.getAllCardsSync()
 
     suspend fun getCardById(cardId: Long): Card? = cardDao.getCardById(cardId)
 
@@ -70,6 +73,68 @@ class CardRepository(
         groupDao.deleteAllGroupsForCard(cardId)
         groupIds.forEach { groupId ->
             groupDao.insertCardGroupCrossRef(CardGroupCrossRef(cardId, groupId))
+        }
+    }
+
+    suspend fun importCardsToGroup(
+        cards: List<Pair<String, String>>,
+        groupId: Long,
+        algorithm: AlgorithmType
+    ): Int {
+        var importedCount = 0
+        cards.forEach { (question, answer) ->
+            val card = Card(
+                question = question,
+                answer = answer,
+                algorithm = algorithm
+            )
+            val cardId = cardDao.insertCard(card)
+            groupDao.insertCardGroupCrossRef(CardGroupCrossRef(cardId, groupId))
+            importedCount++
+        }
+        return importedCount
+    }
+
+    suspend fun importCards(
+        cards: List<Pair<String, String>>,
+        algorithm: AlgorithmType
+    ): Int {
+        var importedCount = 0
+        cards.forEach { (question, answer) ->
+            val card = Card(
+                question = question,
+                answer = answer,
+                algorithm = algorithm
+            )
+            cardDao.insertCard(card)
+            importedCount++
+        }
+        return importedCount
+    }
+
+    suspend fun importFullCards(
+        cards: List<Card>,
+        groupNamesPerCard: List<List<String>>,
+        existingGroups: Map<String, Long>
+    ): Int {
+        var importedCount = 0
+        cards.forEachIndexed { index, card ->
+            val cardId = cardDao.insertCard(card)
+            val groupNames = groupNamesPerCard.getOrNull(index) ?: emptyList()
+            groupNames.forEach { groupName ->
+                existingGroups[groupName]?.let { groupId ->
+                    groupDao.insertCardGroupCrossRef(CardGroupCrossRef(cardId, groupId))
+                }
+            }
+            importedCount++
+        }
+        return importedCount
+    }
+
+    suspend fun getAllCardsWithGroupNames(): List<Pair<Card, List<String>>> {
+        val cardsWithGroups = cardDao.getAllCardsWithGroups().first()
+        return cardsWithGroups.map { cardWithGroups ->
+            cardWithGroups.card to cardWithGroups.groups.map { it.name }
         }
     }
 

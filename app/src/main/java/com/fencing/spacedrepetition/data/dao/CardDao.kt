@@ -10,6 +10,9 @@ interface CardDao {
     @Query("SELECT * FROM cards ORDER BY nextReview ASC")
     fun getAllCards(): Flow<List<Card>>
 
+    @Query("SELECT * FROM cards ORDER BY nextReview ASC")
+    suspend fun getAllCardsSync(): List<Card>
+
     @Query("SELECT * FROM cards WHERE id = :cardId")
     suspend fun getCardById(cardId: Long): Card?
 
@@ -71,6 +74,14 @@ interface CardDao {
         ORDER BY c.nextReview ASC
     """)
     fun getCardsByGroup(groupId: Long): Flow<List<Card>>
+
+    @Query("""
+        SELECT c.* FROM cards c
+        INNER JOIN card_group_cross_ref cgc ON c.id = cgc.cardId
+        WHERE cgc.groupId = :groupId
+        ORDER BY c.nextReview ASC
+    """)
+    suspend fun getCardsByGroupSync(groupId: Long): List<Card>
 
     @Query("""
         SELECT c.* FROM cards c

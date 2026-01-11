@@ -50,7 +50,7 @@ class MainActivity : ComponentActivity() {
                         factory = PracticeViewModelFactory(repository)
                     )
                     val groupViewModel: GroupViewModel = viewModel(
-                        factory = GroupViewModelFactory(groupRepository)
+                        factory = GroupViewModelFactory(groupRepository, repository)
                     )
 
                     AppNavigation(
@@ -91,12 +91,13 @@ class PracticeViewModelFactory(
 }
 
 class GroupViewModelFactory(
-    private val repository: GroupRepository
+    private val groupRepository: GroupRepository,
+    private val cardRepository: CardRepository
 ) : androidx.lifecycle.ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(GroupViewModel::class.java)) {
-            return GroupViewModel(repository) as T
+            return GroupViewModel(groupRepository, cardRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

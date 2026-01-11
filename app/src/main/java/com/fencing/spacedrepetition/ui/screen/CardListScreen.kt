@@ -1,5 +1,8 @@
 package com.fencing.spacedrepetition.ui.screen
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -11,12 +14,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.ImportExportState
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -34,8 +39,29 @@ fun CardListScreen(
     val groups by groupViewModel.allGroups.collectAsState()
     val selectedGroupFilter by viewModel.selectedGroupFilter.collectAsState()
     val cardCount by viewModel.cardCount.collectAsState()
+    val importExportState by viewModel.importExportState.collectAsState()
+    val context = LocalContext.current
 
     var showDeleteDialog by remember { mutableStateOf<Card?>(null) }
+    var showMenu by remember { mutableStateOf(false) }
+
+    // File picker for import
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let {
+            viewModel.importCards(uri, context.contentResolver)
+        }
+    }
+
+    // File picker for export
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri: Uri? ->
+        uri?.let {
+            viewModel.exportAllCards(uri, context.contentResolver)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -44,6 +70,38 @@ fun CardListScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, "Back")
+                    }
+                },
+                actions = {
+                    Box {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(Icons.Default.MoreVert, "More options")
+                        }
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Import Cards") },
+                                onClick = {
+                                    showMenu = false
+                                    importLauncher.launch(arrayOf("text/plain", "text/tab-separated-values", "*/*"))
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.FileUpload, contentDescription = null)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Export All Cards") },
+                                onClick = {
+                                    showMenu = false
+                                    exportLauncher.launch("all_cards.txt")
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.FileDownload, contentDescription = null)
+                                }
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -114,7 +172,7 @@ fun CardListScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Tap + to add your first card",
+                            text = "Tap + to add a card or use menu to import",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -169,6 +227,76 @@ fun CardListScreen(
                 }
             }
         )
+    }
+
+    // Import/Export state dialogs
+    when (val state = importExportState) {
+        is ImportExportState.Loading -> {
+            AlertDialog(
+                onDismissRequest = { },
+                icon = { CircularProgressIndicator(modifier = Modifier.size(48.dp)) },
+                title = { Text("Processing...") },
+                text = { Text("Please wait while the operation completes.") },
+                confirmButton = { }
+            )
+        }
+        is ImportExportState.ImportSuccess -> {
+            AlertDialog(
+                onDismissRequest = { viewModel.resetImportExportState() },
+                icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                title = { Text("Import Complete") },
+                text = {
+                    Column {
+                        Text("Successfully imported ${state.importedCount} cards.")
+                        if (state.skippedCount > 0) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "${state.skippedCount} lines skipped due to errors:",
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            state.errors.take(5).forEach { error ->
+                                Text("• $error", style = MaterialTheme.typography.bodySmall)
+                            }
+                            if (state.errors.size > 5) {
+                                Text("...and ${state.errors.size - 5} more", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = { viewModel.resetImportExportState() }) {
+                        Text("OK")
+                    }
+                }
+            )
+        }
+        is ImportExportState.ExportSuccess -> {
+            AlertDialog(
+                onDismissRequest = { viewModel.resetImportExportState() },
+                icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                title = { Text("Export Complete") },
+                text = { Text("Successfully exported ${state.exportedCount} cards.") },
+                confirmButton = {
+                    Button(onClick = { viewModel.resetImportExportState() }) {
+                        Text("OK")
+                    }
+                }
+            )
+        }
+        is ImportExportState.Error -> {
+            AlertDialog(
+                onDismissRequest = { viewModel.resetImportExportState() },
+                icon = { Icon(Icons.Default.Error, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                title = { Text("Error") },
+                text = { Text(state.message) },
+                confirmButton = {
+                    Button(onClick = { viewModel.resetImportExportState() }) {
+                        Text("OK")
+                    }
+                }
+            )
+        }
+        is ImportExportState.Idle -> { /* No dialog */ }
     }
 }
 
