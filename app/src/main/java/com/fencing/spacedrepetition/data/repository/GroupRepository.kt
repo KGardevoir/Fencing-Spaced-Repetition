@@ -77,4 +77,24 @@ class GroupRepository(
             card to groups.map { it.name }
         }
     }
+
+    /**
+     * Ensures all group names exist, creating any that don't.
+     * Returns an updated map of group name to ID.
+     */
+    suspend fun ensureGroupsExist(groupNames: Set<String>): Map<String, Long> {
+        val existingGroups = getAllGroupsSync().associate { it.name to it.id }.toMutableMap()
+
+        groupNames.forEach { name ->
+            if (name.isNotBlank() && !existingGroups.containsKey(name)) {
+                val newGroup = Group(name = name, description = "Imported group")
+                val newId = groupDao.insertGroup(newGroup)
+                existingGroups[name] = newId
+            }
+        }
+
+        return existingGroups
+    }
+
+    suspend fun getGroupByName(name: String): Group? = groupDao.getGroupByName(name)
 }

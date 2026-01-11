@@ -13,9 +13,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.preferences.ThemeMode
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -23,6 +25,7 @@ fun HomeScreen(
     cardViewModel: CardViewModel,
     practiceViewModel: PracticeViewModel,
     groupViewModel: GroupViewModel,
+    settingsViewModel: SettingsViewModel,
     onNavigateToPractice: () -> Unit,
     onNavigateToCards: () -> Unit,
     onNavigateToGroups: () -> Unit
@@ -30,9 +33,12 @@ fun HomeScreen(
     val dueCardCount by cardViewModel.dueCardCount.collectAsState()
     val totalCards by cardViewModel.cardCount.collectAsState()
     val groups by groupViewModel.allGroups.collectAsState()
+    val themeMode by settingsViewModel.themeMode.collectAsState()
+    val cardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
 
     var showInitDialog by remember { mutableStateOf(false) }
     var showGroupSelectionDialog by remember { mutableStateOf(false) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
     var selectedGroup by remember { mutableStateOf<Group?>(null) }
 
     // Calculate due cards for selected group
@@ -50,6 +56,9 @@ fun HomeScreen(
                 actions = {
                     IconButton(onClick = onNavigateToGroups) {
                         Icon(Icons.Default.Folder, "Manage Groups")
+                    }
+                    IconButton(onClick = { showSettingsDialog = true }) {
+                        Icon(Icons.Default.Settings, "Settings")
                     }
                     IconButton(onClick = { showInitDialog = true }) {
                         Icon(Icons.Default.CloudDownload, "Load Sample Cards")
@@ -94,7 +103,7 @@ fun HomeScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Practice 3 cards, grade them at the end",
+                        text = "Practice $cardsPerSession ${if (cardsPerSession == 1) "card" else "cards"}, grade at the end",
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
@@ -176,7 +185,7 @@ fun HomeScreen(
             // Main actions
             Button(
                 onClick = {
-                    practiceViewModel.startNewSession(3, selectedGroup?.id)
+                    practiceViewModel.startNewSession(cardsPerSession, selectedGroup?.id)
                     onNavigateToPractice()
                 },
                 modifier = Modifier
@@ -296,6 +305,20 @@ fun HomeScreen(
             onDismiss = { showGroupSelectionDialog = false }
         )
     }
+
+    // Settings dialog
+    if (showSettingsDialog) {
+        val autoShowAnswer by settingsViewModel.autoShowAnswer.collectAsState()
+        SettingsDialog(
+            currentThemeMode = themeMode,
+            autoShowAnswer = autoShowAnswer,
+            cardsPerSession = cardsPerSession,
+            onThemeModeChange = { settingsViewModel.setThemeMode(it) },
+            onAutoShowAnswerChange = { settingsViewModel.setAutoShowAnswer(it) },
+            onCardsPerSessionChange = { settingsViewModel.setCardsPerSession(it) },
+            onDismiss = { showSettingsDialog = false }
+        )
+    }
 }
 
 @Composable
@@ -399,4 +422,147 @@ fun StatCard(
             )
         }
     }
+}
+
+@Composable
+fun SettingsDialog(
+    currentThemeMode: ThemeMode,
+    autoShowAnswer: Boolean,
+    cardsPerSession: Int,
+    onThemeModeChange: (ThemeMode) -> Unit,
+    onAutoShowAnswerChange: (Boolean) -> Unit,
+    onCardsPerSessionChange: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+        title = { Text("Settings") },
+        text = {
+            Column {
+                // Theme section
+                Text(
+                    "Theme",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                ThemeMode.values().forEach { mode ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onThemeModeChange(mode) }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = currentThemeMode == mode,
+                            onClick = { onThemeModeChange(mode) }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = when (mode) {
+                                    ThemeMode.SYSTEM -> "System Default"
+                                    ThemeMode.LIGHT -> "Light"
+                                    ThemeMode.DARK -> "Dark"
+                                },
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Text(
+                                text = when (mode) {
+                                    ThemeMode.SYSTEM -> "Follow device settings"
+                                    ThemeMode.LIGHT -> "Always use light theme"
+                                    ThemeMode.DARK -> "Always use dark theme"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Divider()
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Practice section
+                Text(
+                    "Practice",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Cards per session
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Cards per Session",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Text(
+                            text = "$cardsPerSession",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Slider(
+                        value = cardsPerSession.toFloat(),
+                        onValueChange = { onCardsPerSessionChange(it.toInt()) },
+                        valueRange = 1f..20f,
+                        steps = 18,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        text = "Number of cards to practice each session",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Auto-show answer
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onAutoShowAnswerChange(!autoShowAnswer) }
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Auto-show Answer",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Text(
+                            text = "Show answer immediately when viewing cards",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = autoShowAnswer,
+                        onCheckedChange = onAutoShowAnswerChange
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Done")
+            }
+        }
+    )
 }

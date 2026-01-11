@@ -75,4 +75,7 @@ interface GroupDao {
         ORDER BY g.name ASC
     """)
     suspend fun getGroupsForCardSync(cardId: Long): List<Group>
+
+    @Query("SELECT * FROM groups WHERE name = :name LIMIT 1")
+    suspend fun getGroupByName(name: String): Group?
 }

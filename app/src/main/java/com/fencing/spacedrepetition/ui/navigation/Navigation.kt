@@ -11,6 +11,7 @@ import com.fencing.spacedrepetition.ui.screen.*
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
 
 sealed class Screen(val route: String) {
     object Home : Screen("home")
@@ -27,6 +28,7 @@ fun AppNavigation(
     cardViewModel: CardViewModel,
     practiceViewModel: PracticeViewModel,
     groupViewModel: GroupViewModel,
+    settingsViewModel: SettingsViewModel,
     navController: NavHostController = rememberNavController()
 ) {
     // Store card to edit
@@ -41,6 +43,7 @@ fun AppNavigation(
                 cardViewModel = cardViewModel,
                 practiceViewModel = practiceViewModel,
                 groupViewModel = groupViewModel,
+                settingsViewModel = settingsViewModel,
                 onNavigateToPractice = {
                     navController.navigate(Screen.Practice.route)
                 },
@@ -56,6 +59,7 @@ fun AppNavigation(
         composable(Screen.Practice.route) {
             PracticeScreen(
                 viewModel = practiceViewModel,
+                settingsViewModel = settingsViewModel,
                 onNavigateToGrading = {
                     navController.navigate(Screen.Grading.route) {
                         popUpTo(Screen.Practice.route) { inclusive = false }

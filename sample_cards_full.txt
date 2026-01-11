@@ -1,0 +1,12 @@
+#FSR_EXPORT_V1
+#Question	Answer	Algorithm	NextReview	LastReview	FSRS_Stability	FSRS_Difficulty	FSRS_State	FSRS_Reps	FSRS_Lapses	FSRS_ScheduledDays	FSRS_ElapsedDays	SM2_EaseFactor	SM2_Interval	SM2_Repetitions	Groups(pipe-separated)
+Appel	A sharp stamp of the front foot to startle or distract the opponent	FSRS	0	0	0.0	0.0	NEW	0	0	0	0	2.5	0	0	Footwork|Tactics
+Passata Sotto	A low evasive action where the fencer drops under the opponent's blade	FSRS	1736640000000	1736553600000	4.5	5.2	REVIEW	3	0	1	1	2.5	0	0	Defense|Advanced
+Prise de Fer	Taking the opponent's blade and maintaining contact while attacking	FSRS	1737244800000	1736553600000	12.3	4.8	REVIEW	5	1	8	1	2.5	0	0	Blade Work|Advanced
+In Quartata	A counter-attack made while rotating the body away from the attack	SM2	1736726400000	1736553600000	0.0	0.0	NEW	0	0	2	0	2.7	2	2	Defense|Counter-attacks
+Absence of Blade	Keeping the blade away from the opponent's to avoid engagement	SM2	1737504000000	1736553600000	0.0	0.0	NEW	0	0	11	0	2.2	11	4	Tactics
+Second Intention	An attack designed to draw a response, followed by the real attack	FSRS	1736640000000	1736553600000	2.1	6.5	LEARNING	1	0	1	1	2.5	0	0	Tactics|Advanced
+Ceding Parry	Yielding to the opponent's pressure while redirecting their blade	FSRS	1736553600000	1736467200000	1.5	7.0	RELEARNING	2	2	1	1	2.5	0	0	Defense|Blade Work
+Preparations	Actions taken before launching an attack (feints, beats, pressure)	FSRS	0	0	0.0	0.0	NEW	0	0	0	0	2.5	0	0	Tactics
+Line	The path along which the blade travels during an attack or defense	SM2	1738108800000	1736553600000	0.0	0.0	NEW	0	0	18	0	2.9	18	5	Fundamentals
+Sentiment du Fer	The feeling or sense of the opponent's blade through contact	FSRS	1737849600000	1736553600000	18.7	4.2	REVIEW	7	0	15	1	2.5	0	0	Blade Work|Advanced|Fundamentals

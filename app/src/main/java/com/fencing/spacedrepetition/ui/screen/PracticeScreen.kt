@@ -13,17 +13,20 @@ import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.SessionCard
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeUiState
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PracticeScreen(
     viewModel: PracticeViewModel,
+    settingsViewModel: SettingsViewModel,
     onNavigateToGrading: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val sessionCards by viewModel.sessionCards.collectAsState()
     val currentCardIndex by viewModel.currentCardIndex.collectAsState()
+    val autoShowAnswer by settingsViewModel.autoShowAnswer.collectAsState()
 
     Scaffold(
         topBar = {
@@ -91,6 +94,7 @@ fun PracticeScreen(
                             sessionCard = sessionCards[currentCardIndex],
                             cardNumber = currentCardIndex + 1,
                             totalCards = sessionCards.size,
+                            autoShowAnswer = autoShowAnswer,
                             onNext = { viewModel.nextCard() },
                             onPrevious = if (currentCardIndex > 0) {
                                 { viewModel.previousCard() }
@@ -149,11 +153,12 @@ fun PracticeCardView(
     sessionCard: SessionCard,
     cardNumber: Int,
     totalCards: Int,
+    autoShowAnswer: Boolean = false,
     onNext: () -> Unit,
     onPrevious: (() -> Unit)?,
     onFinish: () -> Unit
 ) {
-    var showAnswer by remember { mutableStateOf(false) }
+    var showAnswer by remember(sessionCard.card.id, autoShowAnswer) { mutableStateOf(autoShowAnswer) }
 
     Column(
         modifier = Modifier
@@ -260,7 +265,7 @@ fun PracticeCardView(
             if (onPrevious != null) {
                 OutlinedButton(
                     onClick = {
-                        showAnswer = false
+                        showAnswer = autoShowAnswer
                         onPrevious()
                     }
                 ) {
@@ -276,7 +281,7 @@ fun PracticeCardView(
             if (cardNumber < totalCards) {
                 Button(
                     onClick = {
-                        showAnswer = false
+                        showAnswer = autoShowAnswer
                         onNext()
                     }
                 ) {

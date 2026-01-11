@@ -262,9 +262,15 @@ class CardViewModel(
                     return@launch
                 }
 
-                // Get existing groups for mapping
+                // Collect all unique group names from parsed cards
+                val allGroupNames = parsedCards
+                    .flatMap { it.groupNames }
+                    .filter { it.isNotBlank() }
+                    .toSet()
+
+                // Ensure all groups exist (creates missing ones automatically)
                 val groupNameMap = withContext(Dispatchers.IO) {
-                    groupRepository.getGroupNameMap()
+                    groupRepository.ensureGroupsExist(allGroupNames)
                 }
 
                 // Check if this is a full format import

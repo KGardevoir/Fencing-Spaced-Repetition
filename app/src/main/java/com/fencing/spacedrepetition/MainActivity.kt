@@ -6,9 +6,12 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fencing.spacedrepetition.data.AppDatabase
+import com.fencing.spacedrepetition.data.preferences.ThemePreferences
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.ui.navigation.AppNavigation
@@ -16,6 +19,7 @@ import com.fencing.spacedrepetition.ui.theme.FencingSpacedRepetitionTheme
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -36,8 +40,17 @@ class MainActivity : ComponentActivity() {
             groupDao = database.groupDao()
         )
 
+        // Initialize theme preferences
+        val themePreferences = ThemePreferences(applicationContext)
+
         setContent {
-            FencingSpacedRepetitionTheme {
+            // Create settings ViewModel
+            val settingsViewModel: SettingsViewModel = viewModel(
+                factory = SettingsViewModelFactory(themePreferences)
+            )
+            val themeMode by settingsViewModel.themeMode.collectAsState()
+
+            FencingSpacedRepetitionTheme(themeMode = themeMode) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -56,7 +69,8 @@ class MainActivity : ComponentActivity() {
                     AppNavigation(
                         cardViewModel = cardViewModel,
                         practiceViewModel = practiceViewModel,
-                        groupViewModel = groupViewModel
+                        groupViewModel = groupViewModel,
+                        settingsViewModel = settingsViewModel
                     )
                 }
             }
@@ -98,6 +112,18 @@ class GroupViewModelFactory(
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(GroupViewModel::class.java)) {
             return GroupViewModel(groupRepository, cardRepository) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
+    }
+}
+
+class SettingsViewModelFactory(
+    private val themePreferences: ThemePreferences
+) : androidx.lifecycle.ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(SettingsViewModel::class.java)) {
+            return SettingsViewModel(themePreferences) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
