@@ -1,8 +1,11 @@
 package com.fencing.spacedrepetition.ui.screen
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -25,7 +28,7 @@ import com.fencing.spacedrepetition.ui.viewmodel.ImportExportState
 import java.text.SimpleDateFormat
 import java.util.*
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun CardListScreen(
     viewModel: CardViewModel,
@@ -42,8 +45,15 @@ fun CardListScreen(
     val importExportState by viewModel.importExportState.collectAsState()
     val context = LocalContext.current
 
+    // Selection mode state
+    val isSelectionMode by viewModel.isSelectionMode.collectAsState()
+    val selectedCardIds by viewModel.selectedCardIds.collectAsState()
+
     var showDeleteDialog by remember { mutableStateOf<Card?>(null) }
     var showMenu by remember { mutableStateOf(false) }
+    var showBulkDeleteDialog by remember { mutableStateOf(false) }
+    var showBulkGroupDialog by remember { mutableStateOf(false) }
+    var showBulkResetDialog by remember { mutableStateOf(false) }
 
     // File picker for import
     val importLauncher = rememberLauncherForActivityResult(
@@ -63,58 +73,115 @@ fun CardListScreen(
         }
     }
 
+    // Handle back press when in selection mode
+    if (isSelectionMode) {
+        BackHandler { viewModel.exitSelectionMode() }
+    }
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("My Cards ($cardCount)") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, "Back")
-                    }
-                },
-                actions = {
-                    Box {
-                        IconButton(onClick = { showMenu = true }) {
-                            Icon(Icons.Default.MoreVert, "More options")
+            if (isSelectionMode) {
+                // Selection mode top bar
+                TopAppBar(
+                    title = { Text("${selectedCardIds.size} selected") },
+                    navigationIcon = {
+                        IconButton(onClick = { viewModel.exitSelectionMode() }) {
+                            Icon(Icons.Default.Close, "Exit selection")
                         }
-                        DropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false }
+                    },
+                    actions = {
+                        IconButton(onClick = { viewModel.selectAllCards() }) {
+                            Icon(Icons.Default.SelectAll, "Select all")
+                        }
+                        IconButton(
+                            onClick = { showBulkGroupDialog = true },
+                            enabled = selectedCardIds.isNotEmpty()
                         ) {
-                            DropdownMenuItem(
-                                text = { Text("Import Cards") },
-                                onClick = {
-                                    showMenu = false
-                                    importLauncher.launch(arrayOf("text/plain", "text/tab-separated-values", "*/*"))
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.FileUpload, contentDescription = null)
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Export All Cards") },
-                                onClick = {
-                                    showMenu = false
-                                    exportLauncher.launch("all_cards.txt")
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.FileDownload, contentDescription = null)
-                                }
-                            )
+                            Icon(Icons.Default.Folder, "Change groups")
                         }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                        IconButton(
+                            onClick = { showBulkResetDialog = true },
+                            enabled = selectedCardIds.isNotEmpty()
+                        ) {
+                            Icon(Icons.Default.Refresh, "Reset state")
+                        }
+                        IconButton(
+                            onClick = { showBulkDeleteDialog = true },
+                            enabled = selectedCardIds.isNotEmpty()
+                        ) {
+                            Icon(Icons.Default.Delete, "Delete selected")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    )
                 )
-            )
+            } else {
+                // Normal top bar
+                TopAppBar(
+                    title = { Text("My Cards ($cardCount)") },
+                    navigationIcon = {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(Icons.Default.ArrowBack, "Back")
+                        }
+                    },
+                    actions = {
+                        Box {
+                            IconButton(onClick = { showMenu = true }) {
+                                Icon(Icons.Default.MoreVert, "More options")
+                            }
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Select Cards") },
+                                    onClick = {
+                                        showMenu = false
+                                        viewModel.toggleSelectionMode()
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.CheckBox, contentDescription = null)
+                                    }
+                                )
+                                Divider()
+                                DropdownMenuItem(
+                                    text = { Text("Import Cards") },
+                                    onClick = {
+                                        showMenu = false
+                                        importLauncher.launch(arrayOf("text/plain", "text/tab-separated-values", "*/*"))
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.FileUpload, contentDescription = null)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Export All Cards") },
+                                    onClick = {
+                                        showMenu = false
+                                        exportLauncher.launch("all_cards.txt")
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.FileDownload, contentDescription = null)
+                                    }
+                                )
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                )
+            }
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = onNavigateToAddCard,
-                containerColor = MaterialTheme.colorScheme.primary
-            ) {
-                Icon(Icons.Default.Add, "Add Card")
+            if (!isSelectionMode) {
+                FloatingActionButton(
+                    onClick = onNavigateToAddCard,
+                    containerColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Icon(Icons.Default.Add, "Add Card")
+                }
             }
         }
     ) { paddingValues ->
@@ -192,8 +259,17 @@ fun CardListScreen(
                         CardListItem(
                             card = card,
                             groups = cardGroups,
+                            isSelectionMode = isSelectionMode,
+                            isSelected = card.id in selectedCardIds,
                             onEdit = { onNavigateToEditCard(card) },
-                            onDelete = { showDeleteDialog = card }
+                            onDelete = { showDeleteDialog = card },
+                            onToggleSelection = { viewModel.toggleCardSelection(card.id) },
+                            onLongPress = {
+                                if (!isSelectionMode) {
+                                    viewModel.toggleSelectionMode()
+                                    viewModel.toggleCardSelection(card.id)
+                                }
+                            }
                         )
                     }
                 }
@@ -298,23 +374,171 @@ fun CardListScreen(
         }
         is ImportExportState.Idle -> { /* No dialog */ }
     }
+
+    // Bulk delete confirmation dialog
+    if (showBulkDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showBulkDeleteDialog = false },
+            icon = { Icon(Icons.Default.Delete, contentDescription = null) },
+            title = { Text("Delete ${selectedCardIds.size} Cards?") },
+            text = { Text("Are you sure you want to delete these cards? This action cannot be undone.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteSelectedCards()
+                        showBulkDeleteDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBulkDeleteDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Bulk reset state confirmation dialog
+    if (showBulkResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showBulkResetDialog = false },
+            icon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+            title = { Text("Reset Learning State?") },
+            text = { Text("Reset the learning state for ${selectedCardIds.size} cards? This will set them back to \"New\" status and clear all progress.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.resetSelectedCardsState()
+                        showBulkResetDialog = false
+                    }
+                ) {
+                    Text("Reset")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBulkResetDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Bulk change groups dialog
+    if (showBulkGroupDialog) {
+        BulkGroupDialog(
+            groups = groups,
+            onDismiss = { showBulkGroupDialog = false },
+            onConfirm = { selectedGroupIds ->
+                viewModel.updateSelectedCardsGroups(selectedGroupIds)
+                showBulkGroupDialog = false
+            }
+        )
+    }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun BulkGroupDialog(
+    groups: List<Group>,
+    onDismiss: () -> Unit,
+    onConfirm: (List<Long>) -> Unit
+) {
+    var selectedGroupIds by remember { mutableStateOf(setOf<Long>()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.Folder, contentDescription = null) },
+        title = { Text("Change Groups") },
+        text = {
+            Column {
+                Text(
+                    "Select groups for the selected cards:",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                if (groups.isEmpty()) {
+                    Text(
+                        "No groups available. Create a group first.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    groups.forEach { group ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = group.id in selectedGroupIds,
+                                onCheckedChange = { checked ->
+                                    selectedGroupIds = if (checked) {
+                                        selectedGroupIds + group.id
+                                    } else {
+                                        selectedGroupIds - group.id
+                                    }
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(group.name)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(selectedGroupIds.toList()) }) {
+                Text("Apply")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun CardListItem(
     card: Card,
     groups: List<Group>,
+    isSelectionMode: Boolean = false,
+    isSelected: Boolean = false,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onToggleSelection: () -> Unit = {},
+    onLongPress: () -> Unit = {}
 ) {
     var expanded by remember { mutableStateOf(false) }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = {
+                    if (isSelectionMode) {
+                        onToggleSelection()
+                    } else {
+                        expanded = !expanded
+                    }
+                },
+                onLongClick = onLongPress
+            ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         shape = RoundedCornerShape(12.dp),
-        onClick = { expanded = !expanded }
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected)
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            else
+                MaterialTheme.colorScheme.surface
+        )
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
@@ -324,6 +548,15 @@ fun CardListItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Selection checkbox
+                if (isSelectionMode) {
+                    Checkbox(
+                        checked = isSelected,
+                        onCheckedChange = { onToggleSelection() },
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                }
+
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = card.question,
@@ -371,15 +604,17 @@ fun CardListItem(
                     }
                 }
 
-                IconButton(onClick = { expanded = !expanded }) {
-                    Icon(
-                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = if (expanded) "Collapse" else "Expand"
-                    )
+                if (!isSelectionMode) {
+                    IconButton(onClick = { expanded = !expanded }) {
+                        Icon(
+                            imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (expanded) "Collapse" else "Expand"
+                        )
+                    }
                 }
             }
 
-            if (expanded) {
+            if (expanded && !isSelectionMode) {
                 Divider(modifier = Modifier.padding(vertical = 12.dp))
 
                 Text(

@@ -1,0 +1,15 @@
+Fleche	An explosive running attack where the back foot crosses in front of the front foot
+Balestra	A short jump forward followed immediately by a lunge
+Beat Attack	A sharp tap on the opponent's blade to deflect it before attacking
+Disengage	Moving the blade from one line to another, typically around the opponent's blade
+Coupe	A disengagement made by passing the blade over the opponent's point
+Parry 6	Blade moves from inside to outside, protecting the outside high line (flank)
+Parry 8	Blade sweeps down, protecting the low outside line
+Riposte	A counter-attack made immediately after a successful parry
+Counter-Riposte	An attack made after parrying the opponent's riposte
+Priority (Right of Way)	In foil and sabre, the fencer who initiates an attack first has priority
+Corps-a-corps	Body contact between fencers, which halts the action
+Point in Line	An extended arm with point threatening, which has priority if established before an attack
+Remise	A renewal of an attack in the same line without withdrawing the arm
+Redoublement	A new attack made after returning to en garde following an initial attack
+Compound Attack	An attack with one or more feints before the final action

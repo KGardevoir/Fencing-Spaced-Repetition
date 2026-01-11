@@ -3,6 +3,7 @@ package com.fencing.spacedrepetition.ui.screen
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -10,11 +11,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
+import java.text.SimpleDateFormat
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -39,6 +43,18 @@ fun AddEditCardScreen(
     }
 
     var showGroupSelectionSheet by remember { mutableStateOf(false) }
+    var showAdvancedSettings by remember { mutableStateOf(false) }
+    var showResetDialog by remember { mutableStateOf(false) }
+
+    // Learning state fields (only for editing)
+    var fsrsStability by remember { mutableStateOf(cardToEdit?.fsrsStability?.toString() ?: "0.0") }
+    var fsrsDifficulty by remember { mutableStateOf(cardToEdit?.fsrsDifficulty?.toString() ?: "0.0") }
+    var fsrsReps by remember { mutableStateOf(cardToEdit?.fsrsReps?.toString() ?: "0") }
+    var fsrsLapses by remember { mutableStateOf(cardToEdit?.fsrsLapses?.toString() ?: "0") }
+    var fsrsState by remember { mutableStateOf(cardToEdit?.fsrsState ?: "NEW") }
+    var sm2EaseFactor by remember { mutableStateOf(cardToEdit?.sm2EaseFactor?.toString() ?: "2.5") }
+    var sm2Interval by remember { mutableStateOf(cardToEdit?.sm2Interval?.toString() ?: "0") }
+    var sm2Repetitions by remember { mutableStateOf(cardToEdit?.sm2Repetitions?.toString() ?: "0") }
 
     val isEditing = cardToEdit != null
 
@@ -231,6 +247,211 @@ fun AddEditCardScreen(
                 }
             }
 
+            // Advanced settings (learning state) - only show when editing
+            if (isEditing && cardToEdit != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showAdvancedSettings = !showAdvancedSettings },
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Settings,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "Learning State",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                            Icon(
+                                if (showAdvancedSettings) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = if (showAdvancedSettings) "Collapse" else "Expand"
+                            )
+                        }
+
+                        // Card status summary
+                        val statusText = when {
+                            cardToEdit.fsrsState == "NEW" && cardToEdit.nextReview == 0L -> "New card"
+                            cardToEdit.nextReview <= System.currentTimeMillis() -> "Due for review"
+                            else -> {
+                                val formatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+                                "Next review: ${formatter.format(Date(cardToEdit.nextReview))}"
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            statusText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        if (showAdvancedSettings) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Divider()
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // Reset state button
+                            OutlinedButton(
+                                onClick = { showResetDialog = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error
+                                )
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Reset Learning State")
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // FSRS Parameters
+                            if (selectedAlgorithm == AlgorithmType.FSRS) {
+                                Text(
+                                    "FSRS Parameters",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                // State dropdown
+                                var stateExpanded by remember { mutableStateOf(false) }
+                                ExposedDropdownMenuBox(
+                                    expanded = stateExpanded,
+                                    onExpandedChange = { stateExpanded = !stateExpanded }
+                                ) {
+                                    OutlinedTextField(
+                                        value = fsrsState,
+                                        onValueChange = {},
+                                        readOnly = true,
+                                        label = { Text("State") },
+                                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = stateExpanded) },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .menuAnchor()
+                                    )
+                                    ExposedDropdownMenu(
+                                        expanded = stateExpanded,
+                                        onDismissRequest = { stateExpanded = false }
+                                    ) {
+                                        listOf("NEW", "LEARNING", "REVIEW", "RELEARNING").forEach { state ->
+                                            DropdownMenuItem(
+                                                text = { Text(state) },
+                                                onClick = {
+                                                    fsrsState = state
+                                                    stateExpanded = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = fsrsStability,
+                                        onValueChange = { fsrsStability = it },
+                                        label = { Text("Stability") },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true
+                                    )
+                                    OutlinedTextField(
+                                        value = fsrsDifficulty,
+                                        onValueChange = { fsrsDifficulty = it },
+                                        label = { Text("Difficulty") },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = fsrsReps,
+                                        onValueChange = { fsrsReps = it },
+                                        label = { Text("Reps") },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true
+                                    )
+                                    OutlinedTextField(
+                                        value = fsrsLapses,
+                                        onValueChange = { fsrsLapses = it },
+                                        label = { Text("Lapses") },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true
+                                    )
+                                }
+                            }
+
+                            // SM-2 Parameters
+                            if (selectedAlgorithm == AlgorithmType.SM2) {
+                                Text(
+                                    "SM-2 Parameters",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                OutlinedTextField(
+                                    value = sm2EaseFactor,
+                                    onValueChange = { sm2EaseFactor = it },
+                                    label = { Text("Ease Factor") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    supportingText = { Text("Default: 2.5, Range: 1.3 - 4.0") }
+                                )
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = sm2Interval,
+                                        onValueChange = { sm2Interval = it },
+                                        label = { Text("Interval (days)") },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true
+                                    )
+                                    OutlinedTextField(
+                                        value = sm2Repetitions,
+                                        onValueChange = { sm2Repetitions = it },
+                                        label = { Text("Repetitions") },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.weight(1f))
 
             // Save button
@@ -238,12 +459,24 @@ fun AddEditCardScreen(
                 onClick = {
                     if (question.isNotBlank() && answer.isNotBlank()) {
                         if (isEditing && cardToEdit != null) {
+                            // Build updated card with learning state if advanced settings were used
+                            val updatedCard = cardToEdit.copy(
+                                question = question,
+                                answer = answer,
+                                algorithm = selectedAlgorithm,
+                                // FSRS state
+                                fsrsStability = fsrsStability.toDoubleOrNull() ?: cardToEdit.fsrsStability,
+                                fsrsDifficulty = fsrsDifficulty.toDoubleOrNull() ?: cardToEdit.fsrsDifficulty,
+                                fsrsReps = fsrsReps.toIntOrNull() ?: cardToEdit.fsrsReps,
+                                fsrsLapses = fsrsLapses.toIntOrNull() ?: cardToEdit.fsrsLapses,
+                                fsrsState = fsrsState,
+                                // SM2 state
+                                sm2EaseFactor = sm2EaseFactor.toDoubleOrNull() ?: cardToEdit.sm2EaseFactor,
+                                sm2Interval = sm2Interval.toIntOrNull() ?: cardToEdit.sm2Interval,
+                                sm2Repetitions = sm2Repetitions.toIntOrNull() ?: cardToEdit.sm2Repetitions
+                            )
                             viewModel.updateCard(
-                                cardToEdit.copy(
-                                    question = question,
-                                    answer = answer,
-                                    algorithm = selectedAlgorithm
-                                ),
+                                updatedCard,
                                 groupIds = selectedGroupIds.toList(),
                                 onSuccess = onNavigateBack
                             )
@@ -350,5 +583,43 @@ fun AddEditCardScreen(
                 Spacer(modifier = Modifier.height(32.dp))
             }
         }
+    }
+
+    // Reset learning state confirmation dialog
+    if (showResetDialog && cardToEdit != null) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            icon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+            title = { Text("Reset Learning State?") },
+            text = { Text("This will reset all learning progress for this card. The card will be treated as new and all FSRS/SM-2 data will be cleared.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.resetCardState(cardToEdit.id) {
+                            // Reset local state variables too
+                            fsrsStability = "0.0"
+                            fsrsDifficulty = "0.0"
+                            fsrsReps = "0"
+                            fsrsLapses = "0"
+                            fsrsState = "NEW"
+                            sm2EaseFactor = "2.5"
+                            sm2Interval = "0"
+                            sm2Repetitions = "0"
+                        }
+                        showResetDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Reset")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

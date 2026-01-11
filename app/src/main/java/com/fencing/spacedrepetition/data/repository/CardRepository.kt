@@ -45,6 +45,35 @@ class CardRepository(
         reviewLogDao.deleteReviewLogsByCard(card.id)
     }
 
+    suspend fun deleteCardById(cardId: Long) {
+        cardDao.deleteCardById(cardId)
+        reviewLogDao.deleteReviewLogsByCard(cardId)
+    }
+
+    suspend fun resetCardState(cardId: Long) {
+        val card = cardDao.getCardById(cardId) ?: return
+        val now = System.currentTimeMillis()
+        val resetCard = card.copy(
+            // Reset FSRS state
+            fsrsStability = 0.0,
+            fsrsDifficulty = 0.0,
+            fsrsElapsedDays = 0,
+            fsrsScheduledDays = 0,
+            fsrsReps = 0,
+            fsrsLapses = 0,
+            fsrsState = "NEW",
+            // Reset SM2 state
+            sm2EaseFactor = 2.5,
+            sm2Interval = 0,
+            sm2Repetitions = 0,
+            // Reset review times
+            lastReview = 0L,
+            nextReview = 0L,
+            modified = now
+        )
+        cardDao.updateCard(resetCard)
+    }
+
     fun getCardCount(): Flow<Int> = cardDao.getCardCount()
 
     fun getAllCategories(): Flow<List<String>> = cardDao.getAllCategories()

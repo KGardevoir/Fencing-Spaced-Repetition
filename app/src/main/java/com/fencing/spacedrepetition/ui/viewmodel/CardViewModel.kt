@@ -105,6 +105,85 @@ class CardViewModel(
         }
     }
 
+    // Selection state for bulk operations
+    private val _selectedCardIds = MutableStateFlow<Set<Long>>(emptySet())
+    val selectedCardIds: StateFlow<Set<Long>> = _selectedCardIds.asStateFlow()
+
+    private val _isSelectionMode = MutableStateFlow(false)
+    val isSelectionMode: StateFlow<Boolean> = _isSelectionMode.asStateFlow()
+
+    fun toggleSelectionMode() {
+        _isSelectionMode.value = !_isSelectionMode.value
+        if (!_isSelectionMode.value) {
+            _selectedCardIds.value = emptySet()
+        }
+    }
+
+    fun exitSelectionMode() {
+        _isSelectionMode.value = false
+        _selectedCardIds.value = emptySet()
+    }
+
+    fun toggleCardSelection(cardId: Long) {
+        _selectedCardIds.value = if (cardId in _selectedCardIds.value) {
+            _selectedCardIds.value - cardId
+        } else {
+            _selectedCardIds.value + cardId
+        }
+    }
+
+    fun selectAllCards() {
+        _selectedCardIds.value = filteredCards.value.map { it.id }.toSet()
+    }
+
+    fun clearSelection() {
+        _selectedCardIds.value = emptySet()
+    }
+
+    // Bulk operations
+    fun deleteSelectedCards(onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            val idsToDelete = _selectedCardIds.value.toList()
+            idsToDelete.forEach { cardId ->
+                repository.deleteCardById(cardId)
+            }
+            _selectedCardIds.value = emptySet()
+            _isSelectionMode.value = false
+            onComplete()
+        }
+    }
+
+    fun updateSelectedCardsGroups(groupIds: List<Long>, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            val idsToUpdate = _selectedCardIds.value.toList()
+            idsToUpdate.forEach { cardId ->
+                repository.updateCardGroups(cardId, groupIds)
+            }
+            _selectedCardIds.value = emptySet()
+            _isSelectionMode.value = false
+            onComplete()
+        }
+    }
+
+    fun resetSelectedCardsState(onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            val idsToReset = _selectedCardIds.value.toList()
+            idsToReset.forEach { cardId ->
+                repository.resetCardState(cardId)
+            }
+            _selectedCardIds.value = emptySet()
+            _isSelectionMode.value = false
+            onComplete()
+        }
+    }
+
+    fun resetCardState(cardId: Long, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.resetCardState(cardId)
+            onComplete()
+        }
+    }
+
     fun initializeSampleData() {
         viewModelScope.launch {
             repository.initializeSampleData()
