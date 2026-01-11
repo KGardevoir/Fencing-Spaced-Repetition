@@ -14,7 +14,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Card
+import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -22,13 +24,15 @@ import java.util.*
 @Composable
 fun CardListScreen(
     viewModel: CardViewModel,
+    groupViewModel: GroupViewModel,
     onNavigateToAddCard: () -> Unit,
     onNavigateToEditCard: (Card) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     val allCards by viewModel.filteredCards.collectAsState()
-    val categories by viewModel.categories.collectAsState()
-    val selectedCategory by viewModel.selectedCategory.collectAsState()
+    val allCardsWithGroups by viewModel.allCardsWithGroups.collectAsState()
+    val groups by groupViewModel.allGroups.collectAsState()
+    val selectedGroupFilter by viewModel.selectedGroupFilter.collectAsState()
     val cardCount by viewModel.cardCount.collectAsState()
 
     var showDeleteDialog by remember { mutableStateOf<Card?>(null) }
@@ -61,8 +65,8 @@ fun CardListScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Category filter
-            if (categories.isNotEmpty()) {
+            // Group filter
+            if (groups.isNotEmpty()) {
                 LazyRow(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -71,16 +75,16 @@ fun CardListScreen(
                 ) {
                     item {
                         FilterChip(
-                            selected = selectedCategory == null,
-                            onClick = { viewModel.selectCategory(null) },
+                            selected = selectedGroupFilter == null,
+                            onClick = { viewModel.selectGroupFilter(null) },
                             label = { Text("All") }
                         )
                     }
-                    items(categories) { category ->
+                    items(groups) { group ->
                         FilterChip(
-                            selected = selectedCategory == category,
-                            onClick = { viewModel.selectCategory(category) },
-                            label = { Text(category) }
+                            selected = selectedGroupFilter?.id == group.id,
+                            onClick = { viewModel.selectGroupFilter(group) },
+                            label = { Text(group.name) }
                         )
                     }
                 }
@@ -104,7 +108,7 @@ fun CardListScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = if (selectedCategory != null) "No cards in this category" else "No cards yet",
+                            text = if (selectedGroupFilter != null) "No cards in this group" else "No cards yet",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -123,8 +127,13 @@ fun CardListScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(allCards, key = { it.id }) { card ->
+                        // Find groups for this card
+                        val cardGroups = allCardsWithGroups
+                            .find { it.card.id == card.id }?.groups ?: emptyList()
+
                         CardListItem(
                             card = card,
+                            groups = cardGroups,
                             onEdit = { onNavigateToEditCard(card) },
                             onDelete = { showDeleteDialog = card }
                         )
@@ -163,10 +172,11 @@ fun CardListScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun CardListItem(
     card: Card,
+    groups: List<Group>,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -200,17 +210,24 @@ fun CardListItem(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (card.category.isNotEmpty()) {
+                            if (groups.isNotEmpty()) {
                                 AssistChip(
                                     onClick = { },
                                     label = {
                                         Text(
-                                            card.category,
+                                            groups.firstOrNull()?.name ?: "",
                                             style = MaterialTheme.typography.labelSmall
                                         )
                                     },
                                     modifier = Modifier.height(24.dp)
                                 )
+                                if (groups.size > 1) {
+                                    Text(
+                                        "+${groups.size - 1}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                             AssistChip(
                                 onClick = { },
@@ -250,15 +267,35 @@ fun CardListItem(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Card stats
+                // Groups display
+                if (groups.isNotEmpty()) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        groups.forEach { group ->
+                            AssistChip(
+                                onClick = { },
+                                label = { Text(group.name, style = MaterialTheme.typography.labelSmall) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Folder,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                modifier = Modifier.height(28.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                // Algorithm chip
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    InfoChip(
-                        icon = Icons.Default.Category,
-                        label = card.category.ifEmpty { "No category" }
-                    )
                     InfoChip(
                         icon = Icons.Default.Psychology,
                         label = card.algorithm.name

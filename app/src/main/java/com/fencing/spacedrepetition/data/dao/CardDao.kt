@@ -2,6 +2,7 @@ package com.fencing.spacedrepetition.data.dao
 
 import androidx.room.*
 import com.fencing.spacedrepetition.data.model.Card
+import com.fencing.spacedrepetition.data.model.CardWithGroups
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -53,4 +54,37 @@ interface CardDao {
 
     @Query("SELECT DISTINCT category FROM cards WHERE category != '' ORDER BY category")
     fun getAllCategories(): Flow<List<String>>
+
+    // Group-related queries
+    @Transaction
+    @Query("SELECT * FROM cards WHERE id = :cardId")
+    fun getCardWithGroups(cardId: Long): Flow<CardWithGroups?>
+
+    @Transaction
+    @Query("SELECT * FROM cards ORDER BY nextReview ASC")
+    fun getAllCardsWithGroups(): Flow<List<CardWithGroups>>
+
+    @Query("""
+        SELECT c.* FROM cards c
+        INNER JOIN card_group_cross_ref cgc ON c.id = cgc.cardId
+        WHERE cgc.groupId = :groupId
+        ORDER BY c.nextReview ASC
+    """)
+    fun getCardsByGroup(groupId: Long): Flow<List<Card>>
+
+    @Query("""
+        SELECT c.* FROM cards c
+        INNER JOIN card_group_cross_ref cgc ON c.id = cgc.cardId
+        WHERE cgc.groupId = :groupId AND c.nextReview <= :now
+        ORDER BY c.nextReview ASC
+        LIMIT :limit
+    """)
+    suspend fun getDueCardsByGroup(groupId: Long, now: Long = System.currentTimeMillis(), limit: Int = 100): List<Card>
+
+    @Query("""
+        SELECT COUNT(*) FROM cards c
+        INNER JOIN card_group_cross_ref cgc ON c.id = cgc.cardId
+        WHERE cgc.groupId = :groupId AND c.nextReview <= :now
+    """)
+    fun getDueCardCountByGroup(groupId: Long, now: Long = System.currentTimeMillis()): Flow<Int>
 }

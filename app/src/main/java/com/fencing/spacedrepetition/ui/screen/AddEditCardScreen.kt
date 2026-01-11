@@ -1,5 +1,6 @@
 package com.fencing.spacedrepetition.ui.screen
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -13,18 +14,31 @@ import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AddEditCardScreen(
     viewModel: CardViewModel,
+    groupViewModel: GroupViewModel,
     cardToEdit: Card? = null,
     onNavigateBack: () -> Unit
 ) {
     var question by remember { mutableStateOf(cardToEdit?.question ?: "") }
     var answer by remember { mutableStateOf(cardToEdit?.answer ?: "") }
-    var category by remember { mutableStateOf(cardToEdit?.category ?: "") }
     var selectedAlgorithm by remember { mutableStateOf(cardToEdit?.algorithm ?: AlgorithmType.FSRS) }
+
+    // Group selection state
+    val allGroups by groupViewModel.allGroups.collectAsState()
+    val cardGroups = cardToEdit?.let { card ->
+        viewModel.getGroupsForCard(card.id).collectAsState(initial = emptyList()).value
+    } ?: emptyList()
+
+    var selectedGroupIds by remember(cardGroups) {
+        mutableStateOf(cardGroups.map { it.id }.toSet())
+    }
+
+    var showGroupSelectionSheet by remember { mutableStateOf(false) }
 
     val isEditing = cardToEdit != null
 
@@ -79,18 +93,66 @@ fun AddEditCardScreen(
                 maxLines = 8
             )
 
-            // Category input
-            OutlinedTextField(
-                value = category,
-                onValueChange = { category = it },
-                label = { Text("Category (Optional)") },
-                placeholder = { Text("e.g., Basic Stance") },
-                modifier = Modifier.fillMaxWidth(),
-                leadingIcon = {
-                    Icon(Icons.Default.Category, contentDescription = null)
-                },
-                singleLine = true
-            )
+            // Groups selection
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showGroupSelectionSheet = true }
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Folder,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Groups", style = MaterialTheme.typography.titleMedium)
+                        }
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "Edit groups",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (selectedGroupIds.isEmpty()) {
+                        Text(
+                            "No groups selected (tap to add)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            allGroups.filter { it.id in selectedGroupIds }.forEach { group ->
+                                AssistChip(
+                                    onClick = {
+                                        selectedGroupIds = selectedGroupIds - group.id
+                                    },
+                                    label = { Text(group.name) },
+                                    trailingIcon = {
+                                        Icon(
+                                            Icons.Default.Close,
+                                            contentDescription = "Remove",
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
 
             // Algorithm selection
             Card(
@@ -180,16 +242,16 @@ fun AddEditCardScreen(
                                 cardToEdit.copy(
                                     question = question,
                                     answer = answer,
-                                    category = category,
                                     algorithm = selectedAlgorithm
                                 ),
+                                groupIds = selectedGroupIds.toList(),
                                 onSuccess = onNavigateBack
                             )
                         } else {
                             viewModel.addCard(
                                 question = question,
                                 answer = answer,
-                                category = category,
+                                groupIds = selectedGroupIds.toList(),
                                 algorithm = selectedAlgorithm,
                                 onSuccess = onNavigateBack
                             )
@@ -210,6 +272,82 @@ fun AddEditCardScreen(
                     text = if (isEditing) "Save Changes" else "Add Card",
                     style = MaterialTheme.typography.titleMedium
                 )
+            }
+        }
+    }
+
+    // Group selection bottom sheet
+    if (showGroupSelectionSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showGroupSelectionSheet = false }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Text(
+                    "Select Groups",
+                    style = MaterialTheme.typography.titleLarge
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (allGroups.isEmpty()) {
+                    Text(
+                        "No groups available. Create groups from the home screen.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    allGroups.forEach { group ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedGroupIds = if (group.id in selectedGroupIds) {
+                                        selectedGroupIds - group.id
+                                    } else {
+                                        selectedGroupIds + group.id
+                                    }
+                                }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = group.id in selectedGroupIds,
+                                onCheckedChange = { checked ->
+                                    selectedGroupIds = if (checked) {
+                                        selectedGroupIds + group.id
+                                    } else {
+                                        selectedGroupIds - group.id
+                                    }
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(group.name, style = MaterialTheme.typography.bodyLarge)
+                                if (group.description.isNotEmpty()) {
+                                    Text(
+                                        group.description,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(
+                    onClick = { showGroupSelectionSheet = false },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Done")
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
             }
         }
     }

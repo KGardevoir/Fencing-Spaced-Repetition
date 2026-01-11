@@ -9,6 +9,7 @@ import androidx.navigation.compose.rememberNavController
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.ui.screen.*
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 
 sealed class Screen(val route: String) {
@@ -18,12 +19,14 @@ sealed class Screen(val route: String) {
     object CardList : Screen("card_list")
     object AddCard : Screen("add_card")
     object EditCard : Screen("edit_card/{cardId}")
+    object GroupList : Screen("group_list")
 }
 
 @Composable
 fun AppNavigation(
     cardViewModel: CardViewModel,
     practiceViewModel: PracticeViewModel,
+    groupViewModel: GroupViewModel,
     navController: NavHostController = rememberNavController()
 ) {
     // Store card to edit
@@ -37,11 +40,15 @@ fun AppNavigation(
             HomeScreen(
                 cardViewModel = cardViewModel,
                 practiceViewModel = practiceViewModel,
+                groupViewModel = groupViewModel,
                 onNavigateToPractice = {
                     navController.navigate(Screen.Practice.route)
                 },
                 onNavigateToCards = {
                     navController.navigate(Screen.CardList.route)
+                },
+                onNavigateToGroups = {
+                    navController.navigate(Screen.GroupList.route)
                 }
             )
         }
@@ -79,6 +86,7 @@ fun AppNavigation(
         composable(Screen.CardList.route) {
             CardListScreen(
                 viewModel = cardViewModel,
+                groupViewModel = groupViewModel,
                 onNavigateToAddCard = {
                     navController.navigate(Screen.AddCard.route)
                 },
@@ -95,6 +103,7 @@ fun AppNavigation(
         composable(Screen.AddCard.route) {
             AddEditCardScreen(
                 viewModel = cardViewModel,
+                groupViewModel = groupViewModel,
                 cardToEdit = null,
                 onNavigateBack = {
                     navController.popBackStack()
@@ -105,9 +114,19 @@ fun AppNavigation(
         composable("edit_card/{cardId}") {
             AddEditCardScreen(
                 viewModel = cardViewModel,
+                groupViewModel = groupViewModel,
                 cardToEdit = cardToEdit,
                 onNavigateBack = {
                     cardToEdit = null
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable(Screen.GroupList.route) {
+            GroupListScreen(
+                groupViewModel = groupViewModel,
+                onNavigateBack = {
                     navController.popBackStack()
                 }
             )

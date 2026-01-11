@@ -23,14 +23,20 @@ class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
     val currentCardIndex: StateFlow<Int> = _currentCardIndex.asStateFlow()
 
     private var sessionId: Long? = null
+    private var selectedGroupId: Long? = null
 
-    fun startNewSession(numberOfCards: Int = 3) {
+    fun startNewSession(numberOfCards: Int = 3, groupId: Long? = null) {
+        selectedGroupId = groupId
         viewModelScope.launch {
             _uiState.value = PracticeUiState.Loading
 
             try {
-                // Get due cards
-                val dueCards = repository.getDueCards(limit = numberOfCards)
+                // Get due cards, filtered by group if specified
+                val dueCards = if (groupId != null) {
+                    repository.getDueCardsByGroup(groupId, limit = numberOfCards)
+                } else {
+                    repository.getDueCards(limit = numberOfCards)
+                }
 
                 if (dueCards.isEmpty()) {
                     _uiState.value = PracticeUiState.NoCards
@@ -121,6 +127,7 @@ class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
         _sessionCards.value = emptyList()
         _currentCardIndex.value = 0
         sessionId = null
+        selectedGroupId = null
         _uiState.value = PracticeUiState.Loading
     }
 }

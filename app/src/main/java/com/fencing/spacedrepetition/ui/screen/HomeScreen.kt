@@ -1,6 +1,9 @@
 package com.fencing.spacedrepetition.ui.screen
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -9,7 +12,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -17,13 +22,23 @@ import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 fun HomeScreen(
     cardViewModel: CardViewModel,
     practiceViewModel: PracticeViewModel,
+    groupViewModel: GroupViewModel,
     onNavigateToPractice: () -> Unit,
-    onNavigateToCards: () -> Unit
+    onNavigateToCards: () -> Unit,
+    onNavigateToGroups: () -> Unit
 ) {
     val dueCardCount by cardViewModel.dueCardCount.collectAsState()
     val totalCards by cardViewModel.cardCount.collectAsState()
+    val groups by groupViewModel.allGroups.collectAsState()
 
     var showInitDialog by remember { mutableStateOf(false) }
+    var showGroupSelectionDialog by remember { mutableStateOf(false) }
+    var selectedGroup by remember { mutableStateOf<Group?>(null) }
+
+    // Calculate due cards for selected group
+    val dueForSelectedGroup = selectedGroup?.let { group ->
+        cardViewModel.getDueCardCountByGroup(group.id).collectAsState(initial = 0).value
+    } ?: dueCardCount
 
     Scaffold(
         topBar = {
@@ -33,6 +48,9 @@ fun HomeScreen(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 ),
                 actions = {
+                    IconButton(onClick = onNavigateToGroups) {
+                        Icon(Icons.Default.Folder, "Manage Groups")
+                    }
                     IconButton(onClick = { showInitDialog = true }) {
                         Icon(Icons.Default.CloudDownload, "Load Sample Cards")
                     }
@@ -108,18 +126,63 @@ fun HomeScreen(
                 )
             }
 
+            // Group selection card
+            if (groups.isNotEmpty()) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showGroupSelectionDialog = true }
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Folder,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Practice Group",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = selectedGroup?.name ?: "All Groups",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                        Text(
+                            text = "$dueForSelectedGroup due",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(
+                            Icons.Default.ArrowDropDown,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.weight(1f))
 
             // Main actions
             Button(
                 onClick = {
-                    practiceViewModel.startNewSession(3)
+                    practiceViewModel.startNewSession(3, selectedGroup?.id)
                     onNavigateToPractice()
                 },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(72.dp),
-                enabled = dueCardCount >= 1
+                enabled = dueForSelectedGroup >= 1
             ) {
                 Icon(
                     Icons.Default.PlayArrow,
@@ -133,9 +196,11 @@ fun HomeScreen(
                 )
             }
 
-            if (dueCardCount < 1) {
+            if (dueForSelectedGroup < 1) {
                 Text(
-                    text = if (totalCards == 0) "Add some cards to get started" else "No cards due right now",
+                    text = if (totalCards == 0) "Add some cards to get started"
+                           else if (selectedGroup != null) "No cards due in ${selectedGroup?.name}"
+                           else "No cards due right now",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -218,6 +283,83 @@ fun HomeScreen(
             }
         )
     }
+
+    // Group selection dialog
+    if (showGroupSelectionDialog) {
+        GroupSelectionDialog(
+            groups = groups,
+            selectedGroup = selectedGroup,
+            onSelect = { group ->
+                selectedGroup = group
+                showGroupSelectionDialog = false
+            },
+            onDismiss = { showGroupSelectionDialog = false }
+        )
+    }
+}
+
+@Composable
+fun GroupSelectionDialog(
+    groups: List<Group>,
+    selectedGroup: Group?,
+    onSelect: (Group?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.Folder, contentDescription = null) },
+        title = { Text("Select Practice Group") },
+        text = {
+            LazyColumn {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(null) }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selectedGroup == null,
+                            onClick = { onSelect(null) }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("All Groups", style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+                items(groups) { group ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(group) }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selectedGroup?.id == group.id,
+                            onClick = { onSelect(group) }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(group.name, style = MaterialTheme.typography.bodyLarge)
+                            if (group.description.isNotEmpty()) {
+                                Text(
+                                    group.description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Done")
+            }
+        }
+    )
 }
 
 @Composable

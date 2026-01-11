@@ -10,21 +10,30 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fencing.spacedrepetition.data.AppDatabase
 import com.fencing.spacedrepetition.data.repository.CardRepository
+import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.ui.navigation.AppNavigation
 import com.fencing.spacedrepetition.ui.theme.FencingSpacedRepetitionTheme
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Initialize database and repository
+        // Initialize database and repositories
         val database = AppDatabase.getDatabase(applicationContext)
+
+        val groupRepository = GroupRepository(
+            groupDao = database.groupDao(),
+            cardDao = database.cardDao()
+        )
+
         val repository = CardRepository(
             cardDao = database.cardDao(),
             sessionDao = database.practiceSessionDao(),
-            reviewLogDao = database.reviewLogDao()
+            reviewLogDao = database.reviewLogDao(),
+            groupDao = database.groupDao()
         )
 
         setContent {
@@ -33,17 +42,21 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    // Create ViewModels with repository
+                    // Create ViewModels with repositories
                     val cardViewModel: CardViewModel = viewModel(
-                        factory = CardViewModelFactory(repository)
+                        factory = CardViewModelFactory(repository, groupRepository)
                     )
                     val practiceViewModel: PracticeViewModel = viewModel(
                         factory = PracticeViewModelFactory(repository)
                     )
+                    val groupViewModel: GroupViewModel = viewModel(
+                        factory = GroupViewModelFactory(groupRepository)
+                    )
 
                     AppNavigation(
                         cardViewModel = cardViewModel,
-                        practiceViewModel = practiceViewModel
+                        practiceViewModel = practiceViewModel,
+                        groupViewModel = groupViewModel
                     )
                 }
             }
@@ -53,12 +66,13 @@ class MainActivity : ComponentActivity() {
 
 // ViewModel Factories
 class CardViewModelFactory(
-    private val repository: CardRepository
+    private val repository: CardRepository,
+    private val groupRepository: GroupRepository
 ) : androidx.lifecycle.ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(CardViewModel::class.java)) {
-            return CardViewModel(repository) as T
+            return CardViewModel(repository, groupRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
@@ -71,6 +85,18 @@ class PracticeViewModelFactory(
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(PracticeViewModel::class.java)) {
             return PracticeViewModel(repository) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
+    }
+}
+
+class GroupViewModelFactory(
+    private val repository: GroupRepository
+) : androidx.lifecycle.ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(GroupViewModel::class.java)) {
+            return GroupViewModel(repository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

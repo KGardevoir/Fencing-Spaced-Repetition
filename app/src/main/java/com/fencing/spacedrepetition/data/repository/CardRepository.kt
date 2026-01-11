@@ -3,6 +3,7 @@ package com.fencing.spacedrepetition.data.repository
 import com.fencing.spacedrepetition.algorithm.FSRSAlgorithm
 import com.fencing.spacedrepetition.algorithm.SM2Algorithm
 import com.fencing.spacedrepetition.data.dao.CardDao
+import com.fencing.spacedrepetition.data.dao.GroupDao
 import com.fencing.spacedrepetition.data.dao.PracticeSessionDao
 import com.fencing.spacedrepetition.data.dao.ReviewLogDao
 import com.fencing.spacedrepetition.data.model.*
@@ -11,7 +12,8 @@ import kotlinx.coroutines.flow.Flow
 class CardRepository(
     private val cardDao: CardDao,
     private val sessionDao: PracticeSessionDao,
-    private val reviewLogDao: ReviewLogDao
+    private val reviewLogDao: ReviewLogDao,
+    private val groupDao: GroupDao
 ) {
     private val fsrsAlgorithm = FSRSAlgorithm()
     private val sm2Algorithm = SM2Algorithm()
@@ -43,6 +45,33 @@ class CardRepository(
     fun getCardCount(): Flow<Int> = cardDao.getCardCount()
 
     fun getAllCategories(): Flow<List<String>> = cardDao.getAllCategories()
+
+    // Group-aware card operations
+    fun getAllCardsWithGroups(): Flow<List<CardWithGroups>> = cardDao.getAllCardsWithGroups()
+
+    fun getCardWithGroups(cardId: Long): Flow<CardWithGroups?> = cardDao.getCardWithGroups(cardId)
+
+    suspend fun getDueCardsByGroup(groupId: Long, limit: Int = 100): List<Card> =
+        cardDao.getDueCardsByGroup(groupId, limit = limit)
+
+    fun getDueCardCountByGroup(groupId: Long): Flow<Int> = cardDao.getDueCardCountByGroup(groupId)
+
+    fun getCardsByGroup(groupId: Long): Flow<List<Card>> = cardDao.getCardsByGroup(groupId)
+
+    suspend fun insertCardWithGroups(card: Card, groupIds: List<Long>): Long {
+        val cardId = cardDao.insertCard(card)
+        groupIds.forEach { groupId ->
+            groupDao.insertCardGroupCrossRef(CardGroupCrossRef(cardId, groupId))
+        }
+        return cardId
+    }
+
+    suspend fun updateCardGroups(cardId: Long, groupIds: List<Long>) {
+        groupDao.deleteAllGroupsForCard(cardId)
+        groupIds.forEach { groupId ->
+            groupDao.insertCardGroupCrossRef(CardGroupCrossRef(cardId, groupId))
+        }
+    }
 
     // Practice session operations
     suspend fun createPracticeSession(cardIds: List<Long>): Long {
