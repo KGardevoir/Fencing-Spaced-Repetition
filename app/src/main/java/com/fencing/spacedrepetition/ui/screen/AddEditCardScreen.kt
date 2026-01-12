@@ -26,6 +26,7 @@ fun AddEditCardScreen(
     viewModel: CardViewModel,
     groupViewModel: GroupViewModel,
     cardToEdit: Card? = null,
+    initialGroupId: Long? = null,
     onNavigateBack: () -> Unit
 ) {
     var question by remember { mutableStateOf(cardToEdit?.question ?: "") }
@@ -38,8 +39,13 @@ fun AddEditCardScreen(
         viewModel.getGroupsForCard(card.id).collectAsState(initial = emptyList()).value
     } ?: emptyList()
 
-    var selectedGroupIds by remember(cardGroups) {
-        mutableStateOf(cardGroups.map { it.id }.toSet())
+    var selectedGroupIds by remember(cardGroups, initialGroupId) {
+        val initialIds = cardGroups.map { it.id }.toMutableSet()
+        // For new cards, pre-select the initial group if provided
+        if (cardToEdit == null && initialGroupId != null) {
+            initialIds.add(initialGroupId)
+        }
+        mutableStateOf(initialIds.toSet())
     }
 
     var showGroupSelectionSheet by remember { mutableStateOf(false) }

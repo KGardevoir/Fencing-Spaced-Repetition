@@ -1,5 +1,7 @@
-* When adding a card and a filter is selected, automatically add that card's groups
+* UI is messed up on the HomeScreen. Sometimes Manage Cards has no text or no icon.
+    - Appears to occur when no cards are available for studying or there are no cards
+* Answer/Explaination should be allowed to be empty.
 * Allow adding groups directly from the add card dialog
 * Customize launch icon
 * Add image support for cards
-* Cards practices in different practice groups should have independent learning parameters
+* Cards practices in different practice groups should have independent learning parameters, this needs to be a parameter in the group, something like 'independent learning'

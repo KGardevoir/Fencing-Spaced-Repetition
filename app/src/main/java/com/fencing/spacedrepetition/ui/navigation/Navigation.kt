@@ -33,6 +33,8 @@ fun AppNavigation(
 ) {
     // Store card to edit
     var cardToEdit: Card? = null
+    // Store initial group for new cards
+    var initialGroupIdForNewCard: Long? = null
 
     NavHost(
         navController = navController,
@@ -91,7 +93,8 @@ fun AppNavigation(
             CardListScreen(
                 viewModel = cardViewModel,
                 groupViewModel = groupViewModel,
-                onNavigateToAddCard = {
+                onNavigateToAddCard = { groupId ->
+                    initialGroupIdForNewCard = groupId
                     navController.navigate(Screen.AddCard.route)
                 },
                 onNavigateToEditCard = { card ->
@@ -109,7 +112,9 @@ fun AppNavigation(
                 viewModel = cardViewModel,
                 groupViewModel = groupViewModel,
                 cardToEdit = null,
+                initialGroupId = initialGroupIdForNewCard,
                 onNavigateBack = {
+                    initialGroupIdForNewCard = null
                     navController.popBackStack()
                 }
             )

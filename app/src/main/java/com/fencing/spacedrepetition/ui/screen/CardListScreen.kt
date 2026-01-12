@@ -33,7 +33,7 @@ import java.util.*
 fun CardListScreen(
     viewModel: CardViewModel,
     groupViewModel: GroupViewModel,
-    onNavigateToAddCard: () -> Unit,
+    onNavigateToAddCard: (Long?) -> Unit,
     onNavigateToEditCard: (Card) -> Unit,
     onNavigateBack: () -> Unit
 ) {
@@ -177,7 +177,7 @@ fun CardListScreen(
         floatingActionButton = {
             if (!isSelectionMode) {
                 FloatingActionButton(
-                    onClick = onNavigateToAddCard,
+                    onClick = { onNavigateToAddCard(selectedGroupFilter?.id) },
                     containerColor = MaterialTheme.colorScheme.primary
                 ) {
                     Icon(Icons.Default.Add, "Add Card")
