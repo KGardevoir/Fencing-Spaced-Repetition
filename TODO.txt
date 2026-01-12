@@ -1,1 +1,7 @@
-* Remove the "load defaults"
+* There should be "All Groups" practice option
+* Add image in Manage Cards covers delete button
+* When adding a card and a filter is selected, automatically add that card's groups
+* Allow adding groups directly from the add card dialog
+* Customize launch icon
+* Add image support for cards
+* Cards practices in different practice groups should have independent learning parameters
