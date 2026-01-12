@@ -1,1 +1,0 @@
-* Allow card modification during practice (just text and description)

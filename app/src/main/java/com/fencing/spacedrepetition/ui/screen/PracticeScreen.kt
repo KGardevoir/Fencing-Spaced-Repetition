@@ -1,7 +1,9 @@
 package com.fencing.spacedrepetition.ui.screen
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -10,6 +12,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.SessionCard
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeUiState
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
@@ -28,6 +32,20 @@ fun PracticeScreen(
     val currentCardIndex by viewModel.currentCardIndex.collectAsState()
     val autoShowAnswer by settingsViewModel.autoShowAnswer.collectAsState()
 
+    var showEditDialog by remember { mutableStateOf(false) }
+
+    // Edit dialog
+    if (showEditDialog && sessionCards.isNotEmpty() && currentCardIndex < sessionCards.size) {
+        EditCardDialog(
+            card = sessionCards[currentCardIndex].card,
+            onDismiss = { showEditDialog = false },
+            onSave = { question, answer ->
+                viewModel.updateCardText(currentCardIndex, question, answer)
+                showEditDialog = false
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -35,6 +53,13 @@ fun PracticeScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, "Back")
+                    }
+                },
+                actions = {
+                    if (uiState is PracticeUiState.Practicing && sessionCards.isNotEmpty()) {
+                        IconButton(onClick = { showEditDialog = true }) {
+                            Icon(Icons.Default.Edit, "Edit Card")
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -299,6 +324,76 @@ fun PracticeCardView(
                     Text("Grade Cards")
                     Spacer(modifier = Modifier.width(4.dp))
                     Icon(Icons.Default.Done, contentDescription = null)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun EditCardDialog(
+    card: Card,
+    onDismiss: () -> Unit,
+    onSave: (question: String, answer: String) -> Unit
+) {
+    var question by remember(card.id) { mutableStateOf(card.question) }
+    var answer by remember(card.id) { mutableStateOf(card.answer) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    text = "Edit Card",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                OutlinedTextField(
+                    value = question,
+                    onValueChange = { question = it },
+                    label = { Text("Question") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    maxLines = 4
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = answer,
+                    onValueChange = { answer = it },
+                    label = { Text("Answer") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3,
+                    maxLines = 6
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = { onSave(question, answer) },
+                        enabled = question.isNotBlank() && answer.isNotBlank()
+                    ) {
+                        Text("Save")
+                    }
                 }
             }
         }

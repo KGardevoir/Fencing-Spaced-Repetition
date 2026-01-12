@@ -49,7 +49,7 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Fencing Practice") },
+                title = { Text("Martial Arts Practice") },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 ),
@@ -519,8 +519,8 @@ fun SettingsDialog(
                     Slider(
                         value = cardsPerSession.toFloat(),
                         onValueChange = { onCardsPerSessionChange(it.toInt()) },
-                        valueRange = 1f..20f,
-                        steps = 18,
+                        valueRange = 1f..6f,
+                        steps = 6,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Text(
