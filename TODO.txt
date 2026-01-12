@@ -1,4 +1,3 @@
-* Start Practice and Manage Cards button end up very close on some devices
 * Allow adding groups directly from the add card dialog
 * Customize launch icon
 * Add image support for cards

@@ -229,6 +229,9 @@ fun HomeScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
                 )
+            } else {
+                // Add spacing when helper text is not shown
+                Spacer(modifier = Modifier.height(8.dp))
             }
 
             OutlinedButton(
