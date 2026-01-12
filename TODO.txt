@@ -1,4 +1,4 @@
-* There should be "All Groups" practice option
+* There should not be "All Groups" practice option
 * Add image in Manage Cards covers delete button
 * When adding a card and a filter is selected, automatically add that card's groups
 * Allow adding groups directly from the add card dialog
