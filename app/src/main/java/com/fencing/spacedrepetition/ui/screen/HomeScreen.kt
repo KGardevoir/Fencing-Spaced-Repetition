@@ -36,7 +36,6 @@ fun HomeScreen(
     val themeMode by settingsViewModel.themeMode.collectAsState()
     val cardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
 
-    var showInitDialog by remember { mutableStateOf(false) }
     var showGroupSelectionDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
     var selectedGroup by remember { mutableStateOf<Group?>(null) }
@@ -59,9 +58,6 @@ fun HomeScreen(
                     }
                     IconButton(onClick = { showSettingsDialog = true }) {
                         Icon(Icons.Default.Settings, "Settings")
-                    }
-                    IconButton(onClick = { showInitDialog = true }) {
-                        Icon(Icons.Default.CloudDownload, "Load Sample Cards")
                     }
                 }
             )
@@ -268,30 +264,6 @@ fun HomeScreen(
         }
     }
 
-    // Sample data dialog
-    if (showInitDialog) {
-        AlertDialog(
-            onDismissRequest = { showInitDialog = false },
-            icon = { Icon(Icons.Default.CloudDownload, contentDescription = null) },
-            title = { Text("Load Sample Cards?") },
-            text = {
-                Text("This will add 6 sample fencing technique cards to your collection. Great for testing the app!")
-            },
-            confirmButton = {
-                Button(onClick = {
-                    cardViewModel.initializeSampleData()
-                    showInitDialog = false
-                }) {
-                    Text("Load")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showInitDialog = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
 
     // Group selection dialog
     if (showGroupSelectionDialog) {

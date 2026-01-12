@@ -184,12 +184,6 @@ class CardViewModel(
         }
     }
 
-    fun initializeSampleData() {
-        viewModelScope.launch {
-            repository.initializeSampleData()
-        }
-    }
-
     // Import/Export state
     private val _importExportState = MutableStateFlow<ImportExportState>(ImportExportState.Idle)
     val importExportState: StateFlow<ImportExportState> = _importExportState.asStateFlow()

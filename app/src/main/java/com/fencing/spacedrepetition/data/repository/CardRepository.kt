@@ -387,48 +387,4 @@ class CardRepository(
     fun getReviewLogsByCard(cardId: Long): Flow<List<ReviewLog>> = reviewLogDao.getReviewLogsByCard(cardId)
 
     fun getAllReviewLogs(): Flow<List<ReviewLog>> = reviewLogDao.getAllReviewLogs()
-
-    // Initialize with sample data
-    suspend fun initializeSampleData() {
-        val sampleCards = listOf(
-            Card(
-                question = "En garde position",
-                answer = "Front foot pointed forward, back foot at 90°, knees bent, weight balanced",
-                category = "Basic Stance",
-                algorithm = AlgorithmType.FSRS
-            ),
-            Card(
-                question = "Advance",
-                answer = "Front foot forward then back foot forward, maintaining en garde position",
-                category = "Footwork",
-                algorithm = AlgorithmType.FSRS
-            ),
-            Card(
-                question = "Retreat",
-                answer = "Back foot backward then front foot backward, maintaining en garde position",
-                category = "Footwork",
-                algorithm = AlgorithmType.FSRS
-            ),
-            Card(
-                question = "Lunge",
-                answer = "Extend front leg forward, back leg straight, rear arm back for balance",
-                category = "Attacks",
-                algorithm = AlgorithmType.SM2
-            ),
-            Card(
-                question = "Parry 4",
-                answer = "Blade sweeps from outside to inside, protecting the inside high line",
-                category = "Defense",
-                algorithm = AlgorithmType.SM2
-            ),
-            Card(
-                question = "Riposte",
-                answer = "Counter-attack immediately after a successful parry",
-                category = "Attacks",
-                algorithm = AlgorithmType.FSRS
-            )
-        )
-
-        cardDao.insertCards(sampleCards)
-    }
 }
