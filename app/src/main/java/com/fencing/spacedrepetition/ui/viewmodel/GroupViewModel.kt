@@ -166,9 +166,15 @@ class GroupViewModel(
                     .filter { it.isNotBlank() }
                     .toSet()
 
+                // Detect which groups have independent learning (groups with state-specific rows)
+                val groupsWithIndependentLearning = parsedCards
+                    .filter { it.isGroupSpecificState }
+                    .mapNotNull { it.stateContext }
+                    .toSet()
+
                 // Ensure all groups exist (creates missing ones automatically)
                 val groupNameMap = withContext(Dispatchers.IO) {
-                    groupRepository.ensureGroupsExist(allGroupNames)
+                    groupRepository.ensureGroupsExist(allGroupNames, groupsWithIndependentLearning)
                 }
 
                 // Check if this is a full format import with state

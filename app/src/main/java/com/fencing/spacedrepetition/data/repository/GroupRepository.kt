@@ -104,15 +104,33 @@ class GroupRepository(
     /**
      * Ensures all group names exist, creating any that don't.
      * Returns an updated map of group name to ID.
+     * If groupsWithIndependentLearning is provided, sets independentLearning flag for those groups.
      */
-    suspend fun ensureGroupsExist(groupNames: Set<String>): Map<String, Long> {
+    suspend fun ensureGroupsExist(
+        groupNames: Set<String>,
+        groupsWithIndependentLearning: Set<String> = emptySet()
+    ): Map<String, Long> {
         val existingGroups = getAllGroupsSync().associate { it.name to it.id }.toMutableMap()
 
         groupNames.forEach { name ->
-            if (name.isNotBlank() && !existingGroups.containsKey(name)) {
-                val newGroup = Group(name = name, description = "Imported group")
-                val newId = groupDao.insertGroup(newGroup)
-                existingGroups[name] = newId
+            if (name.isNotBlank()) {
+                if (!existingGroups.containsKey(name)) {
+                    // Create new group
+                    val newGroup = Group(
+                        name = name,
+                        description = "Imported group",
+                        independentLearning = name in groupsWithIndependentLearning
+                    )
+                    val newId = groupDao.insertGroup(newGroup)
+                    existingGroups[name] = newId
+                } else if (name in groupsWithIndependentLearning) {
+                    // Update existing group to enable independent learning if needed
+                    val existingGroupId = existingGroups[name]!!
+                    val existingGroup = groupDao.getGroupById(existingGroupId)
+                    if (existingGroup != null && !existingGroup.independentLearning) {
+                        groupDao.updateGroup(existingGroup.copy(independentLearning = true))
+                    }
+                }
             }
         }
 
