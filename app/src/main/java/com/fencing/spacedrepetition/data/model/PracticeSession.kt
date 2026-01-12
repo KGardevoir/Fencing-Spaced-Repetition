@@ -29,6 +29,7 @@ data class SessionCard(
 )
 
 enum class Grade(val value: Int, val label: String) {
+    SKIP(0, "Skip"),
     AGAIN(1, "Again"),
     HARD(2, "Hard"),
     GOOD(3, "Good"),
