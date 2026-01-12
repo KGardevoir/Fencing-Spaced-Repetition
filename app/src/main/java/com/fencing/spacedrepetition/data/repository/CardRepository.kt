@@ -86,7 +86,12 @@ class CardRepository(
     suspend fun getDueCardsByGroup(groupId: Long, limit: Int = 100): List<Card> =
         cardDao.getDueCardsByGroup(groupId, limit = limit)
 
+    suspend fun getCardsByGroupSync(groupId: Long): List<Card> =
+        cardDao.getCardsByGroupSync(groupId)
+
     fun getDueCardCountByGroup(groupId: Long): Flow<Int> = cardDao.getDueCardCountByGroup(groupId)
+
+    fun getCardCountByGroup(groupId: Long): Flow<Int> = cardDao.getCardCountByGroup(groupId)
 
     fun getCardsByGroup(groupId: Long): Flow<List<Card>> = cardDao.getCardsByGroup(groupId)
 
