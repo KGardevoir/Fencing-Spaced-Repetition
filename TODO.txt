@@ -1,3 +1,4 @@
+* Additional studying should always be allowed. It should be as if we started a new day
 * There should not be "All Groups" practice option
 * Add image in Manage Cards covers delete button
 * When adding a card and a filter is selected, automatically add that card's groups
