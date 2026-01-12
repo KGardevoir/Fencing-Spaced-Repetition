@@ -1,4 +1,3 @@
-* Add Button in Manage Cards covers delete card button
 * When adding a card and a filter is selected, automatically add that card's groups
 * Allow adding groups directly from the add card dialog
 * Customize launch icon
