@@ -35,10 +35,24 @@ fun HomeScreen(
     val groups by groupViewModel.allGroups.collectAsState()
     val themeMode by settingsViewModel.themeMode.collectAsState()
     val cardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
+    val savedGroupId by settingsViewModel.selectedGroupId.collectAsState()
 
     var showGroupSelectionDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
-    var selectedGroup by remember { mutableStateOf<Group?>(null) }
+
+    // Derive selected group from persisted ID and groups list
+    val selectedGroup = groups.find { it.id == savedGroupId } ?: groups.firstOrNull()
+
+    // Auto-select first group when groups become available and no valid selection exists
+    LaunchedEffect(groups, savedGroupId) {
+        if (groups.isNotEmpty()) {
+            val currentGroupExists = groups.any { it.id == savedGroupId }
+            if (!currentGroupExists) {
+                // Save the first group's ID if no valid selection
+                settingsViewModel.setSelectedGroupId(groups.first().id)
+            }
+        }
+    }
 
     // Calculate total cards for selected group (allow additional studying)
     val cardsForSelectedGroup = selectedGroup?.let { group ->
@@ -162,7 +176,7 @@ fun HomeScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = selectedGroup?.name ?: "All Groups",
+                                text = selectedGroup?.name ?: "Select a group",
                                 style = MaterialTheme.typography.titleMedium
                             )
                         }
@@ -209,7 +223,7 @@ fun HomeScreen(
             if (cardsForSelectedGroup < 1) {
                 Text(
                     text = if (totalCards == 0) "Add some cards to get started"
-                           else if (selectedGroup != null) "No cards in ${selectedGroup?.name}"
+                           else if (selectedGroup != null) "No cards in ${selectedGroup.name}"
                            else "No cards available",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -276,7 +290,7 @@ fun HomeScreen(
             groups = groups,
             selectedGroup = selectedGroup,
             onSelect = { group ->
-                selectedGroup = group
+                settingsViewModel.setSelectedGroupId(group.id)
                 showGroupSelectionDialog = false
             },
             onDismiss = { showGroupSelectionDialog = false }
@@ -302,7 +316,7 @@ fun HomeScreen(
 fun GroupSelectionDialog(
     groups: List<Group>,
     selectedGroup: Group?,
-    onSelect: (Group?) -> Unit,
+    onSelect: (Group) -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -311,22 +325,6 @@ fun GroupSelectionDialog(
         title = { Text("Select Practice Group") },
         text = {
             LazyColumn {
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelect(null) }
-                            .padding(vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = selectedGroup == null,
-                            onClick = { onSelect(null) }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("All Groups", style = MaterialTheme.typography.bodyLarge)
-                    }
-                }
                 items(groups) { group ->
                     Row(
                         modifier = Modifier

@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -23,6 +24,7 @@ class ThemePreferences(private val context: Context) {
     private val THEME_KEY = stringPreferencesKey("theme_mode")
     private val AUTO_SHOW_ANSWER_KEY = booleanPreferencesKey("auto_show_answer")
     private val CARDS_PER_SESSION_KEY = intPreferencesKey("cards_per_session")
+    private val SELECTED_GROUP_ID_KEY = longPreferencesKey("selected_group_id")
 
     companion object {
         const val DEFAULT_CARDS_PER_SESSION = 3
@@ -50,6 +52,11 @@ class ThemePreferences(private val context: Context) {
             preferences[CARDS_PER_SESSION_KEY] ?: DEFAULT_CARDS_PER_SESSION
         }
 
+    val selectedGroupId: Flow<Long?> = context.dataStore.data
+        .map { preferences ->
+            preferences[SELECTED_GROUP_ID_KEY]
+        }
+
     suspend fun setThemeMode(mode: ThemeMode) {
         context.dataStore.edit { preferences ->
             preferences[THEME_KEY] = mode.name
@@ -66,6 +73,16 @@ class ThemePreferences(private val context: Context) {
         val validCount = count.coerceIn(MIN_CARDS_PER_SESSION, MAX_CARDS_PER_SESSION)
         context.dataStore.edit { preferences ->
             preferences[CARDS_PER_SESSION_KEY] = validCount
+        }
+    }
+
+    suspend fun setSelectedGroupId(groupId: Long?) {
+        context.dataStore.edit { preferences ->
+            if (groupId != null) {
+                preferences[SELECTED_GROUP_ID_KEY] = groupId
+            } else {
+                preferences.remove(SELECTED_GROUP_ID_KEY)
+            }
         }
     }
 }

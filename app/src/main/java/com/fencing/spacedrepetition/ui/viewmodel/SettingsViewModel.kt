@@ -22,6 +22,9 @@ class SettingsViewModel(
     val cardsPerSession: StateFlow<Int> = themePreferences.cardsPerSession
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_CARDS_PER_SESSION)
 
+    val selectedGroupId: StateFlow<Long?> = themePreferences.selectedGroupId
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch {
             themePreferences.setThemeMode(mode)
@@ -37,6 +40,12 @@ class SettingsViewModel(
     fun setCardsPerSession(count: Int) {
         viewModelScope.launch {
             themePreferences.setCardsPerSession(count)
+        }
+    }
+
+    fun setSelectedGroupId(groupId: Long?) {
+        viewModelScope.launch {
+            themePreferences.setSelectedGroupId(groupId)
         }
     }
 }
