@@ -463,7 +463,7 @@ fun AddEditCardScreen(
             // Save button
             Button(
                 onClick = {
-                    if (question.isNotBlank() && answer.isNotBlank()) {
+                    if (question.isNotBlank()) {
                         if (isEditing && cardToEdit != null) {
                             // Build updated card with learning state if advanced settings were used
                             val updatedCard = cardToEdit.copy(
@@ -500,7 +500,7 @@ fun AddEditCardScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                enabled = question.isNotBlank() && answer.isNotBlank()
+                enabled = question.isNotBlank()
             ) {
                 Icon(
                     if (isEditing) Icons.Default.Save else Icons.Default.Add,
