@@ -287,15 +287,33 @@ fun GroupListItem(
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    group.name,
-                    style = MaterialTheme.typography.titleMedium
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        group.name,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    if (group.independentLearning) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(
+                            Icons.Default.School,
+                            contentDescription = "Independent Learning",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.tertiary
+                        )
+                    }
+                }
                 if (group.description.isNotEmpty()) {
                     Text(
                         group.description,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (group.independentLearning) {
+                    Text(
+                        "Independent learning enabled",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.tertiary
                     )
                 }
             }

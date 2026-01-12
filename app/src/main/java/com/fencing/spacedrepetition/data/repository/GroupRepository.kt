@@ -78,6 +78,29 @@ class GroupRepository(
         }
     }
 
+    suspend fun getCardsByGroupWithStates(groupId: Long): List<com.fencing.spacedrepetition.util.CardWithGroupStates> {
+        val cards = getCardsByGroupSync(groupId)
+        val allGroups = getAllGroupsSync()
+        val independentLearningGroupNames = allGroups.filter { it.independentLearning }.map { it.name to it.id }.toMap()
+
+        return cards.map { card ->
+            val groups = getGroupsForCardSync(card.id)
+            val groupNames = groups.map { it.name }
+
+            // Get group-specific states for groups with independent learning
+            val groupSpecificStates = mutableMapOf<String, com.fencing.spacedrepetition.data.model.CardGroupLearningState>()
+            groups.forEach { group ->
+                if (group.independentLearning) {
+                    groupDao.getLearningState(card.id, group.id)?.let { state ->
+                        groupSpecificStates[group.name] = state
+                    }
+                }
+            }
+
+            com.fencing.spacedrepetition.util.CardWithGroupStates(card, groupNames, groupSpecificStates)
+        }
+    }
+
     /**
      * Ensures all group names exist, creating any that don't.
      * Returns an updated map of group name to ID.

@@ -180,9 +180,16 @@ class CardViewModel(
         }
     }
 
-    fun resetCardState(cardId: Long, onComplete: () -> Unit = {}) {
+    fun resetCardState(cardId: Long, resetGroupStates: Boolean = false, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
-            repository.resetCardState(cardId)
+            repository.resetCardState(cardId, resetGroupStates)
+            onComplete()
+        }
+    }
+
+    fun resetCardStateInGroup(cardId: Long, groupId: Long, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.resetCardStateInGroup(cardId, groupId)
             onComplete()
         }
     }

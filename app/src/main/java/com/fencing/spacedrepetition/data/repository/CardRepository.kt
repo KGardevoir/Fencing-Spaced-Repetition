@@ -50,7 +50,7 @@ class CardRepository(
         reviewLogDao.deleteReviewLogsByCard(cardId)
     }
 
-    suspend fun resetCardState(cardId: Long) {
+    suspend fun resetCardState(cardId: Long, resetGroupStates: Boolean = false) {
         val card = cardDao.getCardById(cardId) ?: return
         val now = System.currentTimeMillis()
         val resetCard = card.copy(
@@ -72,6 +72,34 @@ class CardRepository(
             modified = now
         )
         cardDao.updateCard(resetCard)
+
+        // Optionally reset group-specific learning states
+        if (resetGroupStates) {
+            groupDao.deleteAllLearningStatesForCard(cardId)
+        }
+    }
+
+    suspend fun resetCardStateInGroup(cardId: Long, groupId: Long) {
+        // Reset only the group-specific learning state for this card in this group
+        val learningState = groupDao.getLearningState(cardId, groupId)
+        if (learningState != null) {
+            val resetState = learningState.copy(
+                fsrsStability = 0.0,
+                fsrsDifficulty = 0.0,
+                fsrsElapsedDays = 0,
+                fsrsScheduledDays = 0,
+                fsrsReps = 0,
+                fsrsLapses = 0,
+                fsrsState = "NEW",
+                sm2EaseFactor = 2.5,
+                sm2Interval = 0,
+                sm2Repetitions = 0,
+                lastReview = 0L,
+                nextReview = 0L,
+                modified = System.currentTimeMillis()
+            )
+            groupDao.updateLearningState(resetState)
+        }
     }
 
     fun getCardCount(): Flow<Int> = cardDao.getCardCount()
@@ -209,6 +237,79 @@ class CardRepository(
                     groupDao.insertCardGroupCrossRef(CardGroupCrossRef(cardId, groupId))
                 }
             }
+            importedCount++
+        }
+        return importedCount
+    }
+
+    suspend fun importCardsWithGroupStates(
+        parsedCards: List<com.fencing.spacedrepetition.util.ParsedCard>,
+        existingGroups: Map<String, Long>
+    ): Int {
+        // Group parsed cards by question (same card, different state contexts)
+        val cardsByQuestion = parsedCards.groupBy { it.question }
+        var importedCount = 0
+
+        cardsByQuestion.forEach { (question, states) ->
+            // Find the global state (or use the first state if no global)
+            val globalState = states.find { it.isGlobalState } ?: states.first()
+
+            // Create or update the card
+            val card = com.fencing.spacedrepetition.util.CardImportExport.parsedCardToCard(globalState)
+            val existingCard = cardDao.findCardByQuestion(question)
+            val cardId: Long
+
+            if (existingCard != null) {
+                val updatedCard = card.copy(
+                    id = existingCard.id,
+                    created = existingCard.created,
+                    modified = System.currentTimeMillis()
+                )
+                cardDao.updateCard(updatedCard)
+                cardId = existingCard.id
+
+                // Clear existing group associations
+                groupDao.deleteAllGroupsForCard(cardId)
+                // Clear existing group-specific learning states
+                groupDao.deleteAllLearningStatesForCard(cardId)
+            } else {
+                cardId = cardDao.insertCard(card)
+            }
+
+            // Collect all unique group names from all state contexts
+            val allGroupNames = states.flatMap { it.groupNames }.toSet()
+
+            // Add group associations
+            allGroupNames.forEach { groupName ->
+                existingGroups[groupName]?.let { groupId ->
+                    groupDao.insertCardGroupCrossRef(CardGroupCrossRef(cardId, groupId))
+                }
+            }
+
+            // Import group-specific learning states
+            states.filter { it.isGroupSpecificState }.forEach { groupState ->
+                val groupName = groupState.stateContext!!
+                existingGroups[groupName]?.let { groupId ->
+                    val learningState = com.fencing.spacedrepetition.data.model.CardGroupLearningState(
+                        cardId = cardId,
+                        groupId = groupId,
+                        fsrsStability = groupState.fsrsStability ?: 0.0,
+                        fsrsDifficulty = groupState.fsrsDifficulty ?: 0.0,
+                        fsrsElapsedDays = groupState.fsrsElapsedDays ?: 0,
+                        fsrsScheduledDays = groupState.fsrsScheduledDays ?: 0,
+                        fsrsReps = groupState.fsrsReps ?: 0,
+                        fsrsLapses = groupState.fsrsLapses ?: 0,
+                        fsrsState = groupState.fsrsState ?: "NEW",
+                        sm2EaseFactor = groupState.sm2EaseFactor ?: 2.5,
+                        sm2Interval = groupState.sm2Interval ?: 0,
+                        sm2Repetitions = groupState.sm2Repetitions ?: 0,
+                        lastReview = groupState.lastReview ?: 0L,
+                        nextReview = groupState.nextReview ?: 0L
+                    )
+                    groupDao.insertLearningState(learningState)
+                }
+            }
+
             importedCount++
         }
         return importedCount
