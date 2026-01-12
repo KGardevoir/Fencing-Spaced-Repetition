@@ -179,7 +179,6 @@ object CardImportExport {
         return when {
             parts.size < 2 -> throw IllegalArgumentException("Missing answer (no tab delimiter found)")
             parts[0].isBlank() -> throw IllegalArgumentException("Empty question")
-            parts[1].isBlank() -> throw IllegalArgumentException("Empty answer")
             else -> ParsedCard(
                 question = unescapeNewlines(parts[0].trim()),
                 answer = unescapeNewlines(parts[1].trim()),
@@ -199,7 +198,6 @@ object CardImportExport {
         val answer = unescapeNewlines(parts.getOrNull(COL_V1_ANSWER)?.trim() ?: "")
 
         if (question.isBlank()) throw IllegalArgumentException("Empty question")
-        if (answer.isBlank()) throw IllegalArgumentException("Empty answer")
 
         // If only 2 columns, treat as simple format
         if (parts.size == 2) {
@@ -254,7 +252,6 @@ object CardImportExport {
         val answer = unescapeNewlines(parts.getOrNull(COL_V2_ANSWER)?.trim() ?: "")
 
         if (question.isBlank()) throw IllegalArgumentException("Empty question")
-        if (answer.isBlank()) throw IllegalArgumentException("Empty answer")
 
         // If only 2 columns, treat as simple format
         if (parts.size == 2) {
