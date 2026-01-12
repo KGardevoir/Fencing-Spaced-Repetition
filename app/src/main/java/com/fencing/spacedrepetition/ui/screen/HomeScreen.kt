@@ -195,7 +195,7 @@ fun HomeScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.weight(1f, fill = false).defaultMinSize(minHeight = 8.dp))
 
             // Main actions
             Button(
@@ -237,7 +237,11 @@ fun HomeScreen(
                     .fillMaxWidth()
                     .height(56.dp)
             ) {
-                Icon(Icons.Default.LibraryBooks, contentDescription = null)
+                Icon(
+                    Icons.Default.LibraryBooks,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp)
+                )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "Manage Cards",
