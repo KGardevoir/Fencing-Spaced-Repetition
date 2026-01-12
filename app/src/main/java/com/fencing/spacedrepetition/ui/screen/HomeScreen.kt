@@ -40,7 +40,12 @@ fun HomeScreen(
     var showSettingsDialog by remember { mutableStateOf(false) }
     var selectedGroup by remember { mutableStateOf<Group?>(null) }
 
-    // Calculate due cards for selected group
+    // Calculate total cards for selected group (allow additional studying)
+    val cardsForSelectedGroup = selectedGroup?.let { group ->
+        cardViewModel.getCardCountByGroup(group.id).collectAsState(initial = 0).value
+    } ?: totalCards
+
+    // Still track due cards for display
     val dueForSelectedGroup = selectedGroup?.let { group ->
         cardViewModel.getDueCardCountByGroup(group.id).collectAsState(initial = 0).value
     } ?: dueCardCount
@@ -187,7 +192,7 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(72.dp),
-                enabled = dueForSelectedGroup >= 1
+                enabled = cardsForSelectedGroup >= 1
             ) {
                 Icon(
                     Icons.Default.PlayArrow,
@@ -201,11 +206,11 @@ fun HomeScreen(
                 )
             }
 
-            if (dueForSelectedGroup < 1) {
+            if (cardsForSelectedGroup < 1) {
                 Text(
                     text = if (totalCards == 0) "Add some cards to get started"
-                           else if (selectedGroup != null) "No cards due in ${selectedGroup?.name}"
-                           else "No cards due right now",
+                           else if (selectedGroup != null) "No cards in ${selectedGroup?.name}"
+                           else "No cards available",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center

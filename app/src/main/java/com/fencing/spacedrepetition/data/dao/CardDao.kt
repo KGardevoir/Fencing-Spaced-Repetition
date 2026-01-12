@@ -99,6 +99,13 @@ interface CardDao {
     """)
     fun getDueCardCountByGroup(groupId: Long, now: Long = System.currentTimeMillis()): Flow<Int>
 
+    @Query("""
+        SELECT COUNT(*) FROM cards c
+        INNER JOIN card_group_cross_ref cgc ON c.id = cgc.cardId
+        WHERE cgc.groupId = :groupId
+    """)
+    fun getCardCountByGroup(groupId: Long): Flow<Int>
+
     @Query("SELECT * FROM cards WHERE question = :question LIMIT 1")
     suspend fun findCardByQuestion(question: String): Card?
 
