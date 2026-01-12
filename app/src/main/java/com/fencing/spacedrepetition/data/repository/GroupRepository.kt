@@ -97,4 +97,39 @@ class GroupRepository(
     }
 
     suspend fun getGroupByName(name: String): Group? = groupDao.getGroupByName(name)
+
+    suspend fun toggleIndependentLearning(groupId: Long, enabled: Boolean) {
+        val group = groupDao.getGroupById(groupId) ?: return
+        val updatedGroup = group.copy(independentLearning = enabled)
+        groupDao.updateGroup(updatedGroup)
+
+        // If enabling independent learning, initialize learning states for all cards in the group
+        if (enabled) {
+            val cards = cardDao.getCardsByGroupSync(groupId)
+            cards.forEach { card ->
+                val existingState = groupDao.getLearningState(card.id, groupId)
+                if (existingState == null) {
+                    groupDao.insertLearningState(
+                        com.fencing.spacedrepetition.data.model.CardGroupLearningState(
+                            cardId = card.id,
+                            groupId = groupId,
+                            // Copy current card state to the new learning state
+                            fsrsStability = card.fsrsStability,
+                            fsrsDifficulty = card.fsrsDifficulty,
+                            fsrsElapsedDays = card.fsrsElapsedDays,
+                            fsrsScheduledDays = card.fsrsScheduledDays,
+                            fsrsReps = card.fsrsReps,
+                            fsrsLapses = card.fsrsLapses,
+                            fsrsState = card.fsrsState,
+                            sm2EaseFactor = card.sm2EaseFactor,
+                            sm2Interval = card.sm2Interval,
+                            sm2Repetitions = card.sm2Repetitions,
+                            lastReview = card.lastReview,
+                            nextReview = card.nextReview
+                        )
+                    )
+                }
+            }
+        }
+    }
 }

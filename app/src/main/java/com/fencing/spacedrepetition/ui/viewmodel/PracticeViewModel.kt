@@ -131,9 +131,16 @@ class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
                     }
                 }
 
-                // Only call reviewMultipleCards if there are cards to review
+                // Only call review methods if there are cards to review
                 if (cardsWithGrades.isNotEmpty()) {
-                    repository.reviewMultipleCards(cardsWithGrades, sessionId)
+                    // If practicing within a group, use group-aware review method
+                    if (selectedGroupId != null) {
+                        cardsWithGrades.forEach { (card, grade) ->
+                            repository.reviewCardWithGroup(card, grade, selectedGroupId!!, sessionId)
+                        }
+                    } else {
+                        repository.reviewMultipleCards(cardsWithGrades, sessionId)
+                    }
                 }
 
                 // Complete session

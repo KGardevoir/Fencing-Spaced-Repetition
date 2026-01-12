@@ -77,6 +77,17 @@ class GroupViewModel(
         }
     }
 
+    fun toggleIndependentLearning(groupId: Long, enabled: Boolean, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                groupRepository.toggleIndependentLearning(groupId, enabled)
+                onSuccess()
+            } catch (e: Exception) {
+                // Handle error
+            }
+        }
+    }
+
     fun getDueCardCountForGroup(groupId: Long): Flow<Int> =
         groupRepository.getDueCardCountByGroup(groupId)
 

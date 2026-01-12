@@ -250,6 +250,23 @@ class CardRepository(
 
     fun getCompletedSessions(): Flow<List<PracticeSession>> = sessionDao.getCompletedSessions()
 
+    // Independent learning state operations
+    suspend fun getLearningState(cardId: Long, groupId: Long): CardGroupLearningState? =
+        groupDao.getLearningState(cardId, groupId)
+
+    fun getLearningStateFlow(cardId: Long, groupId: Long): Flow<CardGroupLearningState?> =
+        groupDao.getLearningStateFlow(cardId, groupId)
+
+    suspend fun updateLearningState(learningState: CardGroupLearningState) =
+        groupDao.updateLearningState(learningState)
+
+    suspend fun initializeLearningState(cardId: Long, groupId: Long, algorithm: AlgorithmType) {
+        val existingState = groupDao.getLearningState(cardId, groupId)
+        if (existingState == null) {
+            groupDao.insertLearningState(CardGroupLearningState(cardId, groupId))
+        }
+    }
+
     // Review operations
     suspend fun reviewCard(card: Card, grade: Grade, sessionId: Long? = null): Card {
         val now = System.currentTimeMillis()
@@ -278,6 +295,65 @@ class CardRepository(
         cardDao.updateCard(updatedCard)
 
         return updatedCard
+    }
+
+    suspend fun reviewCardWithGroup(card: Card, grade: Grade, groupId: Long, sessionId: Long? = null): Card {
+        val group = groupDao.getGroupById(groupId) ?: return reviewCard(card, grade, sessionId)
+
+        if (!group.independentLearning) {
+            // Use global learning state
+            return reviewCard(card, grade, sessionId)
+        }
+
+        // Use group-specific learning state
+        val now = System.currentTimeMillis()
+        var learningState = groupDao.getLearningState(card.id, groupId)
+
+        // Initialize learning state if it doesn't exist
+        if (learningState == null) {
+            learningState = CardGroupLearningState(card.id, groupId)
+            groupDao.insertLearningState(learningState)
+        }
+
+        val elapsedDays = if (learningState.lastReview == 0L) 0 else
+            ((now - learningState.lastReview) / (1000 * 60 * 60 * 24)).toInt()
+
+        val updatedState = when (card.algorithm) {
+            AlgorithmType.FSRS -> reviewLearningStateWithFSRS(learningState, grade, now, elapsedDays)
+            AlgorithmType.SM2 -> reviewLearningStateWithSM2(learningState, grade, now)
+        }
+
+        // Create review log
+        val reviewLog = ReviewLog(
+            cardId = card.id,
+            sessionId = sessionId,
+            reviewTime = now,
+            grade = grade.value,
+            algorithm = card.algorithm.name,
+            stateBefore = serializeLearningState(learningState, card.algorithm),
+            stateAfter = serializeLearningState(updatedState, card.algorithm),
+            scheduledDays = updatedState.fsrsScheduledDays,
+            elapsedDays = elapsedDays
+        )
+
+        reviewLogDao.insertReviewLog(reviewLog)
+        groupDao.updateLearningState(updatedState)
+
+        // Return a virtual card with the group-specific state (for UI display)
+        return card.copy(
+            fsrsStability = updatedState.fsrsStability,
+            fsrsDifficulty = updatedState.fsrsDifficulty,
+            fsrsElapsedDays = updatedState.fsrsElapsedDays,
+            fsrsScheduledDays = updatedState.fsrsScheduledDays,
+            fsrsReps = updatedState.fsrsReps,
+            fsrsLapses = updatedState.fsrsLapses,
+            fsrsState = updatedState.fsrsState,
+            sm2EaseFactor = updatedState.sm2EaseFactor,
+            sm2Interval = updatedState.sm2Interval,
+            sm2Repetitions = updatedState.sm2Repetitions,
+            lastReview = updatedState.lastReview,
+            nextReview = updatedState.nextReview
+        )
     }
 
     suspend fun reviewMultipleCards(cardsWithGrades: List<Pair<Card, Grade>>, sessionId: Long? = null) {
@@ -387,6 +463,90 @@ class CardRepository(
         return when (card.algorithm) {
             AlgorithmType.FSRS -> "S:${card.fsrsStability},D:${card.fsrsDifficulty},ST:${card.fsrsState}"
             AlgorithmType.SM2 -> "EF:${card.sm2EaseFactor},I:${card.sm2Interval},R:${card.sm2Repetitions}"
+        }
+    }
+
+    private fun reviewLearningStateWithFSRS(
+        learningState: CardGroupLearningState,
+        grade: Grade,
+        now: Long,
+        elapsedDays: Int
+    ): CardGroupLearningState {
+        val fsrsCard = FSRSAlgorithm.FSRSCard(
+            stability = learningState.fsrsStability,
+            difficulty = learningState.fsrsDifficulty,
+            elapsedDays = elapsedDays,
+            scheduledDays = learningState.fsrsScheduledDays,
+            reps = learningState.fsrsReps,
+            lapses = learningState.fsrsLapses,
+            state = FSRSAlgorithm.CardState.valueOf(learningState.fsrsState),
+            lastReview = learningState.lastReview
+        )
+
+        val rating = when (grade) {
+            Grade.SKIP -> throw IllegalArgumentException("SKIP grade should not be processed")
+            Grade.AGAIN -> FSRSAlgorithm.Rating.AGAIN
+            Grade.HARD -> FSRSAlgorithm.Rating.HARD
+            Grade.GOOD -> FSRSAlgorithm.Rating.GOOD
+            Grade.EASY -> FSRSAlgorithm.Rating.EASY
+        }
+
+        val schedulingInfo = fsrsAlgorithm.schedule(fsrsCard, rating, now)
+        val newCard = schedulingInfo.card
+
+        return learningState.copy(
+            fsrsStability = newCard.stability,
+            fsrsDifficulty = newCard.difficulty,
+            fsrsElapsedDays = newCard.elapsedDays,
+            fsrsScheduledDays = newCard.scheduledDays,
+            fsrsReps = newCard.reps,
+            fsrsLapses = newCard.lapses,
+            fsrsState = newCard.state.name,
+            lastReview = now,
+            nextReview = now + (newCard.scheduledDays * 24 * 60 * 60 * 1000L),
+            modified = now
+        )
+    }
+
+    private fun reviewLearningStateWithSM2(
+        learningState: CardGroupLearningState,
+        grade: Grade,
+        now: Long
+    ): CardGroupLearningState {
+        val sm2Card = SM2Algorithm.SM2Card(
+            easeFactor = learningState.sm2EaseFactor,
+            interval = learningState.sm2Interval,
+            repetitions = learningState.sm2Repetitions,
+            lastReview = learningState.lastReview
+        )
+
+        val quality = when (grade) {
+            Grade.SKIP -> throw IllegalArgumentException("SKIP grade should not be processed")
+            Grade.AGAIN -> SM2Algorithm.Quality.COMPLETE_BLACKOUT
+            Grade.HARD -> SM2Algorithm.Quality.DIFFICULT
+            Grade.GOOD -> SM2Algorithm.Quality.EASY
+            Grade.EASY -> SM2Algorithm.Quality.PERFECT
+        }
+
+        val schedulingInfo = sm2Algorithm.schedule(sm2Card, quality, now)
+        val newCard = schedulingInfo.card
+
+        return learningState.copy(
+            sm2EaseFactor = newCard.easeFactor,
+            sm2Interval = newCard.interval,
+            sm2Repetitions = newCard.repetitions,
+            lastReview = now,
+            nextReview = schedulingInfo.nextReviewDate,
+            modified = now,
+            // Update FSRS scheduled days for consistency in UI
+            fsrsScheduledDays = newCard.interval
+        )
+    }
+
+    private fun serializeLearningState(learningState: CardGroupLearningState, algorithm: AlgorithmType): String {
+        return when (algorithm) {
+            AlgorithmType.FSRS -> "S:${learningState.fsrsStability},D:${learningState.fsrsDifficulty},ST:${learningState.fsrsState}"
+            AlgorithmType.SM2 -> "EF:${learningState.sm2EaseFactor},I:${learningState.sm2Interval},R:${learningState.sm2Repetitions}"
         }
     }
 

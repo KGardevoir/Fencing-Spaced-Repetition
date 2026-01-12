@@ -8,6 +8,7 @@ import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
 import com.fencing.spacedrepetition.data.model.CardGroupCrossRef
+import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.GroupWithCards
 import kotlinx.coroutines.flow.Flow
@@ -78,4 +79,26 @@ interface GroupDao {
 
     @Query("SELECT * FROM groups WHERE name = :name LIMIT 1")
     suspend fun getGroupByName(name: String): Group?
+
+    // CardGroupLearningState operations
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLearningState(learningState: CardGroupLearningState)
+
+    @Update
+    suspend fun updateLearningState(learningState: CardGroupLearningState)
+
+    @Query("SELECT * FROM card_group_learning_state WHERE cardId = :cardId AND groupId = :groupId")
+    suspend fun getLearningState(cardId: Long, groupId: Long): CardGroupLearningState?
+
+    @Query("SELECT * FROM card_group_learning_state WHERE cardId = :cardId AND groupId = :groupId")
+    fun getLearningStateFlow(cardId: Long, groupId: Long): Flow<CardGroupLearningState?>
+
+    @Query("DELETE FROM card_group_learning_state WHERE cardId = :cardId AND groupId = :groupId")
+    suspend fun deleteLearningState(cardId: Long, groupId: Long)
+
+    @Query("DELETE FROM card_group_learning_state WHERE cardId = :cardId")
+    suspend fun deleteAllLearningStatesForCard(cardId: Long)
+
+    @Query("DELETE FROM card_group_learning_state WHERE groupId = :groupId")
+    suspend fun deleteAllLearningStatesForGroup(groupId: Long)
 }
