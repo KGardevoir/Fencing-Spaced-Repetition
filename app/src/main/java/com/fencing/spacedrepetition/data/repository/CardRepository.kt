@@ -328,6 +328,7 @@ class CardRepository(
         )
 
         val rating = when (grade) {
+            Grade.SKIP -> throw IllegalArgumentException("SKIP grade should not be processed")
             Grade.AGAIN -> FSRSAlgorithm.Rating.AGAIN
             Grade.HARD -> FSRSAlgorithm.Rating.HARD
             Grade.GOOD -> FSRSAlgorithm.Rating.GOOD
@@ -360,6 +361,7 @@ class CardRepository(
         )
 
         val quality = when (grade) {
+            Grade.SKIP -> throw IllegalArgumentException("SKIP grade should not be processed")
             Grade.AGAIN -> SM2Algorithm.Quality.COMPLETE_BLACKOUT
             Grade.HARD -> SM2Algorithm.Quality.DIFFICULT
             Grade.GOOD -> SM2Algorithm.Quality.EASY

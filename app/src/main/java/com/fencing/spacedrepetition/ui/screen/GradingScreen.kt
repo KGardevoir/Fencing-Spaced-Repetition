@@ -106,7 +106,7 @@ fun GradingScreen(
                                 )
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Text(
-                                    text = "Rate each card based on how well you recalled it during practice",
+                                    text = "Rate each card based on how well you recalled it during practice. Skip cards that couldn't be trained.",
                                     style = MaterialTheme.typography.bodyMedium
                                 )
                             }
@@ -302,6 +302,10 @@ fun GradeButton(
     modifier: Modifier = Modifier
 ) {
     val (color, icon) = when (grade) {
+        Grade.SKIP -> Pair(
+            MaterialTheme.colorScheme.outline,
+            Icons.Default.SkipNext
+        )
         Grade.AGAIN -> Pair(
             MaterialTheme.colorScheme.error,
             Icons.Default.Close
