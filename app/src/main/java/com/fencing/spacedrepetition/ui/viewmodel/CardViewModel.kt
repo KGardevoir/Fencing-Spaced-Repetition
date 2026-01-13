@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
+import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.CardWithGroups
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.repository.CardRepository
@@ -61,6 +62,16 @@ class CardViewModel(
 
     fun getGroupsForCard(cardId: Long): Flow<List<Group>> =
         groupRepository.getGroupsForCard(cardId)
+
+    fun getLearningStatesForCard(cardId: Long): Flow<List<CardGroupLearningState>> =
+        groupRepository.getAllLearningStatesForCard(cardId)
+
+    fun updateLearningState(learningState: CardGroupLearningState, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.updateLearningState(learningState)
+            onComplete()
+        }
+    }
 
     fun getDueCardCountByGroup(groupId: Long): Flow<Int> =
         repository.getDueCardCountByGroup(groupId)

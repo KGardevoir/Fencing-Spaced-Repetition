@@ -1,4 +1,3 @@
-* Make sure Independent learning parameters are visible in Manage Cards
 * Customize launch icon
 * Add image support for cards
 * Unit tests for algorithms

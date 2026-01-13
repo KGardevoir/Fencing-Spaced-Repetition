@@ -4,6 +4,7 @@ import com.fencing.spacedrepetition.data.dao.CardDao
 import com.fencing.spacedrepetition.data.dao.GroupDao
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupCrossRef
+import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.GroupWithCards
 import kotlinx.coroutines.flow.Flow
@@ -138,6 +139,12 @@ class GroupRepository(
     }
 
     suspend fun getGroupByName(name: String): Group? = groupDao.getGroupByName(name)
+
+    fun getAllLearningStatesForCard(cardId: Long): Flow<List<CardGroupLearningState>> =
+        groupDao.getAllLearningStatesForCardFlow(cardId)
+
+    suspend fun getAllLearningStatesForCardSync(cardId: Long): List<CardGroupLearningState> =
+        groupDao.getAllLearningStatesForCard(cardId)
 
     suspend fun toggleIndependentLearning(groupId: Long, enabled: Boolean) {
         val group = groupDao.getGroupById(groupId) ?: return

@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Card
+import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
@@ -256,9 +257,14 @@ fun CardListScreen(
                         val cardGroups = allCardsWithGroups
                             .find { it.card.id == card.id }?.groups ?: emptyList()
 
+                        // Get learning states for this card
+                        val learningStates by viewModel.getLearningStatesForCard(card.id)
+                            .collectAsState(initial = emptyList())
+
                         CardListItem(
                             card = card,
                             groups = cardGroups,
+                            learningStates = learningStates,
                             isSelectionMode = isSelectionMode,
                             isSelected = card.id in selectedCardIds,
                             onEdit = { onNavigateToEditCard(card) },
@@ -509,6 +515,7 @@ fun BulkGroupDialog(
 fun CardListItem(
     card: Card,
     groups: List<Group>,
+    learningStates: List<CardGroupLearningState> = emptyList(),
     isSelectionMode: Boolean = false,
     isSelected: Boolean = false,
     onEdit: () -> Unit,
@@ -650,6 +657,38 @@ fun CardListItem(
                                 modifier = Modifier.height(28.dp)
                             )
                         }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                // Independent learning states display
+                val independentGroups = groups.filter { it.independentLearning }
+                if (independentGroups.isNotEmpty()) {
+                    Text(
+                        text = "Independent Learning:",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    val formatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+                    independentGroups.forEach { group ->
+                        val state = learningStates.find { it.groupId == group.id }
+                        val stateText = if (state == null) {
+                            "${group.name}: No state"
+                        } else {
+                            val nextReview = if (state.nextReview == 0L) {
+                                "New"
+                            } else {
+                                formatter.format(Date(state.nextReview))
+                            }
+                            "${group.name}: Next ${nextReview} (${state.fsrsState})"
+                        }
+                        Text(
+                            text = stateText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                 }

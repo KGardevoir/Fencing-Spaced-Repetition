@@ -15,6 +15,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
+import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import java.text.SimpleDateFormat
@@ -52,6 +53,29 @@ fun AddEditCardScreen(
     var showAdvancedSettings by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
     var showCreateGroupDialog by remember { mutableStateOf(false) }
+
+    // Independent learning states
+    val learningStates by cardToEdit?.let { card ->
+        viewModel.getLearningStatesForCard(card.id).collectAsState(initial = emptyList())
+    } ?: remember { mutableStateOf(emptyList<CardGroupLearningState>()) }
+
+    // Mutable state for editing independent learning states (groupId -> state fields)
+    var independentLearningEdits by remember(learningStates) {
+        mutableStateOf(
+            learningStates.associate { state ->
+                state.groupId to IndependentLearningEdit(
+                    fsrsStability = state.fsrsStability.toString(),
+                    fsrsDifficulty = state.fsrsDifficulty.toString(),
+                    fsrsReps = state.fsrsReps.toString(),
+                    fsrsLapses = state.fsrsLapses.toString(),
+                    fsrsState = state.fsrsState,
+                    sm2EaseFactor = state.sm2EaseFactor.toString(),
+                    sm2Interval = state.sm2Interval.toString(),
+                    sm2Repetitions = state.sm2Repetitions.toString()
+                )
+            }
+        )
+    }
 
     // Learning state fields (only for editing)
     var fsrsStability by remember { mutableStateOf(cardToEdit?.fsrsStability?.toString() ?: "0.0") }
@@ -457,6 +481,38 @@ fun AddEditCardScreen(
                         }
                     }
                 }
+
+                // Independent Learning States section
+                val independentGroups = allGroups.filter {
+                    it.independentLearning && it.id in selectedGroupIds
+                }
+                if (independentGroups.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    independentGroups.forEach { group ->
+                        val groupState = learningStates.find { it.groupId == group.id }
+                        val editState = independentLearningEdits[group.id]
+
+                        IndependentLearningStateCard(
+                            groupName = group.name,
+                            groupState = groupState,
+                            editState = editState,
+                            selectedAlgorithm = selectedAlgorithm,
+                            onStateChange = { newEdit ->
+                                independentLearningEdits = independentLearningEdits + (group.id to newEdit)
+                            },
+                            onReset = {
+                                cardToEdit?.let { card ->
+                                    viewModel.resetCardStateInGroup(card.id, group.id) {
+                                        // Reset local edit state
+                                        independentLearningEdits = independentLearningEdits + (group.id to IndependentLearningEdit())
+                                    }
+                                }
+                            }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.weight(1f))
@@ -485,7 +541,26 @@ fun AddEditCardScreen(
                             viewModel.updateCard(
                                 updatedCard,
                                 groupIds = selectedGroupIds.toList(),
-                                onSuccess = onNavigateBack
+                                onSuccess = {
+                                    // Save independent learning state changes
+                                    independentLearningEdits.forEach { (groupId, edit) ->
+                                        val existingState = learningStates.find { it.groupId == groupId }
+                                        if (existingState != null) {
+                                            val updatedState = existingState.copy(
+                                                fsrsStability = edit.fsrsStability.toDoubleOrNull() ?: existingState.fsrsStability,
+                                                fsrsDifficulty = edit.fsrsDifficulty.toDoubleOrNull() ?: existingState.fsrsDifficulty,
+                                                fsrsReps = edit.fsrsReps.toIntOrNull() ?: existingState.fsrsReps,
+                                                fsrsLapses = edit.fsrsLapses.toIntOrNull() ?: existingState.fsrsLapses,
+                                                fsrsState = edit.fsrsState,
+                                                sm2EaseFactor = edit.sm2EaseFactor.toDoubleOrNull() ?: existingState.sm2EaseFactor,
+                                                sm2Interval = edit.sm2Interval.toIntOrNull() ?: existingState.sm2Interval,
+                                                sm2Repetitions = edit.sm2Repetitions.toIntOrNull() ?: existingState.sm2Repetitions
+                                            )
+                                            viewModel.updateLearningState(updatedState)
+                                        }
+                                    }
+                                    onNavigateBack()
+                                }
                             )
                         } else {
                             viewModel.addCard(
@@ -680,3 +755,285 @@ fun AddEditCardScreen(
         )
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun IndependentLearningStateCard(
+    groupName: String,
+    groupState: CardGroupLearningState?,
+    editState: IndependentLearningEdit?,
+    selectedAlgorithm: AlgorithmType,
+    onStateChange: (IndependentLearningEdit) -> Unit,
+    onReset: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var showResetDialog by remember { mutableStateOf(false) }
+
+    // Use edit state if available, otherwise use group state or defaults
+    val currentEdit = editState ?: IndependentLearningEdit(
+        fsrsStability = groupState?.fsrsStability?.toString() ?: "0.0",
+        fsrsDifficulty = groupState?.fsrsDifficulty?.toString() ?: "0.0",
+        fsrsReps = groupState?.fsrsReps?.toString() ?: "0",
+        fsrsLapses = groupState?.fsrsLapses?.toString() ?: "0",
+        fsrsState = groupState?.fsrsState ?: "NEW",
+        sm2EaseFactor = groupState?.sm2EaseFactor?.toString() ?: "2.5",
+        sm2Interval = groupState?.sm2Interval?.toString() ?: "0",
+        sm2Repetitions = groupState?.sm2Repetitions?.toString() ?: "0"
+    )
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Folder,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "$groupName (Independent)",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                }
+                Icon(
+                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (expanded) "Collapse" else "Expand"
+                )
+            }
+
+            // Status summary
+            val statusText = if (groupState == null) {
+                "No state yet"
+            } else if (groupState.fsrsState == "NEW" && groupState.nextReview == 0L) {
+                "New card"
+            } else if (groupState.nextReview <= System.currentTimeMillis()) {
+                "Due for review"
+            } else {
+                val formatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+                "Next: ${formatter.format(Date(groupState.nextReview))}"
+            }
+            Text(
+                statusText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            if (expanded) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Divider()
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Reset button
+                OutlinedButton(
+                    onClick = { showResetDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Reset State", style = MaterialTheme.typography.bodySmall)
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // FSRS Parameters
+                if (selectedAlgorithm == AlgorithmType.FSRS) {
+                    Text(
+                        "FSRS Parameters",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // State dropdown
+                    var stateExpanded by remember { mutableStateOf(false) }
+                    ExposedDropdownMenuBox(
+                        expanded = stateExpanded,
+                        onExpandedChange = { stateExpanded = !stateExpanded }
+                    ) {
+                        OutlinedTextField(
+                            value = currentEdit.fsrsState,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("State") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = stateExpanded) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(),
+                            textStyle = MaterialTheme.typography.bodySmall
+                        )
+                        ExposedDropdownMenu(
+                            expanded = stateExpanded,
+                            onDismissRequest = { stateExpanded = false }
+                        ) {
+                            listOf("NEW", "LEARNING", "REVIEW", "RELEARNING").forEach { state ->
+                                DropdownMenuItem(
+                                    text = { Text(state) },
+                                    onClick = {
+                                        onStateChange(currentEdit.copy(fsrsState = state))
+                                        stateExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = currentEdit.fsrsStability,
+                            onValueChange = { onStateChange(currentEdit.copy(fsrsStability = it)) },
+                            label = { Text("Stability") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodySmall
+                        )
+                        OutlinedTextField(
+                            value = currentEdit.fsrsDifficulty,
+                            onValueChange = { onStateChange(currentEdit.copy(fsrsDifficulty = it)) },
+                            label = { Text("Difficulty") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = currentEdit.fsrsReps,
+                            onValueChange = { onStateChange(currentEdit.copy(fsrsReps = it)) },
+                            label = { Text("Reps") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodySmall
+                        )
+                        OutlinedTextField(
+                            value = currentEdit.fsrsLapses,
+                            onValueChange = { onStateChange(currentEdit.copy(fsrsLapses = it)) },
+                            label = { Text("Lapses") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+
+                // SM-2 Parameters
+                if (selectedAlgorithm == AlgorithmType.SM2) {
+                    Text(
+                        "SM-2 Parameters",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = currentEdit.sm2EaseFactor,
+                        onValueChange = { onStateChange(currentEdit.copy(sm2EaseFactor = it)) },
+                        label = { Text("Ease Factor") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodySmall
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = currentEdit.sm2Interval,
+                            onValueChange = { onStateChange(currentEdit.copy(sm2Interval = it)) },
+                            label = { Text("Interval") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodySmall
+                        )
+                        OutlinedTextField(
+                            value = currentEdit.sm2Repetitions,
+                            onValueChange = { onStateChange(currentEdit.copy(sm2Repetitions = it)) },
+                            label = { Text("Reps") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // Reset confirmation dialog
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            icon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+            title = { Text("Reset $groupName State?") },
+            text = { Text("This will reset the learning progress for this card in the $groupName group only.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onReset()
+                        showResetDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Reset")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+
+/**
+ * Data class to hold editable independent learning state fields
+ */
+data class IndependentLearningEdit(
+    val fsrsStability: String = "0.0",
+    val fsrsDifficulty: String = "0.0",
+    val fsrsReps: String = "0",
+    val fsrsLapses: String = "0",
+    val fsrsState: String = "NEW",
+    val sm2EaseFactor: String = "2.5",
+    val sm2Interval: String = "0",
+    val sm2Repetitions: String = "0"
+)

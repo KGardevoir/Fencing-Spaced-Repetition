@@ -93,6 +93,12 @@ interface GroupDao {
     @Query("SELECT * FROM card_group_learning_state WHERE cardId = :cardId AND groupId = :groupId")
     fun getLearningStateFlow(cardId: Long, groupId: Long): Flow<CardGroupLearningState?>
 
+    @Query("SELECT * FROM card_group_learning_state WHERE cardId = :cardId")
+    suspend fun getAllLearningStatesForCard(cardId: Long): List<CardGroupLearningState>
+
+    @Query("SELECT * FROM card_group_learning_state WHERE cardId = :cardId")
+    fun getAllLearningStatesForCardFlow(cardId: Long): Flow<List<CardGroupLearningState>>
+
     @Query("DELETE FROM card_group_learning_state WHERE cardId = :cardId AND groupId = :groupId")
     suspend fun deleteLearningState(cardId: Long, groupId: Long)
 
