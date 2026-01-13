@@ -142,7 +142,7 @@ fun GroupListScreen(
             group = null,
             onDismiss = { showAddDialog = false },
             onConfirm = { name, description, independentLearning ->
-                groupViewModel.addGroup(name, description) { showAddDialog = false }
+                groupViewModel.addGroup(name, description) { _ -> showAddDialog = false }
             }
         )
     }

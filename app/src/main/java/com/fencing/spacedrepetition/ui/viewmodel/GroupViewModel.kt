@@ -48,12 +48,12 @@ class GroupViewModel(
         _selectedGroupForPractice.value = group
     }
 
-    fun addGroup(name: String, description: String = "", onSuccess: () -> Unit = {}) {
+    fun addGroup(name: String, description: String = "", onSuccess: (Long) -> Unit = {}) {
         viewModelScope.launch {
             try {
                 val group = Group(name = name, description = description)
-                groupRepository.insertGroup(group)
-                onSuccess()
+                val newId = groupRepository.insertGroup(group)
+                onSuccess(newId)
             } catch (e: Exception) {
                 // Handle error
             }

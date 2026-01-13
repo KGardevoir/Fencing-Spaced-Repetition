@@ -51,6 +51,7 @@ fun AddEditCardScreen(
     var showGroupSelectionSheet by remember { mutableStateOf(false) }
     var showAdvancedSettings by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
+    var showCreateGroupDialog by remember { mutableStateOf(false) }
 
     // Learning state fields (only for editing)
     var fsrsStability by remember { mutableStateOf(cardToEdit?.fsrsStability?.toString() ?: "0.0") }
@@ -579,6 +580,17 @@ fun AddEditCardScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                OutlinedButton(
+                    onClick = { showCreateGroupDialog = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Create New Group")
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
                 Button(
                     onClick = { showGroupSelectionSheet = false },
                     modifier = Modifier.fillMaxWidth()
@@ -623,6 +635,45 @@ fun AddEditCardScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showResetDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Create new group dialog
+    if (showCreateGroupDialog) {
+        var newGroupName by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showCreateGroupDialog = false },
+            icon = { Icon(Icons.Default.CreateNewFolder, contentDescription = null) },
+            title = { Text("Create New Group") },
+            text = {
+                OutlinedTextField(
+                    value = newGroupName,
+                    onValueChange = { newGroupName = it },
+                    label = { Text("Group Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (newGroupName.isNotBlank()) {
+                            groupViewModel.addGroup(newGroupName) { newId ->
+                                selectedGroupIds = selectedGroupIds + newId
+                                showCreateGroupDialog = false
+                            }
+                        }
+                    },
+                    enabled = newGroupName.isNotBlank()
+                ) {
+                    Text("Create")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateGroupDialog = false }) {
                     Text("Cancel")
                 }
             }

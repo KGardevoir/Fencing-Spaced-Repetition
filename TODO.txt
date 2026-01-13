@@ -1,4 +1,4 @@
-* Allow adding groups directly from the add card dialog
+* Spacing issue is due to Home Screen not being scrollable. Reduce the size of the "Delayed Choice Spaced Repetition" Banner.
 * Customize launch icon
 * Add image support for cards
 * Cards practices in different practice groups should have independent learning parameters, this needs to be a parameter in the group, something like 'independent learning'
