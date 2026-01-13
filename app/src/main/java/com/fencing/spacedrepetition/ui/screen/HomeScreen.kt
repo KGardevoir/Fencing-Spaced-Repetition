@@ -88,10 +88,8 @@ fun HomeScreen(
                 .padding(paddingValues)
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Spacer(modifier = Modifier.height(32.dp))
-
             // App title card
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -99,34 +97,41 @@ fun HomeScreen(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 )
             ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Sports,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Delayed Choice\nSpaced Repetition",
-                        style = MaterialTheme.typography.headlineMedium,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Practice $cardsPerSession ${if (cardsPerSession == 1) "card" else "cards"}, grade at the end",
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                    )
+                Row(
+                    modifier = Modifier.padding(8.dp)
+                ){
+                    Column(
+                        modifier = Modifier.weight(2f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Delayed Choice\nSpaced Repetition",
+                            style = MaterialTheme.typography.headlineMedium,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Practice $cardsPerSession ${if (cardsPerSession == 1) "card" else "cards"}, grade at the end",
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                        )
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ){
+                        Icon(
+                            imageVector = Icons.Default.Sports,
+                            contentDescription = null,
+                            modifier = Modifier.size(128.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
 
             // Stats cards
             Row(
@@ -150,140 +155,110 @@ fun HomeScreen(
                 )
             }
 
-            // Group selection card
-            if (groups.isNotEmpty()) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showGroupSelectionDialog = true }
-                ) {
-                    Row(
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ){
+                Spacer(modifier = Modifier.weight(1f))
+
+                // Group selection card
+                if (groups.isNotEmpty()) {
+                    Card(
                         modifier = Modifier
-                            .padding(16.dp)
-                            .fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+                            .fillMaxWidth()
+                            .clickable { showGroupSelectionDialog = true }
                     ) {
-                        Icon(
-                            Icons.Default.Folder,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Practice Group",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        Row(
+                            modifier = Modifier
+                                .padding(16.dp)
+                                .fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Folder,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
                             )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Practice Group",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = selectedGroup?.name ?: "Select a group",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
                             Text(
-                                text = selectedGroup?.name ?: "Select a group",
-                                style = MaterialTheme.typography.titleMedium
+                                text = "$dueForSelectedGroup due",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Icon(
+                                Icons.Default.ArrowDropDown,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        Text(
-                            text = "$dueForSelectedGroup due",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            Icons.Default.ArrowDropDown,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                 }
-            }
+                Spacer(modifier = Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.weight(1f, fill = false).defaultMinSize(minHeight = 8.dp))
 
-            // Main actions
-            Button(
-                onClick = {
-                    practiceViewModel.startNewSession(cardsPerSession, selectedGroup?.id)
-                    onNavigateToPractice()
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(72.dp),
-                enabled = cardsForSelectedGroup >= 1
-            ) {
-                Icon(
-                    Icons.Default.PlayArrow,
-                    contentDescription = null,
-                    modifier = Modifier.size(32.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = "Start Practice",
-                    style = MaterialTheme.typography.headlineSmall
-                )
-            }
-
-            if (cardsForSelectedGroup < 1) {
-                Text(
-                    text = if (totalCards == 0) "Add some cards to get started"
-                           else if (selectedGroup != null) "No cards in ${selectedGroup.name}"
-                           else "No cards available",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-            } else {
-                // Add spacing when helper text is not shown
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            OutlinedButton(
-                onClick = onNavigateToCards,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-            ) {
-                Icon(
-                    Icons.Default.LibraryBooks,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Manage Cards",
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // Algorithm info
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
+                // Main actions
+                Button(
+                    onClick = {
+                        practiceViewModel.startNewSession(cardsPerSession, selectedGroup?.id)
+                        onNavigateToPractice()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(72.dp),
+                    enabled = cardsForSelectedGroup >= 1
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.Info,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Algorithms: FSRS & SM-2",
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(32.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "Choose between modern FSRS or classic SM-2 algorithm for each card",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "Start Practice",
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                }
+
+                if (cardsForSelectedGroup < 1) {
+                    Text(
+                        text = if (totalCards == 0) "Add some cards to get started"
+                        else if (selectedGroup != null) "No cards in ${selectedGroup.name}"
+                        else "No cards available",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                } else {
+                    // Add spacing when helper text is not shown
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                OutlinedButton(
+                    onClick = onNavigateToCards,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                ) {
+                    Icon(
+                        Icons.Default.LibraryBooks,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Manage Cards",
+                        style = MaterialTheme.typography.titleMedium
                     )
                 }
             }

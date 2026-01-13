@@ -1,4 +1,4 @@
-* Spacing issue is due to Home Screen not being scrollable. Reduce the size of the "Delayed Choice Spaced Repetition" Banner.
+* Make sure Independent learning parameters are visible in Manage Cards
 * Customize launch icon
 * Add image support for cards
 * Unit tests for algorithms
