@@ -279,7 +279,7 @@ fun GradingCardItem(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Grade.values().forEach { grade ->
                     GradeButton(
@@ -326,7 +326,7 @@ fun GradeButton(
 
     OutlinedButton(
         onClick = onClick,
-        modifier = modifier.height(64.dp),
+        modifier = modifier.height(72.dp),
         colors = ButtonDefaults.outlinedButtonColors(
             containerColor = if (selected) color.copy(alpha = 0.2f) else Color.Transparent,
             contentColor = color
@@ -335,7 +335,8 @@ fun GradeButton(
             width = if (selected) 2.dp else 1.dp,
             color = if (selected) color else MaterialTheme.colorScheme.outline
         ),
-        shape = RoundedCornerShape(8.dp)
+        shape = RoundedCornerShape(8.dp),
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
