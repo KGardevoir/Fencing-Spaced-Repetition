@@ -1,9 +1,14 @@
 package com.fencing.spacedrepetition.util
 
+import android.content.Context
+import android.util.Base64
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
+import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 
 sealed class ImportResult {
     data class Success(val importedCount: Int, val skippedCount: Int, val errors: List<String>) : ImportResult()
@@ -22,7 +27,8 @@ data class ParsedCard(
     val question: String,
     val answer: String,
     val lineNumber: Int,
-    val imagePaths: List<String> = emptyList(),
+    val imagePaths: List<String> = emptyList(), // For export (file paths)
+    val imageData: List<String> = emptyList(),  // For import (base64 encoded)
     // Full state (null if simple import)
     val algorithm: AlgorithmType? = null,
     val stateContext: String? = null,  // "GLOBAL" or group name for group-specific state
@@ -345,10 +351,10 @@ object CardImportExport {
             return ParsedCard(question = question, answer = answer, lineNumber = lineNumber)
         }
 
-        // Parse image paths
-        val imagePathsStr = parts.getOrNull(COL_V3_IMAGE_PATHS)?.trim() ?: ""
-        val imagePaths = if (imagePathsStr.isNotEmpty()) {
-            imagePathsStr.split(IMAGE_SEPARATOR).map { it.trim() }.filter { it.isNotEmpty() }
+        // Parse image data (base64 encoded)
+        val imageDataStr = parts.getOrNull(COL_V3_IMAGE_PATHS)?.trim() ?: ""
+        val imageData = if (imageDataStr.isNotEmpty()) {
+            imageDataStr.split(IMAGE_SEPARATOR).map { it.trim() }.filter { it.isNotEmpty() }
         } else {
             emptyList()
         }
@@ -374,7 +380,7 @@ object CardImportExport {
             question = question,
             answer = answer,
             lineNumber = lineNumber,
-            imagePaths = imagePaths,
+            imageData = imageData,  // Store base64 data for later decoding
             algorithm = algorithm,
             stateContext = stateContext,
             nextReview = parts.getOrNull(COL_V3_NEXT_REVIEW)?.toLongOrNull() ?: 0L,
@@ -498,7 +504,9 @@ object CardImportExport {
             append(DELIMITER)
             append(escapeNewlines(card.answer))
             append(DELIMITER)
-            append(card.imagePaths.joinToString(IMAGE_SEPARATOR))
+            // Encode images to base64
+            val encodedImages = card.imagePaths.mapNotNull { encodeImageToBase64(it) }
+            append(encodedImages.joinToString(IMAGE_SEPARATOR))
             append(DELIMITER)
             append(card.algorithm.name)
             append(DELIMITER)
@@ -542,7 +550,9 @@ object CardImportExport {
             append(DELIMITER)
             append(escapeNewlines(card.answer))
             append(DELIMITER)
-            append(card.imagePaths.joinToString(IMAGE_SEPARATOR))
+            // Encode images to base64
+            val encodedImages = card.imagePaths.mapNotNull { encodeImageToBase64(it) }
+            append(encodedImages.joinToString(IMAGE_SEPARATOR))
             append(DELIMITER)
             append(card.algorithm.name)
             append(DELIMITER)
@@ -587,7 +597,8 @@ object CardImportExport {
     }
 
     /**
-     * Converts a ParsedCard to a Card entity
+     * Converts a ParsedCard to a Card entity (without Context - for tests)
+     * Note: This version cannot decode base64 images
      */
     fun parsedCardToCard(parsed: ParsedCard): Card {
         val now = System.currentTimeMillis()
@@ -626,6 +637,50 @@ object CardImportExport {
     }
 
     /**
+     * Converts a ParsedCard to a Card entity with base64 image decoding
+     */
+    fun parsedCardToCard(context: Context, parsed: ParsedCard): Card {
+        val now = System.currentTimeMillis()
+
+        // Decode base64 images to file paths
+        val decodedImagePaths = parsed.imageData.mapNotNull { base64Data ->
+            decodeImageFromBase64(context, base64Data)
+        }
+
+        return if (parsed.hasFullState) {
+            Card(
+                question = parsed.question,
+                answer = parsed.answer,
+                imagePaths = decodedImagePaths,
+                algorithm = parsed.algorithm ?: AlgorithmType.FSRS,
+                nextReview = parsed.nextReview ?: 0L,
+                lastReview = parsed.lastReview ?: 0L,
+                fsrsStability = parsed.fsrsStability ?: 0.0,
+                fsrsDifficulty = parsed.fsrsDifficulty ?: 0.0,
+                fsrsState = parsed.fsrsState ?: "NEW",
+                fsrsReps = parsed.fsrsReps ?: 0,
+                fsrsLapses = parsed.fsrsLapses ?: 0,
+                fsrsScheduledDays = parsed.fsrsScheduledDays ?: 0,
+                fsrsElapsedDays = parsed.fsrsElapsedDays ?: 0,
+                sm2EaseFactor = parsed.sm2EaseFactor ?: 2.5,
+                sm2Interval = parsed.sm2Interval ?: 0,
+                sm2Repetitions = parsed.sm2Repetitions ?: 0,
+                created = now,
+                modified = now
+            )
+        } else {
+            Card(
+                question = parsed.question,
+                answer = parsed.answer,
+                imagePaths = decodedImagePaths,
+                algorithm = AlgorithmType.FSRS,
+                created = now,
+                modified = now
+            )
+        }
+    }
+
+    /**
      * Escapes newlines for export (replaces \n with <br>)
      */
     private fun escapeNewlines(text: String): String {
@@ -647,6 +702,67 @@ object CardImportExport {
     fun generateExportFilename(groupName: String): String {
         val sanitized = groupName.replace(Regex("[^a-zA-Z0-9_\\-]"), "_")
             .take(50)
-        return "${sanitized}_cards.txt"
+        return "${sanitized}_cards.tsv.gz"
+    }
+
+    /**
+     * Encodes image file to base64 string
+     */
+    fun encodeImageToBase64(imagePath: String): String? {
+        return try {
+            val file = File(imagePath)
+            if (!file.exists() || !file.canRead()) {
+                return null
+            }
+            val bytes = file.readBytes()
+            Base64.encodeToString(bytes, Base64.NO_WRAP)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    /**
+     * Decodes base64 string and saves to internal storage
+     * Returns the saved file path or null if failed
+     */
+    fun decodeImageFromBase64(context: Context, base64Data: String): String? {
+        return try {
+            val bytes = Base64.decode(base64Data, Base64.NO_WRAP)
+
+            // Create images directory if it doesn't exist
+            val imagesDir = File(context.filesDir, "card_images")
+            if (!imagesDir.exists()) {
+                imagesDir.mkdirs()
+            }
+
+            // Generate unique filename
+            val timestamp = System.currentTimeMillis()
+            val fileName = "card_image_${timestamp}.jpg"
+            val outputFile = File(imagesDir, fileName)
+
+            // Write file
+            outputFile.writeBytes(bytes)
+
+            // Return the file path
+            outputFile.absolutePath
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    /**
+     * Wraps an OutputStream with GZIP compression
+     */
+    fun createCompressedOutputStream(outputStream: OutputStream): GZIPOutputStream {
+        return GZIPOutputStream(outputStream)
+    }
+
+    /**
+     * Wraps an InputStream with GZIP decompression
+     */
+    fun createDecompressedInputStream(inputStream: InputStream): GZIPInputStream {
+        return GZIPInputStream(inputStream)
     }
 }

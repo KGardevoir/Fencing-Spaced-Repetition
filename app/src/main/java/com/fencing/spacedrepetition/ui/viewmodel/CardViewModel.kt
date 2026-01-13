@@ -1,8 +1,9 @@
 package com.fencing.spacedrepetition.ui.viewmodel
 
+import android.app.Application
 import android.content.ContentResolver
 import android.net.Uri
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
@@ -20,9 +21,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class CardViewModel(
+    application: Application,
     private val repository: CardRepository,
     private val groupRepository: GroupRepository
-) : ViewModel() {
+) : AndroidViewModel(application) {
 
     val allCards: StateFlow<List<Card>> = repository.getAllCards()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -257,8 +259,12 @@ class CardViewModel(
             _importExportState.value = ImportExportState.Loading
             try {
                 val parseResult = withContext(Dispatchers.IO) {
-                    contentResolver.openInputStream(uri)?.use { inputStream ->
-                        CardImportExport.parseCards(inputStream)
+                    contentResolver.openInputStream(uri)?.use { fileStream ->
+                        // Wrap with GZIP decompression
+                        val inputStream = CardImportExport.createDecompressedInputStream(fileStream)
+                        val result = CardImportExport.parseCards(inputStream)
+                        inputStream.close()
+                        result
                     }
                 }
 
@@ -295,8 +301,8 @@ class CardViewModel(
 
                 val importedCount = withContext(Dispatchers.IO) {
                     if (hasFullState) {
-                        // Full import with state and groups
-                        val cards = parsedCards.map { CardImportExport.parsedCardToCard(it) }
+                        // Full import with state and groups (decode base64 images)
+                        val cards = parsedCards.map { CardImportExport.parsedCardToCard(getApplication(), it) }
                         val groupNamesPerCard = parsedCards.map { it.groupNames }
                         repository.importFullCards(cards, groupNamesPerCard, groupNameMap)
                     } else {
