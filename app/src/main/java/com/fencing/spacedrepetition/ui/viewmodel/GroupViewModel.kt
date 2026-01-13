@@ -77,6 +77,17 @@ class GroupViewModel(
         }
     }
 
+    fun toggleIndependentLearning(groupId: Long, enabled: Boolean, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                groupRepository.toggleIndependentLearning(groupId, enabled)
+                onSuccess()
+            } catch (e: Exception) {
+                // Handle error
+            }
+        }
+    }
+
     fun getDueCardCountForGroup(groupId: Long): Flow<Int> =
         groupRepository.getDueCardCountByGroup(groupId)
 
@@ -92,22 +103,18 @@ class GroupViewModel(
         viewModelScope.launch {
             _importExportState.value = ImportExportState.Loading
             try {
-                val cardsWithGroups = withContext(Dispatchers.IO) {
-                    groupRepository.getCardsByGroupWithGroupNames(groupId)
+                val cardsWithStates = withContext(Dispatchers.IO) {
+                    groupRepository.getCardsByGroupWithStates(groupId)
                 }
 
-                if (cardsWithGroups.isEmpty()) {
+                if (cardsWithStates.isEmpty()) {
                     _importExportState.value = ImportExportState.Error("No cards to export in this group")
                     return@launch
                 }
 
-                val exportData = cardsWithGroups.map { (card, groupNames) ->
-                    CardWithGroupNames(card, groupNames)
-                }
-
                 val result = withContext(Dispatchers.IO) {
                     contentResolver.openOutputStream(uri)?.use { outputStream ->
-                        CardImportExport.exportCardsWithGroups(exportData, outputStream)
+                        CardImportExport.exportCardsWithGroupStates(cardsWithStates, outputStream)
                     } ?: ExportResult.Error("Failed to open file for writing")
                 }
 
@@ -159,33 +166,48 @@ class GroupViewModel(
                     .filter { it.isNotBlank() }
                     .toSet()
 
+                // Detect which groups have independent learning (groups with state-specific rows)
+                val groupsWithIndependentLearning = parsedCards
+                    .filter { it.isGroupSpecificState }
+                    .mapNotNull { it.stateContext }
+                    .toSet()
+
                 // Ensure all groups exist (creates missing ones automatically)
                 val groupNameMap = withContext(Dispatchers.IO) {
-                    groupRepository.ensureGroupsExist(allGroupNames)
+                    groupRepository.ensureGroupsExist(allGroupNames, groupsWithIndependentLearning)
                 }
 
-                // Check if this is a full format import
+                // Check if this is a full format import with state
                 val hasFullState = parsedCards.any { it.hasFullState }
+                // Check if any cards have group-specific states (V2 format)
+                val hasGroupSpecificStates = parsedCards.any { it.isGroupSpecificState }
 
                 val importedCount = withContext(Dispatchers.IO) {
-                    if (hasFullState) {
-                        // Full import with state - also add to target group
-                        val cards = parsedCards.map { CardImportExport.parsedCardToCard(it) }
-                        // Merge target group with any groups from file
-                        val targetGroupName = groupRepository.getGroupById(groupId)?.name
-                        val groupNamesPerCard = parsedCards.map { parsed ->
-                            val fileGroups = parsed.groupNames.toMutableList()
-                            // Add target group if not already present
-                            if (targetGroupName != null && targetGroupName !in fileGroups) {
-                                fileGroups.add(targetGroupName)
-                            }
-                            fileGroups
+                    when {
+                        hasGroupSpecificStates -> {
+                            // V2 format with group-specific states
+                            cardRepository.importCardsWithGroupStates(parsedCards, groupNameMap)
                         }
-                        cardRepository.importFullCards(cards, groupNamesPerCard, groupNameMap)
-                    } else {
-                        // Simple import to specific group
-                        val cardsToImport = parsedCards.map { it.question to it.answer }
-                        cardRepository.importCardsToGroup(cardsToImport, groupId, algorithm)
+                        hasFullState -> {
+                            // V1 full import with state - also add to target group
+                            val cards = parsedCards.map { CardImportExport.parsedCardToCard(it) }
+                            // Merge target group with any groups from file
+                            val targetGroupName = groupRepository.getGroupById(groupId)?.name
+                            val groupNamesPerCard = parsedCards.map { parsed ->
+                                val fileGroups = parsed.groupNames.toMutableList()
+                                // Add target group if not already present
+                                if (targetGroupName != null && targetGroupName !in fileGroups) {
+                                    fileGroups.add(targetGroupName)
+                                }
+                                fileGroups
+                            }
+                            cardRepository.importFullCards(cards, groupNamesPerCard, groupNameMap)
+                        }
+                        else -> {
+                            // Simple import to specific group
+                            val cardsToImport = parsedCards.map { it.question to it.answer }
+                            cardRepository.importCardsToGroup(cardsToImport, groupId, algorithm)
+                        }
                     }
                 }
 

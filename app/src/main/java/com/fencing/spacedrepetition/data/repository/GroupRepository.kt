@@ -78,18 +78,59 @@ class GroupRepository(
         }
     }
 
+    suspend fun getCardsByGroupWithStates(groupId: Long): List<com.fencing.spacedrepetition.util.CardWithGroupStates> {
+        val cards = getCardsByGroupSync(groupId)
+        val allGroups = getAllGroupsSync()
+        val independentLearningGroupNames = allGroups.filter { it.independentLearning }.map { it.name to it.id }.toMap()
+
+        return cards.map { card ->
+            val groups = getGroupsForCardSync(card.id)
+            val groupNames = groups.map { it.name }
+
+            // Get group-specific states for groups with independent learning
+            val groupSpecificStates = mutableMapOf<String, com.fencing.spacedrepetition.data.model.CardGroupLearningState>()
+            groups.forEach { group ->
+                if (group.independentLearning) {
+                    groupDao.getLearningState(card.id, group.id)?.let { state ->
+                        groupSpecificStates[group.name] = state
+                    }
+                }
+            }
+
+            com.fencing.spacedrepetition.util.CardWithGroupStates(card, groupNames, groupSpecificStates)
+        }
+    }
+
     /**
      * Ensures all group names exist, creating any that don't.
      * Returns an updated map of group name to ID.
+     * If groupsWithIndependentLearning is provided, sets independentLearning flag for those groups.
      */
-    suspend fun ensureGroupsExist(groupNames: Set<String>): Map<String, Long> {
+    suspend fun ensureGroupsExist(
+        groupNames: Set<String>,
+        groupsWithIndependentLearning: Set<String> = emptySet()
+    ): Map<String, Long> {
         val existingGroups = getAllGroupsSync().associate { it.name to it.id }.toMutableMap()
 
         groupNames.forEach { name ->
-            if (name.isNotBlank() && !existingGroups.containsKey(name)) {
-                val newGroup = Group(name = name, description = "Imported group")
-                val newId = groupDao.insertGroup(newGroup)
-                existingGroups[name] = newId
+            if (name.isNotBlank()) {
+                if (!existingGroups.containsKey(name)) {
+                    // Create new group
+                    val newGroup = Group(
+                        name = name,
+                        description = "Imported group",
+                        independentLearning = name in groupsWithIndependentLearning
+                    )
+                    val newId = groupDao.insertGroup(newGroup)
+                    existingGroups[name] = newId
+                } else if (name in groupsWithIndependentLearning) {
+                    // Update existing group to enable independent learning if needed
+                    val existingGroupId = existingGroups[name]!!
+                    val existingGroup = groupDao.getGroupById(existingGroupId)
+                    if (existingGroup != null && !existingGroup.independentLearning) {
+                        groupDao.updateGroup(existingGroup.copy(independentLearning = true))
+                    }
+                }
             }
         }
 
@@ -97,4 +138,39 @@ class GroupRepository(
     }
 
     suspend fun getGroupByName(name: String): Group? = groupDao.getGroupByName(name)
+
+    suspend fun toggleIndependentLearning(groupId: Long, enabled: Boolean) {
+        val group = groupDao.getGroupById(groupId) ?: return
+        val updatedGroup = group.copy(independentLearning = enabled)
+        groupDao.updateGroup(updatedGroup)
+
+        // If enabling independent learning, initialize learning states for all cards in the group
+        if (enabled) {
+            val cards = cardDao.getCardsByGroupSync(groupId)
+            cards.forEach { card ->
+                val existingState = groupDao.getLearningState(card.id, groupId)
+                if (existingState == null) {
+                    groupDao.insertLearningState(
+                        com.fencing.spacedrepetition.data.model.CardGroupLearningState(
+                            cardId = card.id,
+                            groupId = groupId,
+                            // Copy current card state to the new learning state
+                            fsrsStability = card.fsrsStability,
+                            fsrsDifficulty = card.fsrsDifficulty,
+                            fsrsElapsedDays = card.fsrsElapsedDays,
+                            fsrsScheduledDays = card.fsrsScheduledDays,
+                            fsrsReps = card.fsrsReps,
+                            fsrsLapses = card.fsrsLapses,
+                            fsrsState = card.fsrsState,
+                            sm2EaseFactor = card.sm2EaseFactor,
+                            sm2Interval = card.sm2Interval,
+                            sm2Repetitions = card.sm2Repetitions,
+                            lastReview = card.lastReview,
+                            nextReview = card.nextReview
+                        )
+                    )
+                }
+            }
+        }
+    }
 }

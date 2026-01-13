@@ -50,7 +50,7 @@ class CardRepository(
         reviewLogDao.deleteReviewLogsByCard(cardId)
     }
 
-    suspend fun resetCardState(cardId: Long) {
+    suspend fun resetCardState(cardId: Long, resetGroupStates: Boolean = false) {
         val card = cardDao.getCardById(cardId) ?: return
         val now = System.currentTimeMillis()
         val resetCard = card.copy(
@@ -72,6 +72,34 @@ class CardRepository(
             modified = now
         )
         cardDao.updateCard(resetCard)
+
+        // Optionally reset group-specific learning states
+        if (resetGroupStates) {
+            groupDao.deleteAllLearningStatesForCard(cardId)
+        }
+    }
+
+    suspend fun resetCardStateInGroup(cardId: Long, groupId: Long) {
+        // Reset only the group-specific learning state for this card in this group
+        val learningState = groupDao.getLearningState(cardId, groupId)
+        if (learningState != null) {
+            val resetState = learningState.copy(
+                fsrsStability = 0.0,
+                fsrsDifficulty = 0.0,
+                fsrsElapsedDays = 0,
+                fsrsScheduledDays = 0,
+                fsrsReps = 0,
+                fsrsLapses = 0,
+                fsrsState = "NEW",
+                sm2EaseFactor = 2.5,
+                sm2Interval = 0,
+                sm2Repetitions = 0,
+                lastReview = 0L,
+                nextReview = 0L,
+                modified = System.currentTimeMillis()
+            )
+            groupDao.updateLearningState(resetState)
+        }
     }
 
     fun getCardCount(): Flow<Int> = cardDao.getCardCount()
@@ -214,6 +242,79 @@ class CardRepository(
         return importedCount
     }
 
+    suspend fun importCardsWithGroupStates(
+        parsedCards: List<com.fencing.spacedrepetition.util.ParsedCard>,
+        existingGroups: Map<String, Long>
+    ): Int {
+        // Group parsed cards by question (same card, different state contexts)
+        val cardsByQuestion = parsedCards.groupBy { it.question }
+        var importedCount = 0
+
+        cardsByQuestion.forEach { (question, states) ->
+            // Find the global state (or use the first state if no global)
+            val globalState = states.find { it.isGlobalState } ?: states.first()
+
+            // Create or update the card
+            val card = com.fencing.spacedrepetition.util.CardImportExport.parsedCardToCard(globalState)
+            val existingCard = cardDao.findCardByQuestion(question)
+            val cardId: Long
+
+            if (existingCard != null) {
+                val updatedCard = card.copy(
+                    id = existingCard.id,
+                    created = existingCard.created,
+                    modified = System.currentTimeMillis()
+                )
+                cardDao.updateCard(updatedCard)
+                cardId = existingCard.id
+
+                // Clear existing group associations
+                groupDao.deleteAllGroupsForCard(cardId)
+                // Clear existing group-specific learning states
+                groupDao.deleteAllLearningStatesForCard(cardId)
+            } else {
+                cardId = cardDao.insertCard(card)
+            }
+
+            // Collect all unique group names from all state contexts
+            val allGroupNames = states.flatMap { it.groupNames }.toSet()
+
+            // Add group associations
+            allGroupNames.forEach { groupName ->
+                existingGroups[groupName]?.let { groupId ->
+                    groupDao.insertCardGroupCrossRef(CardGroupCrossRef(cardId, groupId))
+                }
+            }
+
+            // Import group-specific learning states
+            states.filter { it.isGroupSpecificState }.forEach { groupState ->
+                val groupName = groupState.stateContext!!
+                existingGroups[groupName]?.let { groupId ->
+                    val learningState = com.fencing.spacedrepetition.data.model.CardGroupLearningState(
+                        cardId = cardId,
+                        groupId = groupId,
+                        fsrsStability = groupState.fsrsStability ?: 0.0,
+                        fsrsDifficulty = groupState.fsrsDifficulty ?: 0.0,
+                        fsrsElapsedDays = groupState.fsrsElapsedDays ?: 0,
+                        fsrsScheduledDays = groupState.fsrsScheduledDays ?: 0,
+                        fsrsReps = groupState.fsrsReps ?: 0,
+                        fsrsLapses = groupState.fsrsLapses ?: 0,
+                        fsrsState = groupState.fsrsState ?: "NEW",
+                        sm2EaseFactor = groupState.sm2EaseFactor ?: 2.5,
+                        sm2Interval = groupState.sm2Interval ?: 0,
+                        sm2Repetitions = groupState.sm2Repetitions ?: 0,
+                        lastReview = groupState.lastReview ?: 0L,
+                        nextReview = groupState.nextReview ?: 0L
+                    )
+                    groupDao.insertLearningState(learningState)
+                }
+            }
+
+            importedCount++
+        }
+        return importedCount
+    }
+
     suspend fun getAllCardsWithGroupNames(): List<Pair<Card, List<String>>> {
         val cardsWithGroups = cardDao.getAllCardsWithGroups().first()
         return cardsWithGroups.map { cardWithGroups ->
@@ -250,6 +351,23 @@ class CardRepository(
 
     fun getCompletedSessions(): Flow<List<PracticeSession>> = sessionDao.getCompletedSessions()
 
+    // Independent learning state operations
+    suspend fun getLearningState(cardId: Long, groupId: Long): CardGroupLearningState? =
+        groupDao.getLearningState(cardId, groupId)
+
+    fun getLearningStateFlow(cardId: Long, groupId: Long): Flow<CardGroupLearningState?> =
+        groupDao.getLearningStateFlow(cardId, groupId)
+
+    suspend fun updateLearningState(learningState: CardGroupLearningState) =
+        groupDao.updateLearningState(learningState)
+
+    suspend fun initializeLearningState(cardId: Long, groupId: Long, algorithm: AlgorithmType) {
+        val existingState = groupDao.getLearningState(cardId, groupId)
+        if (existingState == null) {
+            groupDao.insertLearningState(CardGroupLearningState(cardId, groupId))
+        }
+    }
+
     // Review operations
     suspend fun reviewCard(card: Card, grade: Grade, sessionId: Long? = null): Card {
         val now = System.currentTimeMillis()
@@ -278,6 +396,65 @@ class CardRepository(
         cardDao.updateCard(updatedCard)
 
         return updatedCard
+    }
+
+    suspend fun reviewCardWithGroup(card: Card, grade: Grade, groupId: Long, sessionId: Long? = null): Card {
+        val group = groupDao.getGroupById(groupId) ?: return reviewCard(card, grade, sessionId)
+
+        if (!group.independentLearning) {
+            // Use global learning state
+            return reviewCard(card, grade, sessionId)
+        }
+
+        // Use group-specific learning state
+        val now = System.currentTimeMillis()
+        var learningState = groupDao.getLearningState(card.id, groupId)
+
+        // Initialize learning state if it doesn't exist
+        if (learningState == null) {
+            learningState = CardGroupLearningState(card.id, groupId)
+            groupDao.insertLearningState(learningState)
+        }
+
+        val elapsedDays = if (learningState.lastReview == 0L) 0 else
+            ((now - learningState.lastReview) / (1000 * 60 * 60 * 24)).toInt()
+
+        val updatedState = when (card.algorithm) {
+            AlgorithmType.FSRS -> reviewLearningStateWithFSRS(learningState, grade, now, elapsedDays)
+            AlgorithmType.SM2 -> reviewLearningStateWithSM2(learningState, grade, now)
+        }
+
+        // Create review log
+        val reviewLog = ReviewLog(
+            cardId = card.id,
+            sessionId = sessionId,
+            reviewTime = now,
+            grade = grade.value,
+            algorithm = card.algorithm.name,
+            stateBefore = serializeLearningState(learningState, card.algorithm),
+            stateAfter = serializeLearningState(updatedState, card.algorithm),
+            scheduledDays = updatedState.fsrsScheduledDays,
+            elapsedDays = elapsedDays
+        )
+
+        reviewLogDao.insertReviewLog(reviewLog)
+        groupDao.updateLearningState(updatedState)
+
+        // Return a virtual card with the group-specific state (for UI display)
+        return card.copy(
+            fsrsStability = updatedState.fsrsStability,
+            fsrsDifficulty = updatedState.fsrsDifficulty,
+            fsrsElapsedDays = updatedState.fsrsElapsedDays,
+            fsrsScheduledDays = updatedState.fsrsScheduledDays,
+            fsrsReps = updatedState.fsrsReps,
+            fsrsLapses = updatedState.fsrsLapses,
+            fsrsState = updatedState.fsrsState,
+            sm2EaseFactor = updatedState.sm2EaseFactor,
+            sm2Interval = updatedState.sm2Interval,
+            sm2Repetitions = updatedState.sm2Repetitions,
+            lastReview = updatedState.lastReview,
+            nextReview = updatedState.nextReview
+        )
     }
 
     suspend fun reviewMultipleCards(cardsWithGrades: List<Pair<Card, Grade>>, sessionId: Long? = null) {
@@ -387,6 +564,90 @@ class CardRepository(
         return when (card.algorithm) {
             AlgorithmType.FSRS -> "S:${card.fsrsStability},D:${card.fsrsDifficulty},ST:${card.fsrsState}"
             AlgorithmType.SM2 -> "EF:${card.sm2EaseFactor},I:${card.sm2Interval},R:${card.sm2Repetitions}"
+        }
+    }
+
+    private fun reviewLearningStateWithFSRS(
+        learningState: CardGroupLearningState,
+        grade: Grade,
+        now: Long,
+        elapsedDays: Int
+    ): CardGroupLearningState {
+        val fsrsCard = FSRSAlgorithm.FSRSCard(
+            stability = learningState.fsrsStability,
+            difficulty = learningState.fsrsDifficulty,
+            elapsedDays = elapsedDays,
+            scheduledDays = learningState.fsrsScheduledDays,
+            reps = learningState.fsrsReps,
+            lapses = learningState.fsrsLapses,
+            state = FSRSAlgorithm.CardState.valueOf(learningState.fsrsState),
+            lastReview = learningState.lastReview
+        )
+
+        val rating = when (grade) {
+            Grade.SKIP -> throw IllegalArgumentException("SKIP grade should not be processed")
+            Grade.AGAIN -> FSRSAlgorithm.Rating.AGAIN
+            Grade.HARD -> FSRSAlgorithm.Rating.HARD
+            Grade.GOOD -> FSRSAlgorithm.Rating.GOOD
+            Grade.EASY -> FSRSAlgorithm.Rating.EASY
+        }
+
+        val schedulingInfo = fsrsAlgorithm.schedule(fsrsCard, rating, now)
+        val newCard = schedulingInfo.card
+
+        return learningState.copy(
+            fsrsStability = newCard.stability,
+            fsrsDifficulty = newCard.difficulty,
+            fsrsElapsedDays = newCard.elapsedDays,
+            fsrsScheduledDays = newCard.scheduledDays,
+            fsrsReps = newCard.reps,
+            fsrsLapses = newCard.lapses,
+            fsrsState = newCard.state.name,
+            lastReview = now,
+            nextReview = now + (newCard.scheduledDays * 24 * 60 * 60 * 1000L),
+            modified = now
+        )
+    }
+
+    private fun reviewLearningStateWithSM2(
+        learningState: CardGroupLearningState,
+        grade: Grade,
+        now: Long
+    ): CardGroupLearningState {
+        val sm2Card = SM2Algorithm.SM2Card(
+            easeFactor = learningState.sm2EaseFactor,
+            interval = learningState.sm2Interval,
+            repetitions = learningState.sm2Repetitions,
+            lastReview = learningState.lastReview
+        )
+
+        val quality = when (grade) {
+            Grade.SKIP -> throw IllegalArgumentException("SKIP grade should not be processed")
+            Grade.AGAIN -> SM2Algorithm.Quality.COMPLETE_BLACKOUT
+            Grade.HARD -> SM2Algorithm.Quality.DIFFICULT
+            Grade.GOOD -> SM2Algorithm.Quality.EASY
+            Grade.EASY -> SM2Algorithm.Quality.PERFECT
+        }
+
+        val schedulingInfo = sm2Algorithm.schedule(sm2Card, quality, now)
+        val newCard = schedulingInfo.card
+
+        return learningState.copy(
+            sm2EaseFactor = newCard.easeFactor,
+            sm2Interval = newCard.interval,
+            sm2Repetitions = newCard.repetitions,
+            lastReview = now,
+            nextReview = schedulingInfo.nextReviewDate,
+            modified = now,
+            // Update FSRS scheduled days for consistency in UI
+            fsrsScheduledDays = newCard.interval
+        )
+    }
+
+    private fun serializeLearningState(learningState: CardGroupLearningState, algorithm: AlgorithmType): String {
+        return when (algorithm) {
+            AlgorithmType.FSRS -> "S:${learningState.fsrsStability},D:${learningState.fsrsDifficulty},ST:${learningState.fsrsState}"
+            AlgorithmType.SM2 -> "EF:${learningState.sm2EaseFactor},I:${learningState.sm2Interval},R:${learningState.sm2Repetitions}"
         }
     }
 

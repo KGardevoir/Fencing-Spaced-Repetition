@@ -141,7 +141,7 @@ fun GroupListScreen(
         AddEditGroupDialog(
             group = null,
             onDismiss = { showAddDialog = false },
-            onConfirm = { name, description ->
+            onConfirm = { name, description, independentLearning ->
                 groupViewModel.addGroup(name, description) { showAddDialog = false }
             }
         )
@@ -152,8 +152,8 @@ fun GroupListScreen(
         AddEditGroupDialog(
             group = group,
             onDismiss = { editingGroup = null },
-            onConfirm = { name, description ->
-                groupViewModel.updateGroup(group.copy(name = name, description = description)) {
+            onConfirm = { name, description, independentLearning ->
+                groupViewModel.updateGroup(group.copy(name = name, description = description, independentLearning = independentLearning)) {
                     editingGroup = null
                 }
             }
@@ -287,15 +287,33 @@ fun GroupListItem(
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    group.name,
-                    style = MaterialTheme.typography.titleMedium
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        group.name,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    if (group.independentLearning) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(
+                            Icons.Default.School,
+                            contentDescription = "Independent Learning",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.tertiary
+                        )
+                    }
+                }
                 if (group.description.isNotEmpty()) {
                     Text(
                         group.description,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (group.independentLearning) {
+                    Text(
+                        "Independent learning enabled",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.tertiary
                     )
                 }
             }
@@ -374,10 +392,11 @@ fun GroupListItem(
 fun AddEditGroupDialog(
     group: Group?,
     onDismiss: () -> Unit,
-    onConfirm: (name: String, description: String) -> Unit
+    onConfirm: (name: String, description: String, independentLearning: Boolean) -> Unit
 ) {
     var name by remember { mutableStateOf(group?.name ?: "") }
     var description by remember { mutableStateOf(group?.description ?: "") }
+    var independentLearning by remember { mutableStateOf(group?.independentLearning ?: false) }
     val isEditing = group != null
 
     AlertDialog(
@@ -406,11 +425,29 @@ fun AddEditGroupDialog(
                     minLines = 2,
                     maxLines = 3
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = independentLearning,
+                        onCheckedChange = { independentLearning = it }
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Independent Learning", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "Cards will have separate learning progress in this group",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(name.trim(), description.trim()) },
+                onClick = { onConfirm(name.trim(), description.trim(), independentLearning) },
                 enabled = name.isNotBlank()
             ) {
                 Text(if (isEditing) "Save" else "Add")

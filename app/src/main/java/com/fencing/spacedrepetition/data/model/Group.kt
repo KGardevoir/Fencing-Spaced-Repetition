@@ -14,6 +14,7 @@ data class Group(
     val id: Long = 0,
     val name: String,
     val description: String = "",
+    val independentLearning: Boolean = false,
     val created: Long = System.currentTimeMillis()
 )
 
@@ -39,6 +40,49 @@ data class Group(
 data class CardGroupCrossRef(
     val cardId: Long,
     val groupId: Long
+)
+
+@Entity(
+    tableName = "card_group_learning_state",
+    primaryKeys = ["cardId", "groupId"],
+    foreignKeys = [
+        ForeignKey(
+            entity = Card::class,
+            parentColumns = ["id"],
+            childColumns = ["cardId"],
+            onDelete = ForeignKey.CASCADE
+        ),
+        ForeignKey(
+            entity = Group::class,
+            parentColumns = ["id"],
+            childColumns = ["groupId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index("groupId"), Index("cardId")]
+)
+data class CardGroupLearningState(
+    val cardId: Long,
+    val groupId: Long,
+
+    // FSRS parameters
+    val fsrsStability: Double = 0.0,
+    val fsrsDifficulty: Double = 0.0,
+    val fsrsElapsedDays: Int = 0,
+    val fsrsScheduledDays: Int = 0,
+    val fsrsReps: Int = 0,
+    val fsrsLapses: Int = 0,
+    val fsrsState: String = "NEW", // NEW, LEARNING, REVIEW, RELEARNING
+
+    // SM-2 parameters
+    val sm2EaseFactor: Double = 2.5,
+    val sm2Interval: Int = 0,
+    val sm2Repetitions: Int = 0,
+
+    // Common scheduling fields
+    val lastReview: Long = 0L,
+    val nextReview: Long = 0L,
+    val modified: Long = System.currentTimeMillis()
 )
 
 data class CardWithGroups(

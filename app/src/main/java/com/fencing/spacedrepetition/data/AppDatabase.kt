@@ -13,13 +13,14 @@ import com.fencing.spacedrepetition.data.dao.PracticeSessionDao
 import com.fencing.spacedrepetition.data.dao.ReviewLogDao
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupCrossRef
+import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
 
 @Database(
-    entities = [Card::class, PracticeSession::class, ReviewLog::class, Group::class, CardGroupCrossRef::class],
-    version = 2,
+    entities = [Card::class, PracticeSession::class, ReviewLog::class, Group::class, CardGroupCrossRef::class, CardGroupLearningState::class],
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -79,6 +80,43 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Add independentLearning column to groups table
+                database.execSQL("""
+                    ALTER TABLE `groups` ADD COLUMN `independentLearning` INTEGER NOT NULL DEFAULT 0
+                """)
+
+                // Create card_group_learning_state table
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `card_group_learning_state` (
+                        `cardId` INTEGER NOT NULL,
+                        `groupId` INTEGER NOT NULL,
+                        `fsrsStability` REAL NOT NULL DEFAULT 0.0,
+                        `fsrsDifficulty` REAL NOT NULL DEFAULT 0.0,
+                        `fsrsElapsedDays` INTEGER NOT NULL DEFAULT 0,
+                        `fsrsScheduledDays` INTEGER NOT NULL DEFAULT 0,
+                        `fsrsReps` INTEGER NOT NULL DEFAULT 0,
+                        `fsrsLapses` INTEGER NOT NULL DEFAULT 0,
+                        `fsrsState` TEXT NOT NULL DEFAULT 'NEW',
+                        `sm2EaseFactor` REAL NOT NULL DEFAULT 2.5,
+                        `sm2Interval` INTEGER NOT NULL DEFAULT 0,
+                        `sm2Repetitions` INTEGER NOT NULL DEFAULT 0,
+                        `lastReview` INTEGER NOT NULL DEFAULT 0,
+                        `nextReview` INTEGER NOT NULL DEFAULT 0,
+                        `modified` INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY(`cardId`, `groupId`),
+                        FOREIGN KEY(`cardId`) REFERENCES `cards`(`id`) ON DELETE CASCADE,
+                        FOREIGN KEY(`groupId`) REFERENCES `groups`(`id`) ON DELETE CASCADE
+                    )
+                """)
+
+                // Create indices for card_group_learning_state
+                database.execSQL("CREATE INDEX IF NOT EXISTS `index_card_group_learning_state_groupId` ON `card_group_learning_state`(`groupId`)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS `index_card_group_learning_state_cardId` ON `card_group_learning_state`(`cardId`)")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -86,7 +124,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "fencing_spaced_repetition_database"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
