@@ -1,0 +1,7 @@
+# Simple format test file
+# Lines starting with # are comments
+What is the capital of France?	Paris
+What is 2 + 2?	4
+Define recursion	A function that calls itself
+Question with empty answer
+Multi-line question<br>with line break	Multi-line answer<br>also with<br>breaks
