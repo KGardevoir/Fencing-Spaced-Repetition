@@ -13,6 +13,7 @@ data class Card(
     val answer: String,
     val category: String = "",
     val tags: String = "", // Comma-separated tags
+    val imagePaths: List<String> = emptyList(), // List of image file paths/URIs
 
     // Algorithm selection
     val algorithm: AlgorithmType = AlgorithmType.FSRS,

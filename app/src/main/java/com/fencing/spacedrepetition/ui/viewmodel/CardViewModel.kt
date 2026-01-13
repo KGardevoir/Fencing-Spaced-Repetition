@@ -84,6 +84,7 @@ class CardViewModel(
         answer: String,
         groupIds: List<Long>,
         algorithm: AlgorithmType,
+        imagePaths: List<String> = emptyList(),
         onSuccess: () -> Unit
     ) {
         viewModelScope.launch {
@@ -91,7 +92,8 @@ class CardViewModel(
                 val card = Card(
                     question = question,
                     answer = answer,
-                    algorithm = algorithm
+                    algorithm = algorithm,
+                    imagePaths = imagePaths
                 )
                 repository.insertCardWithGroups(card, groupIds)
                 onSuccess()
