@@ -195,6 +195,49 @@ class CardViewModel(
         }
     }
 
+    fun resetSelectedCardsGlobalState(onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            val idsToReset = _selectedCardIds.value.toList()
+            idsToReset.forEach { cardId ->
+                repository.resetCardState(cardId, resetGroupStates = false)
+            }
+            _selectedCardIds.value = emptySet()
+            _isSelectionMode.value = false
+            onComplete()
+        }
+    }
+
+    fun resetSelectedCardsInGroups(groupIds: Set<Long>, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            val idsToReset = _selectedCardIds.value.toList()
+            idsToReset.forEach { cardId ->
+                groupIds.forEach { groupId ->
+                    repository.resetCardStateInGroup(cardId, groupId)
+                }
+            }
+            _selectedCardIds.value = emptySet()
+            _isSelectionMode.value = false
+            onComplete()
+        }
+    }
+
+    fun resetSelectedCardsBothStates(groupIds: Set<Long>, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            val idsToReset = _selectedCardIds.value.toList()
+            idsToReset.forEach { cardId ->
+                // Reset global state
+                repository.resetCardState(cardId, resetGroupStates = false)
+                // Reset specific group states
+                groupIds.forEach { groupId ->
+                    repository.resetCardStateInGroup(cardId, groupId)
+                }
+            }
+            _selectedCardIds.value = emptySet()
+            _isSelectionMode.value = false
+            onComplete()
+        }
+    }
+
     fun resetCardState(cardId: Long, resetGroupStates: Boolean = false, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             repository.resetCardState(cardId, resetGroupStates)

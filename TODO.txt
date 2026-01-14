@@ -1,2 +1,2 @@
 * Customize launch icon
-* Unit tests for algorithms
+* Test Card Export functionality
