@@ -411,25 +411,22 @@ fun CardListScreen(
 
     // Bulk reset state confirmation dialog
     if (showBulkResetDialog) {
-        AlertDialog(
-            onDismissRequest = { showBulkResetDialog = false },
-            icon = { Icon(Icons.Default.Refresh, contentDescription = null) },
-            title = { Text("Reset Learning State?") },
-            text = { Text("Reset the learning state for ${selectedCardIds.size} cards? This will set them back to \"New\" status and clear all progress.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.resetSelectedCardsState()
-                        showBulkResetDialog = false
-                    }
-                ) {
-                    Text("Reset")
-                }
+        BulkResetDialog(
+            selectedCardIds = selectedCardIds,
+            allCardsWithGroups = allCardsWithGroups,
+            currentGroupFilter = selectedGroupFilter,
+            onDismiss = { showBulkResetDialog = false },
+            onResetGlobal = {
+                viewModel.resetSelectedCardsGlobalState()
+                showBulkResetDialog = false
             },
-            dismissButton = {
-                TextButton(onClick = { showBulkResetDialog = false }) {
-                    Text("Cancel")
-                }
+            onResetGroups = { groupIds ->
+                viewModel.resetSelectedCardsInGroups(groupIds)
+                showBulkResetDialog = false
+            },
+            onResetBoth = { groupIds ->
+                viewModel.resetSelectedCardsBothStates(groupIds)
+                showBulkResetDialog = false
             }
         )
     }
@@ -764,4 +761,198 @@ fun InfoChip(
         },
         modifier = Modifier.height(28.dp)
     )
+}
+
+@Composable
+fun BulkResetDialog(
+    selectedCardIds: Set<Long>,
+    allCardsWithGroups: List<com.fencing.spacedrepetition.data.model.CardWithGroups>,
+    currentGroupFilter: Group?,
+    onDismiss: () -> Unit,
+    onResetGlobal: () -> Unit,
+    onResetGroups: (Set<Long>) -> Unit,
+    onResetBoth: (Set<Long>) -> Unit
+) {
+    // Find all independent learning groups that contain any of the selected cards
+    val independentLearningGroups = remember(selectedCardIds, allCardsWithGroups) {
+        allCardsWithGroups
+            .filter { it.card.id in selectedCardIds }
+            .flatMap { it.groups }
+            .filter { it.independentLearning }
+            .distinctBy { it.id }
+            .sortedBy { it.name }
+    }
+
+    // Preselect the current filter group if it's an independent learning group
+    var selectedGroupIds by remember(currentGroupFilter, independentLearningGroups) {
+        val preselected = if (currentGroupFilter != null &&
+            independentLearningGroups.any { it.id == currentGroupFilter.id }) {
+            setOf(currentGroupFilter.id)
+        } else {
+            emptySet()
+        }
+        mutableStateOf(preselected)
+    }
+
+    if (independentLearningGroups.isEmpty()) {
+        // Simple dialog for cards not in independent learning groups
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            icon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+            title = { Text("Reset Learning State?") },
+            text = {
+                Text("Reset the learning state for ${selectedCardIds.size} card${if (selectedCardIds.size > 1) "s" else ""}? This will set them back to \"New\" status and clear all progress.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = onResetGlobal,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Reset")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel")
+                }
+            }
+        )
+    } else {
+        // Enhanced dialog with group selection
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            icon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+            title = { Text("Reset Learning State") },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text(
+                        "Resetting ${selectedCardIds.size} card${if (selectedCardIds.size > 1) "s" else ""}.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Some cards are in ${independentLearningGroups.size} group${if (independentLearningGroups.size > 1) "s" else ""} with independent learning.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        "Select groups to reset:",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Group selection checkboxes
+                    independentLearningGroups.forEach { group ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedGroupIds = if (group.id in selectedGroupIds) {
+                                        selectedGroupIds - group.id
+                                    } else {
+                                        selectedGroupIds + group.id
+                                    }
+                                }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = group.id in selectedGroupIds,
+                                onCheckedChange = { checked ->
+                                    selectedGroupIds = if (checked) {
+                                        selectedGroupIds + group.id
+                                    } else {
+                                        selectedGroupIds - group.id
+                                    }
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = group.name,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Quick select buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TextButton(
+                            onClick = {
+                                selectedGroupIds = independentLearningGroups.map { it.id }.toSet()
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Select All", style = MaterialTheme.typography.labelSmall)
+                        }
+                        TextButton(
+                            onClick = { selectedGroupIds = emptySet() },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Clear", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    // Reset Global State Only
+                    Button(
+                        onClick = onResetGlobal,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text("Reset Global State Only")
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Reset Selected Group States Only
+                    OutlinedButton(
+                        onClick = { onResetGroups(selectedGroupIds) },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = selectedGroupIds.isNotEmpty(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text("Reset Selected Groups Only (${selectedGroupIds.size})")
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Reset Both
+                    OutlinedButton(
+                        onClick = { onResetBoth(selectedGroupIds) },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = selectedGroupIds.isNotEmpty(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text("Reset Both Global & Groups (${selectedGroupIds.size})")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
