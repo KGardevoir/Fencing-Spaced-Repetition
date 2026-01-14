@@ -4,6 +4,9 @@ import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,9 +18,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.launch
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.SessionCard
 import com.fencing.spacedrepetition.ui.components.CardImagesDisplay
@@ -194,6 +200,11 @@ fun PracticeCardView(
 ) {
     var showAnswer by remember(sessionCard.card.id, autoShowAnswer) { mutableStateOf(autoShowAnswer) }
 
+    // Swipe gesture state
+    val offsetX = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    val swipeThreshold = 300f // Minimum drag distance to trigger navigation
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -220,7 +231,56 @@ fun PracticeCardView(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f),
+                .weight(1f)
+                .graphicsLayer {
+                    translationX = offsetX.value
+                    rotationZ = offsetX.value / 40f // Slight rotation during swipe
+                }
+                .pointerInput(sessionCard.card.id) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            scope.launch {
+                                when {
+                                    // Swipe left (next card)
+                                    offsetX.value < -swipeThreshold && cardNumber < totalCards -> {
+                                        offsetX.animateTo(
+                                            targetValue = -2000f,
+                                            animationSpec = tween(300)
+                                        )
+                                        showAnswer = autoShowAnswer
+                                        onNext()
+                                        offsetX.snapTo(0f)
+                                    }
+                                    // Swipe right (previous card)
+                                    offsetX.value > swipeThreshold && onPrevious != null -> {
+                                        offsetX.animateTo(
+                                            targetValue = 2000f,
+                                            animationSpec = tween(300)
+                                        )
+                                        showAnswer = autoShowAnswer
+                                        onPrevious()
+                                        offsetX.snapTo(0f)
+                                    }
+                                    // Not enough swipe distance - snap back
+                                    else -> {
+                                        offsetX.animateTo(
+                                            targetValue = 0f,
+                                            animationSpec = tween(300)
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        onHorizontalDrag = { _, dragAmount ->
+                            scope.launch {
+                                val newOffset = offsetX.value + dragAmount
+                                // Limit swipe range to prevent excessive dragging
+                                val limitedOffset = newOffset.coerceIn(-1000f, 1000f)
+                                offsetX.snapTo(limitedOffset)
+                            }
+                        }
+                    )
+                },
             shape = RoundedCornerShape(16.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
         ) {
