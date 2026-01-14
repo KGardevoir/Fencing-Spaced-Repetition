@@ -68,7 +68,7 @@ interface CardDao {
     fun getAllCardsWithGroups(): Flow<List<CardWithGroups>>
 
     @Query("""
-        SELECT c.* FROM cards c
+        SELECT DISTINCT c.* FROM cards c
         INNER JOIN card_group_cross_ref cgc ON c.id = cgc.cardId
         INNER JOIN groups g ON cgc.groupId = g.id
         LEFT JOIN card_group_learning_state cgls ON cgls.cardId = c.id AND cgls.groupId = :groupId
@@ -81,7 +81,7 @@ interface CardDao {
     fun getCardsByGroup(groupId: Long): Flow<List<Card>>
 
     @Query("""
-        SELECT c.* FROM cards c
+        SELECT DISTINCT c.* FROM cards c
         INNER JOIN card_group_cross_ref cgc ON c.id = cgc.cardId
         INNER JOIN groups g ON cgc.groupId = g.id
         LEFT JOIN card_group_learning_state cgls ON cgls.cardId = c.id AND cgls.groupId = :groupId
@@ -94,7 +94,7 @@ interface CardDao {
     suspend fun getCardsByGroupSync(groupId: Long): List<Card>
 
     @Query("""
-        SELECT c.* FROM cards c
+        SELECT DISTINCT c.* FROM cards c
         INNER JOIN card_group_cross_ref cgc ON c.id = cgc.cardId
         INNER JOIN groups g ON cgc.groupId = g.id
         LEFT JOIN card_group_learning_state cgls ON cgls.cardId = c.id AND cgls.groupId = :groupId
@@ -112,7 +112,7 @@ interface CardDao {
     suspend fun getDueCardsByGroup(groupId: Long, now: Long = System.currentTimeMillis(), limit: Int = 100): List<Card>
 
     @Query("""
-        SELECT COUNT(*) FROM cards c
+        SELECT COUNT(DISTINCT c.id) FROM cards c
         INNER JOIN card_group_cross_ref cgc ON c.id = cgc.cardId
         INNER JOIN groups g ON cgc.groupId = g.id
         LEFT JOIN card_group_learning_state cgls ON cgls.cardId = c.id AND cgls.groupId = :groupId
@@ -125,7 +125,7 @@ interface CardDao {
     fun getDueCardCountByGroup(groupId: Long, now: Long = System.currentTimeMillis()): Flow<Int>
 
     @Query("""
-        SELECT COUNT(*) FROM cards c
+        SELECT COUNT(DISTINCT c.id) FROM cards c
         INNER JOIN card_group_cross_ref cgc ON c.id = cgc.cardId
         WHERE cgc.groupId = :groupId
     """)
