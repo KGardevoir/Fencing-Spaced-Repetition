@@ -106,6 +106,40 @@ class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
         }
     }
 
+    fun updateCardImages(cardIndex: Int, imagePaths: List<String>) {
+        viewModelScope.launch {
+            val cards = _sessionCards.value.toMutableList()
+            if (cardIndex in cards.indices) {
+                val oldCard = cards[cardIndex].card
+                val updatedCard = oldCard.copy(
+                    imagePaths = imagePaths,
+                    modified = System.currentTimeMillis()
+                )
+                repository.updateCard(updatedCard)
+                cards[cardIndex] = cards[cardIndex].copy(card = updatedCard)
+                _sessionCards.value = cards
+            }
+        }
+    }
+
+    fun updateCardComplete(cardIndex: Int, question: String, answer: String, imagePaths: List<String>) {
+        viewModelScope.launch {
+            val cards = _sessionCards.value.toMutableList()
+            if (cardIndex in cards.indices) {
+                val oldCard = cards[cardIndex].card
+                val updatedCard = oldCard.copy(
+                    question = question,
+                    answer = answer,
+                    imagePaths = imagePaths,
+                    modified = System.currentTimeMillis()
+                )
+                repository.updateCard(updatedCard)
+                cards[cardIndex] = cards[cardIndex].copy(card = updatedCard)
+                _sessionCards.value = cards
+            }
+        }
+    }
+
     fun submitGrades(onComplete: () -> Unit) {
         viewModelScope.launch {
             _uiState.value = PracticeUiState.Submitting
