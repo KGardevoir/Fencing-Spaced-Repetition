@@ -758,40 +758,149 @@ fun AddEditCardScreen(
 
     // Reset learning state confirmation dialog
     if (showResetDialog && cardToEdit != null) {
-        AlertDialog(
-            onDismissRequest = { showResetDialog = false },
-            icon = { Icon(Icons.Default.Refresh, contentDescription = null) },
-            title = { Text("Reset Learning State?") },
-            text = { Text("This will reset all learning progress for this card. The card will be treated as new and all FSRS/SM-2 data will be cleared.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.resetCardState(cardToEdit.id) {
-                            // Reset local state variables too
-                            fsrsStability = "0.0"
-                            fsrsDifficulty = "0.0"
-                            fsrsReps = "0"
-                            fsrsLapses = "0"
-                            fsrsState = "NEW"
-                            sm2EaseFactor = "2.5"
-                            sm2Interval = "0"
-                            sm2Repetitions = "0"
+        val independentLearningGroups = cardGroups.filter { it.independentLearning }
+
+        if (independentLearningGroups.isNotEmpty()) {
+            // Show enhanced dialog with options
+            AlertDialog(
+                onDismissRequest = { showResetDialog = false },
+                icon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                title = { Text("Reset Learning State") },
+                text = {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            "This card is in ${independentLearningGroups.size} group(s) with independent learning.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Choose which state(s) to reset:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                confirmButton = {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        // Reset Global State Only
+                        Button(
+                            onClick = {
+                                viewModel.resetCardState(cardToEdit.id, resetGroupStates = false) {
+                                    // Reset local global state variables
+                                    fsrsStability = "0.0"
+                                    fsrsDifficulty = "0.0"
+                                    fsrsReps = "0"
+                                    fsrsLapses = "0"
+                                    fsrsState = "NEW"
+                                    sm2EaseFactor = "2.5"
+                                    sm2Interval = "0"
+                                    sm2Repetitions = "0"
+                                }
+                                showResetDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Text("Reset Global State Only")
                         }
-                        showResetDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("Reset")
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Reset Group States Only
+                        OutlinedButton(
+                            onClick = {
+                                independentLearningGroups.forEach { group ->
+                                    viewModel.resetCardStateInGroup(cardToEdit.id, group.id) {
+                                        // Reset local edit state for this group
+                                        independentLearningEdits = independentLearningEdits + (group.id to IndependentLearningEdit())
+                                    }
+                                }
+                                showResetDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Text("Reset Group States Only (${independentLearningGroups.size})")
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Reset Both
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.resetCardState(cardToEdit.id, resetGroupStates = true) {
+                                    // Reset local global state
+                                    fsrsStability = "0.0"
+                                    fsrsDifficulty = "0.0"
+                                    fsrsReps = "0"
+                                    fsrsLapses = "0"
+                                    fsrsState = "NEW"
+                                    sm2EaseFactor = "2.5"
+                                    sm2Interval = "0"
+                                    sm2Repetitions = "0"
+                                }
+                                // Reset local edit states for all groups
+                                independentLearningGroups.forEach { group ->
+                                    independentLearningEdits = independentLearningEdits + (group.id to IndependentLearningEdit())
+                                }
+                                showResetDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Text("Reset Both Global & Group States")
+                        }
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showResetDialog = false }) {
+                        Text("Cancel")
+                    }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showResetDialog = false }) {
-                    Text("Cancel")
+            )
+        } else {
+            // Show simple dialog for cards not in independent learning groups
+            AlertDialog(
+                onDismissRequest = { showResetDialog = false },
+                icon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                title = { Text("Reset Learning State?") },
+                text = { Text("This will reset all learning progress for this card. The card will be treated as new and all FSRS/SM-2 data will be cleared.") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.resetCardState(cardToEdit.id) {
+                                // Reset local state variables too
+                                fsrsStability = "0.0"
+                                fsrsDifficulty = "0.0"
+                                fsrsReps = "0"
+                                fsrsLapses = "0"
+                                fsrsState = "NEW"
+                                sm2EaseFactor = "2.5"
+                                sm2Interval = "0"
+                                sm2Repetitions = "0"
+                            }
+                            showResetDialog = false
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text("Reset")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showResetDialog = false }) {
+                        Text("Cancel")
+                    }
                 }
-            }
-        )
+            )
+        }
     }
 
     // Create new group dialog
