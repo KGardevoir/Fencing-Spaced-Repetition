@@ -234,7 +234,7 @@ fun PracticeCardView(
                 .weight(1f)
                 .graphicsLayer {
                     translationX = offsetX.value
-                    rotationZ = offsetX.value / 50f // Slight rotation during swipe
+                    rotationZ = offsetX.value / 40f // Slight rotation during swipe
                 }
                 .pointerInput(sessionCard.card.id) {
                     detectHorizontalDragGestures(
@@ -249,15 +249,6 @@ fun PracticeCardView(
                                         )
                                         showAnswer = autoShowAnswer
                                         onNext()
-                                        offsetX.snapTo(0f)
-                                    }
-                                    // Swipe left on last card (finish)
-                                    offsetX.value < -swipeThreshold && cardNumber == totalCards -> {
-                                        offsetX.animateTo(
-                                            targetValue = -2000f,
-                                            animationSpec = tween(300)
-                                        )
-                                        onFinish()
                                         offsetX.snapTo(0f)
                                     }
                                     // Swipe right (previous card)
