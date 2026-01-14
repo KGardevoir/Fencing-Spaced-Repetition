@@ -132,6 +132,9 @@ fun PracticeScreen(
                     if (sessionCards.isNotEmpty() && currentCardIndex < sessionCards.size) {
                         PracticeCardView(
                             sessionCard = sessionCards[currentCardIndex],
+                            nextSessionCard = if (currentCardIndex + 1 < sessionCards.size) {
+                                sessionCards[currentCardIndex + 1]
+                            } else null,
                             cardNumber = currentCardIndex + 1,
                             totalCards = sessionCards.size,
                             autoShowAnswer = autoShowAnswer,
@@ -191,6 +194,7 @@ fun PracticeScreen(
 @Composable
 fun PracticeCardView(
     sessionCard: SessionCard,
+    nextSessionCard: SessionCard?,
     cardNumber: Int,
     totalCards: Int,
     autoShowAnswer: Boolean = false,
@@ -227,132 +231,186 @@ fun PracticeCardView(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Card content
-        Card(
+        // Card stack container
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f)
-                .graphicsLayer {
-                    translationX = offsetX.value
-                    rotationZ = offsetX.value / 40f // Slight rotation during swipe
+                .weight(1f),
+            contentAlignment = Alignment.Center
+        ) {
+            // Next card (underneath) - only show if it exists
+            nextSessionCard?.let { nextCard ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight()
+                        .graphicsLayer {
+                            // Calculate progress of swipe (0 to 1)
+                            val swipeProgress = (offsetX.value / -swipeThreshold).coerceIn(0f, 1f)
+
+                            // Scale from 0.92 to 1.0 as current card is swiped away
+                            scaleX = 0.92f + (0.08f * swipeProgress)
+                            scaleY = 0.92f + (0.08f * swipeProgress)
+
+                            // Move up from 16dp to 0dp as current card is swiped away
+                            translationY = 16.dp.toPx() * (1f - swipeProgress)
+
+                            // Fade from 0.6 to 1.0 alpha
+                            alpha = 0.6f + (0.4f * swipeProgress)
+                        },
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(24.dp)
+                            .verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // Question preview
+                        Text(
+                            text = "Question:",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = nextCard.card.question,
+                            style = MaterialTheme.typography.headlineMedium,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
-                .pointerInput(sessionCard.card.id) {
-                    detectHorizontalDragGestures(
-                        onDragEnd = {
-                            scope.launch {
-                                when {
-                                    // Swipe left (next card)
-                                    offsetX.value < -swipeThreshold && cardNumber < totalCards -> {
-                                        offsetX.animateTo(
-                                            targetValue = -2000f,
-                                            animationSpec = tween(300)
-                                        )
-                                        showAnswer = autoShowAnswer
-                                        onNext()
-                                        offsetX.snapTo(0f)
-                                    }
-                                    // Swipe right (previous card)
-                                    offsetX.value > swipeThreshold && onPrevious != null -> {
-                                        offsetX.animateTo(
-                                            targetValue = 2000f,
-                                            animationSpec = tween(300)
-                                        )
-                                        showAnswer = autoShowAnswer
-                                        onPrevious()
-                                        offsetX.snapTo(0f)
-                                    }
-                                    // Not enough swipe distance - snap back
-                                    else -> {
-                                        offsetX.animateTo(
-                                            targetValue = 0f,
-                                            animationSpec = tween(300)
-                                        )
+            }
+
+            // Current card (on top)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight()
+                    .graphicsLayer {
+                        translationX = offsetX.value
+                        rotationZ = offsetX.value / 40f // Slight rotation during swipe
+                    }
+                    .pointerInput(sessionCard.card.id) {
+                        detectHorizontalDragGestures(
+                            onDragEnd = {
+                                scope.launch {
+                                    when {
+                                        // Swipe left (next card)
+                                        offsetX.value < -swipeThreshold && cardNumber < totalCards -> {
+                                            offsetX.animateTo(
+                                                targetValue = -2000f,
+                                                animationSpec = tween(300)
+                                            )
+                                            showAnswer = autoShowAnswer
+                                            onNext()
+                                            offsetX.snapTo(0f)
+                                        }
+                                        // Swipe right (previous card)
+                                        offsetX.value > swipeThreshold && onPrevious != null -> {
+                                            offsetX.animateTo(
+                                                targetValue = 2000f,
+                                                animationSpec = tween(300)
+                                            )
+                                            showAnswer = autoShowAnswer
+                                            onPrevious()
+                                            offsetX.snapTo(0f)
+                                        }
+                                        // Not enough swipe distance - snap back
+                                        else -> {
+                                            offsetX.animateTo(
+                                                targetValue = 0f,
+                                                animationSpec = tween(300)
+                                            )
+                                        }
                                     }
                                 }
+                            },
+                            onHorizontalDrag = { _, dragAmount ->
+                                scope.launch {
+                                    val newOffset = offsetX.value + dragAmount
+                                    // Limit swipe range to prevent excessive dragging
+                                    val limitedOffset = newOffset.coerceIn(-1000f, 1000f)
+                                    offsetX.snapTo(limitedOffset)
+                                }
                             }
-                        },
-                        onHorizontalDrag = { _, dragAmount ->
-                            scope.launch {
-                                val newOffset = offsetX.value + dragAmount
-                                // Limit swipe range to prevent excessive dragging
-                                val limitedOffset = newOffset.coerceIn(-1000f, 1000f)
-                                offsetX.snapTo(limitedOffset)
-                            }
-                        }
-                    )
-                },
-            shape = RoundedCornerShape(16.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp)
-                    .verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally
+                        )
+                    },
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
             ) {
-                // Question
-                Text(
-                    text = "Question:",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = sessionCard.card.question,
-                    style = MaterialTheme.typography.headlineMedium,
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                if (showAnswer) {
-                    Divider(modifier = Modifier.padding(vertical = 16.dp))
-
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp)
+                        .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Question
                     Text(
-                        text = "Answer:",
+                        text = "Question:",
                         style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.secondary
+                        color = MaterialTheme.colorScheme.primary
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = sessionCard.card.answer,
-                        style = MaterialTheme.typography.bodyLarge,
+                        text = sessionCard.card.question,
+                        style = MaterialTheme.typography.headlineMedium,
                         textAlign = TextAlign.Center
                     )
 
-                    // Display images if available
-                    if (sessionCard.card.imagePaths.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        CardImagesDisplay(
-                            imagePaths = sessionCard.card.imagePaths,
-                            modifier = Modifier.fillMaxWidth(),
-                            maxHeight = 200
-                        )
-                    }
+                    Spacer(modifier = Modifier.height(32.dp))
 
-                    if (sessionCard.card.category.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        AssistChip(
-                            onClick = { },
-                            label = { Text(sessionCard.card.category) },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Category,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
+                    if (showAnswer) {
+                        Divider(modifier = Modifier.padding(vertical = 16.dp))
+
+                        Text(
+                            text = "Answer:",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.secondary
                         )
-                    }
-                } else {
-                    Button(
-                        onClick = { showAnswer = true },
-                        modifier = Modifier.padding(top = 16.dp)
-                    ) {
-                        Icon(Icons.Default.Visibility, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Show Answer")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = sessionCard.card.answer,
+                            style = MaterialTheme.typography.bodyLarge,
+                            textAlign = TextAlign.Center
+                        )
+
+                        // Display images if available
+                        if (sessionCard.card.imagePaths.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            CardImagesDisplay(
+                                imagePaths = sessionCard.card.imagePaths,
+                                modifier = Modifier.fillMaxWidth(),
+                                maxHeight = 200
+                            )
+                        }
+
+                        if (sessionCard.card.category.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            AssistChip(
+                                onClick = { },
+                                label = { Text(sessionCard.card.category) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Category,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            )
+                        }
+                    } else {
+                        Button(
+                            onClick = { showAnswer = true },
+                            modifier = Modifier.padding(top = 16.dp)
+                        ) {
+                            Icon(Icons.Default.Visibility, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Show Answer")
+                        }
                     }
                 }
             }
@@ -369,8 +427,16 @@ fun PracticeCardView(
             if (onPrevious != null) {
                 OutlinedButton(
                     onClick = {
-                        showAnswer = autoShowAnswer
-                        onPrevious()
+                        scope.launch {
+                            // Animate card to the right
+                            offsetX.animateTo(
+                                targetValue = 2000f,
+                                animationSpec = tween(300)
+                            )
+                            showAnswer = autoShowAnswer
+                            onPrevious()
+                            offsetX.snapTo(0f)
+                        }
                     }
                 ) {
                     Icon(Icons.Default.ArrowBack, contentDescription = null)
@@ -385,8 +451,16 @@ fun PracticeCardView(
             if (cardNumber < totalCards) {
                 Button(
                     onClick = {
-                        showAnswer = autoShowAnswer
-                        onNext()
+                        scope.launch {
+                            // Animate card to the left
+                            offsetX.animateTo(
+                                targetValue = -2000f,
+                                animationSpec = tween(300)
+                            )
+                            showAnswer = autoShowAnswer
+                            onNext()
+                            offsetX.snapTo(0f)
+                        }
                     }
                 ) {
                     Text("Next")
