@@ -70,16 +70,26 @@ interface CardDao {
     @Query("""
         SELECT c.* FROM cards c
         INNER JOIN card_group_cross_ref cgc ON c.id = cgc.cardId
+        INNER JOIN groups g ON cgc.groupId = g.id
+        LEFT JOIN card_group_learning_state cgls ON cgls.cardId = c.id AND cgls.groupId = :groupId
         WHERE cgc.groupId = :groupId
-        ORDER BY c.nextReview ASC
+        ORDER BY CASE
+            WHEN g.independentLearning = 1 THEN COALESCE(cgls.nextReview, c.nextReview)
+            ELSE c.nextReview
+          END ASC
     """)
     fun getCardsByGroup(groupId: Long): Flow<List<Card>>
 
     @Query("""
         SELECT c.* FROM cards c
         INNER JOIN card_group_cross_ref cgc ON c.id = cgc.cardId
+        INNER JOIN groups g ON cgc.groupId = g.id
+        LEFT JOIN card_group_learning_state cgls ON cgls.cardId = c.id AND cgls.groupId = :groupId
         WHERE cgc.groupId = :groupId
-        ORDER BY c.nextReview ASC
+        ORDER BY CASE
+            WHEN g.independentLearning = 1 THEN COALESCE(cgls.nextReview, c.nextReview)
+            ELSE c.nextReview
+          END ASC
     """)
     suspend fun getCardsByGroupSync(groupId: Long): List<Card>
 
