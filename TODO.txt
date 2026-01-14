@@ -1,2 +1,2 @@
-* Customize launch icon
 * Test Card Export functionality
+* Better Icon
