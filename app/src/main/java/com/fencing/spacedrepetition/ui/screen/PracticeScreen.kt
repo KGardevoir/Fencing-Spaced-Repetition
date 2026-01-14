@@ -135,6 +135,9 @@ fun PracticeScreen(
                             nextSessionCard = if (currentCardIndex + 1 < sessionCards.size) {
                                 sessionCards[currentCardIndex + 1]
                             } else null,
+                            previousSessionCard = if (currentCardIndex > 0) {
+                                sessionCards[currentCardIndex - 1]
+                            } else null,
                             cardNumber = currentCardIndex + 1,
                             totalCards = sessionCards.size,
                             autoShowAnswer = autoShowAnswer,
@@ -195,6 +198,7 @@ fun PracticeScreen(
 fun PracticeCardView(
     sessionCard: SessionCard,
     nextSessionCard: SessionCard?,
+    previousSessionCard: SessionCard?,
     cardNumber: Int,
     totalCards: Int,
     autoShowAnswer: Boolean = false,
@@ -238,14 +242,14 @@ fun PracticeCardView(
                 .weight(1f),
             contentAlignment = Alignment.Center
         ) {
-            // Next card (underneath) - only show if it exists
+            // Next card (underneath when swiping left)
             nextSessionCard?.let { nextCard ->
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .fillMaxHeight()
                         .graphicsLayer {
-                            // Calculate progress of swipe (0 to 1)
+                            // Calculate progress of left swipe (0 to 1)
                             val swipeProgress = (offsetX.value / -swipeThreshold).coerceIn(0f, 1f)
 
                             // Scale from 0.92 to 1.0 as current card is swiped away
@@ -255,8 +259,12 @@ fun PracticeCardView(
                             // Move up from 16dp to 0dp as current card is swiped away
                             translationY = 16.dp.toPx() * (1f - swipeProgress)
 
-                            // Fade from 0.6 to 1.0 alpha
-                            alpha = 0.6f + (0.4f * swipeProgress)
+                            // Fade from 0.6 to 1.0 alpha, but only show when swiping left
+                            alpha = if (offsetX.value < 0) {
+                                0.6f + (0.4f * swipeProgress)
+                            } else {
+                                0f
+                            }
                         },
                     shape = RoundedCornerShape(16.dp),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -277,6 +285,56 @@ fun PracticeCardView(
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = nextCard.card.question,
+                            style = MaterialTheme.typography.headlineMedium,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+
+            // Previous card (underneath when swiping right)
+            previousSessionCard?.let { prevCard ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight()
+                        .graphicsLayer {
+                            // Calculate progress of right swipe (0 to 1)
+                            val swipeProgress = (offsetX.value / swipeThreshold).coerceIn(0f, 1f)
+
+                            // Scale from 0.92 to 1.0 as current card is swiped away
+                            scaleX = 0.92f + (0.08f * swipeProgress)
+                            scaleY = 0.92f + (0.08f * swipeProgress)
+
+                            // Move up from 16dp to 0dp as current card is swiped away
+                            translationY = 16.dp.toPx() * (1f - swipeProgress)
+
+                            // Fade from 0.6 to 1.0 alpha, but only show when swiping right
+                            alpha = if (offsetX.value > 0) {
+                                0.6f + (0.4f * swipeProgress)
+                            } else {
+                                0f
+                            }
+                        },
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(24.dp)
+                            .verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // Question preview
+                        Text(
+                            text = "Question:",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = prevCard.card.question,
                             style = MaterialTheme.typography.headlineMedium,
                             textAlign = TextAlign.Center
                         )
