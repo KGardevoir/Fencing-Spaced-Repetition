@@ -4,19 +4,45 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <group android:scaleX="0.4"
-        android:scaleY="0.4"
-        android:translateX="32.4"
-        android:translateY="32.4">
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M54,27L54,81M27,54L81,54"
-            android:strokeWidth="8"
-            android:strokeColor="#FFFFFF"/>
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M54,18 L54,90 M18,54 L90,54"
-            android:strokeWidth="6"
-            android:strokeColor="#FFFFFF"/>
-    </group>
+
+    <!-- Teal/Cyan circular arrow with dots (left side) -->
+    <path
+        android:fillColor="#00D4C8"
+        android:pathData="M 30,54 A 24,24 0 1,1 30,54.01
+                         L 38,54.01 A 16,16 0 1,0 38,54 Z
+                         M 26,34 A 3,3 0 1,1 26,34.01 Z
+                         M 22,44 A 3,3 0 1,1 22,44.01 Z
+                         M 22,64 A 3,3 0 1,1 22,64.01 Z
+                         M 26,74 A 3,3 0 1,1 26,74.01 Z"/>
+
+    <!-- Teal arrow tip (left) -->
+    <path
+        android:fillColor="#00D4C8"
+        android:pathData="M 26,76 L 20,82 L 24,86 L 30,80 Z"/>
+
+    <!-- Orange/Yellow circular arrow (right side) -->
+    <path
+        android:fillColor="#FFB347"
+        android:pathData="M 78,54 A 24,24 0 1,0 78,53.99
+                         L 70,53.99 A 16,16 0 1,1 70,54 Z"/>
+
+    <!-- Orange arrow tip (right) -->
+    <path
+        android:fillColor="#FFB347"
+        android:pathData="M 82,76 L 88,82 L 84,86 L 78,80 Z"/>
+
+    <!-- White fencing belt - collar/top part -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 44,38 L 44,48 L 42,50 L 42,56 L 44,58 L 44,68 L 48,68 L 50,66 L 50,60 L 54,56 L 58,60 L 58,66 L 60,68 L 64,68 L 64,58 L 66,56 L 66,50 L 64,48 L 64,38 L 60,38 L 58,40 L 58,46 L 54,50 L 50,46 L 50,40 L 48,38 Z"/>
+
+    <!-- Belt knot - horizontal part -->
+    <path
+        android:fillColor="#E8E8E8"
+        android:pathData="M 40,56 L 40,60 L 50,60 L 50,64 L 58,64 L 58,60 L 68,60 L 68,56 L 58,56 L 58,52 L 50,52 L 50,56 Z"/>
+
+    <!-- Knot detail - center -->
+    <path
+        android:fillColor="#D0D0D0"
+        android:pathData="M 50,56 L 50,60 L 54,60 L 58,60 L 58,56 Z"/>
 </vector>
