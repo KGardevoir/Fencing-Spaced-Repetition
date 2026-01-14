@@ -1,8 +1,9 @@
 package com.fencing.spacedrepetition.ui.viewmodel
 
+import android.app.Application
 import android.content.ContentResolver
 import android.net.Uri
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Group
@@ -31,9 +32,10 @@ sealed class ImportExportState {
 }
 
 class GroupViewModel(
+    application: Application,
     private val groupRepository: GroupRepository,
     private val cardRepository: CardRepository
-) : ViewModel() {
+) : AndroidViewModel(application) {
 
     val allGroups: StateFlow<List<Group>> = groupRepository.getAllGroups()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -113,8 +115,12 @@ class GroupViewModel(
                 }
 
                 val result = withContext(Dispatchers.IO) {
-                    contentResolver.openOutputStream(uri)?.use { outputStream ->
-                        CardImportExport.exportCardsWithGroupStates(cardsWithStates, outputStream)
+                    contentResolver.openOutputStream(uri)?.use { fileStream ->
+                        // Wrap with GZIP compression
+                        val outputStream = CardImportExport.createCompressedOutputStream(fileStream)
+                        val exportResult = CardImportExport.exportCardsWithGroupStates(cardsWithStates, outputStream)
+                        outputStream.close()  // Ensure GZIP stream is properly closed
+                        exportResult
                     } ?: ExportResult.Error("Failed to open file for writing")
                 }
 
@@ -138,8 +144,12 @@ class GroupViewModel(
             _importExportState.value = ImportExportState.Loading
             try {
                 val parseResult = withContext(Dispatchers.IO) {
-                    contentResolver.openInputStream(uri)?.use { inputStream ->
-                        CardImportExport.parseCards(inputStream)
+                    contentResolver.openInputStream(uri)?.use { fileStream ->
+                        // Wrap with GZIP decompression
+                        val inputStream = CardImportExport.createDecompressedInputStream(fileStream)
+                        val result = CardImportExport.parseCards(inputStream)
+                        inputStream.close()
+                        result
                     }
                 }
 
@@ -185,12 +195,12 @@ class GroupViewModel(
                 val importedCount = withContext(Dispatchers.IO) {
                     when {
                         hasGroupSpecificStates -> {
-                            // V2 format with group-specific states
-                            cardRepository.importCardsWithGroupStates(parsedCards, groupNameMap)
+                            // V2 format with group-specific states (decode base64 images)
+                            cardRepository.importCardsWithGroupStates(getApplication(), parsedCards, groupNameMap)
                         }
                         hasFullState -> {
-                            // V1 full import with state - also add to target group
-                            val cards = parsedCards.map { CardImportExport.parsedCardToCard(it) }
+                            // V1 full import with state - also add to target group (decode base64 images)
+                            val cards = parsedCards.map { CardImportExport.parsedCardToCard(getApplication(), it) }
                             // Merge target group with any groups from file
                             val targetGroupName = groupRepository.getGroupById(groupId)?.name
                             val groupNamesPerCard = parsedCards.map { parsed ->

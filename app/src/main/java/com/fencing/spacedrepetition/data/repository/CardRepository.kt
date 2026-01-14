@@ -243,6 +243,7 @@ class CardRepository(
     }
 
     suspend fun importCardsWithGroupStates(
+        context: android.content.Context,
         parsedCards: List<com.fencing.spacedrepetition.util.ParsedCard>,
         existingGroups: Map<String, Long>
     ): Int {
@@ -254,8 +255,8 @@ class CardRepository(
             // Find the global state (or use the first state if no global)
             val globalState = states.find { it.isGlobalState } ?: states.first()
 
-            // Create or update the card
-            val card = com.fencing.spacedrepetition.util.CardImportExport.parsedCardToCard(globalState)
+            // Create or update the card (decode base64 images)
+            val card = com.fencing.spacedrepetition.util.CardImportExport.parsedCardToCard(context, globalState)
             val existingCard = cardDao.findCardByQuestion(question)
             val cardId: Long
 

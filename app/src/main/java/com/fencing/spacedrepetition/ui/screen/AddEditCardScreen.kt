@@ -1,5 +1,9 @@
 package com.fencing.spacedrepetition.ui.screen
 
+import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -11,13 +15,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
+import com.fencing.spacedrepetition.ui.components.CardImagesEdit
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -30,9 +38,11 @@ fun AddEditCardScreen(
     initialGroupId: Long? = null,
     onNavigateBack: () -> Unit
 ) {
+    val context = LocalContext.current
     var question by remember { mutableStateOf(cardToEdit?.question ?: "") }
     var answer by remember { mutableStateOf(cardToEdit?.answer ?: "") }
     var selectedAlgorithm by remember { mutableStateOf(cardToEdit?.algorithm ?: AlgorithmType.FSRS) }
+    var imagePaths by remember { mutableStateOf(cardToEdit?.imagePaths?.toMutableList() ?: mutableListOf()) }
 
     // Group selection state
     val allGroups by groupViewModel.allGroups.collectAsState()
@@ -53,6 +63,19 @@ fun AddEditCardScreen(
     var showAdvancedSettings by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
     var showCreateGroupDialog by remember { mutableStateOf(false) }
+
+    // Image picker launcher
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            // Copy image to app's internal storage and save path
+            val savedPath = saveImageToInternalStorage(context, it)
+            if (savedPath != null) {
+                imagePaths = (imagePaths + savedPath).toMutableList()
+            }
+        }
+    }
 
     // Independent learning states
     val learningStates by cardToEdit?.let { card ->
@@ -139,6 +162,59 @@ fun AddEditCardScreen(
                 minLines = 3,
                 maxLines = 8
             )
+
+            // Images section
+            Card(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Image,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Images", style = MaterialTheme.typography.titleMedium)
+                        }
+                        OutlinedButton(
+                            onClick = { imagePickerLauncher.launch("image/*") },
+                            modifier = Modifier.height(36.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Add Image")
+                        }
+                    }
+
+                    if (imagePaths.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        CardImagesEdit(
+                            imagePaths = imagePaths,
+                            onRemoveImage = { path ->
+                                imagePaths = imagePaths.filter { it != path }.toMutableList()
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "No images added",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
 
             // Groups selection
             Card(
@@ -527,6 +603,7 @@ fun AddEditCardScreen(
                                 question = question,
                                 answer = answer,
                                 algorithm = selectedAlgorithm,
+                                imagePaths = imagePaths,
                                 // FSRS state
                                 fsrsStability = fsrsStability.toDoubleOrNull() ?: cardToEdit.fsrsStability,
                                 fsrsDifficulty = fsrsDifficulty.toDoubleOrNull() ?: cardToEdit.fsrsDifficulty,
@@ -568,6 +645,7 @@ fun AddEditCardScreen(
                                 answer = answer,
                                 groupIds = selectedGroupIds.toList(),
                                 algorithm = selectedAlgorithm,
+                                imagePaths = imagePaths,
                                 onSuccess = onNavigateBack
                             )
                         }
@@ -1037,3 +1115,37 @@ data class IndependentLearningEdit(
     val sm2Interval: String = "0",
     val sm2Repetitions: String = "0"
 )
+
+/**
+ * Save image from URI to app's internal storage
+ * Returns the saved file path or null if failed
+ */
+private fun saveImageToInternalStorage(context: Context, uri: Uri): String? {
+    return try {
+        val inputStream = context.contentResolver.openInputStream(uri) ?: return null
+
+        // Create images directory if it doesn't exist
+        val imagesDir = File(context.filesDir, "card_images")
+        if (!imagesDir.exists()) {
+            imagesDir.mkdirs()
+        }
+
+        // Generate unique filename
+        val timestamp = System.currentTimeMillis()
+        val extension = context.contentResolver.getType(uri)?.split("/")?.lastOrNull() ?: "jpg"
+        val fileName = "card_image_${timestamp}.${extension}"
+        val outputFile = File(imagesDir, fileName)
+
+        // Copy file
+        FileOutputStream(outputFile).use { outputStream ->
+            inputStream.copyTo(outputStream)
+        }
+        inputStream.close()
+
+        // Return the file URI as string
+        outputFile.absolutePath
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
+    }
+}

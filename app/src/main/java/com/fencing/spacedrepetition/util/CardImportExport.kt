@@ -1,9 +1,14 @@
 package com.fencing.spacedrepetition.util
 
+import android.content.Context
+import android.util.Base64
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
+import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 
 sealed class ImportResult {
     data class Success(val importedCount: Int, val skippedCount: Int, val errors: List<String>) : ImportResult()
@@ -22,6 +27,8 @@ data class ParsedCard(
     val question: String,
     val answer: String,
     val lineNumber: Int,
+    val imagePaths: List<String> = emptyList(), // For export (file paths)
+    val imageData: List<String> = emptyList(),  // For import (base64 encoded)
     // Full state (null if simple import)
     val algorithm: AlgorithmType? = null,
     val stateContext: String? = null,  // "GLOBAL" or group name for group-specific state
@@ -65,8 +72,10 @@ object CardImportExport {
     private const val DELIMITER = "\t"
     private const val NEWLINE_PLACEHOLDER = "<br>"
     private const val GROUP_SEPARATOR = "|"
+    private const val IMAGE_SEPARATOR = "||"
     private const val HEADER_MARKER_V1 = "#FSR_EXPORT_V1"
     private const val HEADER_MARKER_V2 = "#FSR_EXPORT_V2"
+    private const val HEADER_MARKER_V3 = "#FSR_EXPORT_V3"
 
     // Column indices for V1 export format
     private const val COL_V1_QUESTION = 0
@@ -105,6 +114,26 @@ object CardImportExport {
     private const val COL_V2_SM2_REPETITIONS = 15
     private const val COL_V2_GROUPS = 16
 
+    // Column indices for V3 export format (includes ImagePaths)
+    private const val COL_V3_QUESTION = 0
+    private const val COL_V3_ANSWER = 1
+    private const val COL_V3_IMAGE_PATHS = 2
+    private const val COL_V3_ALGORITHM = 3
+    private const val COL_V3_STATE_CONTEXT = 4
+    private const val COL_V3_NEXT_REVIEW = 5
+    private const val COL_V3_LAST_REVIEW = 6
+    private const val COL_V3_FSRS_STABILITY = 7
+    private const val COL_V3_FSRS_DIFFICULTY = 8
+    private const val COL_V3_FSRS_STATE = 9
+    private const val COL_V3_FSRS_REPS = 10
+    private const val COL_V3_FSRS_LAPSES = 11
+    private const val COL_V3_FSRS_SCHEDULED_DAYS = 12
+    private const val COL_V3_FSRS_ELAPSED_DAYS = 13
+    private const val COL_V3_SM2_EASE_FACTOR = 14
+    private const val COL_V3_SM2_INTERVAL = 15
+    private const val COL_V3_SM2_REPETITIONS = 16
+    private const val COL_V3_GROUPS = 17
+
     // Column headers for V1 export
     private const val COLUMN_HEADERS_V1 = "#Question\tAnswer\tAlgorithm\tNextReview\tLastReview\t" +
             "FSRS_Stability\tFSRS_Difficulty\tFSRS_State\tFSRS_Reps\tFSRS_Lapses\t" +
@@ -117,9 +146,15 @@ object CardImportExport {
             "FSRS_ScheduledDays\tFSRS_ElapsedDays\tSM2_EaseFactor\tSM2_Interval\t" +
             "SM2_Repetitions\tGroups(pipe-separated)"
 
+    // Column headers for V3 export (includes ImagePaths)
+    private const val COLUMN_HEADERS_V3 = "#Question\tAnswer\tImagePaths(double-pipe-separated)\tAlgorithm\tStateContext\tNextReview\tLastReview\t" +
+            "FSRS_Stability\tFSRS_Difficulty\tFSRS_State\tFSRS_Reps\tFSRS_Lapses\t" +
+            "FSRS_ScheduledDays\tFSRS_ElapsedDays\tSM2_EaseFactor\tSM2_Interval\t" +
+            "SM2_Repetitions\tGroups(pipe-separated)"
+
     /**
      * Parses a TSV input stream into a list of ParsedCard objects.
-     * Supports both simple (question\tanswer) and full export formats (V1 and V2).
+     * Supports both simple (question\tanswer) and full export formats (V1, V2, and V3).
      * Returns pair of (valid cards, error messages)
      */
     fun parseCards(inputStream: InputStream): Pair<List<ParsedCard>, List<String>> {
@@ -135,6 +170,7 @@ object CardImportExport {
             // Detect format version
             val firstLine = lines.firstOrNull() ?: ""
             val formatVersion = when {
+                firstLine.startsWith(HEADER_MARKER_V3) -> 3
                 firstLine.startsWith(HEADER_MARKER_V2) -> 2
                 firstLine.startsWith(HEADER_MARKER_V1) -> 1
                 else -> 0 // Simple format
@@ -152,6 +188,7 @@ object CardImportExport {
 
                 try {
                     val parsedCard = when (formatVersion) {
+                        3 -> parseV3FormatLine(trimmedLine, lineNumber)
                         2 -> parseV2FormatLine(trimmedLine, lineNumber)
                         1 -> parseV1FormatLine(trimmedLine, lineNumber)
                         else -> parseSimpleLine(trimmedLine, lineNumber)
@@ -297,6 +334,71 @@ object CardImportExport {
         )
     }
 
+    private fun parseV3FormatLine(line: String, lineNumber: Int): ParsedCard? {
+        val parts = line.split(DELIMITER)
+
+        if (parts.size < 2) {
+            throw IllegalArgumentException("Missing answer")
+        }
+
+        val question = unescapeNewlines(parts.getOrNull(COL_V3_QUESTION)?.trim() ?: "")
+        val answer = unescapeNewlines(parts.getOrNull(COL_V3_ANSWER)?.trim() ?: "")
+
+        if (question.isBlank()) throw IllegalArgumentException("Empty question")
+
+        // If only 2 columns, treat as simple format
+        if (parts.size == 2) {
+            return ParsedCard(question = question, answer = answer, lineNumber = lineNumber)
+        }
+
+        // Parse image data (base64 encoded)
+        val imageDataStr = parts.getOrNull(COL_V3_IMAGE_PATHS)?.trim() ?: ""
+        val imageData = if (imageDataStr.isNotEmpty()) {
+            imageDataStr.split(IMAGE_SEPARATOR).map { it.trim() }.filter { it.isNotEmpty() }
+        } else {
+            emptyList()
+        }
+
+        // Parse V3 full format
+        val algorithmStr = parts.getOrNull(COL_V3_ALGORITHM)?.trim() ?: "FSRS"
+        val algorithm = try {
+            AlgorithmType.valueOf(algorithmStr)
+        } catch (e: Exception) {
+            AlgorithmType.FSRS
+        }
+
+        val stateContext = parts.getOrNull(COL_V3_STATE_CONTEXT)?.trim() ?: "GLOBAL"
+
+        val groupsStr = parts.getOrNull(COL_V3_GROUPS)?.trim() ?: ""
+        val groupNames = if (groupsStr.isNotEmpty()) {
+            groupsStr.split(GROUP_SEPARATOR).map { it.trim() }.filter { it.isNotEmpty() }
+        } else {
+            emptyList()
+        }
+
+        return ParsedCard(
+            question = question,
+            answer = answer,
+            lineNumber = lineNumber,
+            imageData = imageData,  // Store base64 data for later decoding
+            algorithm = algorithm,
+            stateContext = stateContext,
+            nextReview = parts.getOrNull(COL_V3_NEXT_REVIEW)?.toLongOrNull() ?: 0L,
+            lastReview = parts.getOrNull(COL_V3_LAST_REVIEW)?.toLongOrNull() ?: 0L,
+            fsrsStability = parts.getOrNull(COL_V3_FSRS_STABILITY)?.toDoubleOrNull() ?: 0.0,
+            fsrsDifficulty = parts.getOrNull(COL_V3_FSRS_DIFFICULTY)?.toDoubleOrNull() ?: 0.0,
+            fsrsState = parts.getOrNull(COL_V3_FSRS_STATE)?.trim() ?: "NEW",
+            fsrsReps = parts.getOrNull(COL_V3_FSRS_REPS)?.toIntOrNull() ?: 0,
+            fsrsLapses = parts.getOrNull(COL_V3_FSRS_LAPSES)?.toIntOrNull() ?: 0,
+            fsrsScheduledDays = parts.getOrNull(COL_V3_FSRS_SCHEDULED_DAYS)?.toIntOrNull() ?: 0,
+            fsrsElapsedDays = parts.getOrNull(COL_V3_FSRS_ELAPSED_DAYS)?.toIntOrNull() ?: 0,
+            sm2EaseFactor = parts.getOrNull(COL_V3_SM2_EASE_FACTOR)?.toDoubleOrNull() ?: 2.5,
+            sm2Interval = parts.getOrNull(COL_V3_SM2_INTERVAL)?.toIntOrNull() ?: 0,
+            sm2Repetitions = parts.getOrNull(COL_V3_SM2_REPETITIONS)?.toIntOrNull() ?: 0,
+            groupNames = groupNames
+        )
+    }
+
     /**
      * Exports cards with their groups to V1 format TSV (backward compatibility)
      */
@@ -359,7 +461,7 @@ object CardImportExport {
     }
 
     /**
-     * Exports cards with group-specific learning states to V2 format TSV
+     * Exports cards with group-specific learning states to V3 format TSV
      */
     fun exportCardsWithGroupStates(
         cardsWithStates: List<CardWithGroupStates>,
@@ -368,12 +470,12 @@ object CardImportExport {
         return try {
             var rowCount = 0
             outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
-                // Write format marker (V2)
-                writer.write(HEADER_MARKER_V2)
+                // Write format marker (V3)
+                writer.write(HEADER_MARKER_V3)
                 writer.newLine()
 
                 // Write column headers
-                writer.write(COLUMN_HEADERS_V2)
+                writer.write(COLUMN_HEADERS_V3)
                 writer.newLine()
 
                 cardsWithStates.forEach { (card, groupNames, groupSpecificStates) ->
@@ -401,6 +503,10 @@ object CardImportExport {
             append(escapeNewlines(card.question))
             append(DELIMITER)
             append(escapeNewlines(card.answer))
+            append(DELIMITER)
+            // Encode images to base64
+            val encodedImages = card.imagePaths.mapNotNull { encodeImageToBase64(it) }
+            append(encodedImages.joinToString(IMAGE_SEPARATOR))
             append(DELIMITER)
             append(card.algorithm.name)
             append(DELIMITER)
@@ -443,6 +549,10 @@ object CardImportExport {
             append(escapeNewlines(card.question))
             append(DELIMITER)
             append(escapeNewlines(card.answer))
+            append(DELIMITER)
+            // Encode images to base64
+            val encodedImages = card.imagePaths.mapNotNull { encodeImageToBase64(it) }
+            append(encodedImages.joinToString(IMAGE_SEPARATOR))
             append(DELIMITER)
             append(card.algorithm.name)
             append(DELIMITER)
@@ -487,7 +597,8 @@ object CardImportExport {
     }
 
     /**
-     * Converts a ParsedCard to a Card entity
+     * Converts a ParsedCard to a Card entity (without Context - for tests)
+     * Note: This version cannot decode base64 images
      */
     fun parsedCardToCard(parsed: ParsedCard): Card {
         val now = System.currentTimeMillis()
@@ -496,6 +607,7 @@ object CardImportExport {
             Card(
                 question = parsed.question,
                 answer = parsed.answer,
+                imagePaths = parsed.imagePaths,
                 algorithm = parsed.algorithm ?: AlgorithmType.FSRS,
                 nextReview = parsed.nextReview ?: 0L,
                 lastReview = parsed.lastReview ?: 0L,
@@ -516,6 +628,51 @@ object CardImportExport {
             Card(
                 question = parsed.question,
                 answer = parsed.answer,
+                imagePaths = parsed.imagePaths,
+                algorithm = AlgorithmType.FSRS,
+                created = now,
+                modified = now
+            )
+        }
+    }
+
+    /**
+     * Converts a ParsedCard to a Card entity with base64 image decoding
+     */
+    fun parsedCardToCard(context: Context, parsed: ParsedCard): Card {
+        val now = System.currentTimeMillis()
+
+        // Decode base64 images to file paths
+        val decodedImagePaths = parsed.imageData.mapNotNull { base64Data ->
+            decodeImageFromBase64(context, base64Data)
+        }
+
+        return if (parsed.hasFullState) {
+            Card(
+                question = parsed.question,
+                answer = parsed.answer,
+                imagePaths = decodedImagePaths,
+                algorithm = parsed.algorithm ?: AlgorithmType.FSRS,
+                nextReview = parsed.nextReview ?: 0L,
+                lastReview = parsed.lastReview ?: 0L,
+                fsrsStability = parsed.fsrsStability ?: 0.0,
+                fsrsDifficulty = parsed.fsrsDifficulty ?: 0.0,
+                fsrsState = parsed.fsrsState ?: "NEW",
+                fsrsReps = parsed.fsrsReps ?: 0,
+                fsrsLapses = parsed.fsrsLapses ?: 0,
+                fsrsScheduledDays = parsed.fsrsScheduledDays ?: 0,
+                fsrsElapsedDays = parsed.fsrsElapsedDays ?: 0,
+                sm2EaseFactor = parsed.sm2EaseFactor ?: 2.5,
+                sm2Interval = parsed.sm2Interval ?: 0,
+                sm2Repetitions = parsed.sm2Repetitions ?: 0,
+                created = now,
+                modified = now
+            )
+        } else {
+            Card(
+                question = parsed.question,
+                answer = parsed.answer,
+                imagePaths = decodedImagePaths,
                 algorithm = AlgorithmType.FSRS,
                 created = now,
                 modified = now
@@ -545,6 +702,67 @@ object CardImportExport {
     fun generateExportFilename(groupName: String): String {
         val sanitized = groupName.replace(Regex("[^a-zA-Z0-9_\\-]"), "_")
             .take(50)
-        return "${sanitized}_cards.txt"
+        return "${sanitized}_cards.tsv.gz"
+    }
+
+    /**
+     * Encodes image file to base64 string
+     */
+    fun encodeImageToBase64(imagePath: String): String? {
+        return try {
+            val file = File(imagePath)
+            if (!file.exists() || !file.canRead()) {
+                return null
+            }
+            val bytes = file.readBytes()
+            Base64.encodeToString(bytes, Base64.NO_WRAP)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    /**
+     * Decodes base64 string and saves to internal storage
+     * Returns the saved file path or null if failed
+     */
+    fun decodeImageFromBase64(context: Context, base64Data: String): String? {
+        return try {
+            val bytes = Base64.decode(base64Data, Base64.NO_WRAP)
+
+            // Create images directory if it doesn't exist
+            val imagesDir = File(context.filesDir, "card_images")
+            if (!imagesDir.exists()) {
+                imagesDir.mkdirs()
+            }
+
+            // Generate unique filename
+            val timestamp = System.currentTimeMillis()
+            val fileName = "card_image_${timestamp}.jpg"
+            val outputFile = File(imagesDir, fileName)
+
+            // Write file
+            outputFile.writeBytes(bytes)
+
+            // Return the file path
+            outputFile.absolutePath
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    /**
+     * Wraps an OutputStream with GZIP compression
+     */
+    fun createCompressedOutputStream(outputStream: OutputStream): GZIPOutputStream {
+        return GZIPOutputStream(outputStream)
+    }
+
+    /**
+     * Wraps an InputStream with GZIP decompression
+     */
+    fun createDecompressedInputStream(inputStream: InputStream): GZIPInputStream {
+        return GZIPInputStream(inputStream)
     }
 }

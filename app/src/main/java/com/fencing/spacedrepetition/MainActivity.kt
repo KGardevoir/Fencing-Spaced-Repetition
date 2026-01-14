@@ -57,13 +57,13 @@ class MainActivity : ComponentActivity() {
                 ) {
                     // Create ViewModels with repositories
                     val cardViewModel: CardViewModel = viewModel(
-                        factory = CardViewModelFactory(repository, groupRepository)
+                        factory = CardViewModelFactory(application, repository, groupRepository)
                     )
                     val practiceViewModel: PracticeViewModel = viewModel(
                         factory = PracticeViewModelFactory(repository)
                     )
                     val groupViewModel: GroupViewModel = viewModel(
-                        factory = GroupViewModelFactory(groupRepository, repository)
+                        factory = GroupViewModelFactory(application, groupRepository, repository)
                     )
 
                     AppNavigation(
@@ -80,13 +80,14 @@ class MainActivity : ComponentActivity() {
 
 // ViewModel Factories
 class CardViewModelFactory(
+    private val application: android.app.Application,
     private val repository: CardRepository,
     private val groupRepository: GroupRepository
 ) : androidx.lifecycle.ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(CardViewModel::class.java)) {
-            return CardViewModel(repository, groupRepository) as T
+            return CardViewModel(application, repository, groupRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
@@ -105,13 +106,14 @@ class PracticeViewModelFactory(
 }
 
 class GroupViewModelFactory(
+    private val application: android.app.Application,
     private val groupRepository: GroupRepository,
     private val cardRepository: CardRepository
 ) : androidx.lifecycle.ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(GroupViewModel::class.java)) {
-            return GroupViewModel(groupRepository, cardRepository) as T
+            return GroupViewModel(application, groupRepository, cardRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

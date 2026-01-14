@@ -16,6 +16,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.SessionCard
+import com.fencing.spacedrepetition.ui.components.CardImagesDisplay
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeUiState
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 
@@ -257,6 +258,16 @@ fun GradingCardItem(
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(top = 4.dp)
                 )
+
+                // Display images if available
+                if (sessionCard.card.imagePaths.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    CardImagesDisplay(
+                        imagePaths = sessionCard.card.imagePaths,
+                        modifier = Modifier.fillMaxWidth(),
+                        maxHeight = 150
+                    )
+                }
 
                 if (sessionCard.card.category.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))

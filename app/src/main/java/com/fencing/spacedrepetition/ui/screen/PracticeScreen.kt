@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.SessionCard
+import com.fencing.spacedrepetition.ui.components.CardImagesDisplay
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeUiState
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
@@ -218,9 +219,9 @@ fun PracticeCardView(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                    .padding(24.dp)
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Question
                 Text(
@@ -251,6 +252,16 @@ fun PracticeCardView(
                         style = MaterialTheme.typography.bodyLarge,
                         textAlign = TextAlign.Center
                     )
+
+                    // Display images if available
+                    if (sessionCard.card.imagePaths.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        CardImagesDisplay(
+                            imagePaths = sessionCard.card.imagePaths,
+                            modifier = Modifier.fillMaxWidth(),
+                            maxHeight = 200
+                        )
+                    }
 
                     if (sessionCard.card.category.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(16.dp))
