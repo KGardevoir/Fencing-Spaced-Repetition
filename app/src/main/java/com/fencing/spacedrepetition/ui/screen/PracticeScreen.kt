@@ -1,5 +1,9 @@
 package com.fencing.spacedrepetition.ui.screen
 
+import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -10,15 +14,19 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.SessionCard
 import com.fencing.spacedrepetition.ui.components.CardImagesDisplay
+import com.fencing.spacedrepetition.ui.components.CardImagesEdit
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeUiState
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
+import java.io.File
+import java.io.FileOutputStream
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,8 +48,8 @@ fun PracticeScreen(
         EditCardDialog(
             card = sessionCards[currentCardIndex].card,
             onDismiss = { showEditDialog = false },
-            onSave = { question, answer ->
-                viewModel.updateCardText(currentCardIndex, question, answer)
+            onSave = { question, answer, imagePaths ->
+                viewModel.updateCardComplete(currentCardIndex, question, answer, imagePaths)
                 showEditDialog = false
             }
         )
@@ -345,10 +353,26 @@ fun PracticeCardView(
 fun EditCardDialog(
     card: Card,
     onDismiss: () -> Unit,
-    onSave: (question: String, answer: String) -> Unit
+    onSave: (question: String, answer: String, imagePaths: List<String>) -> Unit
 ) {
     var question by remember(card.id) { mutableStateOf(card.question) }
     var answer by remember(card.id) { mutableStateOf(card.answer) }
+    var imagePaths by remember(card.id) { mutableStateOf(card.imagePaths.toMutableList()) }
+
+    val context = LocalContext.current
+
+    // Image picker launcher
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            // Copy image to app's internal storage and save path
+            val savedPath = saveImageToInternalStorage(context, it)
+            if (savedPath != null) {
+                imagePaths = (imagePaths + savedPath).toMutableList()
+            }
+        }
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -389,6 +413,70 @@ fun EditCardDialog(
                     maxLines = 6
                 )
 
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Images section
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Image,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "Images",
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                            }
+                            OutlinedButton(
+                                onClick = { imagePickerLauncher.launch("image/*") },
+                                modifier = Modifier.height(32.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Add,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Add", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+
+                        if (imagePaths.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            CardImagesEdit(
+                                imagePaths = imagePaths,
+                                onRemoveImage = { path ->
+                                    imagePaths = imagePaths.filter { it != path }.toMutableList()
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                maxHeight = 120
+                            )
+                        } else {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                "No images",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Row(
@@ -400,7 +488,7 @@ fun EditCardDialog(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
-                        onClick = { onSave(question, answer) },
+                        onClick = { onSave(question, answer, imagePaths) },
                         enabled = question.isNotBlank() && answer.isNotBlank()
                     ) {
                         Text("Save")
@@ -408,5 +496,39 @@ fun EditCardDialog(
                 }
             }
         }
+    }
+}
+
+/**
+ * Save image from URI to app's internal storage
+ * Returns the saved file path or null if failed
+ */
+private fun saveImageToInternalStorage(context: Context, uri: Uri): String? {
+    return try {
+        val inputStream = context.contentResolver.openInputStream(uri) ?: return null
+
+        // Create images directory if it doesn't exist
+        val imagesDir = File(context.filesDir, "card_images")
+        if (!imagesDir.exists()) {
+            imagesDir.mkdirs()
+        }
+
+        // Generate unique filename
+        val timestamp = System.currentTimeMillis()
+        val extension = context.contentResolver.getType(uri)?.split("/")?.lastOrNull() ?: "jpg"
+        val fileName = "card_image_${timestamp}.${extension}"
+        val outputFile = File(imagesDir, fileName)
+
+        // Copy file
+        FileOutputStream(outputFile).use { outputStream ->
+            inputStream.copyTo(outputStream)
+        }
+        inputStream.close()
+
+        // Return the file URI as string
+        outputFile.absolutePath
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
     }
 }
