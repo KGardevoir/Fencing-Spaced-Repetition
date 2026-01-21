@@ -25,11 +25,16 @@ class ThemePreferences(private val context: Context) {
     private val AUTO_SHOW_ANSWER_KEY = booleanPreferencesKey("auto_show_answer")
     private val CARDS_PER_SESSION_KEY = intPreferencesKey("cards_per_session")
     private val SELECTED_GROUP_ID_KEY = longPreferencesKey("selected_group_id")
+    private val RANDOMIZE_DUE_CARDS_KEY = booleanPreferencesKey("randomize_due_cards")
+    private val MAXIMUM_INTERVAL_KEY = intPreferencesKey("maximum_interval")
 
     companion object {
         const val DEFAULT_CARDS_PER_SESSION = 3
         const val MIN_CARDS_PER_SESSION = 1
         const val MAX_CARDS_PER_SESSION = 20
+        const val DEFAULT_MAXIMUM_INTERVAL = 36500 // 100 years in days
+        const val MIN_MAXIMUM_INTERVAL = 30 // 30 days
+        const val MAX_MAXIMUM_INTERVAL = 36500 // 100 years
     }
 
     val themeMode: Flow<ThemeMode> = context.dataStore.data
@@ -55,6 +60,16 @@ class ThemePreferences(private val context: Context) {
     val selectedGroupId: Flow<Long?> = context.dataStore.data
         .map { preferences ->
             preferences[SELECTED_GROUP_ID_KEY]
+        }
+
+    val randomizeDueCards: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[RANDOMIZE_DUE_CARDS_KEY] ?: false
+        }
+
+    val maximumInterval: Flow<Int> = context.dataStore.data
+        .map { preferences ->
+            preferences[MAXIMUM_INTERVAL_KEY] ?: DEFAULT_MAXIMUM_INTERVAL
         }
 
     suspend fun setThemeMode(mode: ThemeMode) {
@@ -83,6 +98,19 @@ class ThemePreferences(private val context: Context) {
             } else {
                 preferences.remove(SELECTED_GROUP_ID_KEY)
             }
+        }
+    }
+
+    suspend fun setRandomizeDueCards(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[RANDOMIZE_DUE_CARDS_KEY] = enabled
+        }
+    }
+
+    suspend fun setMaximumInterval(days: Int) {
+        val validDays = days.coerceIn(MIN_MAXIMUM_INTERVAL, MAX_MAXIMUM_INTERVAL)
+        context.dataStore.edit { preferences ->
+            preferences[MAXIMUM_INTERVAL_KEY] = validDays
         }
     }
 }

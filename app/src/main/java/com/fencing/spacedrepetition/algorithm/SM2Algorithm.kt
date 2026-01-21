@@ -6,7 +6,16 @@ import kotlin.math.max
  * SM-2 (SuperMemo 2) Algorithm Implementation
  * Classic spaced repetition algorithm
  */
-class SM2Algorithm {
+class SM2Algorithm(
+    private var maximumInterval: Int = 36500 // Default: 100 years
+) {
+
+    /**
+     * Update the maximum interval setting
+     */
+    fun setMaximumInterval(days: Int) {
+        maximumInterval = days.coerceAtLeast(1)
+    }
 
     data class SM2Card(
         val easeFactor: Double = 2.5,
@@ -65,7 +74,7 @@ class SM2Algorithm {
         val newInterval = when (card.repetitions) {
             0 -> 1
             1 -> 6
-            else -> (card.interval * newEaseFactor).toInt()
+            else -> (card.interval * newEaseFactor).toInt().coerceAtMost(maximumInterval)
         }
 
         val newCard = card.copy(
