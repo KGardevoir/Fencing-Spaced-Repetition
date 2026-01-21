@@ -81,6 +81,10 @@ class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
         _uiState.value = PracticeUiState.ReadyToGrade
     }
 
+    fun backToPracticing() {
+        _uiState.value = PracticeUiState.Practicing
+    }
+
     fun updateGrade(cardIndex: Int, grade: Grade) {
         val cards = _sessionCards.value.toMutableList()
         if (cardIndex in cards.indices) {
