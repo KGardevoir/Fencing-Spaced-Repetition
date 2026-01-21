@@ -282,13 +282,19 @@ fun HomeScreen(
     // Settings dialog
     if (showSettingsDialog) {
         val autoShowAnswer by settingsViewModel.autoShowAnswer.collectAsState()
+        val randomizeDueCards by settingsViewModel.randomizeDueCards.collectAsState()
+        val maximumInterval by settingsViewModel.maximumInterval.collectAsState()
         SettingsDialog(
             currentThemeMode = themeMode,
             autoShowAnswer = autoShowAnswer,
             cardsPerSession = cardsPerSession,
+            randomizeDueCards = randomizeDueCards,
+            maximumInterval = maximumInterval,
             onThemeModeChange = { settingsViewModel.setThemeMode(it) },
             onAutoShowAnswerChange = { settingsViewModel.setAutoShowAnswer(it) },
             onCardsPerSessionChange = { settingsViewModel.setCardsPerSession(it) },
+            onRandomizeDueCardsChange = { settingsViewModel.setRandomizeDueCards(it) },
+            onMaximumIntervalChange = { settingsViewModel.setMaximumInterval(it) },
             onDismiss = { showSettingsDialog = false }
         )
     }
@@ -386,9 +392,13 @@ fun SettingsDialog(
     currentThemeMode: ThemeMode,
     autoShowAnswer: Boolean,
     cardsPerSession: Int,
+    randomizeDueCards: Boolean,
+    maximumInterval: Int,
     onThemeModeChange: (ThemeMode) -> Unit,
     onAutoShowAnswerChange: (Boolean) -> Unit,
     onCardsPerSessionChange: (Int) -> Unit,
+    onRandomizeDueCardsChange: (Boolean) -> Unit,
+    onMaximumIntervalChange: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -512,6 +522,85 @@ fun SettingsDialog(
                     Switch(
                         checked = autoShowAnswer,
                         onCheckedChange = onAutoShowAnswerChange
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Randomize due cards
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onRandomizeDueCardsChange(!randomizeDueCards) }
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Randomize Due Cards",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Text(
+                            text = "Shuffle cards with similar due dates for variety",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = randomizeDueCards,
+                        onCheckedChange = onRandomizeDueCardsChange
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Divider()
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Algorithm section
+                Text(
+                    "Algorithm",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Maximum interval
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Maximum Interval",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Text(
+                            text = if (maximumInterval >= 365) {
+                                "${maximumInterval / 365} ${if (maximumInterval / 365 == 1) "year" else "years"}"
+                            } else {
+                                "$maximumInterval days"
+                            },
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Slider(
+                        value = maximumInterval.toFloat(),
+                        onValueChange = { onMaximumIntervalChange(it.toInt()) },
+                        valueRange = 30f..36500f,
+                        steps = 0,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        text = "Maximum days between reviews (30 days to 100 years)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
