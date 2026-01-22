@@ -401,6 +401,23 @@ fun SettingsDialog(
     onMaximumIntervalChange: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
+    // Preset values for maximum interval with better granularity
+    val intervalPresets = listOf(
+        7 to "1 week",
+        30 to "1 month",
+        90 to "3 months",
+        180 to "6 months",
+        365 to "1 year",
+        730 to "2 years",
+        1825 to "5 years",
+        3650 to "10 years",
+        36500 to "100 years"
+    )
+
+    // Find closest preset index to current value
+    val currentPresetIndex = intervalPresets.indexOfFirst { it.first >= maximumInterval }
+        .let { if (it == -1) intervalPresets.size - 1 else it }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Default.Settings, contentDescription = null) },
@@ -581,24 +598,23 @@ fun SettingsDialog(
                             style = MaterialTheme.typography.bodyLarge
                         )
                         Text(
-                            text = if (maximumInterval >= 365) {
-                                "${maximumInterval / 365} ${if (maximumInterval / 365 == 1) "year" else "years"}"
-                            } else {
-                                "$maximumInterval days"
-                            },
+                            text = intervalPresets[currentPresetIndex].second,
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
                     Slider(
-                        value = maximumInterval.toFloat(),
-                        onValueChange = { onMaximumIntervalChange(it.toInt()) },
-                        valueRange = 30f..36500f,
-                        steps = 0,
+                        value = currentPresetIndex.toFloat(),
+                        onValueChange = { newIndex ->
+                            val presetValue = intervalPresets[newIndex.toInt()].first
+                            onMaximumIntervalChange(presetValue)
+                        },
+                        valueRange = 0f..(intervalPresets.size - 1).toFloat(),
+                        steps = intervalPresets.size - 2,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Text(
-                        text = "Maximum days between reviews (30 days to 100 years)",
+                        text = "Maximum time between reviews",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
