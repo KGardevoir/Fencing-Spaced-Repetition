@@ -21,6 +21,7 @@ sealed class Screen(val route: String) {
     object AddCard : Screen("add_card")
     object EditCard : Screen("edit_card/{cardId}")
     object GroupList : Screen("group_list")
+    object Settings : Screen("settings")
 }
 
 @Composable
@@ -54,6 +55,9 @@ fun AppNavigation(
                 },
                 onNavigateToGroups = {
                     navController.navigate(Screen.GroupList.route)
+                },
+                onNavigateToSettings = {
+                    navController.navigate(Screen.Settings.route)
                 }
             )
         }
@@ -136,6 +140,15 @@ fun AppNavigation(
         composable(Screen.GroupList.route) {
             GroupListScreen(
                 groupViewModel = groupViewModel,
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable(Screen.Settings.route) {
+            SettingsScreen(
+                settingsViewModel = settingsViewModel,
                 onNavigateBack = {
                     navController.popBackStack()
                 }
