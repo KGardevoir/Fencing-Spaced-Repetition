@@ -28,6 +28,9 @@ class MainActivity : ComponentActivity() {
         // Initialize database and repositories
         val database = AppDatabase.getDatabase(applicationContext)
 
+        // Initialize theme preferences (needed by CardRepository)
+        val themePreferences = ThemePreferences(applicationContext)
+
         val groupRepository = GroupRepository(
             groupDao = database.groupDao(),
             cardDao = database.cardDao()
@@ -37,11 +40,9 @@ class MainActivity : ComponentActivity() {
             cardDao = database.cardDao(),
             sessionDao = database.practiceSessionDao(),
             reviewLogDao = database.reviewLogDao(),
-            groupDao = database.groupDao()
+            groupDao = database.groupDao(),
+            preferences = themePreferences
         )
-
-        // Initialize theme preferences
-        val themePreferences = ThemePreferences(applicationContext)
 
         setContent {
             // Create settings ViewModel

@@ -8,7 +8,9 @@ import kotlin.math.pow
  * FSRS (Free Spaced Repetition Scheduler) Algorithm Implementation
  * Based on the FSRS-4.5 specification
  */
-class FSRSAlgorithm {
+class FSRSAlgorithm(
+    private var maximumInterval: Int = 36500 // Default: 100 years
+) {
 
     data class FSRSCard(
         val stability: Double = 0.0,
@@ -54,9 +56,15 @@ class FSRSAlgorithm {
     )
 
     private val requestRetention = 0.9 // Target retention rate
-    private val maximumInterval = 36500 // Maximum interval in days (100 years)
     private val easyBonus = 1.3
     private val hardInterval = 1.2
+
+    /**
+     * Update the maximum interval setting
+     */
+    fun setMaximumInterval(days: Int) {
+        maximumInterval = days.coerceAtLeast(1)
+    }
 
     /**
      * Schedule a card review based on rating

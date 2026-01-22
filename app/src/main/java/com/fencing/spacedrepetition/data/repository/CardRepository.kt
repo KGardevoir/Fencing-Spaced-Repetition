@@ -7,6 +7,7 @@ import com.fencing.spacedrepetition.data.dao.GroupDao
 import com.fencing.spacedrepetition.data.dao.PracticeSessionDao
 import com.fencing.spacedrepetition.data.dao.ReviewLogDao
 import com.fencing.spacedrepetition.data.model.*
+import com.fencing.spacedrepetition.data.preferences.ThemePreferences
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
@@ -14,7 +15,8 @@ class CardRepository(
     private val cardDao: CardDao,
     private val sessionDao: PracticeSessionDao,
     private val reviewLogDao: ReviewLogDao,
-    private val groupDao: GroupDao
+    private val groupDao: GroupDao,
+    private val preferences: ThemePreferences
 ) {
     private val fsrsAlgorithm = FSRSAlgorithm()
     private val sm2Algorithm = SM2Algorithm()
@@ -22,13 +24,29 @@ class CardRepository(
     // Card operations
     fun getAllCards(): Flow<List<Card>> = cardDao.getAllCards()
 
-    suspend fun getAllCardsSync(): List<Card> = cardDao.getAllCardsSync()
+    suspend fun getAllCardsSync(): List<Card> {
+        val cards = cardDao.getAllCardsSync()
+        val shouldRandomize = preferences.randomizeDueCards.first()
+        return if (shouldRandomize) {
+            cards.shuffled()
+        } else {
+            cards
+        }
+    }
 
     suspend fun getCardById(cardId: Long): Card? = cardDao.getCardById(cardId)
 
     fun getCardByIdFlow(cardId: Long): Flow<Card?> = cardDao.getCardByIdFlow(cardId)
 
-    suspend fun getDueCards(limit: Int = 100): List<Card> = cardDao.getDueCards(limit = limit)
+    suspend fun getDueCards(limit: Int = 100): List<Card> {
+        val cards = cardDao.getDueCards(limit = limit)
+        val shouldRandomize = preferences.randomizeDueCards.first()
+        return if (shouldRandomize) {
+            randomizeCardsBySimilarDueTime(cards)
+        } else {
+            cards
+        }
+    }
 
     fun getDueCardsFlow(limit: Int = 100): Flow<List<Card>> = cardDao.getDueCardsFlow(limit = limit)
 
@@ -111,11 +129,25 @@ class CardRepository(
 
     fun getCardWithGroups(cardId: Long): Flow<CardWithGroups?> = cardDao.getCardWithGroups(cardId)
 
-    suspend fun getDueCardsByGroup(groupId: Long, limit: Int = 100): List<Card> =
-        cardDao.getDueCardsByGroup(groupId, limit = limit)
+    suspend fun getDueCardsByGroup(groupId: Long, limit: Int = 100): List<Card> {
+        val cards = cardDao.getDueCardsByGroup(groupId, limit = limit)
+        val shouldRandomize = preferences.randomizeDueCards.first()
+        return if (shouldRandomize) {
+            randomizeCardsBySimilarDueTime(cards)
+        } else {
+            cards
+        }
+    }
 
-    suspend fun getCardsByGroupSync(groupId: Long): List<Card> =
-        cardDao.getCardsByGroupSync(groupId)
+    suspend fun getCardsByGroupSync(groupId: Long): List<Card> {
+        val cards = cardDao.getCardsByGroupSync(groupId)
+        val shouldRandomize = preferences.randomizeDueCards.first()
+        return if (shouldRandomize) {
+            cards.shuffled()
+        } else {
+            cards
+        }
+    }
 
     fun getDueCardCountByGroup(groupId: Long): Flow<Int> = cardDao.getDueCardCountByGroup(groupId)
 
@@ -493,7 +525,11 @@ class CardRepository(
         cardDao.updateCards(updatedCards)
     }
 
-    private fun reviewWithFSRS(card: Card, grade: Grade, now: Long, elapsedDays: Int): Card {
+    private suspend fun reviewWithFSRS(card: Card, grade: Grade, now: Long, elapsedDays: Int): Card {
+        // Update algorithm with current maximum interval setting
+        val maxInterval = preferences.maximumInterval.first()
+        fsrsAlgorithm.setMaximumInterval(maxInterval)
+
         val fsrsCard = FSRSAlgorithm.FSRSCard(
             stability = card.fsrsStability,
             difficulty = card.fsrsDifficulty,
@@ -530,7 +566,11 @@ class CardRepository(
         )
     }
 
-    private fun reviewWithSM2(card: Card, grade: Grade, now: Long): Card {
+    private suspend fun reviewWithSM2(card: Card, grade: Grade, now: Long): Card {
+        // Update algorithm with current maximum interval setting
+        val maxInterval = preferences.maximumInterval.first()
+        sm2Algorithm.setMaximumInterval(maxInterval)
+
         val sm2Card = SM2Algorithm.SM2Card(
             easeFactor = card.sm2EaseFactor,
             interval = card.sm2Interval,
@@ -568,12 +608,16 @@ class CardRepository(
         }
     }
 
-    private fun reviewLearningStateWithFSRS(
+    private suspend fun reviewLearningStateWithFSRS(
         learningState: CardGroupLearningState,
         grade: Grade,
         now: Long,
         elapsedDays: Int
     ): CardGroupLearningState {
+        // Update algorithm with current maximum interval setting
+        val maxInterval = preferences.maximumInterval.first()
+        fsrsAlgorithm.setMaximumInterval(maxInterval)
+
         val fsrsCard = FSRSAlgorithm.FSRSCard(
             stability = learningState.fsrsStability,
             difficulty = learningState.fsrsDifficulty,
@@ -610,11 +654,15 @@ class CardRepository(
         )
     }
 
-    private fun reviewLearningStateWithSM2(
+    private suspend fun reviewLearningStateWithSM2(
         learningState: CardGroupLearningState,
         grade: Grade,
         now: Long
     ): CardGroupLearningState {
+        // Update algorithm with current maximum interval setting
+        val maxInterval = preferences.maximumInterval.first()
+        sm2Algorithm.setMaximumInterval(maxInterval)
+
         val sm2Card = SM2Algorithm.SM2Card(
             easeFactor = learningState.sm2EaseFactor,
             interval = learningState.sm2Interval,
@@ -656,4 +704,26 @@ class CardRepository(
     fun getReviewLogsByCard(cardId: Long): Flow<List<ReviewLog>> = reviewLogDao.getReviewLogsByCard(cardId)
 
     fun getAllReviewLogs(): Flow<List<ReviewLog>> = reviewLogDao.getAllReviewLogs()
+
+    /**
+     * Randomize cards that have similar due times (within the same day)
+     * to add variety to review sessions while maintaining spaced repetition principles
+     */
+    private fun randomizeCardsBySimilarDueTime(cards: List<Card>): List<Card> {
+        if (cards.isEmpty()) return cards
+
+        val millisecondsPerDay = 24 * 60 * 60 * 1000L
+
+        // Group cards by day (rounded to nearest day)
+        val grouped = cards.groupBy { card ->
+            card.nextReview / millisecondsPerDay
+        }
+
+        // Shuffle within each day group, then flatten back to a list
+        return grouped.entries
+            .sortedBy { it.key } // Keep day order
+            .flatMap { (_, cardsInDay) ->
+                cardsInDay.shuffled() // Randomize within day
+            }
+    }
 }

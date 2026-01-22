@@ -84,6 +84,7 @@ fun AppNavigation(
                     }
                 },
                 onNavigateBack = {
+                    practiceViewModel.backToPracticing()
                     navController.popBackStack()
                 }
             )

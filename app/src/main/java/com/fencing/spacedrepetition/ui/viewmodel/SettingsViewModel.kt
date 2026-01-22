@@ -25,6 +25,12 @@ class SettingsViewModel(
     val selectedGroupId: StateFlow<Long?> = themePreferences.selectedGroupId
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    val randomizeDueCards: StateFlow<Boolean> = themePreferences.randomizeDueCards
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val maximumInterval: StateFlow<Int> = themePreferences.maximumInterval
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_MAXIMUM_INTERVAL)
+
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch {
             themePreferences.setThemeMode(mode)
@@ -46,6 +52,18 @@ class SettingsViewModel(
     fun setSelectedGroupId(groupId: Long?) {
         viewModelScope.launch {
             themePreferences.setSelectedGroupId(groupId)
+        }
+    }
+
+    fun setRandomizeDueCards(enabled: Boolean) {
+        viewModelScope.launch {
+            themePreferences.setRandomizeDueCards(enabled)
+        }
+    }
+
+    fun setMaximumInterval(days: Int) {
+        viewModelScope.launch {
+            themePreferences.setMaximumInterval(days)
         }
     }
 }
