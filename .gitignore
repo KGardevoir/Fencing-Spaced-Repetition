@@ -34,3 +34,10 @@ captures/
 !.idea/copyright
 *.hprof
 .cxx/
+
+# Keystore files - NEVER commit these!
+*.jks
+*.keystore
+keystore.properties
+release-keystore.jks
+upload-keystore.jks

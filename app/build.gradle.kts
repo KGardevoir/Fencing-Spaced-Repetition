@@ -21,13 +21,34 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            // For security, these should be set via environment variables or gradle.properties
+            // Never commit actual keystore credentials to version control
+            storeFile = file(System.getenv("KEYSTORE_FILE") ?: "release-keystore.jks")
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
+            keyAlias = System.getenv("KEY_ALIAS") ?: ""
+            keyPassword = System.getenv("KEY_PASSWORD") ?: ""
+        }
+    }
+
     buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-DEBUG"
+        }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Only sign if keystore file exists
+            val keystoreFile = file(System.getenv("KEYSTORE_FILE") ?: "release-keystore.jks")
+            if (keystoreFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
     compileOptions {
@@ -84,6 +105,9 @@ dependencies {
 
     // Coil for image loading
     implementation("io.coil-kt:coil-compose:2.5.0")
+
+    // Google Play Billing
+    implementation("com.android.billingclient:billing-ktx:6.1.0")
 
     // Testing
     testImplementation("junit:junit:4.13.2")
