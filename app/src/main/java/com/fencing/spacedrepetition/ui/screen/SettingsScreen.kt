@@ -110,7 +110,7 @@ fun SettingsScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            HorizontalDivider()
+            Divider()
             Spacer(modifier = Modifier.height(16.dp))
 
             // Practice section
@@ -213,7 +213,7 @@ fun SettingsScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            HorizontalDivider()
+            Divider()
             Spacer(modifier = Modifier.height(16.dp))
 
             // Algorithm section
