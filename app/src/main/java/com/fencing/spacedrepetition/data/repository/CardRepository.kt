@@ -24,7 +24,15 @@ class CardRepository(
     // Card operations
     fun getAllCards(): Flow<List<Card>> = cardDao.getAllCards()
 
-    suspend fun getAllCardsSync(): List<Card> = cardDao.getAllCardsSync()
+    suspend fun getAllCardsSync(): List<Card> {
+        val cards = cardDao.getAllCardsSync()
+        val shouldRandomize = preferences.randomizeDueCards.first()
+        return if (shouldRandomize) {
+            cards.shuffled()
+        } else {
+            cards
+        }
+    }
 
     suspend fun getCardById(cardId: Long): Card? = cardDao.getCardById(cardId)
 
@@ -131,8 +139,15 @@ class CardRepository(
         }
     }
 
-    suspend fun getCardsByGroupSync(groupId: Long): List<Card> =
-        cardDao.getCardsByGroupSync(groupId)
+    suspend fun getCardsByGroupSync(groupId: Long): List<Card> {
+        val cards = cardDao.getCardsByGroupSync(groupId)
+        val shouldRandomize = preferences.randomizeDueCards.first()
+        return if (shouldRandomize) {
+            cards.shuffled()
+        } else {
+            cards
+        }
+    }
 
     fun getDueCardCountByGroup(groupId: Long): Flow<Int> = cardDao.getDueCardCountByGroup(groupId)
 

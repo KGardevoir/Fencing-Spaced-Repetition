@@ -31,12 +31,23 @@ class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
             _uiState.value = PracticeUiState.Loading
 
             try {
-                // Get all cards, filtered by group if specified
-                // This allows additional studying as if starting a new day
-                val allCards = if (groupId != null) {
-                    repository.getCardsByGroupSync(groupId)
+                // Get due cards first (these will be randomized if setting is enabled)
+                val dueCards = if (groupId != null) {
+                    repository.getDueCardsByGroup(groupId, limit = numberOfCards * 2)
                 } else {
-                    repository.getAllCardsSync()
+                    repository.getDueCards(limit = numberOfCards * 2)
+                }
+
+                // If we have enough due cards, use those
+                // Otherwise, get all cards to allow additional studying
+                val allCards = if (dueCards.size >= numberOfCards) {
+                    dueCards
+                } else {
+                    if (groupId != null) {
+                        repository.getCardsByGroupSync(groupId)
+                    } else {
+                        repository.getAllCardsSync()
+                    }
                 }
 
                 if (allCards.isEmpty()) {
