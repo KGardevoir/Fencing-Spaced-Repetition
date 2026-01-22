@@ -13,7 +13,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Group
-import com.fencing.spacedrepetition.data.preferences.ThemeMode
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
@@ -28,17 +27,16 @@ fun HomeScreen(
     settingsViewModel: SettingsViewModel,
     onNavigateToPractice: () -> Unit,
     onNavigateToCards: () -> Unit,
-    onNavigateToGroups: () -> Unit
+    onNavigateToGroups: () -> Unit,
+    onNavigateToSettings: () -> Unit
 ) {
     val dueCardCount by cardViewModel.dueCardCount.collectAsState()
     val totalCards by cardViewModel.cardCount.collectAsState()
     val groups by groupViewModel.allGroups.collectAsState()
-    val themeMode by settingsViewModel.themeMode.collectAsState()
     val cardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
     val savedGroupId by settingsViewModel.selectedGroupId.collectAsState()
 
     var showGroupSelectionDialog by remember { mutableStateOf(false) }
-    var showSettingsDialog by remember { mutableStateOf(false) }
 
     // Derive selected group from persisted ID and groups list
     val selectedGroup = groups.find { it.id == savedGroupId } ?: groups.firstOrNull()
@@ -75,7 +73,7 @@ fun HomeScreen(
                     IconButton(onClick = onNavigateToGroups) {
                         Icon(Icons.Default.Folder, "Manage Groups")
                     }
-                    IconButton(onClick = { showSettingsDialog = true }) {
+                    IconButton(onClick = onNavigateToSettings) {
                         Icon(Icons.Default.Settings, "Settings")
                     }
                 }
@@ -278,26 +276,6 @@ fun HomeScreen(
             onDismiss = { showGroupSelectionDialog = false }
         )
     }
-
-    // Settings dialog
-    if (showSettingsDialog) {
-        val autoShowAnswer by settingsViewModel.autoShowAnswer.collectAsState()
-        val randomizeDueCards by settingsViewModel.randomizeDueCards.collectAsState()
-        val maximumInterval by settingsViewModel.maximumInterval.collectAsState()
-        SettingsDialog(
-            currentThemeMode = themeMode,
-            autoShowAnswer = autoShowAnswer,
-            cardsPerSession = cardsPerSession,
-            randomizeDueCards = randomizeDueCards,
-            maximumInterval = maximumInterval,
-            onThemeModeChange = { settingsViewModel.setThemeMode(it) },
-            onAutoShowAnswerChange = { settingsViewModel.setAutoShowAnswer(it) },
-            onCardsPerSessionChange = { settingsViewModel.setCardsPerSession(it) },
-            onRandomizeDueCardsChange = { settingsViewModel.setRandomizeDueCards(it) },
-            onMaximumIntervalChange = { settingsViewModel.setMaximumInterval(it) },
-            onDismiss = { showSettingsDialog = false }
-        )
-    }
 }
 
 @Composable
@@ -387,245 +365,3 @@ fun StatCard(
     }
 }
 
-@Composable
-fun SettingsDialog(
-    currentThemeMode: ThemeMode,
-    autoShowAnswer: Boolean,
-    cardsPerSession: Int,
-    randomizeDueCards: Boolean,
-    maximumInterval: Int,
-    onThemeModeChange: (ThemeMode) -> Unit,
-    onAutoShowAnswerChange: (Boolean) -> Unit,
-    onCardsPerSessionChange: (Int) -> Unit,
-    onRandomizeDueCardsChange: (Boolean) -> Unit,
-    onMaximumIntervalChange: (Int) -> Unit,
-    onDismiss: () -> Unit
-) {
-    // Preset values for maximum interval with better granularity
-    val intervalPresets = listOf(
-        7 to "1 week",
-        14 to "2 weeks",
-        30 to "1 month",
-        60 to "2 months",
-        90 to "3 months",
-        180 to "6 months",
-        365 to "1 year",
-        730 to "2 years",
-        1825 to "5 years",
-        3650 to "10 years"
-    )
-
-    // Find closest preset index to current value
-    val currentPresetIndex = intervalPresets.indexOfFirst { it.first >= maximumInterval }
-        .let { if (it == -1) intervalPresets.size - 1 else it }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-        title = { Text("Settings") },
-        text = {
-            Column {
-                // Theme section
-                Text(
-                    "Theme",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-
-                ThemeMode.values().forEach { mode ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onThemeModeChange(mode) }
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = currentThemeMode == mode,
-                            onClick = { onThemeModeChange(mode) }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(
-                                text = when (mode) {
-                                    ThemeMode.SYSTEM -> "System Default"
-                                    ThemeMode.LIGHT -> "Light"
-                                    ThemeMode.DARK -> "Dark"
-                                },
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                            Text(
-                                text = when (mode) {
-                                    ThemeMode.SYSTEM -> "Follow device settings"
-                                    ThemeMode.LIGHT -> "Always use light theme"
-                                    ThemeMode.DARK -> "Always use dark theme"
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-                Divider()
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Practice section
-                Text(
-                    "Practice",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Cards per session
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Cards per Session",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Text(
-                            text = "$cardsPerSession",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    Slider(
-                        value = cardsPerSession.toFloat(),
-                        onValueChange = { onCardsPerSessionChange(it.toInt()) },
-                        valueRange = 1f..6f,
-                        steps = 6,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Text(
-                        text = "Number of cards to practice each session",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Auto-show answer
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onAutoShowAnswerChange(!autoShowAnswer) }
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Auto-show Answer",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Text(
-                            text = "Show answer immediately when viewing cards",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = autoShowAnswer,
-                        onCheckedChange = onAutoShowAnswerChange
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Randomize due cards
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onRandomizeDueCardsChange(!randomizeDueCards) }
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Randomize Due Cards",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Text(
-                            text = "Shuffle cards with similar due dates for variety",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = randomizeDueCards,
-                        onCheckedChange = onRandomizeDueCardsChange
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-                Divider()
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Algorithm section
-                Text(
-                    "Algorithm",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Maximum interval
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Maximum Interval",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Text(
-                            text = intervalPresets[currentPresetIndex].second,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    Slider(
-                        value = currentPresetIndex.toFloat(),
-                        onValueChange = { newIndex ->
-                            val presetValue = intervalPresets[newIndex.toInt()].first
-                            onMaximumIntervalChange(presetValue)
-                        },
-                        valueRange = 0f..(intervalPresets.size - 1).toFloat(),
-                        steps = intervalPresets.size - 2,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Text(
-                        text = "Maximum time between reviews",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Done")
-            }
-        }
-    )
-}
