@@ -32,9 +32,9 @@ class ThemePreferences(private val context: Context) {
         const val DEFAULT_CARDS_PER_SESSION = 3
         const val MIN_CARDS_PER_SESSION = 1
         const val MAX_CARDS_PER_SESSION = 20
-        const val DEFAULT_MAXIMUM_INTERVAL = 36500 // 100 years in days
+        const val DEFAULT_MAXIMUM_INTERVAL = 365 // 1 years in days
         const val MIN_MAXIMUM_INTERVAL = 7 // 1 week
-        const val MAX_MAXIMUM_INTERVAL = 36500 // 100 years
+        const val MAX_MAXIMUM_INTERVAL = 3650 // 10 years
     }
 
     val themeMode: Flow<ThemeMode> = context.dataStore.data

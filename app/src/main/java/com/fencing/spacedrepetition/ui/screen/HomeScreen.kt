@@ -404,14 +404,15 @@ fun SettingsDialog(
     // Preset values for maximum interval with better granularity
     val intervalPresets = listOf(
         7 to "1 week",
+        14 to "2 weeks",
         30 to "1 month",
+        60 to "2 months",
         90 to "3 months",
         180 to "6 months",
         365 to "1 year",
         730 to "2 years",
         1825 to "5 years",
-        3650 to "10 years",
-        36500 to "100 years"
+        3650 to "10 years"
     )
 
     // Find closest preset index to current value
