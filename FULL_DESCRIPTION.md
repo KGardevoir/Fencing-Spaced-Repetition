@@ -1,56 +1,68 @@
-# Delayed Choice Spaced Repetition -- Full Description
+# Google Play Store Listing
 
-## Short Description
+## App Name
+Delayed Choice Spaced Repetition
 
-A spaced repetition flashcard app built for martial arts and fencing. Practice techniques, then grade yourself afterwards. Fully offline and privacy-first.
+## Short Description (80 character limit)
+Spaced repetition flashcards for martial arts. Practice first, grade after.
 
-## Full Description
+## Full Description (4000 character limit)
 
-Delayed Choice Spaced Repetition is a flashcard app designed specifically for physical training disciplines like fencing, martial arts, and combat sports. Unlike traditional flashcard apps that ask you to grade yourself immediately after seeing a card, this app lets you practice a batch of techniques first and grade your performance afterwards -- matching the way physical training actually works.
+Delayed Choice Spaced Repetition is a flashcard app built for physical training. Practice a batch of techniques during your session, then grade yourself afterwards. The app schedules your next review using proven spaced repetition algorithms so you always practice what you need most.
 
-### How it works
+DESIGNED FOR PHYSICAL TRAINING
 
-Start a practice session and the app presents you with a set of technique cards. Each card has a question (the technique name) and a description (how to perform it). Study the cards, practice the techniques during your training session, then come back and grade how well you remembered each one. The app uses proven spaced repetition algorithms to schedule your next review -- techniques you struggle with appear more often, while ones you've mastered are spaced further apart.
+Traditional flashcard apps expect you to grade yourself the moment you see a card. Physical skills don't work that way. You need to attempt the technique, feel how it went, and reflect on your performance. This app gives you that workflow: study your cards, go train, then come back and grade everything at once.
 
-### Built for athletes
+HOW IT WORKS
 
-Most spaced repetition apps are built for language learning or academic study. They expect you to sit at a desk and immediately know whether you got the answer right. Physical skills don't work that way. You need to practice a technique, feel how it went, and reflect on your performance after the fact. That's exactly what delayed-choice grading gives you.
+1. Select a practice group and tap Start Practice
+2. Swipe through your technique cards during training
+3. Tap Show Description to reveal how to perform each technique
+4. After all cards, grade each one: Skip, Again, Hard, Good, or Easy
+5. The algorithm schedules your next review for each card
 
-### Two proven algorithms
+TWO PROVEN ALGORITHMS
 
-Choose between FSRS (Free Spaced Repetition Scheduler), a modern algorithm that uses stability and difficulty modeling for accurate predictions, or SM-2 (SuperMemo 2), the classic algorithm that has been the foundation of spaced repetition for decades. You can even mix algorithms across different cards.
+Choose between FSRS (Free Spaced Repetition Scheduler), a modern algorithm with stability and difficulty modeling, or SM-2 (SuperMemo 2), the classic algorithm behind decades of spaced repetition research. Mix and match across different cards.
 
-### Organize your training
+ORGANIZE YOUR TRAINING
 
-Create groups to organize cards by training focus -- footwork drills, blade work, competition preparation, or whatever structure fits your practice. Each group can optionally maintain independent learning states, so the same technique card can have different progress in different training contexts.
+Create groups to organize cards by focus area -- footwork, blade work, competition prep, or any structure that fits your training. Each group can optionally maintain independent learning progress, so the same technique card can be at different stages in different training contexts.
 
-### Smart scheduling
+SMART SCHEDULING
 
-Set how many days per week you practice, and the app adjusts review intervals to match. If you train three times a week, cards are scheduled to come due on days you'll actually be at practice -- not on rest days when you can't train. You also control the maximum interval between reviews to prevent any technique from going too long without practice.
+Tell the app how many days per week you practice (1-7), and review intervals adjust automatically. Cards come due on days you'll actually train, not on rest days. Set a maximum review interval to make sure no technique goes too long without practice.
 
-### Randomization with control
+CONFIGURABLE RANDOMIZATION
 
-Enable randomization to shuffle the order of your practice cards for variety. Configure the sampling bucket size to control how much shuffling happens -- a smaller bucket (like 1 hour) keeps cards in strict priority order, while a larger bucket (like 1 week) gives you maximum variety. Either way, the most overdue cards still come first.
+Shuffle due cards for variety while keeping priorities intact. Choose a sampling bucket size from 1 hour to 1 week. Cards within the same bucket are randomized; ordering between buckets is preserved. More overdue cards still come first.
 
-### Your data, your device
+IMPORT AND EXPORT
 
-This app is completely offline. It makes no network requests, collects no analytics, requires no account, and asks for no device permissions. All your cards, progress, and settings are stored locally on your device. You can export your entire card library (including images and learning state) as a portable file, and import it on another device.
+Export your entire card library as a portable file, including learning progress, group states, and images. Import on another device to pick up where you left off. Three export levels: basic content, content with group states, or everything including embedded images.
 
-### Key features
+YOUR DATA STAYS ON YOUR DEVICE
+
+This app is completely offline. No network requests, no analytics, no telemetry, no accounts, no ads. All cards, progress, and settings are stored locally. No permissions required.
+
+KEY FEATURES
 
 - Delayed-choice grading: practice first, grade afterwards
-- Configurable session size (1 to 6 cards)
+- Configurable session size (1-6 cards per session)
 - FSRS and SM-2 spaced repetition algorithms
 - Groups with optional independent learning states
 - Image attachments on cards
-- Categories and tags for organization
-- Import/export with three format levels (basic, with group states, with images)
+- Categories and tags
+- Import/export with three format levels
 - Practices-per-week scheduling adjustment
-- Configurable randomization with time-based buckets
+- Configurable randomization with time-based sampling buckets
 - Maximum review interval control
-- Light, dark, and system theme support
+- Light, dark, and system themes
 - Auto-show description mode
 - Swipe gestures for card navigation
-- Edit cards directly during practice
-- Completely offline and privacy-first
+- Edit cards during practice
+- Completely offline and private
 - No ads, no tracking, no accounts
+
+Built for fencing and martial arts but works for any sport or physical discipline.
