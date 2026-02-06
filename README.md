@@ -1,6 +1,8 @@
-# Fencing Spaced Repetition App
+# Martial Arts Practice
 
-An Android app for practicing fencing techniques using delayed choice spaced repetition with both FSRS and SM-2 algorithms.
+An Android app for mastering martial arts techniques using spaced repetition flashcards with both FSRS and SM-2 algorithms.
+
+**Status**: Ready for Google Play Store deployment
 
 ## Features
 
@@ -15,18 +17,22 @@ An Android app for practicing fencing techniques using delayed choice spaced rep
 - Choose the algorithm per card based on your preference
 
 ### Core Functionality
-- **Practice Sessions**: View 3 cards during practice, then grade them all at once
-- **Card Management**: Add, edit, and organize fencing technique cards
-- **Categories**: Organize cards by technique type (e.g., Basic Stance, Footwork, Attacks)
-- **Progress Tracking**: View due cards and total card count
-- **Sample Data**: Load sample fencing technique cards to get started
+- **Practice Sessions**: View cards during practice, then grade them all at once
+- **Card Management**: Add, edit, and organize technique cards with optional images
+- **Groups**: Organize cards by technique type with independent learning states
+- **Progress Tracking**: View due cards and track your progress over time
+- **Import/Export**: Import and export card decks as CSV files
+- **Settings**: Customizable theme, practice settings, and algorithm parameters
+- **Donation System**: Support development with optional in-app donations
 
 ## Technical Stack
 
 - **Language**: Kotlin
 - **UI Framework**: Jetpack Compose with Material 3
 - **Architecture**: MVVM with Repository pattern
-- **Database**: Room (SQLite)
+- **Database**: Room (SQLite) with migrations
+- **Monetization**: Google Play Billing (optional donations)
+- **Image Loading**: Coil
 - **Algorithms**:
   - FSRS-4.5 implementation
   - SM-2 implementation
@@ -38,30 +44,37 @@ app/src/main/java/com/fencing/spacedrepetition/
 ├── algorithm/              # Spaced repetition algorithms
 │   ├── FSRSAlgorithm.kt   # FSRS implementation
 │   └── SM2Algorithm.kt    # SM-2 implementation
+├── billing/                # Google Play Billing
+│   └── BillingManager.kt  # Donation handling
 ├── data/                   # Data layer
 │   ├── model/             # Data models
 │   ├── dao/               # Room DAOs
-│   └── repository/        # Repository classes
+│   ├── repository/        # Repository classes
+│   └── preferences/       # DataStore preferences
 ├── ui/                     # UI layer
 │   ├── screen/            # Composable screens
 │   ├── viewmodel/         # ViewModels
 │   ├── navigation/        # Navigation setup
+│   ├── components/        # Reusable UI components
 │   └── theme/             # App theme
+├── util/                   # Utilities
+│   └── CardImportExport.kt # CSV import/export
 └── MainActivity.kt         # Main activity
 ```
 
 ## How It Works
 
 ### Practice Flow
-1. Start a practice session from the home screen
-2. View and study 3 cards during your training
-3. Navigate through cards, revealing answers as needed
+1. Start a practice session from the home screen (or specific group)
+2. View and study cards during your training
+3. Navigate through cards, revealing answers as needed (or use auto-show)
 4. After finishing practice, grade each card:
-   - **Again**: Complete failure
-   - **Hard**: Difficult recall
-   - **Good**: Correct with effort
-   - **Easy**: Perfect recall
+   - **Again**: Complete failure - card needs more work
+   - **Hard**: Difficult recall - barely remembered
+   - **Good**: Correct with effort - standard recall
+   - **Easy**: Perfect recall - very easy
 5. Submit grades to update card schedules
+6. Cards are scheduled based on the chosen algorithm (FSRS or SM-2)
 
 ### Algorithm Selection
 Each card can use either FSRS or SM-2:
@@ -89,9 +102,23 @@ Each card can use either FSRS or SM-2:
 # Install on device
 ./gradlew installDebug
 
+# Build release AAB (for Play Store)
+./gradlew bundleRelease
+
+# Build release APK
+./gradlew assembleRelease
+
 # Run tests
 ./gradlew test
 ```
+
+### For Google Play Store Deployment
+See [DEPLOYMENT.md](DEPLOYMENT.md) for complete deployment instructions, including:
+- Creating a keystore for signing (see [KEYSTORE_SETUP.md](KEYSTORE_SETUP.md))
+- Setting up in-app donation products
+- Creating store assets
+- Privacy policy requirements
+- Submission process
 
 ## Database Schema
 
@@ -112,17 +139,37 @@ Each card can use either FSRS or SM-2:
 - Performance tracking
 - Algorithm state changes
 
+## Privacy & Data
+
+This app is privacy-first:
+- ✅ All data stored locally on your device
+- ✅ No data collection or tracking
+- ✅ No analytics or telemetry
+- ✅ No account required
+- ✅ Works completely offline
+- ✅ Optional donations processed securely by Google Play
+
+See [PRIVACY_POLICY.md](PRIVACY_POLICY.md) for complete privacy details.
+
+## Supporting Development
+
+The app is completely free with all features unlocked. If you find it helpful, you can support development through optional in-app donations:
+- Small Coffee ($0.99)
+- Big Coffee ($2.99)
+- Generous Support ($4.99)
+
+Donations help keep the app free, ad-free, and actively maintained!
+
 ## Future Enhancements
 
 Potential features for future versions:
 - Statistics and analytics dashboard
-- Export/import card decks
-- Cloud sync
-- Custom algorithm parameters
-- Image support for cards
+- Cloud sync (optional)
+- Custom algorithm parameters fine-tuning
 - Audio pronunciation guides
-- Multiple deck support
 - Study reminders/notifications
+- Additional algorithm options
+- Deck sharing community
 
 ## License
 
@@ -130,6 +177,13 @@ This project is open source and available for educational purposes.
 
 ## Credits
 
-- FSRS algorithm based on the open-source FSRS project
-- SM-2 algorithm from SuperMemo research
-- Designed for fencing practice but adaptable to any sport or learning domain
+- FSRS algorithm based on the open-source [FSRS project](https://github.com/open-spaced-repetition/fsrs4anki)
+- SM-2 algorithm from [SuperMemo research](https://www.supermemo.com/en/archives1990-2015/english/ol/sm2)
+- Built with Jetpack Compose and Material Design 3
+- Originally designed for martial arts practice but adaptable to any learning domain
+
+## Documentation
+
+- [DEPLOYMENT.md](DEPLOYMENT.md) - Complete Google Play Store deployment guide
+- [KEYSTORE_SETUP.md](KEYSTORE_SETUP.md) - Keystore creation and signing guide
+- [PRIVACY_POLICY.md](PRIVACY_POLICY.md) - Privacy policy and data handling
