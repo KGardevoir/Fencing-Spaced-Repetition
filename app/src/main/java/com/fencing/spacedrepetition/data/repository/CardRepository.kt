@@ -40,14 +40,15 @@ class CardRepository(
 
     suspend fun getDueCards(limit: Int = 100): List<Card> {
         val shouldRandomize = preferences.randomizeDueCards.first()
-        // When randomizing, fetch all due cards so we can pick from the full pool
+        // When randomizing, fetch all due cards so we can sample from the full pool
         val cards = if (shouldRandomize) {
             cardDao.getDueCards(limit = Int.MAX_VALUE)
         } else {
             cardDao.getDueCards(limit = limit)
         }
         return if (shouldRandomize) {
-            cards.shuffled().take(limit)
+            val bucketHours = preferences.randomizeBucketHours.first()
+            randomizeCardsByBucket(cards, bucketHours).take(limit)
         } else {
             cards
         }
@@ -142,7 +143,8 @@ class CardRepository(
             cardDao.getDueCardsByGroup(groupId, limit = limit)
         }
         return if (shouldRandomize) {
-            cards.shuffled().take(limit)
+            val bucketHours = preferences.randomizeBucketHours.first()
+            randomizeCardsByBucket(cards, bucketHours).take(limit)
         } else {
             cards
         }
@@ -735,24 +737,23 @@ class CardRepository(
     fun getAllReviewLogs(): Flow<List<ReviewLog>> = reviewLogDao.getAllReviewLogs()
 
     /**
-     * Randomize cards that have similar due times (within the same day)
-     * to add variety to review sessions while maintaining spaced repetition principles
+     * Randomize cards by grouping them into time buckets of the given size.
+     * Cards within the same bucket are shuffled randomly; bucket ordering
+     * is preserved so more-overdue cards still come first.
      */
-    private fun randomizeCardsBySimilarDueTime(cards: List<Card>): List<Card> {
+    private fun randomizeCardsByBucket(cards: List<Card>, bucketHours: Int): List<Card> {
         if (cards.isEmpty()) return cards
 
-        val millisecondsPerDay = 24 * 60 * 60 * 1000L
+        val millisecondsPerBucket = bucketHours * 60 * 60 * 1000L
 
-        // Group cards by day (rounded to nearest day)
         val grouped = cards.groupBy { card ->
-            card.nextReview / millisecondsPerDay
+            card.nextReview / millisecondsPerBucket
         }
 
-        // Shuffle within each day group, then flatten back to a list
         return grouped.entries
-            .sortedBy { it.key } // Keep day order
-            .flatMap { (_, cardsInDay) ->
-                cardsInDay.shuffled() // Randomize within day
+            .sortedBy { it.key }
+            .flatMap { (_, cardsInBucket) ->
+                cardsInBucket.shuffled()
             }
     }
 }

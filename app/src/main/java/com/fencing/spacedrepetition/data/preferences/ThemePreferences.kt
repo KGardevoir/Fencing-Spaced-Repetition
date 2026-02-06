@@ -28,6 +28,7 @@ class ThemePreferences(private val context: Context) {
     private val RANDOMIZE_DUE_CARDS_KEY = booleanPreferencesKey("randomize_due_cards")
     private val MAXIMUM_INTERVAL_KEY = intPreferencesKey("maximum_interval")
     private val PRACTICES_PER_WEEK_KEY = intPreferencesKey("practices_per_week")
+    private val RANDOMIZE_BUCKET_HOURS_KEY = intPreferencesKey("randomize_bucket_hours")
 
     companion object {
         const val DEFAULT_CARDS_PER_SESSION = 3
@@ -39,6 +40,7 @@ class ThemePreferences(private val context: Context) {
         const val DEFAULT_PRACTICES_PER_WEEK = 7 // daily
         const val MIN_PRACTICES_PER_WEEK = 1
         const val MAX_PRACTICES_PER_WEEK = 7
+        const val DEFAULT_RANDOMIZE_BUCKET_HOURS = 24 // 1 day
     }
 
     val themeMode: Flow<ThemeMode> = context.dataStore.data
@@ -79,6 +81,11 @@ class ThemePreferences(private val context: Context) {
     val practicesPerWeek: Flow<Int> = context.dataStore.data
         .map { preferences ->
             preferences[PRACTICES_PER_WEEK_KEY] ?: DEFAULT_PRACTICES_PER_WEEK
+        }
+
+    val randomizeBucketHours: Flow<Int> = context.dataStore.data
+        .map { preferences ->
+            preferences[RANDOMIZE_BUCKET_HOURS_KEY] ?: DEFAULT_RANDOMIZE_BUCKET_HOURS
         }
 
     suspend fun setThemeMode(mode: ThemeMode) {
@@ -127,6 +134,12 @@ class ThemePreferences(private val context: Context) {
         val validCount = count.coerceIn(MIN_PRACTICES_PER_WEEK, MAX_PRACTICES_PER_WEEK)
         context.dataStore.edit { preferences ->
             preferences[PRACTICES_PER_WEEK_KEY] = validCount
+        }
+    }
+
+    suspend fun setRandomizeBucketHours(hours: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[RANDOMIZE_BUCKET_HOURS_KEY] = hours
         }
     }
 }
