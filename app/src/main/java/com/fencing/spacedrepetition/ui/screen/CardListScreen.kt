@@ -625,7 +625,7 @@ fun CardListItem(
                 Divider(modifier = Modifier.padding(vertical = 12.dp))
 
                 Text(
-                    text = "Answer:",
+                    text = "Description:",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary
                 )

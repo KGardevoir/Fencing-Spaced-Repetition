@@ -27,6 +27,7 @@ class ThemePreferences(private val context: Context) {
     private val SELECTED_GROUP_ID_KEY = longPreferencesKey("selected_group_id")
     private val RANDOMIZE_DUE_CARDS_KEY = booleanPreferencesKey("randomize_due_cards")
     private val MAXIMUM_INTERVAL_KEY = intPreferencesKey("maximum_interval")
+    private val PRACTICES_PER_WEEK_KEY = intPreferencesKey("practices_per_week")
 
     companion object {
         const val DEFAULT_CARDS_PER_SESSION = 3
@@ -35,6 +36,9 @@ class ThemePreferences(private val context: Context) {
         const val DEFAULT_MAXIMUM_INTERVAL = 365 // 1 years in days
         const val MIN_MAXIMUM_INTERVAL = 7 // 1 week
         const val MAX_MAXIMUM_INTERVAL = 3650 // 10 years
+        const val DEFAULT_PRACTICES_PER_WEEK = 7 // daily
+        const val MIN_PRACTICES_PER_WEEK = 1
+        const val MAX_PRACTICES_PER_WEEK = 7
     }
 
     val themeMode: Flow<ThemeMode> = context.dataStore.data
@@ -70,6 +74,11 @@ class ThemePreferences(private val context: Context) {
     val maximumInterval: Flow<Int> = context.dataStore.data
         .map { preferences ->
             preferences[MAXIMUM_INTERVAL_KEY] ?: DEFAULT_MAXIMUM_INTERVAL
+        }
+
+    val practicesPerWeek: Flow<Int> = context.dataStore.data
+        .map { preferences ->
+            preferences[PRACTICES_PER_WEEK_KEY] ?: DEFAULT_PRACTICES_PER_WEEK
         }
 
     suspend fun setThemeMode(mode: ThemeMode) {
@@ -111,6 +120,13 @@ class ThemePreferences(private val context: Context) {
         val validDays = days.coerceIn(MIN_MAXIMUM_INTERVAL, MAX_MAXIMUM_INTERVAL)
         context.dataStore.edit { preferences ->
             preferences[MAXIMUM_INTERVAL_KEY] = validDays
+        }
+    }
+
+    suspend fun setPracticesPerWeek(count: Int) {
+        val validCount = count.coerceIn(MIN_PRACTICES_PER_WEEK, MAX_PRACTICES_PER_WEEK)
+        context.dataStore.edit { preferences ->
+            preferences[PRACTICES_PER_WEEK_KEY] = validCount
         }
     }
 }

@@ -32,6 +32,7 @@ fun SettingsScreen(
     val cardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
     val randomizeDueCards by settingsViewModel.randomizeDueCards.collectAsState()
     val maximumInterval by settingsViewModel.maximumInterval.collectAsState()
+    val practicesPerWeek by settingsViewModel.practicesPerWeek.collectAsState()
 
     // Donation state
     val context = LocalContext.current
@@ -200,11 +201,11 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Auto-show Answer",
+                        text = "Auto-show Description",
                         style = MaterialTheme.typography.bodyLarge
                     )
                     Text(
-                        text = "Show answer immediately when viewing cards",
+                        text = "Show description immediately when viewing cards",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -240,6 +241,53 @@ fun SettingsScreen(
                 Switch(
                     checked = randomizeDueCards,
                     onCheckedChange = { settingsViewModel.setRandomizeDueCards(it) }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Divider()
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Scheduling section
+            Text(
+                "Scheduling",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Practices per week
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Practices per Week",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Text(
+                        text = if (practicesPerWeek == 7) "Daily" else "$practicesPerWeek",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Slider(
+                    value = practicesPerWeek.toFloat(),
+                    onValueChange = { settingsViewModel.setPracticesPerWeek(it.toInt()) },
+                    valueRange = 1f..7f,
+                    steps = 5,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = "Adjusts review spacing to match your practice frequency. Cards are scheduled to come due on days you practice.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 

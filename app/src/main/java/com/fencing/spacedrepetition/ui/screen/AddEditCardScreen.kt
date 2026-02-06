@@ -153,7 +153,7 @@ fun AddEditCardScreen(
             OutlinedTextField(
                 value = answer,
                 onValueChange = { answer = it },
-                label = { Text("Answer / Explanation") },
+                label = { Text("Description") },
                 placeholder = { Text("e.g., Front foot pointed forward, back foot at 90°...") },
                 modifier = Modifier.fillMaxWidth(),
                 leadingIcon = {

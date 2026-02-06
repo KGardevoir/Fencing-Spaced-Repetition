@@ -425,7 +425,7 @@ fun PracticeCardView(
                         Divider(modifier = Modifier.padding(vertical = 16.dp))
 
                         Text(
-                            text = "Answer:",
+                            text = "Description:",
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.secondary
                         )
@@ -467,7 +467,7 @@ fun PracticeCardView(
                         ) {
                             Icon(Icons.Default.Visibility, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Show Answer")
+                            Text("Show Description")
                         }
                     }
                 }
@@ -599,7 +599,7 @@ fun EditCardDialog(
                 OutlinedTextField(
                     value = answer,
                     onValueChange = { answer = it },
-                    label = { Text("Answer") },
+                    label = { Text("Description") },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 3,
                     maxLines = 6
