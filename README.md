@@ -1,114 +1,139 @@
-# Martial Arts Practice
+# Delayed Choice Spaced Repetition
 
-An Android app for mastering martial arts techniques using spaced repetition flashcards with both FSRS and SM-2 algorithms.
+An Android app for practicing martial arts and fencing techniques using delayed-choice spaced repetition. Practice a set of cards during training, then grade your recall afterwards -- designed for physical disciplines where immediate self-grading isn't practical.
 
 **Status**: Ready for Google Play Store deployment
 
 ## Features
 
-### Delayed Choice Spaced Repetition
-- Practice 3 cards during your training session
-- Grade all cards at the end based on recall
-- Optimal for sports practice where immediate grading isn't practical
+### Delayed-Choice Practice Flow
+- Start a practice session and study a configurable number of cards (1--6)
+- Swipe or tap through cards, revealing descriptions when ready
+- After finishing, grade every card at once: **Skip**, **Again**, **Hard**, **Good**, or **Easy**
+- The spaced repetition algorithm schedules your next review based on your grades
 
 ### Dual Algorithm Support
-- **FSRS (Free Spaced Repetition Scheduler)**: Modern algorithm with improved predictions
-- **SM-2 (SuperMemo 2)**: Classic, proven spaced repetition algorithm
-- Choose the algorithm per card based on your preference
+- **FSRS (Free Spaced Repetition Scheduler)**: Modern algorithm using stability and difficulty parameters for sophisticated scheduling
+- **SM-2 (SuperMemo 2)**: Classic algorithm using ease factor and repetition count
+- Algorithm is selectable per card
 
-### Core Functionality
-- **Practice Sessions**: View cards during practice, then grade them all at once
-- **Card Management**: Add, edit, and organize technique cards with optional images
-- **Groups**: Organize cards by technique type with independent learning states
-- **Progress Tracking**: View due cards and track your progress over time
-- **Import/Export**: Import and export card decks as CSV files
-- **Settings**: Customizable theme, practice settings, and algorithm parameters
-- **Donation System**: Support development with optional in-app donations
+### Groups and Organization
+- Create groups (decks) to organize cards by topic, technique, or training focus
+- **Independent learning states**: optionally track separate progress for the same card across different groups
+- Select which group to practice from the home screen
+
+### Card Management
+- Add, edit, and delete flashcards with question and description fields
+- Attach images to cards
+- Assign categories and tags
+- Bulk selection and deletion
+- Edit cards inline during practice sessions
+
+### Import and Export
+- Export cards as tab-separated (TSV) files with optional GZIP compression
+- Three export formats with increasing detail:
+  - **V1**: Card content + full learning state
+  - **V2**: V1 + group-specific learning states
+  - **V3**: V2 + base64-encoded images
+- Import auto-detects format and merges with existing cards
+- Simple two-column (question/answer) import also supported
+
+### Configurable Scheduling
+- **Practices per week** (1--7): adjusts review intervals to match your training frequency so cards come due on days you actually practice
+- **Maximum interval**: caps the longest gap between reviews (1 week to 10 years)
+- **Randomization**: shuffle due cards within configurable time buckets (1 hour to 1 week) to add variety while preserving spaced repetition priority
+
+### Settings
+- Theme: System, Light, or Dark
+- Cards per session: 1--6
+- Auto-show description: reveal card descriptions immediately without tapping
+- Randomize due cards with configurable bucket size
+- Practices per week for scheduling adjustment
+- Maximum review interval
+
+### Donation System
+- Support development with optional in-app donations via Google Play Billing
+- Small Coffee ($0.99), Big Coffee ($2.99), Generous Support ($4.99)
+- All features are free -- donations are entirely optional
+
+### Privacy
+- Fully offline -- no network requests, no analytics, no telemetry
+- No permissions required (except billing for optional donations)
+- All data stored locally on device
+- See [PRIVACY_POLICY.md](PRIVACY_POLICY.md) for details
 
 ## Technical Stack
 
 - **Language**: Kotlin
-- **UI Framework**: Jetpack Compose with Material 3
+- **UI**: Jetpack Compose with Material 3
 - **Architecture**: MVVM with Repository pattern
 - **Database**: Room (SQLite) with migrations
+- **Preferences**: DataStore
 - **Monetization**: Google Play Billing (optional donations)
-- **Image Loading**: Coil
-- **Algorithms**:
-  - FSRS-4.5 implementation
-  - SM-2 implementation
+- **Image loading**: Coil
+- **Minimum API**: 24 (Android 7.0)
 
 ## Project Structure
 
 ```
 app/src/main/java/com/fencing/spacedrepetition/
 ├── algorithm/              # Spaced repetition algorithms
-│   ├── FSRSAlgorithm.kt   # FSRS implementation
+│   ├── FSRSAlgorithm.kt   # FSRS-4.5 implementation
 │   └── SM2Algorithm.kt    # SM-2 implementation
 ├── billing/                # Google Play Billing
 │   └── BillingManager.kt  # Donation handling
-├── data/                   # Data layer
-│   ├── model/             # Data models
-│   ├── dao/               # Room DAOs
-│   ├── repository/        # Repository classes
-│   └── preferences/       # DataStore preferences
-├── ui/                     # UI layer
+├── data/
+│   ├── model/             # Room entities and data classes
+│   ├── dao/               # Database access objects
+│   ├── repository/        # Business logic and scheduling
+│   └── preferences/       # DataStore settings
+├── ui/
 │   ├── screen/            # Composable screens
 │   ├── viewmodel/         # ViewModels
-│   ├── navigation/        # Navigation setup
 │   ├── components/        # Reusable UI components
-│   └── theme/             # App theme
-├── util/                   # Utilities
-│   └── CardImportExport.kt # CSV import/export
-└── MainActivity.kt         # Main activity
+│   ├── navigation/        # Navigation graph
+│   └── theme/             # Material 3 theme
+├── util/                  # Import/export utilities
+└── MainActivity.kt
 ```
 
 ## How It Works
 
 ### Practice Flow
-1. Start a practice session from the home screen (or specific group)
-2. View and study cards during your training
-3. Navigate through cards, revealing answers as needed (or use auto-show)
-4. After finishing practice, grade each card:
-   - **Again**: Complete failure - card needs more work
-   - **Hard**: Difficult recall - barely remembered
-   - **Good**: Correct with effort - standard recall
-   - **Easy**: Perfect recall - very easy
-5. Submit grades to update card schedules
-6. Cards are scheduled based on the chosen algorithm (FSRS or SM-2)
+1. Select a practice group from the home screen
+2. Tap **Start Practice** to begin a session
+3. Study each card -- swipe left/right or use navigation buttons
+4. Tap **Show Description** to reveal the card's description
+5. After all cards, grade each one:
+   - **Skip**: exclude from scheduling
+   - **Again**: complete failure to recall
+   - **Hard**: difficult recall
+   - **Good**: correct with effort
+   - **Easy**: perfect recall
+6. Grades are submitted and the algorithm schedules the next review for each card
 
-### Algorithm Selection
-Each card can use either FSRS or SM-2:
-- **FSRS**: Uses stability and difficulty parameters for sophisticated scheduling
-- **SM-2**: Uses ease factor and repetition count for classic scheduling
+### Scheduling
+The algorithm calculates how many days until a card should next be reviewed. Two additional settings adjust this:
+
+- **Practices per week**: if you train 3 days a week, a card due in 5 days is snapped to the nearest practice-day interval (~4.7 days) so it comes due when you'll actually be training
+- **Maximum interval**: hard cap on the longest gap (e.g., 6 months means no card waits longer than 6 months)
+
+### Randomization
+When enabled, due cards are grouped into time buckets (configurable from 1 hour to 1 week). Cards within the same bucket are shuffled; ordering between buckets is preserved. This gives variety within a session while still prioritizing the most overdue cards.
 
 ## Building and Running
 
 ### Prerequisites
 - Android Studio Arctic Fox or later
 - JDK 17
-- Android SDK with API level 24+ (Android 7.0+)
+- Android SDK API 24+
 
-### Build Steps
-1. Clone the repository
-2. Open in Android Studio
-3. Sync Gradle files
-4. Run on emulator or physical device (API 24+)
-
-### Gradle Commands
+### Build
 ```bash
-# Build debug APK
 ./gradlew assembleDebug
-
-# Install on device
 ./gradlew installDebug
-
-# Build release AAB (for Play Store)
 ./gradlew bundleRelease
-
-# Build release APK
 ./gradlew assembleRelease
-
-# Run tests
 ./gradlew test
 ```
 
@@ -122,22 +147,17 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for complete deployment instructions, includi
 
 ## Database Schema
 
-### Cards Table
-- Question and answer content
-- Category and tags
-- Algorithm type (FSRS or SM-2)
-- Algorithm-specific parameters
-- Review scheduling data
+### Cards
+Question and description content, category, tags, image paths, algorithm type (FSRS or SM-2), algorithm-specific parameters, and review scheduling timestamps.
 
-### Practice Sessions Table
-- Session timing
-- Associated card IDs
-- Grades assigned
+### Groups
+Named groups with optional independent learning mode. Cards are linked to groups via a many-to-many relationship. Group-specific learning states allow tracking separate progress per group.
 
-### Review Logs Table
-- Complete review history
-- Performance tracking
-- Algorithm state changes
+### Practice Sessions
+Session start/end times, associated card IDs, and assigned grades.
+
+### Review Logs
+Complete history of every review including grade, algorithm used, state before and after, and scheduling metrics.
 
 ## Privacy & Data
 
@@ -162,13 +182,11 @@ Donations help keep the app free, ad-free, and actively maintained!
 
 ## Future Enhancements
 
-Potential features for future versions:
 - Statistics and analytics dashboard
-- Cloud sync (optional)
+- Cloud sync
 - Custom algorithm parameters fine-tuning
-- Audio pronunciation guides
-- Study reminders/notifications
-- Additional algorithm options
+- Audio support for cards
+- Study reminders and notifications
 - Deck sharing community
 
 ## License
@@ -180,7 +198,7 @@ This project is open source and available for educational purposes.
 - FSRS algorithm based on the open-source [FSRS project](https://github.com/open-spaced-repetition/fsrs4anki)
 - SM-2 algorithm from [SuperMemo research](https://www.supermemo.com/en/archives1990-2015/english/ol/sm2)
 - Built with Jetpack Compose and Material Design 3
-- Originally designed for martial arts practice but adaptable to any learning domain
+- Designed for fencing and martial arts practice but adaptable to any sport or learning domain
 
 ## Documentation
 
