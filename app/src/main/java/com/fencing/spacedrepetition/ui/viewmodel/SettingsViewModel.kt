@@ -31,6 +31,12 @@ class SettingsViewModel(
     val maximumInterval: StateFlow<Int> = themePreferences.maximumInterval
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_MAXIMUM_INTERVAL)
 
+    val practicesPerWeek: StateFlow<Int> = themePreferences.practicesPerWeek
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_PRACTICES_PER_WEEK)
+
+    val randomizeBucketHours: StateFlow<Int> = themePreferences.randomizeBucketHours
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_RANDOMIZE_BUCKET_HOURS)
+
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch {
             themePreferences.setThemeMode(mode)
@@ -64,6 +70,18 @@ class SettingsViewModel(
     fun setMaximumInterval(days: Int) {
         viewModelScope.launch {
             themePreferences.setMaximumInterval(days)
+        }
+    }
+
+    fun setPracticesPerWeek(count: Int) {
+        viewModelScope.launch {
+            themePreferences.setPracticesPerWeek(count)
+        }
+    }
+
+    fun setRandomizeBucketHours(hours: Int) {
+        viewModelScope.launch {
+            themePreferences.setRandomizeBucketHours(hours)
         }
     }
 }

@@ -249,7 +249,7 @@ fun GradingCardItem(
             if (expanded) {
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
                 Text(
-                    text = "Answer:",
+                    text = "Description:",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.secondary
                 )

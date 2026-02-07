@@ -31,32 +31,30 @@ class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
             _uiState.value = PracticeUiState.Loading
 
             try {
-                // Get due cards first (these will be randomized if setting is enabled)
+                // Get due cards (randomized from the full pool if setting is enabled)
                 val dueCards = if (groupId != null) {
-                    repository.getDueCardsByGroup(groupId, limit = numberOfCards * 2)
+                    repository.getDueCardsByGroup(groupId, limit = numberOfCards)
                 } else {
-                    repository.getDueCards(limit = numberOfCards * 2)
+                    repository.getDueCards(limit = numberOfCards)
                 }
 
                 // If we have enough due cards, use those
                 // Otherwise, get all cards to allow additional studying
-                val allCards = if (dueCards.size >= numberOfCards) {
-                    dueCards
+                val cardsForSession = if (dueCards.size >= numberOfCards) {
+                    dueCards.take(numberOfCards)
                 } else {
-                    if (groupId != null) {
+                    val allCards = if (groupId != null) {
                         repository.getCardsByGroupSync(groupId)
                     } else {
                         repository.getAllCardsSync()
                     }
+                    allCards.take(numberOfCards)
                 }
 
-                if (allCards.isEmpty()) {
+                if (cardsForSession.isEmpty()) {
                     _uiState.value = PracticeUiState.NoCards
                     return@launch
                 }
-
-                // Take up to numberOfCards
-                val cardsForSession = allCards.take(numberOfCards)
 
                 // Create session
                 sessionId = repository.createPracticeSession(cardsForSession.map { it.id })

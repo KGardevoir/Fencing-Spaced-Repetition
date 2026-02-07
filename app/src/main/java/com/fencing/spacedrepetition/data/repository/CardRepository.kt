@@ -39,10 +39,16 @@ class CardRepository(
     fun getCardByIdFlow(cardId: Long): Flow<Card?> = cardDao.getCardByIdFlow(cardId)
 
     suspend fun getDueCards(limit: Int = 100): List<Card> {
-        val cards = cardDao.getDueCards(limit = limit)
         val shouldRandomize = preferences.randomizeDueCards.first()
+        // When randomizing, fetch all due cards so we can sample from the full pool
+        val cards = if (shouldRandomize) {
+            cardDao.getDueCards(limit = Int.MAX_VALUE)
+        } else {
+            cardDao.getDueCards(limit = limit)
+        }
         return if (shouldRandomize) {
-            randomizeCardsBySimilarDueTime(cards)
+            val bucketHours = preferences.randomizeBucketHours.first()
+            randomizeCardsByBucket(cards, bucketHours).take(limit)
         } else {
             cards
         }
@@ -130,10 +136,15 @@ class CardRepository(
     fun getCardWithGroups(cardId: Long): Flow<CardWithGroups?> = cardDao.getCardWithGroups(cardId)
 
     suspend fun getDueCardsByGroup(groupId: Long, limit: Int = 100): List<Card> {
-        val cards = cardDao.getDueCardsByGroup(groupId, limit = limit)
         val shouldRandomize = preferences.randomizeDueCards.first()
+        val cards = if (shouldRandomize) {
+            cardDao.getDueCardsByGroup(groupId, limit = Int.MAX_VALUE)
+        } else {
+            cardDao.getDueCardsByGroup(groupId, limit = limit)
+        }
         return if (shouldRandomize) {
-            randomizeCardsBySimilarDueTime(cards)
+            val bucketHours = preferences.randomizeBucketHours.first()
+            randomizeCardsByBucket(cards, bucketHours).take(limit)
         } else {
             cards
         }
@@ -551,17 +562,18 @@ class CardRepository(
 
         val schedulingInfo = fsrsAlgorithm.schedule(fsrsCard, rating, now)
         val newCard = schedulingInfo.card
+        val adjustedDays = adjustForPracticeFrequency(newCard.scheduledDays)
 
         return card.copy(
             fsrsStability = newCard.stability,
             fsrsDifficulty = newCard.difficulty,
             fsrsElapsedDays = newCard.elapsedDays,
-            fsrsScheduledDays = newCard.scheduledDays,
+            fsrsScheduledDays = adjustedDays,
             fsrsReps = newCard.reps,
             fsrsLapses = newCard.lapses,
             fsrsState = newCard.state.name,
             lastReview = now,
-            nextReview = now + (newCard.scheduledDays * 24 * 60 * 60 * 1000L),
+            nextReview = now + (adjustedDays * 24 * 60 * 60 * 1000L),
             modified = now
         )
     }
@@ -588,17 +600,33 @@ class CardRepository(
 
         val schedulingInfo = sm2Algorithm.schedule(sm2Card, quality, now)
         val newCard = schedulingInfo.card
+        val adjustedInterval = adjustForPracticeFrequency(newCard.interval)
+        val adjustedNextReview = now + (adjustedInterval * 24 * 60 * 60 * 1000L)
 
         return card.copy(
             sm2EaseFactor = newCard.easeFactor,
-            sm2Interval = newCard.interval,
+            sm2Interval = adjustedInterval,
             sm2Repetitions = newCard.repetitions,
             lastReview = now,
-            nextReview = schedulingInfo.nextReviewDate,
+            nextReview = adjustedNextReview,
             modified = now,
             // Update FSRS scheduled days for consistency in UI
-            fsrsScheduledDays = newCard.interval
+            fsrsScheduledDays = adjustedInterval
         )
+    }
+
+    /**
+     * Adjust scheduled days based on practices-per-week setting.
+     * Snaps the interval to the nearest practice slot so cards come due
+     * on days the user will actually practice.
+     */
+    private suspend fun adjustForPracticeFrequency(scheduledDays: Int): Int {
+        val practicesPerWeek = preferences.practicesPerWeek.first()
+        if (practicesPerWeek >= 7 || scheduledDays <= 1) return scheduledDays
+
+        val daysBetweenPractices = 7.0 / practicesPerWeek
+        val adjustedDays = (Math.round(scheduledDays / daysBetweenPractices) * daysBetweenPractices).toInt()
+        return adjustedDays.coerceAtLeast(1)
     }
 
     private fun serializeCardState(card: Card): String {
@@ -639,17 +667,18 @@ class CardRepository(
 
         val schedulingInfo = fsrsAlgorithm.schedule(fsrsCard, rating, now)
         val newCard = schedulingInfo.card
+        val adjustedDays = adjustForPracticeFrequency(newCard.scheduledDays)
 
         return learningState.copy(
             fsrsStability = newCard.stability,
             fsrsDifficulty = newCard.difficulty,
             fsrsElapsedDays = newCard.elapsedDays,
-            fsrsScheduledDays = newCard.scheduledDays,
+            fsrsScheduledDays = adjustedDays,
             fsrsReps = newCard.reps,
             fsrsLapses = newCard.lapses,
             fsrsState = newCard.state.name,
             lastReview = now,
-            nextReview = now + (newCard.scheduledDays * 24 * 60 * 60 * 1000L),
+            nextReview = now + (adjustedDays * 24 * 60 * 60 * 1000L),
             modified = now
         )
     }
@@ -680,16 +709,18 @@ class CardRepository(
 
         val schedulingInfo = sm2Algorithm.schedule(sm2Card, quality, now)
         val newCard = schedulingInfo.card
+        val adjustedInterval = adjustForPracticeFrequency(newCard.interval)
+        val adjustedNextReview = now + (adjustedInterval * 24 * 60 * 60 * 1000L)
 
         return learningState.copy(
             sm2EaseFactor = newCard.easeFactor,
-            sm2Interval = newCard.interval,
+            sm2Interval = adjustedInterval,
             sm2Repetitions = newCard.repetitions,
             lastReview = now,
-            nextReview = schedulingInfo.nextReviewDate,
+            nextReview = adjustedNextReview,
             modified = now,
             // Update FSRS scheduled days for consistency in UI
-            fsrsScheduledDays = newCard.interval
+            fsrsScheduledDays = adjustedInterval
         )
     }
 
@@ -706,24 +737,23 @@ class CardRepository(
     fun getAllReviewLogs(): Flow<List<ReviewLog>> = reviewLogDao.getAllReviewLogs()
 
     /**
-     * Randomize cards that have similar due times (within the same day)
-     * to add variety to review sessions while maintaining spaced repetition principles
+     * Randomize cards by grouping them into time buckets of the given size.
+     * Cards within the same bucket are shuffled randomly; bucket ordering
+     * is preserved so more-overdue cards still come first.
      */
-    private fun randomizeCardsBySimilarDueTime(cards: List<Card>): List<Card> {
+    private fun randomizeCardsByBucket(cards: List<Card>, bucketHours: Int): List<Card> {
         if (cards.isEmpty()) return cards
 
-        val millisecondsPerDay = 24 * 60 * 60 * 1000L
+        val millisecondsPerBucket = bucketHours * 60 * 60 * 1000L
 
-        // Group cards by day (rounded to nearest day)
         val grouped = cards.groupBy { card ->
-            card.nextReview / millisecondsPerDay
+            card.nextReview / millisecondsPerBucket
         }
 
-        // Shuffle within each day group, then flatten back to a list
         return grouped.entries
-            .sortedBy { it.key } // Keep day order
-            .flatMap { (_, cardsInDay) ->
-                cardsInDay.shuffled() // Randomize within day
+            .sortedBy { it.key }
+            .flatMap { (_, cardsInBucket) ->
+                cardsInBucket.shuffled()
             }
     }
 }

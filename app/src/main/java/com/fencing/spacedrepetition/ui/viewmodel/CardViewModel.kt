@@ -278,8 +278,11 @@ class CardViewModel(
                 }
 
                 val result = withContext(Dispatchers.IO) {
-                    contentResolver.openOutputStream(uri)?.use { outputStream ->
-                        CardImportExport.exportCardsWithGroups(exportData, outputStream)
+                    contentResolver.openOutputStream(uri)?.use { fileStream ->
+                        val outputStream = CardImportExport.createCompressedOutputStream(fileStream)
+                        val exportResult = CardImportExport.exportCardsWithGroups(exportData, outputStream)
+                        outputStream.close()
+                        exportResult
                     } ?: ExportResult.Error("Failed to open file for writing")
                 }
 
@@ -303,8 +306,7 @@ class CardViewModel(
             try {
                 val parseResult = withContext(Dispatchers.IO) {
                     contentResolver.openInputStream(uri)?.use { fileStream ->
-                        // Wrap with GZIP decompression
-                        val inputStream = CardImportExport.createDecompressedInputStream(fileStream)
+                        val inputStream = CardImportExport.smartInputStream(fileStream)
                         val result = CardImportExport.parseCards(inputStream)
                         inputStream.close()
                         result

@@ -31,7 +31,9 @@ fun SettingsScreen(
     val autoShowAnswer by settingsViewModel.autoShowAnswer.collectAsState()
     val cardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
     val randomizeDueCards by settingsViewModel.randomizeDueCards.collectAsState()
+    val randomizeBucketHours by settingsViewModel.randomizeBucketHours.collectAsState()
     val maximumInterval by settingsViewModel.maximumInterval.collectAsState()
+    val practicesPerWeek by settingsViewModel.practicesPerWeek.collectAsState()
 
     // Donation state
     val context = LocalContext.current
@@ -56,6 +58,18 @@ fun SettingsScreen(
             }
         }
     }
+
+    // Presets for randomization bucket size
+    val bucketPresets = listOf(
+        1 to "1 hour",
+        6 to "6 hours",
+        12 to "12 hours",
+        24 to "1 day",
+        72 to "3 days",
+        168 to "1 week"
+    )
+    val currentBucketIndex = bucketPresets.indexOfFirst { it.first >= randomizeBucketHours }
+        .let { if (it == -1) bucketPresets.size - 1 else it }
 
     // Preset values for maximum interval with better granularity
     val intervalPresets = listOf(
@@ -200,11 +214,11 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Auto-show Answer",
+                        text = "Auto-show Description",
                         style = MaterialTheme.typography.bodyLarge
                     )
                     Text(
-                        text = "Show answer immediately when viewing cards",
+                        text = "Show description immediately when viewing cards",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -240,6 +254,94 @@ fun SettingsScreen(
                 Switch(
                     checked = randomizeDueCards,
                     onCheckedChange = { settingsViewModel.setRandomizeDueCards(it) }
+                )
+            }
+
+            // Randomization bucket size (only shown when randomization is enabled)
+            if (randomizeDueCards) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp, horizontal = 16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Sampling Bucket Size",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Text(
+                            text = bucketPresets[currentBucketIndex].second,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Slider(
+                        value = currentBucketIndex.toFloat(),
+                        onValueChange = { newIndex ->
+                            val presetValue = bucketPresets[newIndex.toInt()].first
+                            settingsViewModel.setRandomizeBucketHours(presetValue)
+                        },
+                        valueRange = 0f..(bucketPresets.size - 1).toFloat(),
+                        steps = bucketPresets.size - 2,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        text = "Cards due within the same bucket are shuffled randomly. Smaller buckets preserve due-date ordering more strictly.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Divider()
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Scheduling section
+            Text(
+                "Scheduling",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Practices per week
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Practices per Week",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Text(
+                        text = if (practicesPerWeek == 7) "Daily" else "$practicesPerWeek",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Slider(
+                    value = practicesPerWeek.toFloat(),
+                    onValueChange = { settingsViewModel.setPracticesPerWeek(it.toInt()) },
+                    valueRange = 1f..7f,
+                    steps = 5,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = "Adjusts review spacing to match your practice frequency. Cards are scheduled to come due on days you practice.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
