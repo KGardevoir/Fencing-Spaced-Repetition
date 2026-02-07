@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -145,7 +146,7 @@ fun HomeScreen(
                 )
 
                 StatCard(
-                    icon = Icons.Default.LibraryBooks,
+                    icon = Icons.AutoMirrored.Filled.LibraryBooks,
                     value = totalCards.toString(),
                     label = "Total Cards",
                     modifier = Modifier.weight(1f),
@@ -249,7 +250,7 @@ fun HomeScreen(
                         .height(56.dp)
                 ) {
                     Icon(
-                        Icons.Default.LibraryBooks,
+                        Icons.AutoMirrored.Filled.LibraryBooks,
                         contentDescription = null,
                         modifier = Modifier.size(24.dp)
                     )

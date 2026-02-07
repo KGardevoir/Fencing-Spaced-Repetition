@@ -12,6 +12,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -67,7 +69,7 @@ fun PracticeScreen(
                 title = { Text("Practice Session") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                     }
                 },
                 actions = {
@@ -221,7 +223,7 @@ fun PracticeCardView(
     ) {
         // Progress indicator
         LinearProgressIndicator(
-            progress = cardNumber.toFloat() / totalCards.toFloat(),
+            progress = { cardNumber.toFloat() / totalCards.toFloat() },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 8.dp)
@@ -422,7 +424,7 @@ fun PracticeCardView(
                     Spacer(modifier = Modifier.height(32.dp))
 
                     if (showAnswer) {
-                        Divider(modifier = Modifier.padding(vertical = 16.dp))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
                         Text(
                             text = "Description:",
@@ -497,7 +499,7 @@ fun PracticeCardView(
                         }
                     }
                 ) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = null)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("Previous")
                 }
@@ -523,7 +525,7 @@ fun PracticeCardView(
                 ) {
                     Text("Next")
                     Spacer(modifier = Modifier.width(4.dp))
-                    Icon(Icons.Default.ArrowForward, contentDescription = null)
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
                 }
             } else {
                 Button(
