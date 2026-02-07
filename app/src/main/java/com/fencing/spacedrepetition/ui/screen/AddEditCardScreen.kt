@@ -42,7 +42,7 @@ fun AddEditCardScreen(
     var question by remember { mutableStateOf(cardToEdit?.question ?: "") }
     var answer by remember { mutableStateOf(cardToEdit?.answer ?: "") }
     var selectedAlgorithm by remember { mutableStateOf(cardToEdit?.algorithm ?: AlgorithmType.FSRS) }
-    var imagePaths by remember { mutableStateOf(cardToEdit?.imagePaths?.toMutableList() ?: mutableListOf()) }
+    var imagePaths by remember { mutableStateOf<List<String>>(cardToEdit?.imagePaths?.toMutableList() ?: mutableListOf()) }
 
     // Group selection state
     val allGroups by groupViewModel.allGroups.collectAsState()
