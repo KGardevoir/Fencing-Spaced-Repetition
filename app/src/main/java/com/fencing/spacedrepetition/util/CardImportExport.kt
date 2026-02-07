@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Base64
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
+import java.io.BufferedInputStream
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
@@ -764,5 +765,23 @@ object CardImportExport {
      */
     fun createDecompressedInputStream(inputStream: InputStream): GZIPInputStream {
         return GZIPInputStream(inputStream)
+    }
+
+    /**
+     * Auto-detects whether the input stream is GZIP-compressed by checking magic bytes.
+     * Returns a GZIPInputStream if compressed, or the original (buffered) stream if plain text.
+     */
+    fun smartInputStream(inputStream: InputStream): InputStream {
+        val buffered = BufferedInputStream(inputStream)
+        buffered.mark(2)
+        val byte1 = buffered.read()
+        val byte2 = buffered.read()
+        buffered.reset()
+        // GZIP magic number: 0x1f 0x8b
+        return if (byte1 == 0x1f && byte2 == 0x8b) {
+            GZIPInputStream(buffered)
+        } else {
+            buffered
+        }
     }
 }

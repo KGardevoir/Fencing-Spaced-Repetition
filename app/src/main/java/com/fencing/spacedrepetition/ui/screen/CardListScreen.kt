@@ -70,7 +70,7 @@ fun CardListScreen(
 
     // File picker for export
     val exportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("text/plain")
+        contract = ActivityResultContracts.CreateDocument("application/gzip")
     ) { uri: Uri? ->
         uri?.let {
             viewModel.exportAllCards(uri, context.contentResolver)
@@ -153,7 +153,7 @@ fun CardListScreen(
                                     text = { Text("Import Cards") },
                                     onClick = {
                                         showMenu = false
-                                        importLauncher.launch(arrayOf("text/plain", "text/tab-separated-values", "*/*"))
+                                        importLauncher.launch(arrayOf("application/gzip", "application/x-gzip", "text/plain", "text/tab-separated-values", "application/octet-stream", "*/*"))
                                     },
                                     leadingIcon = {
                                         Icon(Icons.Default.FileUpload, contentDescription = null)
@@ -163,7 +163,7 @@ fun CardListScreen(
                                     text = { Text("Export All Cards") },
                                     onClick = {
                                         showMenu = false
-                                        exportLauncher.launch("all_cards.txt")
+                                        exportLauncher.launch("all_cards.tsv.gz")
                                     },
                                     leadingIcon = {
                                         Icon(Icons.Default.FileDownload, contentDescription = null)

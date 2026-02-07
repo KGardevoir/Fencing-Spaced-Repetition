@@ -48,7 +48,7 @@ fun GroupListScreen(
 
     // File picker for export
     val exportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("text/plain")
+        contract = ActivityResultContracts.CreateDocument("application/gzip")
     ) { uri: Uri? ->
         uri?.let {
             groupForExport?.let { group ->
@@ -124,7 +124,7 @@ fun GroupListScreen(
                         onDelete = { showDeleteDialog = group },
                         onImport = {
                             groupForImport = group
-                            importLauncher.launch(arrayOf("text/plain", "text/tab-separated-values", "*/*"))
+                            importLauncher.launch(arrayOf("application/gzip", "application/x-gzip", "text/plain", "text/tab-separated-values", "application/octet-stream", "*/*"))
                         },
                         onExport = {
                             groupForExport = group

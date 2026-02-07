@@ -145,8 +145,7 @@ class GroupViewModel(
             try {
                 val parseResult = withContext(Dispatchers.IO) {
                     contentResolver.openInputStream(uri)?.use { fileStream ->
-                        // Wrap with GZIP decompression
-                        val inputStream = CardImportExport.createDecompressedInputStream(fileStream)
+                        val inputStream = CardImportExport.smartInputStream(fileStream)
                         val result = CardImportExport.parseCards(inputStream)
                         inputStream.close()
                         result
