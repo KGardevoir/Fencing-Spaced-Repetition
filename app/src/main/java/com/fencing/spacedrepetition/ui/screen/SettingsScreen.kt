@@ -61,12 +61,11 @@ fun SettingsScreen(
 
     // Presets for randomization bucket size
     val bucketPresets = listOf(
-        1 to "1 hour",
-        6 to "6 hours",
-        12 to "12 hours",
         24 to "1 day",
         72 to "3 days",
-        168 to "1 week"
+        168 to "1 week",
+        336 to "2 weeks",
+        672 to "4 weeks"
     )
     val currentBucketIndex = bucketPresets.indexOfFirst { it.first >= randomizeBucketHours }
         .let { if (it == -1) bucketPresets.size - 1 else it }
