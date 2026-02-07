@@ -35,9 +35,9 @@ abstract class AppDatabase : RoomDatabase() {
         private var INSTANCE: AppDatabase? = null
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
-            override fun migrate(database: SupportSQLiteDatabase) {
+            override fun migrate(db: SupportSQLiteDatabase) {
                 // Create groups table
-                database.execSQL("""
+                db.execSQL("""
                     CREATE TABLE IF NOT EXISTS `groups` (
                         `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                         `name` TEXT NOT NULL,
@@ -47,7 +47,7 @@ abstract class AppDatabase : RoomDatabase() {
                 """)
 
                 // Create junction table
-                database.execSQL("""
+                db.execSQL("""
                     CREATE TABLE IF NOT EXISTS `card_group_cross_ref` (
                         `cardId` INTEGER NOT NULL,
                         `groupId` INTEGER NOT NULL,
@@ -58,11 +58,11 @@ abstract class AppDatabase : RoomDatabase() {
                 """)
 
                 // Create index for groupId
-                database.execSQL("CREATE INDEX IF NOT EXISTS `index_card_group_cross_ref_groupId` ON `card_group_cross_ref`(`groupId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_card_group_cross_ref_groupId` ON `card_group_cross_ref`(`groupId`)")
 
                 // Migrate existing categories to groups
                 val currentTime = System.currentTimeMillis()
-                database.execSQL("""
+                db.execSQL("""
                     INSERT INTO `groups` (`name`, `created`)
                     SELECT DISTINCT `category`, $currentTime
                     FROM `cards`
@@ -70,7 +70,7 @@ abstract class AppDatabase : RoomDatabase() {
                 """)
 
                 // Create cross-references for existing cards
-                database.execSQL("""
+                db.execSQL("""
                     INSERT INTO `card_group_cross_ref` (`cardId`, `groupId`)
                     SELECT c.`id`, g.`id`
                     FROM `cards` c
@@ -81,14 +81,14 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         private val MIGRATION_2_3 = object : Migration(2, 3) {
-            override fun migrate(database: SupportSQLiteDatabase) {
+            override fun migrate(db: SupportSQLiteDatabase) {
                 // Add independentLearning column to groups table
-                database.execSQL("""
+                db.execSQL("""
                     ALTER TABLE `groups` ADD COLUMN `independentLearning` INTEGER NOT NULL DEFAULT 0
                 """)
 
                 // Create card_group_learning_state table
-                database.execSQL("""
+                db.execSQL("""
                     CREATE TABLE IF NOT EXISTS `card_group_learning_state` (
                         `cardId` INTEGER NOT NULL,
                         `groupId` INTEGER NOT NULL,
@@ -112,15 +112,15 @@ abstract class AppDatabase : RoomDatabase() {
                 """)
 
                 // Create indices for card_group_learning_state
-                database.execSQL("CREATE INDEX IF NOT EXISTS `index_card_group_learning_state_groupId` ON `card_group_learning_state`(`groupId`)")
-                database.execSQL("CREATE INDEX IF NOT EXISTS `index_card_group_learning_state_cardId` ON `card_group_learning_state`(`cardId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_card_group_learning_state_groupId` ON `card_group_learning_state`(`groupId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_card_group_learning_state_cardId` ON `card_group_learning_state`(`cardId`)")
             }
         }
 
         private val MIGRATION_3_4 = object : Migration(3, 4) {
-            override fun migrate(database: SupportSQLiteDatabase) {
+            override fun migrate(db: SupportSQLiteDatabase) {
                 // Add imagePaths column to cards table
-                database.execSQL("""
+                db.execSQL("""
                     ALTER TABLE `cards` ADD COLUMN `imagePaths` TEXT NOT NULL DEFAULT ''
                 """)
             }
@@ -134,7 +134,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "fencing_spaced_repetition_database"
                 )
                     .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
-                    .fallbackToDestructiveMigration()
+                    .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                 INSTANCE = instance
                 instance
