@@ -33,7 +33,7 @@ fun SettingsScreen(
     val randomizeDueCards by settingsViewModel.randomizeDueCards.collectAsState()
     val randomizeBucketHours by settingsViewModel.randomizeBucketHours.collectAsState()
     val maximumInterval by settingsViewModel.maximumInterval.collectAsState()
-    val practicesPerWeek by settingsViewModel.practicesPerWeek.collectAsState()
+    val practiceDays by settingsViewModel.practiceDays.collectAsState()
 
     // Donation state
     val context = LocalContext.current
@@ -190,7 +190,7 @@ fun SettingsScreen(
                     value = cardsPerSession.toFloat(),
                     onValueChange = { settingsViewModel.setCardsPerSession(it.toInt()) },
                     valueRange = 1f..6f,
-                    steps = 6,
+                    steps = 4,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
@@ -309,36 +309,53 @@ fun SettingsScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Practices per week
+            // Practice days
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 8.dp)
             ) {
+                Text(
+                    text = "Practice Days",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    Text(
-                        text = "Practices per Week",
-                        style = MaterialTheme.typography.bodyLarge
+                    // Day values: 1=Monday through 7=Sunday (ISO-8601)
+                    val dayLabels = listOf(
+                        1 to "M",
+                        2 to "T",
+                        3 to "W",
+                        4 to "T",
+                        5 to "F",
+                        6 to "S",
+                        7 to "S"
                     )
-                    Text(
-                        text = if (practicesPerWeek == 7) "Daily" else "$practicesPerWeek",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    dayLabels.forEach { (day, label) ->
+                        val selected = practiceDays.contains(day)
+                        FilterChip(
+                            selected = selected,
+                            onClick = { settingsViewModel.togglePracticeDay(day) },
+                            label = { Text(label) },
+                            modifier = Modifier.size(width = 42.dp, height = 36.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        )
+                    }
                 }
-                Slider(
-                    value = practicesPerWeek.toFloat(),
-                    onValueChange = { settingsViewModel.setPracticesPerWeek(it.toInt()) },
-                    valueRange = 1f..7f,
-                    steps = 5,
-                    modifier = Modifier.fillMaxWidth()
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = if (practiceDays.size == 7) "Daily" else "${practiceDays.size} days per week",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "Adjusts review spacing to match your practice frequency. Cards are scheduled to come due on days you practice.",
+                    text = "Cards are scheduled to come due on days you practice.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

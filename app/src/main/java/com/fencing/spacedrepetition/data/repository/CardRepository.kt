@@ -8,6 +8,7 @@ import com.fencing.spacedrepetition.data.dao.PracticeSessionDao
 import com.fencing.spacedrepetition.data.dao.ReviewLogDao
 import com.fencing.spacedrepetition.data.model.*
 import com.fencing.spacedrepetition.data.preferences.ThemePreferences
+import java.util.Calendar
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
@@ -616,17 +617,48 @@ class CardRepository(
     }
 
     /**
-     * Adjust scheduled days based on practices-per-week setting.
-     * Snaps the interval to the nearest practice slot so cards come due
-     * on days the user will actually practice.
+     * Adjust scheduled days based on practice-days setting.
+     * Snaps the interval to the nearest selected practice day so cards
+     * come due on days the user will actually practice.
+     *
+     * Practice days use ISO-8601 convention: 1=Monday through 7=Sunday.
      */
     private suspend fun adjustForPracticeFrequency(scheduledDays: Int): Int {
-        val practicesPerWeek = preferences.practicesPerWeek.first()
-        if (practicesPerWeek >= 7 || scheduledDays <= 1) return scheduledDays
+        val practiceDays = preferences.practiceDays.first()
+        if (practiceDays.size >= 7 || practiceDays.isEmpty() || scheduledDays <= 1) return scheduledDays
 
-        val daysBetweenPractices = 7.0 / practicesPerWeek
-        val adjustedDays = (Math.round(scheduledDays / daysBetweenPractices) * daysBetweenPractices).toInt()
+        val calendar = Calendar.getInstance()
+        calendar.add(Calendar.DAY_OF_YEAR, scheduledDays)
+        // Convert Calendar day-of-week (1=Sunday..7=Saturday) to ISO-8601 (1=Monday..7=Sunday)
+        val calendarDow = calendar.get(Calendar.DAY_OF_WEEK)
+        val targetDow = calendarDowToIso(calendarDow)
+
+        if (practiceDays.contains(targetDow)) return scheduledDays
+
+        // Find nearest practice day (forward and backward)
+        var bestForward = 7
+        var bestBackward = 7
+        for (day in practiceDays) {
+            val forward = (day - targetDow + 7) % 7
+            val backward = (targetDow - day + 7) % 7
+            if (forward in 1 until bestForward) bestForward = forward
+            if (backward in 1 until bestBackward) bestBackward = backward
+        }
+
+        // Prefer forward (later) to avoid reviewing too soon; if tie, pick forward
+        val adjustedDays = if (bestForward <= bestBackward) {
+            scheduledDays + bestForward
+        } else {
+            scheduledDays - bestBackward
+        }
         return adjustedDays.coerceAtLeast(1)
+    }
+
+    /**
+     * Convert Calendar.DAY_OF_WEEK (1=Sunday..7=Saturday) to ISO-8601 (1=Monday..7=Sunday).
+     */
+    private fun calendarDowToIso(calendarDow: Int): Int {
+        return if (calendarDow == Calendar.SUNDAY) 7 else calendarDow - 1
     }
 
     private fun serializeCardState(card: Card): String {

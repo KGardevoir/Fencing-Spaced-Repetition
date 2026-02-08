@@ -28,6 +28,7 @@ class ThemePreferences(private val context: Context) {
     private val RANDOMIZE_DUE_CARDS_KEY = booleanPreferencesKey("randomize_due_cards")
     private val MAXIMUM_INTERVAL_KEY = intPreferencesKey("maximum_interval")
     private val PRACTICES_PER_WEEK_KEY = intPreferencesKey("practices_per_week")
+    private val PRACTICE_DAYS_KEY = stringPreferencesKey("practice_days")
     private val RANDOMIZE_BUCKET_HOURS_KEY = intPreferencesKey("randomize_bucket_hours")
 
     companion object {
@@ -41,6 +42,8 @@ class ThemePreferences(private val context: Context) {
         const val MIN_PRACTICES_PER_WEEK = 1
         const val MAX_PRACTICES_PER_WEEK = 7
         const val DEFAULT_RANDOMIZE_BUCKET_HOURS = 24 // 1 day
+        // All days of week selected by default (1=Monday through 7=Sunday, ISO-8601 convention)
+        val DEFAULT_PRACTICE_DAYS: Set<Int> = setOf(1, 2, 3, 4, 5, 6, 7)
     }
 
     val themeMode: Flow<ThemeMode> = context.dataStore.data
@@ -81,6 +84,20 @@ class ThemePreferences(private val context: Context) {
     val practicesPerWeek: Flow<Int> = context.dataStore.data
         .map { preferences ->
             preferences[PRACTICES_PER_WEEK_KEY] ?: DEFAULT_PRACTICES_PER_WEEK
+        }
+
+    val practiceDays: Flow<Set<Int>> = context.dataStore.data
+        .map { preferences ->
+            val stored = preferences[PRACTICE_DAYS_KEY]
+            if (stored != null) {
+                stored.split(",")
+                    .filter { it.isNotBlank() }
+                    .mapNotNull { it.trim().toIntOrNull() }
+                    .filter { it in 1..7 }
+                    .toSet()
+            } else {
+                DEFAULT_PRACTICE_DAYS
+            }
         }
 
     val randomizeBucketHours: Flow<Int> = context.dataStore.data
@@ -134,6 +151,13 @@ class ThemePreferences(private val context: Context) {
         val validCount = count.coerceIn(MIN_PRACTICES_PER_WEEK, MAX_PRACTICES_PER_WEEK)
         context.dataStore.edit { preferences ->
             preferences[PRACTICES_PER_WEEK_KEY] = validCount
+        }
+    }
+
+    suspend fun setPracticeDays(days: Set<Int>) {
+        val value = days.sorted().joinToString(",")
+        context.dataStore.edit { preferences ->
+            preferences[PRACTICE_DAYS_KEY] = value
         }
     }
 
