@@ -190,7 +190,7 @@ fun SettingsScreen(
                     value = cardsPerSession.toFloat(),
                     onValueChange = { settingsViewModel.setCardsPerSession(it.toInt()) },
                     valueRange = 1f..6f,
-                    steps = 6,
+                    steps = 4,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
