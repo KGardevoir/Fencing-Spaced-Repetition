@@ -19,6 +19,7 @@ import com.fencing.spacedrepetition.billing.BillingManager
 import com.fencing.spacedrepetition.data.preferences.ThemeMode
 import com.fencing.spacedrepetition.ui.viewmodel.DonationViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -188,7 +189,7 @@ fun SettingsScreen(
                 }
                 Slider(
                     value = cardsPerSession.toFloat(),
-                    onValueChange = { settingsViewModel.setCardsPerSession(it.toInt()) },
+                    onValueChange = { settingsViewModel.setCardsPerSession(it.roundToInt()) },
                     valueRange = 1f..6f,
                     steps = 4,
                     modifier = Modifier.fillMaxWidth()
@@ -282,7 +283,7 @@ fun SettingsScreen(
                     Slider(
                         value = currentBucketIndex.toFloat(),
                         onValueChange = { newIndex ->
-                            val presetValue = bucketPresets[newIndex.toInt()].first
+                            val presetValue = bucketPresets[newIndex.roundToInt()].first
                             settingsViewModel.setRandomizeBucketHours(presetValue)
                         },
                         valueRange = 0f..(bucketPresets.size - 1).toFloat(),
@@ -397,7 +398,7 @@ fun SettingsScreen(
                 Slider(
                     value = currentPresetIndex.toFloat(),
                     onValueChange = { newIndex ->
-                        val presetValue = intervalPresets[newIndex.toInt()].first
+                        val presetValue = intervalPresets[newIndex.roundToInt()].first
                         settingsViewModel.setMaximumInterval(presetValue)
                     },
                     valueRange = 0f..(intervalPresets.size - 1).toFloat(),
