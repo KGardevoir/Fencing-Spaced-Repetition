@@ -23,7 +23,8 @@ import com.fencing.spacedrepetition.ui.viewmodel.ImportExportState
 @Composable
 fun GroupListScreen(
     groupViewModel: GroupViewModel,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToEdit: (Long) -> Unit = {}
 ) {
     val groups by groupViewModel.allGroups.collectAsState()
     val importExportState by groupViewModel.importExportState.collectAsState()
@@ -31,7 +32,6 @@ fun GroupListScreen(
 
     var showAddDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf<Group?>(null) }
-    var editingGroup by remember { mutableStateOf<Group?>(null) }
     var groupForImport by remember { mutableStateOf<Group?>(null) }
     var groupForExport by remember { mutableStateOf<Group?>(null) }
 
@@ -121,7 +121,7 @@ fun GroupListScreen(
                         group = group,
                         dueCardCount = groupViewModel.getDueCardCountForGroup(group.id)
                             .collectAsState(initial = 0).value,
-                        onEdit = { editingGroup = group },
+                        onEdit = { onNavigateToEdit(group.id) },
                         onDelete = { showDeleteDialog = group },
                         onImport = {
                             groupForImport = group
@@ -144,19 +144,6 @@ fun GroupListScreen(
             onDismiss = { showAddDialog = false },
             onConfirm = { name, description, independentLearning ->
                 groupViewModel.addGroup(name, description) { _ -> showAddDialog = false }
-            }
-        )
-    }
-
-    // Edit group dialog
-    editingGroup?.let { group ->
-        AddEditGroupDialog(
-            group = group,
-            onDismiss = { editingGroup = null },
-            onConfirm = { name, description, independentLearning ->
-                groupViewModel.updateGroup(group.copy(name = name, description = description, independentLearning = independentLearning)) {
-                    editingGroup = null
-                }
             }
         )
     }
@@ -300,6 +287,15 @@ fun GroupListItem(
                             contentDescription = "Independent Learning",
                             modifier = Modifier.size(16.dp),
                             tint = MaterialTheme.colorScheme.tertiary
+                        )
+                    }
+                    if (group.hasCustomSettings()) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(
+                            Icons.Default.Tune,
+                            contentDescription = "Custom Settings",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.secondary
                         )
                     }
                 }

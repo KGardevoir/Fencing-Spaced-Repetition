@@ -34,7 +34,7 @@ fun HomeScreen(
     val dueCardCount by cardViewModel.dueCardCount.collectAsState()
     val totalCards by cardViewModel.cardCount.collectAsState()
     val groups by groupViewModel.allGroups.collectAsState()
-    val cardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
+    val globalCardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
     val savedGroupId by settingsViewModel.selectedGroupId.collectAsState()
 
     var showGroupSelectionDialog by remember { mutableStateOf(false) }
@@ -52,6 +52,9 @@ fun HomeScreen(
             }
         }
     }
+
+    // Resolve cardsPerSession: group override takes precedence over global
+    val cardsPerSession = selectedGroup?.cardsPerSession ?: globalCardsPerSession
 
     // Calculate total cards for selected group (allow additional studying)
     val cardsForSelectedGroup = selectedGroup?.let { group ->

@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Base64
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
+import com.fencing.spacedrepetition.data.model.Group
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.InputStream
@@ -77,6 +78,7 @@ object CardImportExport {
     private const val HEADER_MARKER_V1 = "#FSR_EXPORT_V1"
     private const val HEADER_MARKER_V2 = "#FSR_EXPORT_V2"
     private const val HEADER_MARKER_V3 = "#FSR_EXPORT_V3"
+    private const val GROUP_SETTINGS_PREFIX = "#GROUP_SETTINGS:"
 
     // Column indices for V1 export format
     private const val COL_V1_QUESTION = 0
@@ -158,9 +160,14 @@ object CardImportExport {
      * Supports both simple (question\tanswer) and full export formats (V1, V2, and V3).
      * Returns pair of (valid cards, error messages)
      */
+    /** Parsed group settings from an import file */
+    var lastParsedGroupSettings: Map<String, Map<String, String>> = emptyMap()
+        private set
+
     fun parseCards(inputStream: InputStream): Pair<List<ParsedCard>, List<String>> {
         val cards = mutableListOf<ParsedCard>()
         val errors = mutableListOf<String>()
+        val groupSettings = mutableMapOf<String, Map<String, String>>()
 
         try {
             val lines = inputStream.bufferedReader(Charsets.UTF_8).readLines()
@@ -183,8 +190,16 @@ object CardImportExport {
                 val lineNumber = if (formatVersion > 0) index + 2 else index + 1
                 val trimmedLine = line.trim()
 
-                if (trimmedLine.isEmpty() || trimmedLine.startsWith("#")) {
-                    return@forEachIndexed // Skip empty lines and comments
+                if (trimmedLine.isEmpty()) return@forEachIndexed
+                // Capture group settings lines
+                if (trimmedLine.startsWith(GROUP_SETTINGS_PREFIX)) {
+                    parseGroupSettingsLine(trimmedLine)?.let { (name, settings) ->
+                        groupSettings[name] = settings
+                    }
+                    return@forEachIndexed
+                }
+                if (trimmedLine.startsWith("#")) {
+                    return@forEachIndexed // Skip other comments
                 }
 
                 try {
@@ -208,6 +223,7 @@ object CardImportExport {
             errors.add("Failed to read file: ${e.message}")
         }
 
+        lastParsedGroupSettings = groupSettings
         return Pair(cards, errors)
     }
 
@@ -466,7 +482,8 @@ object CardImportExport {
      */
     fun exportCardsWithGroupStates(
         cardsWithStates: List<CardWithGroupStates>,
-        outputStream: OutputStream
+        outputStream: OutputStream,
+        groupSettings: List<Group> = emptyList()
     ): ExportResult {
         return try {
             var rowCount = 0
@@ -474,6 +491,12 @@ object CardImportExport {
                 // Write format marker (V3)
                 writer.write(HEADER_MARKER_V3)
                 writer.newLine()
+
+                // Write group settings metadata
+                groupSettings.filter { it.hasCustomSettings() }.forEach { group ->
+                    writer.write(buildGroupSettingsLine(group))
+                    writer.newLine()
+                }
 
                 // Write column headers
                 writer.write(COLUMN_HEADERS_V3)
@@ -695,6 +718,57 @@ object CardImportExport {
      */
     private fun unescapeNewlines(text: String): String {
         return text.replace(NEWLINE_PLACEHOLDER, "\n")
+    }
+
+    /**
+     * Builds a group settings metadata line for export.
+     * Format: #GROUP_SETTINGS:name\tkey=value\tkey=value\t...
+     */
+    private fun buildGroupSettingsLine(group: Group): String {
+        return buildString {
+            append(GROUP_SETTINGS_PREFIX)
+            append(escapeNewlines(group.name))
+            group.cardsPerSession?.let { append("\tcardsPerSession=$it") }
+            group.autoShowAnswer?.let { append("\tautoShowAnswer=$it") }
+            group.randomizeDueCards?.let { append("\trandomizeDueCards=$it") }
+            group.randomizeBucketHours?.let { append("\trandomizeBucketHours=$it") }
+            group.practiceDays?.let { append("\tpracticeDays=$it") }
+            group.maximumInterval?.let { append("\tmaximumInterval=$it") }
+        }
+    }
+
+    /**
+     * Parses a group settings line from import.
+     * Returns pair of (group name, settings map) or null if not a settings line.
+     */
+    fun parseGroupSettingsLine(line: String): Pair<String, Map<String, String>>? {
+        if (!line.startsWith(GROUP_SETTINGS_PREFIX)) return null
+        val rest = line.removePrefix(GROUP_SETTINGS_PREFIX)
+        val parts = rest.split("\t")
+        if (parts.isEmpty()) return null
+        val groupName = unescapeNewlines(parts[0])
+        val settings = mutableMapOf<String, String>()
+        parts.drop(1).forEach { part ->
+            val eqIndex = part.indexOf('=')
+            if (eqIndex > 0) {
+                settings[part.substring(0, eqIndex)] = part.substring(eqIndex + 1)
+            }
+        }
+        return groupName to settings
+    }
+
+    /**
+     * Applies parsed settings map to a Group entity.
+     */
+    fun applyGroupSettings(group: Group, settings: Map<String, String>): Group {
+        return group.copy(
+            cardsPerSession = settings["cardsPerSession"]?.toIntOrNull(),
+            autoShowAnswer = settings["autoShowAnswer"]?.toBooleanStrictOrNull(),
+            randomizeDueCards = settings["randomizeDueCards"]?.toBooleanStrictOrNull(),
+            randomizeBucketHours = settings["randomizeBucketHours"]?.toIntOrNull(),
+            practiceDays = settings["practiceDays"],
+            maximumInterval = settings["maximumInterval"]?.toIntOrNull()
+        )
     }
 
     /**

@@ -137,14 +137,15 @@ class CardRepository(
     fun getCardWithGroups(cardId: Long): Flow<CardWithGroups?> = cardDao.getCardWithGroups(cardId)
 
     suspend fun getDueCardsByGroup(groupId: Long, limit: Int = 100): List<Card> {
-        val shouldRandomize = preferences.randomizeDueCards.first()
+        val group = groupDao.getGroupById(groupId)
+        val shouldRandomize = group?.randomizeDueCards ?: preferences.randomizeDueCards.first()
         val cards = if (shouldRandomize) {
             cardDao.getDueCardsByGroup(groupId, limit = Int.MAX_VALUE)
         } else {
             cardDao.getDueCardsByGroup(groupId, limit = limit)
         }
         return if (shouldRandomize) {
-            val bucketHours = preferences.randomizeBucketHours.first()
+            val bucketHours = group?.randomizeBucketHours ?: preferences.randomizeBucketHours.first()
             randomizeCardsByBucket(cards, bucketHours).take(limit)
         } else {
             cards
@@ -153,7 +154,8 @@ class CardRepository(
 
     suspend fun getCardsByGroupSync(groupId: Long): List<Card> {
         val cards = cardDao.getCardsByGroupSync(groupId)
-        val shouldRandomize = preferences.randomizeDueCards.first()
+        val group = groupDao.getGroupById(groupId)
+        val shouldRandomize = group?.randomizeDueCards ?: preferences.randomizeDueCards.first()
         return if (shouldRandomize) {
             cards.shuffled()
         } else {
@@ -414,14 +416,14 @@ class CardRepository(
     }
 
     // Review operations
-    suspend fun reviewCard(card: Card, grade: Grade, sessionId: Long? = null): Card {
+    suspend fun reviewCard(card: Card, grade: Grade, sessionId: Long? = null, groupId: Long? = null): Card {
         val now = System.currentTimeMillis()
         val elapsedDays = if (card.lastReview == 0L) 0 else
             ((now - card.lastReview) / (1000 * 60 * 60 * 24)).toInt()
 
         val updatedCard = when (card.algorithm) {
-            AlgorithmType.FSRS -> reviewWithFSRS(card, grade, now, elapsedDays)
-            AlgorithmType.SM2 -> reviewWithSM2(card, grade, now)
+            AlgorithmType.FSRS -> reviewWithFSRS(card, grade, now, elapsedDays, groupId)
+            AlgorithmType.SM2 -> reviewWithSM2(card, grade, now, groupId)
         }
 
         // Create review log
@@ -444,11 +446,11 @@ class CardRepository(
     }
 
     suspend fun reviewCardWithGroup(card: Card, grade: Grade, groupId: Long, sessionId: Long? = null): Card {
-        val group = groupDao.getGroupById(groupId) ?: return reviewCard(card, grade, sessionId)
+        val group = groupDao.getGroupById(groupId) ?: return reviewCard(card, grade, sessionId, groupId)
 
         if (!group.independentLearning) {
-            // Use global learning state
-            return reviewCard(card, grade, sessionId)
+            // Use global learning state but apply group settings
+            return reviewCard(card, grade, sessionId, groupId)
         }
 
         // Use group-specific learning state
@@ -465,8 +467,8 @@ class CardRepository(
             ((now - learningState.lastReview) / (1000 * 60 * 60 * 24)).toInt()
 
         val updatedState = when (card.algorithm) {
-            AlgorithmType.FSRS -> reviewLearningStateWithFSRS(learningState, grade, now, elapsedDays)
-            AlgorithmType.SM2 -> reviewLearningStateWithSM2(learningState, grade, now)
+            AlgorithmType.FSRS -> reviewLearningStateWithFSRS(learningState, grade, now, elapsedDays, groupId)
+            AlgorithmType.SM2 -> reviewLearningStateWithSM2(learningState, grade, now, groupId)
         }
 
         // Create review log
@@ -537,9 +539,9 @@ class CardRepository(
         cardDao.updateCards(updatedCards)
     }
 
-    private suspend fun reviewWithFSRS(card: Card, grade: Grade, now: Long, elapsedDays: Int): Card {
-        // Update algorithm with current maximum interval setting
-        val maxInterval = preferences.maximumInterval.first()
+    private suspend fun reviewWithFSRS(card: Card, grade: Grade, now: Long, elapsedDays: Int, groupId: Long? = null): Card {
+        // Resolve maximum interval (group override or global)
+        val maxInterval = resolveMaximumInterval(groupId)
         fsrsAlgorithm.setMaximumInterval(maxInterval)
 
         val fsrsCard = FSRSAlgorithm.FSRSCard(
@@ -563,7 +565,7 @@ class CardRepository(
 
         val schedulingInfo = fsrsAlgorithm.schedule(fsrsCard, rating, now)
         val newCard = schedulingInfo.card
-        val adjustedDays = adjustForPracticeFrequency(newCard.scheduledDays)
+        val adjustedDays = adjustForPracticeFrequency(newCard.scheduledDays, groupId)
 
         return card.copy(
             fsrsStability = newCard.stability,
@@ -579,9 +581,9 @@ class CardRepository(
         )
     }
 
-    private suspend fun reviewWithSM2(card: Card, grade: Grade, now: Long): Card {
-        // Update algorithm with current maximum interval setting
-        val maxInterval = preferences.maximumInterval.first()
+    private suspend fun reviewWithSM2(card: Card, grade: Grade, now: Long, groupId: Long? = null): Card {
+        // Resolve maximum interval (group override or global)
+        val maxInterval = resolveMaximumInterval(groupId)
         sm2Algorithm.setMaximumInterval(maxInterval)
 
         val sm2Card = SM2Algorithm.SM2Card(
@@ -601,7 +603,7 @@ class CardRepository(
 
         val schedulingInfo = sm2Algorithm.schedule(sm2Card, quality, now)
         val newCard = schedulingInfo.card
-        val adjustedInterval = adjustForPracticeFrequency(newCard.interval)
+        val adjustedInterval = adjustForPracticeFrequency(newCard.interval, groupId)
         val adjustedNextReview = now + (adjustedInterval * 24 * 60 * 60 * 1000L)
 
         return card.copy(
@@ -623,8 +625,27 @@ class CardRepository(
      *
      * Practice days use ISO-8601 convention: 1=Monday through 7=Sunday.
      */
-    private suspend fun adjustForPracticeFrequency(scheduledDays: Int): Int {
-        val practiceDays = preferences.practiceDays.first()
+    /** Resolve maximum interval: group override takes precedence over global. */
+    private suspend fun resolveMaximumInterval(groupId: Long?): Int {
+        if (groupId != null) {
+            val group = groupDao.getGroupById(groupId)
+            if (group?.maximumInterval != null) return group.maximumInterval
+        }
+        return preferences.maximumInterval.first()
+    }
+
+    /** Resolve practice days: group override takes precedence over global. */
+    private suspend fun resolvePracticeDays(groupId: Long?): Set<Int> {
+        if (groupId != null) {
+            val group = groupDao.getGroupById(groupId)
+            val groupDays = group?.parsePracticeDays()
+            if (groupDays != null) return groupDays
+        }
+        return preferences.practiceDays.first()
+    }
+
+    private suspend fun adjustForPracticeFrequency(scheduledDays: Int, groupId: Long? = null): Int {
+        val practiceDays = resolvePracticeDays(groupId)
         if (practiceDays.size >= 7 || practiceDays.isEmpty() || scheduledDays <= 1) return scheduledDays
 
         val calendar = Calendar.getInstance()
@@ -672,10 +693,11 @@ class CardRepository(
         learningState: CardGroupLearningState,
         grade: Grade,
         now: Long,
-        elapsedDays: Int
+        elapsedDays: Int,
+        groupId: Long? = null
     ): CardGroupLearningState {
-        // Update algorithm with current maximum interval setting
-        val maxInterval = preferences.maximumInterval.first()
+        // Resolve maximum interval (group override or global)
+        val maxInterval = resolveMaximumInterval(groupId)
         fsrsAlgorithm.setMaximumInterval(maxInterval)
 
         val fsrsCard = FSRSAlgorithm.FSRSCard(
@@ -699,7 +721,7 @@ class CardRepository(
 
         val schedulingInfo = fsrsAlgorithm.schedule(fsrsCard, rating, now)
         val newCard = schedulingInfo.card
-        val adjustedDays = adjustForPracticeFrequency(newCard.scheduledDays)
+        val adjustedDays = adjustForPracticeFrequency(newCard.scheduledDays, groupId)
 
         return learningState.copy(
             fsrsStability = newCard.stability,
@@ -718,10 +740,11 @@ class CardRepository(
     private suspend fun reviewLearningStateWithSM2(
         learningState: CardGroupLearningState,
         grade: Grade,
-        now: Long
+        now: Long,
+        groupId: Long? = null
     ): CardGroupLearningState {
-        // Update algorithm with current maximum interval setting
-        val maxInterval = preferences.maximumInterval.first()
+        // Resolve maximum interval (group override or global)
+        val maxInterval = resolveMaximumInterval(groupId)
         sm2Algorithm.setMaximumInterval(maxInterval)
 
         val sm2Card = SM2Algorithm.SM2Card(
@@ -741,7 +764,7 @@ class CardRepository(
 
         val schedulingInfo = sm2Algorithm.schedule(sm2Card, quality, now)
         val newCard = schedulingInfo.card
-        val adjustedInterval = adjustForPracticeFrequency(newCard.interval)
+        val adjustedInterval = adjustForPracticeFrequency(newCard.interval, groupId)
         val adjustedNextReview = now + (adjustedInterval * 24 * 60 * 60 * 1000L)
 
         return learningState.copy(
