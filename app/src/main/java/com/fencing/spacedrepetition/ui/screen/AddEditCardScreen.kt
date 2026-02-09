@@ -4,8 +4,10 @@ import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -18,10 +20,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
+import com.fencing.spacedrepetition.data.model.Grade
+import kotlinx.coroutines.launch
 import com.fencing.spacedrepetition.ui.components.CardImagesEdit
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
@@ -111,9 +116,19 @@ fun AddEditCardScreen(
     var sm2Interval by remember { mutableStateOf(cardToEdit?.sm2Interval?.toString() ?: "0") }
     var sm2Repetitions by remember { mutableStateOf(cardToEdit?.sm2Repetitions?.toString() ?: "0") }
 
+    // Additional state for review timing (updated by quick grading)
+    var lastReview by remember { mutableStateOf(cardToEdit?.lastReview ?: 0L) }
+    var nextReview by remember { mutableStateOf(cardToEdit?.nextReview ?: 0L) }
+    var fsrsElapsedDays by remember { mutableStateOf(cardToEdit?.fsrsElapsedDays?.toString() ?: "0") }
+    var fsrsScheduledDays by remember { mutableStateOf(cardToEdit?.fsrsScheduledDays?.toString() ?: "0") }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
     val isEditing = cardToEdit != null
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(if (isEditing) "Edit Card" else "Add New Card") },
@@ -388,11 +403,11 @@ fun AddEditCardScreen(
 
                         // Card status summary
                         val statusText = when {
-                            cardToEdit.fsrsState == "NEW" && cardToEdit.nextReview == 0L -> "New card"
-                            cardToEdit.nextReview <= System.currentTimeMillis() -> "Due for review"
+                            fsrsState == "NEW" && nextReview == 0L -> "New card"
+                            nextReview <= System.currentTimeMillis() -> "Due for review"
                             else -> {
                                 val formatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-                                "Next review: ${formatter.format(Date(cardToEdit.nextReview))}"
+                                "Next review: ${formatter.format(Date(nextReview))}"
                             }
                         }
                         Spacer(modifier = Modifier.height(4.dp))
@@ -592,6 +607,158 @@ fun AddEditCardScreen(
                 }
             }
 
+            // Quick Grade section (only when editing)
+            if (isEditing && cardToEdit != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        var showGradeButtons by remember { mutableStateOf(false) }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showGradeButtons = !showGradeButtons },
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Star,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "Quick Grade",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                            Icon(
+                                if (showGradeButtons) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = if (showGradeButtons) "Collapse" else "Expand"
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Grade this card without a practice session",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        if (showGradeButtons) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            HorizontalDivider()
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // Global state grading
+                            Text(
+                                "Global State",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                listOf(Grade.AGAIN, Grade.HARD, Grade.GOOD, Grade.EASY).forEach { grade ->
+                                    CompactGradeButton(
+                                        grade = grade,
+                                        onClick = {
+                                            viewModel.gradeCard(cardToEdit.id, grade) { updated ->
+                                                fsrsStability = updated.fsrsStability.toString()
+                                                fsrsDifficulty = updated.fsrsDifficulty.toString()
+                                                fsrsReps = updated.fsrsReps.toString()
+                                                fsrsLapses = updated.fsrsLapses.toString()
+                                                fsrsState = updated.fsrsState
+                                                fsrsElapsedDays = updated.fsrsElapsedDays.toString()
+                                                fsrsScheduledDays = updated.fsrsScheduledDays.toString()
+                                                sm2EaseFactor = updated.sm2EaseFactor.toString()
+                                                sm2Interval = updated.sm2Interval.toString()
+                                                sm2Repetitions = updated.sm2Repetitions.toString()
+                                                lastReview = updated.lastReview
+                                                nextReview = updated.nextReview
+                                                scope.launch {
+                                                    val dateStr = SimpleDateFormat("MMM dd", Locale.getDefault())
+                                                        .format(Date(updated.nextReview))
+                                                    snackbarHostState.showSnackbar(
+                                                        "Graded as ${grade.label} - Next review: $dateStr"
+                                                    )
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+
+                            // Independent learning group grading
+                            val independentGradeGroups = allGroups.filter {
+                                it.independentLearning && it.id in selectedGroupIds
+                            }
+
+                            if (independentGradeGroups.isNotEmpty()) {
+                                independentGradeGroups.forEach { group ->
+                                    Spacer(modifier = Modifier.height(16.dp))
+
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Default.Folder,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.secondary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            "${group.name} (Independent)",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = MaterialTheme.colorScheme.secondary
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        listOf(Grade.AGAIN, Grade.HARD, Grade.GOOD, Grade.EASY).forEach { grade ->
+                                            CompactGradeButton(
+                                                grade = grade,
+                                                onClick = {
+                                                    viewModel.gradeCard(cardToEdit.id, grade, group.id) { updated ->
+                                                        independentLearningEdits = independentLearningEdits + (group.id to IndependentLearningEdit(
+                                                            fsrsStability = updated.fsrsStability.toString(),
+                                                            fsrsDifficulty = updated.fsrsDifficulty.toString(),
+                                                            fsrsReps = updated.fsrsReps.toString(),
+                                                            fsrsLapses = updated.fsrsLapses.toString(),
+                                                            fsrsState = updated.fsrsState,
+                                                            sm2EaseFactor = updated.sm2EaseFactor.toString(),
+                                                            sm2Interval = updated.sm2Interval.toString(),
+                                                            sm2Repetitions = updated.sm2Repetitions.toString()
+                                                        ))
+                                                        scope.launch {
+                                                            val dateStr = SimpleDateFormat("MMM dd", Locale.getDefault())
+                                                                .format(Date(updated.nextReview))
+                                                            snackbarHostState.showSnackbar(
+                                                                "${group.name}: Graded as ${grade.label} - Next: $dateStr"
+                                                            )
+                                                        }
+                                                    }
+                                                },
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.weight(1f))
 
             // Save button
@@ -611,10 +778,15 @@ fun AddEditCardScreen(
                                 fsrsReps = fsrsReps.toIntOrNull() ?: cardToEdit.fsrsReps,
                                 fsrsLapses = fsrsLapses.toIntOrNull() ?: cardToEdit.fsrsLapses,
                                 fsrsState = fsrsState,
+                                fsrsElapsedDays = fsrsElapsedDays.toIntOrNull() ?: cardToEdit.fsrsElapsedDays,
+                                fsrsScheduledDays = fsrsScheduledDays.toIntOrNull() ?: cardToEdit.fsrsScheduledDays,
                                 // SM2 state
                                 sm2EaseFactor = sm2EaseFactor.toDoubleOrNull() ?: cardToEdit.sm2EaseFactor,
                                 sm2Interval = sm2Interval.toIntOrNull() ?: cardToEdit.sm2Interval,
-                                sm2Repetitions = sm2Repetitions.toIntOrNull() ?: cardToEdit.sm2Repetitions
+                                sm2Repetitions = sm2Repetitions.toIntOrNull() ?: cardToEdit.sm2Repetitions,
+                                // Review timing
+                                lastReview = lastReview,
+                                nextReview = nextReview
                             )
                             viewModel.updateCard(
                                 updatedCard,
@@ -1209,6 +1381,48 @@ fun IndependentLearningStateCard(
                 }
             }
         )
+    }
+}
+
+@Composable
+fun CompactGradeButton(
+    grade: Grade,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val (color, icon) = when (grade) {
+        Grade.SKIP -> Pair(MaterialTheme.colorScheme.outline, Icons.Default.SkipNext)
+        Grade.AGAIN -> Pair(MaterialTheme.colorScheme.error, Icons.Default.Close)
+        Grade.HARD -> Pair(Color(0xFFFF9800), Icons.Default.Remove)
+        Grade.GOOD -> Pair(Color(0xFF4CAF50), Icons.Default.Check)
+        Grade.EASY -> Pair(Color(0xFF2196F3), Icons.Default.Done)
+    }
+
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier.height(56.dp),
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = color),
+        border = BorderStroke(1.dp, color),
+        shape = RoundedCornerShape(8.dp),
+        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = color
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = grade.label,
+                style = MaterialTheme.typography.labelSmall,
+                color = color
+            )
+        }
     }
 }
 

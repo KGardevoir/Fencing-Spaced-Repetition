@@ -9,6 +9,7 @@ import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.CardWithGroups
+import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
@@ -249,6 +250,22 @@ class CardViewModel(
         viewModelScope.launch {
             repository.resetCardStateInGroup(cardId, groupId)
             onComplete()
+        }
+    }
+
+    fun gradeCard(cardId: Long, grade: Grade, groupId: Long? = null, onComplete: (Card) -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                val card = repository.getCardById(cardId) ?: return@launch
+                val updatedCard = if (groupId != null) {
+                    repository.reviewCardWithGroup(card, grade, groupId)
+                } else {
+                    repository.reviewCard(card, grade)
+                }
+                onComplete(updatedCard)
+            } catch (e: Exception) {
+                // Handle error
+            }
         }
     }
 
