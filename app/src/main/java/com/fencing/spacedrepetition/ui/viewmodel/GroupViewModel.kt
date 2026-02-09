@@ -62,6 +62,20 @@ class GroupViewModel(
         }
     }
 
+    fun addGroupWithSettings(group: Group, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                val newId = groupRepository.insertGroup(group)
+                if (group.independentLearning) {
+                    groupRepository.toggleIndependentLearning(newId, true)
+                }
+                onSuccess()
+            } catch (e: Exception) {
+                // Handle error
+            }
+        }
+    }
+
     fun updateGroup(group: Group, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
             try {
@@ -114,11 +128,17 @@ class GroupViewModel(
                     return@launch
                 }
 
+                // Collect all groups referenced by exported cards for settings
+                val allGroupNames = cardsWithStates.flatMap { it.groupNames }.toSet()
+                val allGroups = withContext(Dispatchers.IO) {
+                    groupRepository.getAllGroupsSync().filter { it.name in allGroupNames }
+                }
+
                 val result = withContext(Dispatchers.IO) {
                     contentResolver.openOutputStream(uri)?.use { fileStream ->
                         // Wrap with GZIP compression
                         val outputStream = CardImportExport.createCompressedOutputStream(fileStream)
-                        val exportResult = CardImportExport.exportCardsWithGroupStates(cardsWithStates, outputStream)
+                        val exportResult = CardImportExport.exportCardsWithGroupStates(cardsWithStates, outputStream, allGroups)
                         outputStream.close()  // Ensure GZIP stream is properly closed
                         exportResult
                     } ?: ExportResult.Error("Failed to open file for writing")
@@ -184,6 +204,19 @@ class GroupViewModel(
                 // Ensure all groups exist (creates missing ones automatically)
                 val groupNameMap = withContext(Dispatchers.IO) {
                     groupRepository.ensureGroupsExist(allGroupNames, groupsWithIndependentLearning)
+                }
+
+                // Apply group settings from export file
+                val parsedGroupSettings = CardImportExport.lastParsedGroupSettings
+                if (parsedGroupSettings.isNotEmpty()) {
+                    withContext(Dispatchers.IO) {
+                        parsedGroupSettings.forEach { (groupName, settings) ->
+                            val groupIdForSettings = groupNameMap[groupName] ?: return@forEach
+                            val group = groupRepository.getGroupById(groupIdForSettings) ?: return@forEach
+                            val updatedGroup = CardImportExport.applyGroupSettings(group, settings)
+                            groupRepository.updateGroup(updatedGroup)
+                        }
+                    }
                 }
 
                 // Check if this is a full format import with state

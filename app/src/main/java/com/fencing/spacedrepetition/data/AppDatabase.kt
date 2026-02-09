@@ -20,7 +20,7 @@ import com.fencing.spacedrepetition.data.model.ReviewLog
 
 @Database(
     entities = [Card::class, PracticeSession::class, ReviewLog::class, Group::class, CardGroupCrossRef::class, CardGroupLearningState::class],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -126,6 +126,18 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Add per-group settings columns (nullable = use global default)
+                db.execSQL("ALTER TABLE `groups` ADD COLUMN `cardsPerSession` INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE `groups` ADD COLUMN `autoShowAnswer` INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE `groups` ADD COLUMN `randomizeDueCards` INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE `groups` ADD COLUMN `randomizeBucketHours` INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE `groups` ADD COLUMN `practiceDays` TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE `groups` ADD COLUMN `maximumInterval` INTEGER DEFAULT NULL")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -133,7 +145,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "fencing_spaced_repetition_database"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                 INSTANCE = instance

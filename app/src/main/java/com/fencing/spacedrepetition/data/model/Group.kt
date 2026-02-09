@@ -15,8 +15,30 @@ data class Group(
     val name: String,
     val description: String = "",
     val independentLearning: Boolean = false,
-    val created: Long = System.currentTimeMillis()
-)
+    val created: Long = System.currentTimeMillis(),
+    // Per-group settings overrides (null = use global default)
+    val cardsPerSession: Int? = null,
+    val autoShowAnswer: Boolean? = null,
+    val randomizeDueCards: Boolean? = null,
+    val randomizeBucketHours: Int? = null,
+    val practiceDays: String? = null,  // comma-separated ISO-8601 day ints (1=Mon..7=Sun)
+    val maximumInterval: Int? = null
+) {
+    /** Returns true if any per-group setting override is set */
+    fun hasCustomSettings(): Boolean =
+        cardsPerSession != null || autoShowAnswer != null || randomizeDueCards != null ||
+        randomizeBucketHours != null || practiceDays != null || maximumInterval != null
+
+    /** Parse the practiceDays string to a Set<Int>, or null if not overridden */
+    fun parsePracticeDays(): Set<Int>? {
+        val raw = practiceDays ?: return null
+        return raw.split(",")
+            .filter { it.isNotBlank() }
+            .mapNotNull { it.trim().toIntOrNull() }
+            .filter { it in 1..7 }
+            .toSet()
+    }
+}
 
 @Entity(
     tableName = "card_group_cross_ref",

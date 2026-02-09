@@ -6,6 +6,7 @@ import com.fencing.spacedrepetition.data.preferences.ThemeMode
 import com.fencing.spacedrepetition.data.preferences.ThemePreferences
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -33,6 +34,9 @@ class SettingsViewModel(
 
     val practicesPerWeek: StateFlow<Int> = themePreferences.practicesPerWeek
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_PRACTICES_PER_WEEK)
+
+    val practiceDays: StateFlow<Set<Int>> = themePreferences.practiceDays
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_PRACTICE_DAYS)
 
     val randomizeBucketHours: StateFlow<Int> = themePreferences.randomizeBucketHours
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_RANDOMIZE_BUCKET_HOURS)
@@ -76,6 +80,25 @@ class SettingsViewModel(
     fun setPracticesPerWeek(count: Int) {
         viewModelScope.launch {
             themePreferences.setPracticesPerWeek(count)
+        }
+    }
+
+    fun setPracticeDays(days: Set<Int>) {
+        viewModelScope.launch {
+            themePreferences.setPracticeDays(days)
+        }
+    }
+
+    fun togglePracticeDay(day: Int) {
+        viewModelScope.launch {
+            val current = themePreferences.practiceDays.first()
+            val updated = if (current.contains(day)) {
+                // Don't allow deselecting the last day
+                if (current.size > 1) current - day else current
+            } else {
+                current + day
+            }
+            themePreferences.setPracticeDays(updated)
         }
     }
 

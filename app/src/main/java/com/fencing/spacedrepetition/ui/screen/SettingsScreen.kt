@@ -16,9 +16,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fencing.spacedrepetition.billing.BillingManager
+import com.fencing.spacedrepetition.data.preferences.SettingsConstants
 import com.fencing.spacedrepetition.data.preferences.ThemeMode
 import com.fencing.spacedrepetition.ui.viewmodel.DonationViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,7 +35,7 @@ fun SettingsScreen(
     val randomizeDueCards by settingsViewModel.randomizeDueCards.collectAsState()
     val randomizeBucketHours by settingsViewModel.randomizeBucketHours.collectAsState()
     val maximumInterval by settingsViewModel.maximumInterval.collectAsState()
-    val practicesPerWeek by settingsViewModel.practicesPerWeek.collectAsState()
+    val practiceDays by settingsViewModel.practiceDays.collectAsState()
 
     // Donation state
     val context = LocalContext.current
@@ -59,34 +61,11 @@ fun SettingsScreen(
         }
     }
 
-    // Presets for randomization bucket size
-    val bucketPresets = listOf(
-        24 to "1 day",
-        72 to "3 days",
-        168 to "1 week",
-        336 to "2 weeks",
-        672 to "4 weeks"
-    )
-    val currentBucketIndex = bucketPresets.indexOfFirst { it.first >= randomizeBucketHours }
-        .let { if (it == -1) bucketPresets.size - 1 else it }
+    val bucketPresets = SettingsConstants.BUCKET_PRESETS
+    val currentBucketIndex = SettingsConstants.findPresetIndex(bucketPresets, randomizeBucketHours)
 
-    // Preset values for maximum interval with better granularity
-    val intervalPresets = listOf(
-        7 to "1 week",
-        14 to "2 weeks",
-        30 to "1 month",
-        60 to "2 months",
-        90 to "3 months",
-        180 to "6 months",
-        365 to "1 year",
-        730 to "2 years",
-        1825 to "5 years",
-        3650 to "10 years"
-    )
-
-    // Find closest preset index to current value
-    val currentPresetIndex = intervalPresets.indexOfFirst { it.first >= maximumInterval }
-        .let { if (it == -1) intervalPresets.size - 1 else it }
+    val intervalPresets = SettingsConstants.INTERVAL_PRESETS
+    val currentPresetIndex = SettingsConstants.findPresetIndex(intervalPresets, maximumInterval)
 
     Scaffold(
         topBar = {
@@ -188,9 +167,9 @@ fun SettingsScreen(
                 }
                 Slider(
                     value = cardsPerSession.toFloat(),
-                    onValueChange = { settingsViewModel.setCardsPerSession(it.toInt()) },
-                    valueRange = 1f..6f,
-                    steps = 6,
+                    onValueChange = { settingsViewModel.setCardsPerSession(it.roundToInt()) },
+                    valueRange = SettingsConstants.CARDS_PER_SESSION_MIN..SettingsConstants.CARDS_PER_SESSION_MAX,
+                    steps = SettingsConstants.CARDS_PER_SESSION_STEPS,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
@@ -282,7 +261,7 @@ fun SettingsScreen(
                     Slider(
                         value = currentBucketIndex.toFloat(),
                         onValueChange = { newIndex ->
-                            val presetValue = bucketPresets[newIndex.toInt()].first
+                            val presetValue = bucketPresets[newIndex.roundToInt()].first
                             settingsViewModel.setRandomizeBucketHours(presetValue)
                         },
                         valueRange = 0f..(bucketPresets.size - 1).toFloat(),
@@ -309,36 +288,43 @@ fun SettingsScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Practices per week
+            // Practice days
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 8.dp)
             ) {
+                Text(
+                    text = "Practice Days",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    Text(
-                        text = "Practices per Week",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    Text(
-                        text = if (practicesPerWeek == 7) "Daily" else "$practicesPerWeek",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    SettingsConstants.DAY_LABELS.forEach { (day, label) ->
+                        val selected = practiceDays.contains(day)
+                        FilterChip(
+                            selected = selected,
+                            onClick = { settingsViewModel.togglePracticeDay(day) },
+                            label = { Text(label) },
+                            modifier = Modifier.size(width = 42.dp, height = 36.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        )
+                    }
                 }
-                Slider(
-                    value = practicesPerWeek.toFloat(),
-                    onValueChange = { settingsViewModel.setPracticesPerWeek(it.toInt()) },
-                    valueRange = 1f..7f,
-                    steps = 5,
-                    modifier = Modifier.fillMaxWidth()
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = if (practiceDays.size == 7) "Daily" else "${practiceDays.size} days per week",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "Adjusts review spacing to match your practice frequency. Cards are scheduled to come due on days you practice.",
+                    text = "Cards are scheduled to come due on days you practice.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -380,7 +366,7 @@ fun SettingsScreen(
                 Slider(
                     value = currentPresetIndex.toFloat(),
                     onValueChange = { newIndex ->
-                        val presetValue = intervalPresets[newIndex.toInt()].first
+                        val presetValue = intervalPresets[newIndex.roundToInt()].first
                         settingsViewModel.setMaximumInterval(presetValue)
                     },
                     valueRange = 0f..(intervalPresets.size - 1).toFloat(),
