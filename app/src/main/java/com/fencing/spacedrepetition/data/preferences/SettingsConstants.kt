@@ -31,7 +31,7 @@ object SettingsConstants {
 
     /** Day labels for practice day chips (ISO-8601: 1=Mon..7=Sun). */
     val DAY_LABELS = listOf(
-        1 to "M", 2 to "T", 3 to "W", 4 to "T", 5 to "F", 6 to "S", 7 to "S"
+        7 to "S", 1 to "M", 2 to "T", 3 to "W", 4 to "T", 5 to "F", 6 to "S"
     )
 
     /** Find the closest preset index for a given value. */
