@@ -29,6 +29,8 @@ fun GroupEditScreen(
     onSave: (Group) -> Unit,
     onNavigateBack: () -> Unit
 ) {
+    val isNewGroup = group.id == 0L
+
     var name by remember { mutableStateOf(group.name) }
     var description by remember { mutableStateOf(group.description) }
     var independentLearning by remember { mutableStateOf(group.independentLearning) }
@@ -67,7 +69,7 @@ fun GroupEditScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Edit Group") },
+                title = { Text(if (isNewGroup) "Add Group" else "Edit Group") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -91,7 +93,7 @@ fun GroupEditScreen(
                         },
                         enabled = name.isNotBlank()
                     ) {
-                        Text("Save")
+                        Text(if (isNewGroup) "Add" else "Save")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

@@ -25,6 +25,7 @@ sealed class Screen(val route: String) {
     object EditCard : Screen("edit_card/{cardId}")
     object GroupList : Screen("group_list")
     object GroupEdit : Screen("group_edit/{groupId}")
+    object GroupAdd : Screen("group_add")
     object Settings : Screen("settings")
 }
 
@@ -153,6 +154,36 @@ fun AppNavigation(
                 onNavigateToEdit = { groupId ->
                     groupToEdit = groups.find { it.id == groupId }
                     navController.navigate("group_edit/$groupId")
+                },
+                onNavigateToAdd = {
+                    navController.navigate(Screen.GroupAdd.route)
+                }
+            )
+        }
+
+        composable(Screen.GroupAdd.route) {
+            val globalCardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
+            val globalAutoShowAnswer by settingsViewModel.autoShowAnswer.collectAsState()
+            val globalRandomizeDueCards by settingsViewModel.randomizeDueCards.collectAsState()
+            val globalRandomizeBucketHours by settingsViewModel.randomizeBucketHours.collectAsState()
+            val globalPracticeDays by settingsViewModel.practiceDays.collectAsState()
+            val globalMaximumInterval by settingsViewModel.maximumInterval.collectAsState()
+
+            GroupEditScreen(
+                group = Group(name = ""),
+                globalCardsPerSession = globalCardsPerSession,
+                globalAutoShowAnswer = globalAutoShowAnswer,
+                globalRandomizeDueCards = globalRandomizeDueCards,
+                globalRandomizeBucketHours = globalRandomizeBucketHours,
+                globalPracticeDays = globalPracticeDays,
+                globalMaximumInterval = globalMaximumInterval,
+                onSave = { newGroup ->
+                    groupViewModel.addGroupWithSettings(newGroup) {
+                        navController.popBackStack()
+                    }
+                },
+                onNavigateBack = {
+                    navController.popBackStack()
                 }
             )
         }

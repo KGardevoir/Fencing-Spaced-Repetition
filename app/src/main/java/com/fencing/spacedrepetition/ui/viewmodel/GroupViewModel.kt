@@ -62,6 +62,20 @@ class GroupViewModel(
         }
     }
 
+    fun addGroupWithSettings(group: Group, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                val newId = groupRepository.insertGroup(group)
+                if (group.independentLearning) {
+                    groupRepository.toggleIndependentLearning(newId, true)
+                }
+                onSuccess()
+            } catch (e: Exception) {
+                // Handle error
+            }
+        }
+    }
+
     fun updateGroup(group: Group, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
             try {

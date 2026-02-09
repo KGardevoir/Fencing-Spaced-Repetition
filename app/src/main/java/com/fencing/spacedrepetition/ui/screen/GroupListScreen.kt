@@ -24,13 +24,13 @@ import com.fencing.spacedrepetition.ui.viewmodel.ImportExportState
 fun GroupListScreen(
     groupViewModel: GroupViewModel,
     onNavigateBack: () -> Unit,
-    onNavigateToEdit: (Long) -> Unit = {}
+    onNavigateToEdit: (Long) -> Unit = {},
+    onNavigateToAdd: () -> Unit = {}
 ) {
     val groups by groupViewModel.allGroups.collectAsState()
     val importExportState by groupViewModel.importExportState.collectAsState()
     val context = LocalContext.current
 
-    var showAddDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf<Group?>(null) }
     var groupForImport by remember { mutableStateOf<Group?>(null) }
     var groupForExport by remember { mutableStateOf<Group?>(null) }
@@ -74,7 +74,7 @@ fun GroupListScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAddDialog = true }) {
+            FloatingActionButton(onClick = onNavigateToAdd) {
                 Icon(Icons.Default.Add, contentDescription = "Add Group")
             }
         }
@@ -135,17 +135,6 @@ fun GroupListScreen(
                 }
             }
         }
-    }
-
-    // Add group dialog
-    if (showAddDialog) {
-        AddEditGroupDialog(
-            group = null,
-            onDismiss = { showAddDialog = false },
-            onConfirm = { name, description, independentLearning ->
-                groupViewModel.addGroup(name, description) { _ -> showAddDialog = false }
-            }
-        )
     }
 
     // Delete confirmation dialog
@@ -385,75 +374,3 @@ fun GroupListItem(
     }
 }
 
-@Composable
-fun AddEditGroupDialog(
-    group: Group?,
-    onDismiss: () -> Unit,
-    onConfirm: (name: String, description: String, independentLearning: Boolean) -> Unit
-) {
-    var name by remember { mutableStateOf(group?.name ?: "") }
-    var description by remember { mutableStateOf(group?.description ?: "") }
-    var independentLearning by remember { mutableStateOf(group?.independentLearning ?: false) }
-    val isEditing = group != null
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = {
-            Icon(
-                if (isEditing) Icons.Default.Edit else Icons.Default.Add,
-                contentDescription = null
-            )
-        },
-        title = { Text(if (isEditing) "Edit Group" else "Add Group") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Group Name") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text("Description (Optional)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                    maxLines = 3
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = independentLearning,
-                        onCheckedChange = { independentLearning = it }
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Independent Learning", style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            "Cards will have separate learning progress in this group",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onConfirm(name.trim(), description.trim(), independentLearning) },
-                enabled = name.isNotBlank()
-            ) {
-                Text(if (isEditing) "Save" else "Add")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
-}
