@@ -122,6 +122,13 @@ fun AddEditCardScreen(
     var fsrsElapsedDays by remember { mutableStateOf(cardToEdit?.fsrsElapsedDays?.toString() ?: "0") }
     var fsrsScheduledDays by remember { mutableStateOf(cardToEdit?.fsrsScheduledDays?.toString() ?: "0") }
 
+    // Track per-group next review dates for instant UI updates after grading
+    var groupNextReviews by remember(learningStates) {
+        mutableStateOf(
+            learningStates.associate { it.groupId to it.nextReview }
+        )
+    }
+
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -285,6 +292,90 @@ fun AddEditCardScreen(
                                             contentDescription = "Remove",
                                             modifier = Modifier.size(16.dp)
                                         )
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Next review schedule (only when editing)
+            if (isEditing && cardToEdit != null) {
+                val independentGroups = allGroups.filter {
+                    it.independentLearning && it.id in selectedGroupIds
+                }
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Schedule,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.tertiary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "Review Schedule",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Global next review
+                        val globalStatusText = formatReviewStatus(fsrsState, nextReview)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Global",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                globalStatusText,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = when {
+                                    fsrsState == "NEW" && nextReview == 0L -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    nextReview <= System.currentTimeMillis() -> MaterialTheme.colorScheme.error
+                                    else -> MaterialTheme.colorScheme.tertiary
+                                }
+                            )
+                        }
+
+                        // Per-group next review dates
+                        independentGroups.forEach { group ->
+                            val groupReview = groupNextReviews[group.id] ?: 0L
+                            val groupState = learningStates.find { it.groupId == group.id }
+                            val groupFsrsState = groupState?.fsrsState ?: "NEW"
+                            val groupStatusText = formatReviewStatus(groupFsrsState, groupReview)
+
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    group.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    groupStatusText,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = when {
+                                        groupFsrsState == "NEW" && groupReview == 0L -> MaterialTheme.colorScheme.onSurfaceVariant
+                                        groupReview <= System.currentTimeMillis() -> MaterialTheme.colorScheme.error
+                                        else -> MaterialTheme.colorScheme.tertiary
                                     }
                                 )
                             }
@@ -739,6 +830,7 @@ fun AddEditCardScreen(
                                                             sm2Interval = updated.sm2Interval.toString(),
                                                             sm2Repetitions = updated.sm2Repetitions.toString()
                                                         ))
+                                                        groupNextReviews = groupNextReviews + (group.id to updated.nextReview)
                                                         scope.launch {
                                                             val dateStr = SimpleDateFormat("MMM dd", Locale.getDefault())
                                                                 .format(Date(updated.nextReview))
@@ -1439,6 +1531,16 @@ data class IndependentLearningEdit(
     val sm2Interval: String = "0",
     val sm2Repetitions: String = "0"
 )
+
+/** Formats the next-review status for display. */
+private fun formatReviewStatus(fsrsState: String, nextReview: Long): String = when {
+    fsrsState == "NEW" && nextReview == 0L -> "New card"
+    nextReview <= System.currentTimeMillis() -> "Due now"
+    else -> {
+        val formatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+        formatter.format(Date(nextReview))
+    }
+}
 
 /**
  * Save image from URI to app's internal storage
