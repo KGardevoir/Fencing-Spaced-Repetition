@@ -13,7 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Group
-import com.fencing.spacedrepetition.data.preferences.ThemePreferences
+import com.fencing.spacedrepetition.data.preferences.SettingsConstants
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -54,17 +54,8 @@ fun GroupEditScreen(
     var overrideMaximumInterval by remember { mutableStateOf(group.maximumInterval != null) }
     var maximumInterval by remember { mutableIntStateOf(group.maximumInterval ?: globalMaximumInterval) }
 
-    // Preset values for maximum interval
-    val intervalPresets = listOf(
-        7 to "1 week", 14 to "2 weeks", 30 to "1 month", 60 to "2 months",
-        90 to "3 months", 180 to "6 months", 365 to "1 year", 730 to "2 years",
-        1825 to "5 years", 3650 to "10 years"
-    )
-
-    // Preset values for bucket size
-    val bucketPresets = listOf(
-        24 to "1 day", 72 to "3 days", 168 to "1 week", 336 to "2 weeks", 672 to "4 weeks"
-    )
+    val intervalPresets = SettingsConstants.INTERVAL_PRESETS
+    val bucketPresets = SettingsConstants.BUCKET_PRESETS
 
     Scaffold(
         topBar = {
@@ -199,8 +190,8 @@ fun GroupEditScreen(
                 Slider(
                     value = cardsPerSession.toFloat(),
                     onValueChange = { cardsPerSession = it.roundToInt() },
-                    valueRange = 1f..6f,
-                    steps = 4,
+                    valueRange = SettingsConstants.CARDS_PER_SESSION_MIN..SettingsConstants.CARDS_PER_SESSION_MAX,
+                    steps = SettingsConstants.CARDS_PER_SESSION_STEPS,
                     modifier = Modifier.fillMaxWidth(),
                     enabled = overrideCardsPerSession
                 )
@@ -266,8 +257,7 @@ fun GroupEditScreen(
                 overridden = overrideRandomizeBucketHours,
                 onOverrideChange = { overrideRandomizeBucketHours = it }
             ) {
-                val currentBucketIndex = bucketPresets.indexOfFirst { it.first >= randomizeBucketHours }
-                    .let { if (it == -1) bucketPresets.size - 1 else it }
+                val currentBucketIndex = SettingsConstants.findPresetIndex(bucketPresets, randomizeBucketHours)
                 Text(
                     bucketPresets[currentBucketIndex].second,
                     style = MaterialTheme.typography.titleMedium,
@@ -295,10 +285,7 @@ fun GroupEditScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    val dayLabels = listOf(
-                        1 to "M", 2 to "T", 3 to "W", 4 to "T", 5 to "F", 6 to "S", 7 to "S"
-                    )
-                    dayLabels.forEach { (day, label) ->
+                    SettingsConstants.DAY_LABELS.forEach { (day, label) ->
                         val selected = practiceDays.contains(day)
                         FilterChip(
                             selected = selected,
@@ -336,8 +323,7 @@ fun GroupEditScreen(
                 overridden = overrideMaximumInterval,
                 onOverrideChange = { overrideMaximumInterval = it }
             ) {
-                val currentPresetIndex = intervalPresets.indexOfFirst { it.first >= maximumInterval }
-                    .let { if (it == -1) intervalPresets.size - 1 else it }
+                val currentPresetIndex = SettingsConstants.findPresetIndex(intervalPresets, maximumInterval)
                 Text(
                     intervalPresets[currentPresetIndex].second,
                     style = MaterialTheme.typography.titleMedium,
