@@ -185,10 +185,12 @@ class CardImportExportV2Test {
         assertEquals(1, card2Cards.count { it.isGroupSpecificState })
     }
 
-    // ==================== EXPORT V2 FORMAT TESTS ====================
+    // ==================== EXPORT FORMAT TESTS ====================
+    // Note: exportCardsWithGroupStates uses V3 format (the latest),
+    // but V2 import parsing remains backward-compatible.
 
     @Test
-    fun `Export V2 format with no independent learning groups`() {
+    fun `Export with no independent learning groups`() {
         val card = Card(
             id = 1,
             question = "Test Question",
@@ -213,7 +215,7 @@ class CardImportExportV2Test {
         assertEquals(1, (result as ExportResult.Success).exportedCount)
 
         val content = output.toString(Charsets.UTF_8.name())
-        assertTrue(content.startsWith("#FSR_EXPORT_V2"))
+        assertTrue(content.startsWith("#FSR_EXPORT_V3"))
         assertTrue(content.contains("\tGLOBAL\t"))
 
         // Should only have header + column names + 1 data row
@@ -222,7 +224,7 @@ class CardImportExportV2Test {
     }
 
     @Test
-    fun `Export V2 format with one independent learning group`() {
+    fun `Export with one independent learning group`() {
         val card = Card(
             id = 1,
             question = "Test Question",
@@ -273,7 +275,7 @@ class CardImportExportV2Test {
     }
 
     @Test
-    fun `Export V2 format with multiple independent learning groups`() {
+    fun `Export with multiple independent learning groups`() {
         val card = Card(
             id = 1,
             question = "Test",
@@ -312,10 +314,10 @@ class CardImportExportV2Test {
         assertEquals(4, dataLines.size)
     }
 
-    // ==================== ROUND-TRIP V2 FORMAT TESTS ====================
+    // ==================== ROUND-TRIP FORMAT TESTS ====================
 
     @Test
-    fun `Round-trip V2 format preserves all data`() {
+    fun `Round-trip export and import preserves all data`() {
         val originalCard = Card(
             id = 1,
             question = "Round trip V2 test",

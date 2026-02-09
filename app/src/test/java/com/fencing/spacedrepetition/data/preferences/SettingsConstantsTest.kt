@@ -1,0 +1,87 @@
+package com.fencing.spacedrepetition.data.preferences
+
+import org.junit.Assert.*
+import org.junit.Test
+
+/**
+ * Tests for SettingsConstants utility functions and data.
+ */
+class SettingsConstantsTest {
+
+    // ==================== findPresetIndex TESTS ====================
+
+    @Test
+    fun `findPresetIndex - exact match returns correct index`() {
+        val presets = SettingsConstants.INTERVAL_PRESETS
+        assertEquals(0, SettingsConstants.findPresetIndex(presets, 7))    // 1 week
+        assertEquals(2, SettingsConstants.findPresetIndex(presets, 30))   // 1 month
+        assertEquals(6, SettingsConstants.findPresetIndex(presets, 365))  // 1 year
+        assertEquals(9, SettingsConstants.findPresetIndex(presets, 3650)) // 10 years
+    }
+
+    @Test
+    fun `findPresetIndex - value between presets snaps to next higher`() {
+        val presets = SettingsConstants.INTERVAL_PRESETS
+        // 10 is between 7 (index 0) and 14 (index 1), should snap to index 1
+        assertEquals(1, SettingsConstants.findPresetIndex(presets, 10))
+        // 20 is between 14 (index 1) and 30 (index 2), should snap to index 2
+        assertEquals(2, SettingsConstants.findPresetIndex(presets, 20))
+    }
+
+    @Test
+    fun `findPresetIndex - value below minimum returns first index`() {
+        val presets = SettingsConstants.INTERVAL_PRESETS
+        assertEquals(0, SettingsConstants.findPresetIndex(presets, 1))
+        assertEquals(0, SettingsConstants.findPresetIndex(presets, 0))
+    }
+
+    @Test
+    fun `findPresetIndex - value above maximum returns last index`() {
+        val presets = SettingsConstants.INTERVAL_PRESETS
+        assertEquals(9, SettingsConstants.findPresetIndex(presets, 5000))
+        assertEquals(9, SettingsConstants.findPresetIndex(presets, 99999))
+    }
+
+    @Test
+    fun `findPresetIndex - works with bucket presets`() {
+        val presets = SettingsConstants.BUCKET_PRESETS
+        assertEquals(0, SettingsConstants.findPresetIndex(presets, 24))   // 1 day
+        assertEquals(2, SettingsConstants.findPresetIndex(presets, 168))  // 1 week
+        assertEquals(4, SettingsConstants.findPresetIndex(presets, 672))  // 4 weeks
+        // Value above max
+        assertEquals(4, SettingsConstants.findPresetIndex(presets, 1000))
+    }
+
+    // ==================== Constants validity TESTS ====================
+
+    @Test
+    fun `bucket presets are sorted ascending`() {
+        val values = SettingsConstants.BUCKET_PRESETS.map { it.first }
+        assertEquals(values, values.sorted())
+    }
+
+    @Test
+    fun `interval presets are sorted ascending`() {
+        val values = SettingsConstants.INTERVAL_PRESETS.map { it.first }
+        assertEquals(values, values.sorted())
+    }
+
+    @Test
+    fun `day labels cover all 7 days`() {
+        assertEquals(7, SettingsConstants.DAY_LABELS.size)
+        val dayNumbers = SettingsConstants.DAY_LABELS.map { it.first }.toSet()
+        assertEquals(setOf(1, 2, 3, 4, 5, 6, 7), dayNumbers)
+    }
+
+    @Test
+    fun `day labels start with Sunday`() {
+        assertEquals(7, SettingsConstants.DAY_LABELS[0].first)
+        assertEquals("S", SettingsConstants.DAY_LABELS[0].second)
+    }
+
+    @Test
+    fun `cards per session slider range is valid`() {
+        assertTrue(SettingsConstants.CARDS_PER_SESSION_MIN < SettingsConstants.CARDS_PER_SESSION_MAX)
+        assertTrue(SettingsConstants.CARDS_PER_SESSION_STEPS > 0)
+    }
+}
