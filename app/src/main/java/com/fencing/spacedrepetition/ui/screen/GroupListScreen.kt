@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.ui.viewmodel.GroupSortOption
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.ImportExportState
 
@@ -27,13 +28,15 @@ fun GroupListScreen(
     onNavigateToEdit: (Long) -> Unit = {},
     onNavigateToAdd: () -> Unit = {}
 ) {
-    val groups by groupViewModel.allGroups.collectAsState()
+    val groups by groupViewModel.sortedGroups.collectAsState()
     val importExportState by groupViewModel.importExportState.collectAsState()
+    val groupSortOption by groupViewModel.groupSortOption.collectAsState()
     val context = LocalContext.current
 
     var showDeleteDialog by remember { mutableStateOf<Group?>(null) }
     var groupForImport by remember { mutableStateOf<Group?>(null) }
     var groupForExport by remember { mutableStateOf<Group?>(null) }
+    var showSortMenu by remember { mutableStateOf(false) }
 
     // File picker for import
     val importLauncher = rememberLauncherForActivityResult(
@@ -66,6 +69,32 @@ fun GroupListScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    Box {
+                        IconButton(onClick = { showSortMenu = true }) {
+                            Icon(Icons.Default.Sort, contentDescription = "Sort")
+                        }
+                        DropdownMenu(
+                            expanded = showSortMenu,
+                            onDismissRequest = { showSortMenu = false }
+                        ) {
+                            GroupSortOption.entries.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option.label) },
+                                    onClick = {
+                                        groupViewModel.setGroupSortOption(option)
+                                        showSortMenu = false
+                                    },
+                                    leadingIcon = {
+                                        if (groupSortOption == option) {
+                                            Icon(Icons.Default.Check, contentDescription = null)
+                                        }
+                                    }
+                                )
+                            }
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
