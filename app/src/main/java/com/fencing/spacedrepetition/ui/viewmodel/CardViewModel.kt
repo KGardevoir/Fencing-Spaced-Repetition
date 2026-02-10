@@ -20,6 +20,13 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+enum class CardSortOption(val label: String) {
+    DUE_DATE("Due Date"),
+    NAME("Name"),
+    REVIEWS("Reviews"),
+    DIFFICULTY("Difficulty")
+}
+
 class CardViewModel(
     application: Application,
     private val repository: CardRepository,
@@ -48,11 +55,19 @@ class CardViewModel(
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
+    private val _cardSortOption = MutableStateFlow(CardSortOption.DUE_DATE)
+    val cardSortOption: StateFlow<CardSortOption> = _cardSortOption.asStateFlow()
+
+    fun setCardSortOption(option: CardSortOption) {
+        _cardSortOption.value = option
+    }
+
     val filteredCards: StateFlow<List<Card>> = combine(
         allCardsWithGroups,
         selectedGroupFilter,
-        searchQuery
-    ) { cardsWithGroups, group, query ->
+        searchQuery,
+        _cardSortOption
+    ) { cardsWithGroups, group, query, sortOption ->
         var filtered = if (group == null) {
             cardsWithGroups.map { it.card }
         } else {
@@ -70,7 +85,23 @@ class CardViewModel(
             }
         }
 
-        filtered
+        // Apply sort
+        when (sortOption) {
+            CardSortOption.DUE_DATE -> filtered.sortedBy { it.nextReview }
+            CardSortOption.NAME -> filtered.sortedBy { it.question.lowercase() }
+            CardSortOption.REVIEWS -> filtered.sortedByDescending {
+                when (it.algorithm) {
+                    AlgorithmType.FSRS -> it.fsrsReps
+                    AlgorithmType.SM2 -> it.sm2Repetitions
+                }
+            }
+            CardSortOption.DIFFICULTY -> filtered.sortedByDescending {
+                when (it.algorithm) {
+                    AlgorithmType.FSRS -> it.fsrsDifficulty
+                    AlgorithmType.SM2 -> 2.5 - it.sm2EaseFactor
+                }
+            }
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun selectGroupFilter(group: Group?) {

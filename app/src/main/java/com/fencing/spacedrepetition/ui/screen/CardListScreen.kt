@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.ui.viewmodel.CardSortOption
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.ImportExportState
@@ -50,6 +51,7 @@ fun CardListScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val cardCount by viewModel.cardCount.collectAsState()
     val importExportState by viewModel.importExportState.collectAsState()
+    val cardSortOption by viewModel.cardSortOption.collectAsState()
     val context = LocalContext.current
 
     // Selection mode state
@@ -58,6 +60,7 @@ fun CardListScreen(
 
     var showDeleteDialog by remember { mutableStateOf<Card?>(null) }
     var showMenu by remember { mutableStateOf(false) }
+    var showSortMenu by remember { mutableStateOf(false) }
     var showBulkDeleteDialog by remember { mutableStateOf(false) }
     var showBulkGroupDialog by remember { mutableStateOf(false) }
     var showBulkResetDialog by remember { mutableStateOf(false) }
@@ -144,6 +147,30 @@ fun CardListScreen(
                         }
                     },
                     actions = {
+                        Box {
+                            IconButton(onClick = { showSortMenu = true }) {
+                                Icon(Icons.Default.Sort, "Sort")
+                            }
+                            DropdownMenu(
+                                expanded = showSortMenu,
+                                onDismissRequest = { showSortMenu = false }
+                            ) {
+                                CardSortOption.entries.forEach { option ->
+                                    DropdownMenuItem(
+                                        text = { Text(option.label) },
+                                        onClick = {
+                                            viewModel.setCardSortOption(option)
+                                            showSortMenu = false
+                                        },
+                                        leadingIcon = {
+                                            if (cardSortOption == option) {
+                                                Icon(Icons.Default.Check, contentDescription = null)
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
                         Box {
                             IconButton(onClick = { showMenu = true }) {
                                 Icon(Icons.Default.MoreVert, "More options")

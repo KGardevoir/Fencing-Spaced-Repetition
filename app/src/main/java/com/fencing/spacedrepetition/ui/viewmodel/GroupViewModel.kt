@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.GroupWithCards
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.util.CardImportExport
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -31,6 +33,11 @@ sealed class ImportExportState {
     data class Error(val message: String) : ImportExportState()
 }
 
+enum class GroupSortOption(val label: String) {
+    NAME("Name"),
+    CARD_COUNT("Card Count")
+}
+
 class GroupViewModel(
     application: Application,
     private val groupRepository: GroupRepository,
@@ -39,6 +46,23 @@ class GroupViewModel(
 
     val allGroups: StateFlow<List<Group>> = groupRepository.getAllGroups()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _groupSortOption = MutableStateFlow(GroupSortOption.NAME)
+    val groupSortOption: StateFlow<GroupSortOption> = _groupSortOption.asStateFlow()
+
+    fun setGroupSortOption(option: GroupSortOption) {
+        _groupSortOption.value = option
+    }
+
+    val sortedGroups: StateFlow<List<Group>> = combine(
+        groupRepository.getAllGroupsWithCards(),
+        _groupSortOption
+    ) { groupsWithCards, sortOption ->
+        when (sortOption) {
+            GroupSortOption.NAME -> groupsWithCards.map { it.group }.sortedBy { it.name.lowercase() }
+            GroupSortOption.CARD_COUNT -> groupsWithCards.sortedByDescending { it.cards.size }.map { it.group }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val groupCount: StateFlow<Int> = groupRepository.getGroupCount()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
