@@ -77,6 +77,13 @@ class CardRepository(
         reviewLogDao.deleteReviewLogsByCard(cardId)
     }
 
+    suspend fun deleteAllCards() {
+        reviewLogDao.deleteAllReviewLogs()
+        groupDao.deleteAllLearningStates()
+        groupDao.deleteAllCardGroupCrossRefs()
+        cardDao.deleteAllCards()
+    }
+
     suspend fun resetCardState(cardId: Long, resetGroupStates: Boolean = false) {
         val card = cardDao.getCardById(cardId) ?: return
         val now = System.currentTimeMillis()

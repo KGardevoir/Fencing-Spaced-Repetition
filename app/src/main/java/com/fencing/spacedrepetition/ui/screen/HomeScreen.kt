@@ -38,6 +38,7 @@ fun HomeScreen(
     val savedGroupId by settingsViewModel.selectedGroupId.collectAsState()
 
     var showGroupSelectionDialog by remember { mutableStateOf(false) }
+    var showDeleteAllDialog by remember { mutableStateOf(false) }
 
     // Derive selected group from persisted ID and groups list
     val selectedGroup = groups.find { it.id == savedGroupId } ?: groups.firstOrNull()
@@ -263,6 +264,31 @@ fun HomeScreen(
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Delete All Cards button
+                Button(
+                    onClick = { showDeleteAllDialog = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    ),
+                    enabled = totalCards > 0
+                ) {
+                    Icon(
+                        Icons.Default.DeleteForever,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Delete All Cards",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
             }
         }
     }
@@ -278,6 +304,46 @@ fun HomeScreen(
                 showGroupSelectionDialog = false
             },
             onDismiss = { showGroupSelectionDialog = false }
+        )
+    }
+
+    // Delete All Cards confirmation dialog
+    if (showDeleteAllDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteAllDialog = false },
+            icon = {
+                Icon(
+                    Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+            },
+            title = { Text("Delete All Cards?") },
+            text = {
+                Text(
+                    "This will permanently delete all $totalCards cards, " +
+                        "their review history, and all group assignments. " +
+                        "This action cannot be undone."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        cardViewModel.deleteAllCards()
+                        showDeleteAllDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Delete All")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showDeleteAllDialog = false }) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 }

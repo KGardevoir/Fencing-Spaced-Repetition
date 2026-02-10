@@ -209,6 +209,13 @@ class CardViewModel(
         }
     }
 
+    fun deleteAllCards(onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.deleteAllCards()
+            onComplete()
+        }
+    }
+
     // Selection state for bulk operations
     private val _selectedCardIds = MutableStateFlow<Set<Long>>(emptySet())
     val selectedCardIds: StateFlow<Set<Long>> = _selectedCardIds.asStateFlow()
