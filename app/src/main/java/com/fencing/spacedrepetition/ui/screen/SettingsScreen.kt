@@ -7,7 +7,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,6 +20,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fencing.spacedrepetition.billing.BillingManager
 import com.fencing.spacedrepetition.data.preferences.SettingsConstants
 import com.fencing.spacedrepetition.data.preferences.ThemeMode
+import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.DonationViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
 import kotlin.math.roundToInt
@@ -26,9 +29,13 @@ import kotlin.math.roundToInt
 @Composable
 fun SettingsScreen(
     settingsViewModel: SettingsViewModel,
+    cardViewModel: CardViewModel,
     onNavigateBack: () -> Unit,
     donationViewModel: DonationViewModel = viewModel()
 ) {
+    val totalCards by cardViewModel.cardCount.collectAsState()
+    var showDeleteAllDialog by remember { mutableStateOf(false) }
+
     val themeMode by settingsViewModel.themeMode.collectAsState()
     val autoShowAnswer by settingsViewModel.autoShowAnswer.collectAsState()
     val cardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
@@ -542,6 +549,85 @@ fun SettingsScreen(
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Danger Zone section
+            Text(
+                "Danger Zone",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.error
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Button(
+                onClick = { showDeleteAllDialog = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error
+                ),
+                enabled = totalCards > 0
+            ) {
+                Icon(
+                    Icons.Default.DeleteForever,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Delete All Cards",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+            Text(
+                text = "Permanently remove all cards, review history, and group assignments",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
+    }
+
+    // Delete All Cards confirmation dialog
+    if (showDeleteAllDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteAllDialog = false },
+            icon = {
+                Icon(
+                    Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+            },
+            title = { Text("Delete All Cards?") },
+            text = {
+                Text(
+                    "This will permanently delete all $totalCards cards, " +
+                        "their review history, and all group assignments. " +
+                        "This action cannot be undone."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        cardViewModel.deleteAllCards()
+                        showDeleteAllDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Delete All")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showDeleteAllDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
