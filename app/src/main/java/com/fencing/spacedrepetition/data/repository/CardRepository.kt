@@ -369,6 +369,27 @@ class CardRepository(
         }
     }
 
+    suspend fun getAllCardsWithGroupStates(): List<com.fencing.spacedrepetition.util.CardWithGroupStates> {
+        val cardsWithGroups = cardDao.getAllCardsWithGroups().first()
+        return cardsWithGroups.map { cardWithGroups ->
+            val card = cardWithGroups.card
+            val groups = cardWithGroups.groups
+            val groupNames = groups.map { it.name }
+
+            // Get group-specific states for groups with independent learning
+            val groupSpecificStates = mutableMapOf<String, CardGroupLearningState>()
+            groups.forEach { group ->
+                if (group.independentLearning) {
+                    groupDao.getLearningState(card.id, group.id)?.let { state ->
+                        groupSpecificStates[group.name] = state
+                    }
+                }
+            }
+
+            com.fencing.spacedrepetition.util.CardWithGroupStates(card, groupNames, groupSpecificStates)
+        }
+    }
+
     // Practice session operations
     suspend fun createPracticeSession(cardIds: List<Long>): Long {
         val session = PracticeSession(

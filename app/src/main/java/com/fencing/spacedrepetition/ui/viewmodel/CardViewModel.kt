@@ -9,11 +9,11 @@ import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.CardWithGroups
+import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.util.CardImportExport
-import com.fencing.spacedrepetition.util.CardWithGroupNames
 import com.fencing.spacedrepetition.util.ExportResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -252,6 +252,22 @@ class CardViewModel(
         }
     }
 
+    fun gradeCard(cardId: Long, grade: Grade, groupId: Long? = null, onComplete: (Card) -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                val card = repository.getCardById(cardId) ?: return@launch
+                val updatedCard = if (groupId != null) {
+                    repository.reviewCardWithGroup(card, grade, groupId)
+                } else {
+                    repository.reviewCard(card, grade)
+                }
+                onComplete(updatedCard)
+            } catch (e: Exception) {
+                // Handle error
+            }
+        }
+    }
+
     // Import/Export state
     private val _importExportState = MutableStateFlow<ImportExportState>(ImportExportState.Idle)
     val importExportState: StateFlow<ImportExportState> = _importExportState.asStateFlow()
@@ -264,23 +280,27 @@ class CardViewModel(
         viewModelScope.launch {
             _importExportState.value = ImportExportState.Loading
             try {
-                val cardsWithGroups = withContext(Dispatchers.IO) {
-                    repository.getAllCardsWithGroupNames()
+                val cardsWithStates = withContext(Dispatchers.IO) {
+                    repository.getAllCardsWithGroupStates()
                 }
 
-                if (cardsWithGroups.isEmpty()) {
+                if (cardsWithStates.isEmpty()) {
                     _importExportState.value = ImportExportState.Error("No cards to export")
                     return@launch
                 }
 
-                val exportData = cardsWithGroups.map { (card, groupNames) ->
-                    CardWithGroupNames(card, groupNames)
+                // Collect all groups referenced by exported cards for settings
+                val allGroupNames = cardsWithStates.flatMap { it.groupNames }.toSet()
+                val allGroups = withContext(Dispatchers.IO) {
+                    groupRepository.getAllGroupsSync().filter { it.name in allGroupNames }
                 }
 
                 val result = withContext(Dispatchers.IO) {
                     contentResolver.openOutputStream(uri)?.use { fileStream ->
                         val outputStream = CardImportExport.createCompressedOutputStream(fileStream)
-                        val exportResult = CardImportExport.exportCardsWithGroups(exportData, outputStream)
+                        val exportResult = CardImportExport.exportCardsWithGroupStates(
+                            cardsWithStates, outputStream, allGroups
+                        )
                         outputStream.close()
                         exportResult
                     } ?: ExportResult.Error("Failed to open file for writing")
@@ -336,24 +356,52 @@ class CardViewModel(
                     .filter { it.isNotBlank() }
                     .toSet()
 
+                // Detect which groups have independent learning (groups with state-specific rows)
+                val groupsWithIndependentLearning = parsedCards
+                    .filter { it.isGroupSpecificState }
+                    .mapNotNull { it.stateContext }
+                    .toSet()
+
                 // Ensure all groups exist (creates missing ones automatically)
                 val groupNameMap = withContext(Dispatchers.IO) {
-                    groupRepository.ensureGroupsExist(allGroupNames)
+                    groupRepository.ensureGroupsExist(allGroupNames, groupsWithIndependentLearning)
+                }
+
+                // Apply group settings from export file
+                val parsedGroupSettings = CardImportExport.lastParsedGroupSettings
+                if (parsedGroupSettings.isNotEmpty()) {
+                    withContext(Dispatchers.IO) {
+                        parsedGroupSettings.forEach { (groupName, settings) ->
+                            val groupIdForSettings = groupNameMap[groupName] ?: return@forEach
+                            val group = groupRepository.getGroupById(groupIdForSettings) ?: return@forEach
+                            val updatedGroup = CardImportExport.applyGroupSettings(group, settings)
+                            groupRepository.updateGroup(updatedGroup)
+                        }
+                    }
                 }
 
                 // Check if this is a full format import
                 val hasFullState = parsedCards.any { it.hasFullState }
+                // Check if any cards have group-specific states (V2/V3 format)
+                val hasGroupSpecificStates = parsedCards.any { it.isGroupSpecificState }
 
                 val importedCount = withContext(Dispatchers.IO) {
-                    if (hasFullState) {
-                        // Full import with state and groups (decode base64 images)
-                        val cards = parsedCards.map { CardImportExport.parsedCardToCard(getApplication(), it) }
-                        val groupNamesPerCard = parsedCards.map { it.groupNames }
-                        repository.importFullCards(cards, groupNamesPerCard, groupNameMap)
-                    } else {
-                        // Simple import
-                        val cardsToImport = parsedCards.map { it.question to it.answer }
-                        repository.importCards(cardsToImport, algorithm)
+                    when {
+                        hasGroupSpecificStates -> {
+                            // V2/V3 format with group-specific states
+                            repository.importCardsWithGroupStates(getApplication(), parsedCards, groupNameMap)
+                        }
+                        hasFullState -> {
+                            // V1 full import with state and groups (decode base64 images)
+                            val cards = parsedCards.map { CardImportExport.parsedCardToCard(getApplication(), it) }
+                            val groupNamesPerCard = parsedCards.map { it.groupNames }
+                            repository.importFullCards(cards, groupNamesPerCard, groupNameMap)
+                        }
+                        else -> {
+                            // Simple import
+                            val cardsToImport = parsedCards.map { it.question to it.answer }
+                            repository.importCards(cardsToImport, algorithm)
+                        }
                     }
                 }
 
