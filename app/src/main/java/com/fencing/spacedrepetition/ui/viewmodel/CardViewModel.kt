@@ -316,6 +316,57 @@ class CardViewModel(
         }
     }
 
+    fun exportSelectedGroups(selectedGroupIds: List<Long>, uri: Uri, contentResolver: ContentResolver) {
+        viewModelScope.launch {
+            _importExportState.value = ImportExportState.Loading
+            try {
+                // Get all cards with states
+                val allCardsWithStates = withContext(Dispatchers.IO) {
+                    repository.getAllCardsWithGroupStates()
+                }
+
+                // Get selected group names for filtering
+                val selectedGroups = withContext(Dispatchers.IO) {
+                    groupRepository.getAllGroupsSync().filter { it.id in selectedGroupIds }
+                }
+                val selectedGroupNames = selectedGroups.map { it.name }.toSet()
+
+                if (selectedGroupNames.isEmpty()) {
+                    _importExportState.value = ImportExportState.Error("No groups selected")
+                    return@launch
+                }
+
+                // Filter cards that belong to at least one of the selected groups
+                val filteredCardsWithStates = allCardsWithStates.filter { cardWithState ->
+                    cardWithState.groupNames.any { it in selectedGroupNames }
+                }
+
+                if (filteredCardsWithStates.isEmpty()) {
+                    _importExportState.value = ImportExportState.Error("No cards found in selected groups")
+                    return@launch
+                }
+
+                val result = withContext(Dispatchers.IO) {
+                    contentResolver.openOutputStream(uri)?.use { fileStream ->
+                        val outputStream = CardImportExport.createCompressedOutputStream(fileStream)
+                        val exportResult = CardImportExport.exportCardsWithGroupStates(
+                            filteredCardsWithStates, outputStream, selectedGroups
+                        )
+                        outputStream.close()
+                        exportResult
+                    } ?: ExportResult.Error("Failed to open file for writing")
+                }
+
+                _importExportState.value = when (result) {
+                    is ExportResult.Success -> ImportExportState.ExportSuccess(result.exportedCount)
+                    is ExportResult.Error -> ImportExportState.Error(result.message)
+                }
+            } catch (e: Exception) {
+                _importExportState.value = ImportExportState.Error("Export failed: ${e.message}")
+            }
+        }
+    }
+
     fun importCards(
         uri: Uri,
         contentResolver: ContentResolver,
