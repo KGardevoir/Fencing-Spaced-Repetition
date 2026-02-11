@@ -45,21 +45,40 @@ class CardViewModel(
     private val _selectedGroupFilter = MutableStateFlow<Group?>(null)
     val selectedGroupFilter: StateFlow<Group?> = _selectedGroupFilter.asStateFlow()
 
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
     val filteredCards: StateFlow<List<Card>> = combine(
         allCardsWithGroups,
-        selectedGroupFilter
-    ) { cardsWithGroups, group ->
-        if (group == null) {
+        selectedGroupFilter,
+        searchQuery
+    ) { cardsWithGroups, group, query ->
+        var filtered = if (group == null) {
             cardsWithGroups.map { it.card }
         } else {
             cardsWithGroups
                 .filter { cardWithGroups -> cardWithGroups.groups.any { it.id == group.id } }
                 .map { it.card }
         }
+
+        // Apply search filter
+        if (query.isNotBlank()) {
+            val searchLower = query.lowercase()
+            filtered = filtered.filter { card ->
+                card.question.lowercase().contains(searchLower) ||
+                card.answer.lowercase().contains(searchLower)
+            }
+        }
+
+        filtered
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun selectGroupFilter(group: Group?) {
         _selectedGroupFilter.value = group
+    }
+
+    fun updateSearchQuery(query: String) {
+        _searchQuery.value = query
     }
 
     fun getGroupsForCard(cardId: Long): Flow<List<Group>> =

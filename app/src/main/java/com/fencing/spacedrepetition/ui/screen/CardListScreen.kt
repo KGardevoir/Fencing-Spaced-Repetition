@@ -17,6 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -46,6 +47,7 @@ fun CardListScreen(
     val allCardsWithGroups by viewModel.allCardsWithGroups.collectAsState()
     val groups by groupViewModel.allGroups.collectAsState()
     val selectedGroupFilter by viewModel.selectedGroupFilter.collectAsState()
+    val searchQuery by viewModel.searchQuery.collectAsState()
     val cardCount by viewModel.cardCount.collectAsState()
     val importExportState by viewModel.importExportState.collectAsState()
     val context = LocalContext.current
@@ -195,6 +197,34 @@ fun CardListScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            // Search field
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { viewModel.updateSearchQuery(it) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                placeholder = { Text("Search cards...") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Outlined.Search,
+                        contentDescription = "Search"
+                    )
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { viewModel.updateSearchQuery("") }) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Clear search"
+                            )
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp)
+            )
+
             // Group filter
             if (groups.isNotEmpty()) {
                 LazyRow(
@@ -231,20 +261,28 @@ fun CardListScreen(
                         modifier = Modifier.padding(32.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Description,
+                            imageVector = if (searchQuery.isNotEmpty()) Icons.Outlined.Search else Icons.Default.Description,
                             contentDescription = null,
                             modifier = Modifier.size(64.dp),
                             tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = if (selectedGroupFilter != null) "No cards in this group" else "No cards yet",
+                            text = when {
+                                searchQuery.isNotEmpty() -> "No cards match your search"
+                                selectedGroupFilter != null -> "No cards in this group"
+                                else -> "No cards yet"
+                            },
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Tap + to add a card or use menu to import",
+                            text = if (searchQuery.isNotEmpty()) {
+                                "Try a different search term"
+                            } else {
+                                "Tap + to add a card or use menu to import"
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
