@@ -61,6 +61,8 @@ fun CardListScreen(
     var showBulkDeleteDialog by remember { mutableStateOf(false) }
     var showBulkGroupDialog by remember { mutableStateOf(false) }
     var showBulkResetDialog by remember { mutableStateOf(false) }
+    var showGroupSelectionDialog by remember { mutableStateOf(false) }
+    var selectedGroupsForExport by remember { mutableStateOf<List<Long>>(emptyList()) }
 
     // File picker for import
     val importLauncher = rememberLauncherForActivityResult(
@@ -77,6 +79,15 @@ fun CardListScreen(
     ) { uri: Uri? ->
         uri?.let {
             viewModel.exportAllCards(uri, context.contentResolver)
+        }
+    }
+
+    // File picker for export selected groups
+    val exportSelectedGroupsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/gzip")
+    ) { uri: Uri? ->
+        uri?.let {
+            viewModel.exportSelectedGroups(selectedGroupsForExport, uri, context.contentResolver)
         }
     }
 
@@ -171,6 +182,17 @@ fun CardListScreen(
                                     leadingIcon = {
                                         Icon(Icons.Default.FileDownload, contentDescription = null)
                                     }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Export Selected Groups") },
+                                    onClick = {
+                                        showMenu = false
+                                        showGroupSelectionDialog = true
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.FolderOpen, contentDescription = null)
+                                    },
+                                    enabled = groups.isNotEmpty()
                                 )
                             }
                         }
@@ -484,6 +506,19 @@ fun CardListScreen(
             }
         )
     }
+
+    // Export selected groups dialog
+    if (showGroupSelectionDialog) {
+        ExportGroupSelectionDialog(
+            groups = groups,
+            onDismiss = { showGroupSelectionDialog = false },
+            onConfirm = { selectedGroupIds ->
+                selectedGroupsForExport = selectedGroupIds
+                showGroupSelectionDialog = false
+                exportSelectedGroupsLauncher.launch("selected_groups_cards.tsv.gz")
+            }
+        )
+    }
 }
 
 @Composable
@@ -539,6 +574,88 @@ fun BulkGroupDialog(
         confirmButton = {
             Button(onClick = { onConfirm(selectedGroupIds.toList()) }) {
                 Text("Apply")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun ExportGroupSelectionDialog(
+    groups: List<Group>,
+    onDismiss: () -> Unit,
+    onConfirm: (List<Long>) -> Unit
+) {
+    var selectedGroupIds by remember { mutableStateOf(setOf<Long>()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.FolderOpen, contentDescription = null) },
+        title = { Text("Export Selected Groups") },
+        text = {
+            Column {
+                Text(
+                    "Select groups to export:",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                if (groups.isEmpty()) {
+                    Text(
+                        "No groups available. Create a group first.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 400.dp)
+                    ) {
+                        items(groups) { group ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = group.id in selectedGroupIds,
+                                    onCheckedChange = { checked ->
+                                        selectedGroupIds = if (checked) {
+                                            selectedGroupIds + group.id
+                                        } else {
+                                            selectedGroupIds - group.id
+                                        }
+                                    }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = group.name,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    if (group.description.isNotBlank()) {
+                                        Text(
+                                            text = group.description,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(selectedGroupIds.toList()) },
+                enabled = selectedGroupIds.isNotEmpty()
+            ) {
+                Text("Export ${selectedGroupIds.size} Groups")
             }
         },
         dismissButton = {
