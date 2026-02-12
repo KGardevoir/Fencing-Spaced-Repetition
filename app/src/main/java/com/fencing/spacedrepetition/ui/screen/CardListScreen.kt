@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.Group
@@ -809,31 +810,24 @@ fun CardListItem(
                             )
 
                             // Display additional sort field info
-                            when (sortOption) {
-                                CardSortOption.REVIEWS -> {
-                                    val reviews = when (card.algorithm) {
-                                        AlgorithmType.FSRS -> card.fsrsReps
-                                        AlgorithmType.SM2 -> card.sm2Repetitions
-                                    }
-                                    Text(
-                                        text = "• $reviews reviews",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                CardSortOption.DIFFICULTY -> {
-                                    val difficulty = when (card.algorithm) {
-                                        AlgorithmType.FSRS -> String.format("%.2f", card.fsrsDifficulty)
-                                        AlgorithmType.SM2 -> String.format("%.2f", 2.5 - card.sm2EaseFactor)
-                                    }
-                                    Text(
-                                        text = "• Difficulty: $difficulty",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                else -> {} // DUE_DATE and NAME already show their primary info
+                            val reviews = when (card.algorithm) {
+                                AlgorithmType.FSRS -> card.fsrsReps
+                                AlgorithmType.SM2 -> card.sm2Repetitions
                             }
+                            Text(
+                                text = "• $reviews reviews",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            val difficulty = when (card.algorithm) {
+                                AlgorithmType.FSRS -> String.format("%.1f", card.fsrsDifficulty)
+                                AlgorithmType.SM2 -> String.format("%.1f", 2.5 - card.sm2EaseFactor)
+                            }
+                            Text(
+                                text = "• Difficulty: $difficulty",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
 
                         Spacer(modifier = Modifier.height(4.dp))
