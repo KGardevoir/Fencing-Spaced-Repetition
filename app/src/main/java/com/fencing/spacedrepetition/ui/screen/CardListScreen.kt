@@ -767,26 +767,23 @@ fun CardListItem(
                         Spacer(modifier = Modifier.height(4.dp))
 
                         // Due date
-                        val dueDateText = if (card.nextReview == 0L) {
-                            "New card"
+                        val dueDateText: String
+                        val dueDateColor: androidx.compose.ui.graphics.Color
+                        if (card.nextReview == 0L) {
+                            dueDateText = "New card"
+                            dueDateColor = MaterialTheme.colorScheme.onSurfaceVariant
                         } else {
+                            val formatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+                            dueDateText = formatter.format(Date(card.nextReview))
                             val now = System.currentTimeMillis()
                             val diff = card.nextReview - now
                             val daysDiff = (diff / (1000 * 60 * 60 * 24)).toInt()
-                            when {
-                                daysDiff < 0 -> "Overdue"
-                                daysDiff == 0 -> "Due today"
-                                daysDiff == 1 -> "Due tomorrow"
-                                else -> {
-                                    val formatter = SimpleDateFormat("MMM dd", Locale.getDefault())
-                                    "Due ${formatter.format(Date(card.nextReview))}"
-                                }
+                            dueDateColor = when {
+                                diff <= 0 -> MaterialTheme.colorScheme.error
+                                daysDiff == 0 -> MaterialTheme.colorScheme.tertiary
+                                daysDiff <= 3 -> MaterialTheme.colorScheme.secondary
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
                             }
-                        }
-                        val dueDateColor = if (card.nextReview != 0L && card.nextReview <= System.currentTimeMillis()) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
                         }
                         Text(
                             text = dueDateText,
