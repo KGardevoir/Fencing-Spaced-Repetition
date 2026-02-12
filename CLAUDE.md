@@ -14,6 +14,7 @@ This is an Android app (Kotlin + Jetpack Compose) for practicing martial arts an
 
 - Build: `./gradlew assembleDebug`
 - Test: `./gradlew testDebugUnitTest`
+- Do NOT attempt to build or test after a rebase. The CI environment may not have network access for Gradle dependencies.
 
 ## Architecture
 
