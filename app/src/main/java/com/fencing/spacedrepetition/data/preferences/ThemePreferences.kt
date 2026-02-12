@@ -25,7 +25,6 @@ class ThemePreferences(private val context: Context) {
     private val AUTO_SHOW_ANSWER_KEY = booleanPreferencesKey("auto_show_answer")
     private val CARDS_PER_SESSION_KEY = intPreferencesKey("cards_per_session")
     private val SELECTED_GROUP_ID_KEY = longPreferencesKey("selected_group_id")
-    private val SELECTED_GROUP_IDS_KEY = stringPreferencesKey("selected_group_ids")
     private val RANDOMIZE_DUE_CARDS_KEY = booleanPreferencesKey("randomize_due_cards")
     private val MAXIMUM_INTERVAL_KEY = intPreferencesKey("maximum_interval")
     private val PRACTICES_PER_WEEK_KEY = intPreferencesKey("practices_per_week")
@@ -70,21 +69,6 @@ class ThemePreferences(private val context: Context) {
     val selectedGroupId: Flow<Long?> = context.dataStore.data
         .map { preferences ->
             preferences[SELECTED_GROUP_ID_KEY]
-        }
-
-    val selectedGroupIds: Flow<Set<Long>> = context.dataStore.data
-        .map { preferences ->
-            val stored = preferences[SELECTED_GROUP_IDS_KEY]
-            if (stored != null && stored.isNotBlank()) {
-                stored.split(",")
-                    .filter { it.isNotBlank() }
-                    .mapNotNull { it.trim().toLongOrNull() }
-                    .toSet()
-            } else {
-                // Migrate from old single-selection key
-                val singleId = preferences[SELECTED_GROUP_ID_KEY]
-                if (singleId != null) setOf(singleId) else emptySet()
-            }
         }
 
     val randomizeDueCards: Flow<Boolean> = context.dataStore.data
@@ -146,16 +130,6 @@ class ThemePreferences(private val context: Context) {
                 preferences[SELECTED_GROUP_ID_KEY] = groupId
             } else {
                 preferences.remove(SELECTED_GROUP_ID_KEY)
-            }
-        }
-    }
-
-    suspend fun setSelectedGroupIds(groupIds: Set<Long>) {
-        context.dataStore.edit { preferences ->
-            if (groupIds.isNotEmpty()) {
-                preferences[SELECTED_GROUP_IDS_KEY] = groupIds.sorted().joinToString(",")
-            } else {
-                preferences.remove(SELECTED_GROUP_IDS_KEY)
             }
         }
     }

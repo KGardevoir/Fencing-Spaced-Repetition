@@ -48,7 +48,7 @@ fun CardListScreen(
     val allCards by viewModel.filteredCards.collectAsState()
     val allCardsWithGroups by viewModel.allCardsWithGroups.collectAsState()
     val groups by groupViewModel.allGroups.collectAsState()
-    val selectedGroupFilter by viewModel.selectedGroupFilter.collectAsState()
+    val selectedGroupFilters by viewModel.selectedGroupFilters.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val cardCount by viewModel.cardCount.collectAsState()
     val importExportState by viewModel.importExportState.collectAsState()
@@ -240,7 +240,7 @@ fun CardListScreen(
         floatingActionButton = {
             if (!isSelectionMode) {
                 FloatingActionButton(
-                    onClick = { onNavigateToAddCard(selectedGroupFilter?.id) },
+                    onClick = { onNavigateToAddCard(selectedGroupFilters.firstOrNull()) },
                     containerColor = MaterialTheme.colorScheme.primary
                 ) {
                     Icon(Icons.Default.Add, "Add Card")
@@ -291,15 +291,15 @@ fun CardListScreen(
                 ) {
                     item {
                         FilterChip(
-                            selected = selectedGroupFilter == null,
-                            onClick = { viewModel.selectGroupFilter(null) },
+                            selected = selectedGroupFilters.isEmpty(),
+                            onClick = { viewModel.clearGroupFilters() },
                             label = { Text("All") }
                         )
                     }
                     items(groups) { group ->
                         FilterChip(
-                            selected = selectedGroupFilter?.id == group.id,
-                            onClick = { viewModel.selectGroupFilter(group) },
+                            selected = group.id in selectedGroupFilters,
+                            onClick = { viewModel.toggleGroupFilter(group.id) },
                             label = { Text(group.name) }
                         )
                     }
@@ -326,7 +326,7 @@ fun CardListScreen(
                         Text(
                             text = when {
                                 searchQuery.isNotEmpty() -> "No cards match your search"
-                                selectedGroupFilter != null -> "No cards in this group"
+                                selectedGroupFilters.isNotEmpty() -> "No cards in selected groups"
                                 else -> "No cards yet"
                             },
                             style = MaterialTheme.typography.titleMedium,
@@ -513,7 +513,7 @@ fun CardListScreen(
         BulkResetDialog(
             selectedCardIds = selectedCardIds,
             allCardsWithGroups = allCardsWithGroups,
-            currentGroupFilter = selectedGroupFilter,
+            currentGroupFilter = null,
             onDismiss = { showBulkResetDialog = false },
             onResetGlobal = {
                 viewModel.resetSelectedCardsGlobalState()

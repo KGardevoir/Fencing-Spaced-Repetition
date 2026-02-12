@@ -136,20 +136,4 @@ interface CardDao {
 
     @Query("SELECT * FROM cards")
     suspend fun getAllCardsAsList(): List<Card>
-
-    // Multi-group queries
-    @Query("""
-        SELECT COUNT(DISTINCT c.id) FROM cards c
-        INNER JOIN card_group_cross_ref cgc ON c.id = cgc.cardId
-        WHERE cgc.groupId IN (:groupIds)
-          AND c.nextReview <= :now
-    """)
-    fun getDueCardCountByGroups(groupIds: List<Long>, now: Long = System.currentTimeMillis()): Flow<Int>
-
-    @Query("""
-        SELECT COUNT(DISTINCT c.id) FROM cards c
-        INNER JOIN card_group_cross_ref cgc ON c.id = cgc.cardId
-        WHERE cgc.groupId IN (:groupIds)
-    """)
-    fun getCardCountByGroups(groupIds: List<Long>): Flow<Int>
 }
