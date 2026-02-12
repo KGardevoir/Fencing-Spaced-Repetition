@@ -26,6 +26,9 @@ class SettingsViewModel(
     val selectedGroupId: StateFlow<Long?> = themePreferences.selectedGroupId
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    val selectedGroupIds: StateFlow<Set<Long>> = themePreferences.selectedGroupIds
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
     val randomizeDueCards: StateFlow<Boolean> = themePreferences.randomizeDueCards
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
@@ -62,6 +65,24 @@ class SettingsViewModel(
     fun setSelectedGroupId(groupId: Long?) {
         viewModelScope.launch {
             themePreferences.setSelectedGroupId(groupId)
+        }
+    }
+
+    fun setSelectedGroupIds(groupIds: Set<Long>) {
+        viewModelScope.launch {
+            themePreferences.setSelectedGroupIds(groupIds)
+        }
+    }
+
+    fun toggleGroupSelection(groupId: Long) {
+        viewModelScope.launch {
+            val current = themePreferences.selectedGroupIds.first()
+            val updated = if (groupId in current) {
+                current - groupId
+            } else {
+                current + groupId
+            }
+            themePreferences.setSelectedGroupIds(updated)
         }
     }
 

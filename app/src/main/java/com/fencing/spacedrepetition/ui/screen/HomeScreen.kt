@@ -35,36 +35,42 @@ fun HomeScreen(
     val totalCards by cardViewModel.cardCount.collectAsState()
     val groups by groupViewModel.allGroups.collectAsState()
     val globalCardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
-    val savedGroupId by settingsViewModel.selectedGroupId.collectAsState()
+    val savedGroupIds by settingsViewModel.selectedGroupIds.collectAsState()
 
     var showGroupSelectionDialog by remember { mutableStateOf(false) }
 
-    // Derive selected group from persisted ID and groups list
-    val selectedGroup = groups.find { it.id == savedGroupId } ?: groups.firstOrNull()
+    // Filter to only valid group IDs
+    val selectedGroupIds = savedGroupIds.filter { id -> groups.any { it.id == id } }.toSet()
+    val selectedGroups = groups.filter { it.id in selectedGroupIds }
 
     // Auto-select first group when groups become available and no valid selection exists
-    LaunchedEffect(groups, savedGroupId) {
-        if (groups.isNotEmpty()) {
-            val currentGroupExists = groups.any { it.id == savedGroupId }
-            if (!currentGroupExists) {
-                // Save the first group's ID if no valid selection
-                settingsViewModel.setSelectedGroupId(groups.first().id)
-            }
+    LaunchedEffect(groups, savedGroupIds) {
+        if (groups.isNotEmpty() && selectedGroupIds.isEmpty()) {
+            settingsViewModel.setSelectedGroupIds(setOf(groups.first().id))
         }
     }
 
-    // Resolve cardsPerSession: group override takes precedence over global
-    val cardsPerSession = selectedGroup?.cardsPerSession ?: globalCardsPerSession
+    // Resolve cardsPerSession: single group override takes precedence, otherwise global
+    val cardsPerSession = if (selectedGroups.size == 1) {
+        selectedGroups.first().cardsPerSession ?: globalCardsPerSession
+    } else {
+        globalCardsPerSession
+    }
 
-    // Calculate total cards for selected group (allow additional studying)
-    val cardsForSelectedGroup = selectedGroup?.let { group ->
-        cardViewModel.getCardCountByGroup(group.id).collectAsState(initial = 0).value
-    } ?: totalCards
+    // Calculate total cards for selected groups
+    val selectedGroupIdList = selectedGroupIds.toList()
+    val cardsForSelectedGroups = if (selectedGroupIdList.isNotEmpty()) {
+        cardViewModel.getCardCountByGroups(selectedGroupIdList).collectAsState(initial = 0).value
+    } else {
+        totalCards
+    }
 
-    // Still track due cards for display
-    val dueForSelectedGroup = selectedGroup?.let { group ->
-        cardViewModel.getDueCardCountByGroup(group.id).collectAsState(initial = 0).value
-    } ?: dueCardCount
+    // Track due cards for display
+    val dueForSelectedGroups = if (selectedGroupIdList.isNotEmpty()) {
+        cardViewModel.getDueCardCountByGroups(selectedGroupIdList).collectAsState(initial = 0).value
+    } else {
+        dueCardCount
+    }
 
     Scaffold(
         topBar = {
@@ -183,17 +189,22 @@ fun HomeScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Practice Group",
+                                    text = if (selectedGroups.size == 1) "Practice Group" else "Practice Groups",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
-                                    text = selectedGroup?.name ?: "Select a group",
+                                    text = when {
+                                        selectedGroups.isEmpty() -> "Select groups"
+                                        selectedGroups.size == 1 -> selectedGroups.first().name
+                                        selectedGroups.size <= 3 -> selectedGroups.joinToString(", ") { it.name }
+                                        else -> "${selectedGroups.size} groups selected"
+                                    },
                                     style = MaterialTheme.typography.titleMedium
                                 )
                             }
                             Text(
-                                text = "$dueForSelectedGroup due",
+                                text = "$dueForSelectedGroups due",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -212,13 +223,13 @@ fun HomeScreen(
                 // Main actions
                 Button(
                     onClick = {
-                        practiceViewModel.startNewSession(cardsPerSession, selectedGroup?.id)
+                        practiceViewModel.startNewSession(cardsPerSession, selectedGroupIdList)
                         onNavigateToPractice()
                     },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(72.dp),
-                    enabled = cardsForSelectedGroup >= 1
+                    enabled = cardsForSelectedGroups >= 1
                 ) {
                     Icon(
                         Icons.Default.PlayArrow,
@@ -232,10 +243,10 @@ fun HomeScreen(
                     )
                 }
 
-                if (cardsForSelectedGroup < 1) {
+                if (cardsForSelectedGroups < 1) {
                     Text(
                         text = if (totalCards == 0) "Add some cards to get started"
-                        else if (selectedGroup != null) "No cards in ${selectedGroup.name}"
+                        else if (selectedGroups.isNotEmpty()) "No cards in selected groups"
                         else "No cards available",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -272,10 +283,15 @@ fun HomeScreen(
     if (showGroupSelectionDialog) {
         GroupSelectionDialog(
             groups = groups,
-            selectedGroup = selectedGroup,
-            onSelect = { group ->
-                settingsViewModel.setSelectedGroupId(group.id)
-                showGroupSelectionDialog = false
+            selectedGroupIds = selectedGroupIds,
+            onToggleGroup = { groupId ->
+                settingsViewModel.toggleGroupSelection(groupId)
+            },
+            onSelectAll = {
+                settingsViewModel.setSelectedGroupIds(groups.map { it.id }.toSet())
+            },
+            onClearAll = {
+                settingsViewModel.setSelectedGroupIds(emptySet())
             },
             onDismiss = { showGroupSelectionDialog = false }
         )
@@ -285,37 +301,56 @@ fun HomeScreen(
 @Composable
 fun GroupSelectionDialog(
     groups: List<Group>,
-    selectedGroup: Group?,
-    onSelect: (Group) -> Unit,
+    selectedGroupIds: Set<Long>,
+    onToggleGroup: (Long) -> Unit,
+    onSelectAll: () -> Unit,
+    onClearAll: () -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Default.Folder, contentDescription = null) },
-        title = { Text("Select Practice Group") },
+        title = { Text("Select Practice Groups") },
         text = {
-            LazyColumn {
-                items(groups) { group ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelect(group) }
-                            .padding(vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+            Column {
+                // Select All / Clear All row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onSelectAll) {
+                        Text("Select All")
+                    }
+                    TextButton(
+                        onClick = onClearAll,
+                        enabled = selectedGroupIds.isNotEmpty()
                     ) {
-                        RadioButton(
-                            selected = selectedGroup?.id == group.id,
-                            onClick = { onSelect(group) }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(group.name, style = MaterialTheme.typography.bodyLarge)
-                            if (group.description.isNotEmpty()) {
-                                Text(
-                                    group.description,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                        Text("Clear")
+                    }
+                }
+                LazyColumn {
+                    items(groups) { group ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onToggleGroup(group.id) }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = group.id in selectedGroupIds,
+                                onCheckedChange = { onToggleGroup(group.id) }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(group.name, style = MaterialTheme.typography.bodyLarge)
+                                if (group.description.isNotEmpty()) {
+                                    Text(
+                                        group.description,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }

@@ -131,6 +131,12 @@ class CardViewModel(
     fun getCardCountByGroup(groupId: Long): Flow<Int> =
         repository.getCardCountByGroup(groupId)
 
+    fun getDueCardCountByGroups(groupIds: List<Long>): Flow<Int> =
+        repository.getDueCardCountByGroups(groupIds)
+
+    fun getCardCountByGroups(groupIds: List<Long>): Flow<Int> =
+        repository.getCardCountByGroups(groupIds)
+
     fun addCard(
         question: String,
         answer: String,
