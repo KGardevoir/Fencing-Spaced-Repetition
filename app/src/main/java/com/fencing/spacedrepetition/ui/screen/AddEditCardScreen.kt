@@ -732,6 +732,7 @@ fun AddEditCardScreen(
                                                 onClick = {
                                                     fsrsState = state
                                                     stateExpanded = false
+                                                    isDirty = true
                                                 }
                                             )
                                         }
@@ -746,7 +747,7 @@ fun AddEditCardScreen(
                                 ) {
                                     OutlinedTextField(
                                         value = fsrsStability,
-                                        onValueChange = { fsrsStability = it },
+                                        onValueChange = { fsrsStability = it; isDirty = true },
                                         label = { Text("Stability") },
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                         modifier = Modifier.weight(1f),
@@ -754,7 +755,7 @@ fun AddEditCardScreen(
                                     )
                                     OutlinedTextField(
                                         value = fsrsDifficulty,
-                                        onValueChange = { fsrsDifficulty = it },
+                                        onValueChange = { fsrsDifficulty = it; isDirty = true },
                                         label = { Text("Difficulty") },
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                         modifier = Modifier.weight(1f),
@@ -770,7 +771,7 @@ fun AddEditCardScreen(
                                 ) {
                                     OutlinedTextField(
                                         value = fsrsReps,
-                                        onValueChange = { fsrsReps = it },
+                                        onValueChange = { fsrsReps = it; isDirty = true },
                                         label = { Text("Reps") },
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                         modifier = Modifier.weight(1f),
@@ -778,7 +779,7 @@ fun AddEditCardScreen(
                                     )
                                     OutlinedTextField(
                                         value = fsrsLapses,
-                                        onValueChange = { fsrsLapses = it },
+                                        onValueChange = { fsrsLapses = it; isDirty = true },
                                         label = { Text("Lapses") },
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                         modifier = Modifier.weight(1f),
@@ -798,7 +799,7 @@ fun AddEditCardScreen(
 
                                 OutlinedTextField(
                                     value = sm2EaseFactor,
-                                    onValueChange = { sm2EaseFactor = it },
+                                    onValueChange = { sm2EaseFactor = it; isDirty = true },
                                     label = { Text("Ease Factor") },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                     modifier = Modifier.fillMaxWidth(),
@@ -814,7 +815,7 @@ fun AddEditCardScreen(
                                 ) {
                                     OutlinedTextField(
                                         value = sm2Interval,
-                                        onValueChange = { sm2Interval = it },
+                                        onValueChange = { sm2Interval = it; isDirty = true },
                                         label = { Text("Interval (days)") },
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                         modifier = Modifier.weight(1f),
@@ -822,7 +823,7 @@ fun AddEditCardScreen(
                                     )
                                     OutlinedTextField(
                                         value = sm2Repetitions,
-                                        onValueChange = { sm2Repetitions = it },
+                                        onValueChange = { sm2Repetitions = it; isDirty = true },
                                         label = { Text("Repetitions") },
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                         modifier = Modifier.weight(1f),
@@ -852,6 +853,7 @@ fun AddEditCardScreen(
                             selectedAlgorithm = selectedAlgorithm,
                             onStateChange = { newEdit ->
                                 independentLearningEdits = independentLearningEdits + (group.id to newEdit)
+                                isDirty = true
                             },
                             onReset = {
                                 cardToEdit?.let { card ->
