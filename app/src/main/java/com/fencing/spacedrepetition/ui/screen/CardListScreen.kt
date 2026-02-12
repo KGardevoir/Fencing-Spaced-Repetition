@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -97,6 +98,12 @@ fun CardListScreen(
     // Handle back press when in selection mode
     if (isSelectionMode) {
         BackHandler { viewModel.exitSelectionMode() }
+    }
+
+    // Scroll to top when sort option changes
+    val cardListState = rememberLazyListState()
+    LaunchedEffect(cardSortOption) {
+        cardListState.scrollToItem(0)
     }
 
     Scaffold(
@@ -339,6 +346,7 @@ fun CardListScreen(
                 }
             } else {
                 LazyColumn(
+                    state = cardListState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 80.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -756,6 +764,36 @@ fun CardListItem(
                     )
 
                     if (!expanded) {
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        // Due date
+                        val dueDateText = if (card.nextReview == 0L) {
+                            "New card"
+                        } else {
+                            val now = System.currentTimeMillis()
+                            val diff = card.nextReview - now
+                            val daysDiff = (diff / (1000 * 60 * 60 * 24)).toInt()
+                            when {
+                                daysDiff < 0 -> "Overdue"
+                                daysDiff == 0 -> "Due today"
+                                daysDiff == 1 -> "Due tomorrow"
+                                else -> {
+                                    val formatter = SimpleDateFormat("MMM dd", Locale.getDefault())
+                                    "Due ${formatter.format(Date(card.nextReview))}"
+                                }
+                            }
+                        }
+                        val dueDateColor = if (card.nextReview != 0L && card.nextReview <= System.currentTimeMillis()) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                        Text(
+                            text = dueDateText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = dueDateColor
+                        )
+
                         Spacer(modifier = Modifier.height(4.dp))
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),

@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -37,6 +38,12 @@ fun GroupListScreen(
     var groupForImport by remember { mutableStateOf<Group?>(null) }
     var groupForExport by remember { mutableStateOf<Group?>(null) }
     var showSortMenu by remember { mutableStateOf(false) }
+
+    // Scroll to top when sort option changes
+    val groupListState = rememberLazyListState()
+    LaunchedEffect(groupSortOption) {
+        groupListState.scrollToItem(0)
+    }
 
     // File picker for import
     val importLauncher = rememberLauncherForActivityResult(
@@ -139,6 +146,7 @@ fun GroupListScreen(
             }
         } else {
             LazyColumn(
+                state = groupListState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues),
