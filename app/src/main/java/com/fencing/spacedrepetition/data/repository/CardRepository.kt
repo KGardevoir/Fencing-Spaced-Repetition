@@ -525,6 +525,48 @@ class CardRepository(
         )
     }
 
+    /** Compute the result of grading [card] without persisting anything to the database. */
+    suspend fun computeReview(card: Card, grade: Grade, groupId: Long? = null): Card {
+        val now = System.currentTimeMillis()
+        val elapsedDays = if (card.lastReview == 0L) 0 else
+            ((now - card.lastReview) / (1000 * 60 * 60 * 24)).toInt()
+        return when (card.algorithm) {
+            AlgorithmType.FSRS -> reviewWithFSRS(card, grade, now, elapsedDays, groupId)
+            AlgorithmType.SM2 -> reviewWithSM2(card, grade, now, groupId)
+        }
+    }
+
+    /** Compute the result of grading [card] in a specific group without persisting. */
+    suspend fun computeReviewWithGroup(card: Card, grade: Grade, groupId: Long): Card {
+        val group = groupDao.getGroupById(groupId) ?: return computeReview(card, grade, groupId)
+        if (!group.independentLearning) {
+            return computeReview(card, grade, groupId)
+        }
+        val now = System.currentTimeMillis()
+        val learningState = groupDao.getLearningState(card.id, groupId)
+            ?: CardGroupLearningState(card.id, groupId)
+        val elapsedDays = if (learningState.lastReview == 0L) 0 else
+            ((now - learningState.lastReview) / (1000 * 60 * 60 * 24)).toInt()
+        val updatedState = when (card.algorithm) {
+            AlgorithmType.FSRS -> reviewLearningStateWithFSRS(learningState, grade, now, elapsedDays, groupId)
+            AlgorithmType.SM2 -> reviewLearningStateWithSM2(learningState, grade, now, groupId)
+        }
+        return card.copy(
+            fsrsStability = updatedState.fsrsStability,
+            fsrsDifficulty = updatedState.fsrsDifficulty,
+            fsrsElapsedDays = updatedState.fsrsElapsedDays,
+            fsrsScheduledDays = updatedState.fsrsScheduledDays,
+            fsrsReps = updatedState.fsrsReps,
+            fsrsLapses = updatedState.fsrsLapses,
+            fsrsState = updatedState.fsrsState,
+            sm2EaseFactor = updatedState.sm2EaseFactor,
+            sm2Interval = updatedState.sm2Interval,
+            sm2Repetitions = updatedState.sm2Repetitions,
+            lastReview = updatedState.lastReview,
+            nextReview = updatedState.nextReview
+        )
+    }
+
     suspend fun reviewMultipleCards(cardsWithGrades: List<Pair<Card, Grade>>, sessionId: Long? = null) {
         val now = System.currentTimeMillis()
         val reviewLogs = mutableListOf<ReviewLog>()

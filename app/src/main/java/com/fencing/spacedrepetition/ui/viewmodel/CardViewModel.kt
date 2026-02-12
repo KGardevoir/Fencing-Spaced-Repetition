@@ -352,6 +352,23 @@ class CardViewModel(
         }
     }
 
+    /** Compute the result of grading a card without persisting. Used for staged Quick Grade. */
+    fun computeGradeCard(cardId: Long, grade: Grade, groupId: Long? = null, onComplete: (Card) -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                val card = repository.getCardById(cardId) ?: return@launch
+                val computed = if (groupId != null) {
+                    repository.computeReviewWithGroup(card, grade, groupId)
+                } else {
+                    repository.computeReview(card, grade)
+                }
+                onComplete(computed)
+            } catch (e: Exception) {
+                // Handle error
+            }
+        }
+    }
+
     // Import/Export state
     private val _importExportState = MutableStateFlow<ImportExportState>(ImportExportState.Idle)
     val importExportState: StateFlow<ImportExportState> = _importExportState.asStateFlow()

@@ -461,7 +461,7 @@ fun AddEditCardScreen(
                                     CompactGradeButton(
                                         grade = grade,
                                         onClick = {
-                                            viewModel.gradeCard(cardToEdit.id, grade) { updated ->
+                                            viewModel.computeGradeCard(cardToEdit.id, grade) { updated ->
                                                 fsrsStability = updated.fsrsStability.toString()
                                                 fsrsDifficulty = updated.fsrsDifficulty.toString()
                                                 fsrsReps = updated.fsrsReps.toString()
@@ -474,11 +474,12 @@ fun AddEditCardScreen(
                                                 sm2Repetitions = updated.sm2Repetitions.toString()
                                                 lastReview = updated.lastReview
                                                 nextReview = updated.nextReview
+                                                isDirty = true
                                                 scope.launch {
                                                     val dateStr = SimpleDateFormat("MMM dd", Locale.getDefault())
                                                         .format(Date(updated.nextReview))
                                                     snackbarHostState.showSnackbar(
-                                                        "Graded as ${grade.label} - Next review: $dateStr"
+                                                        "Grade staged — save to apply (next: $dateStr)"
                                                     )
                                                 }
                                             }
@@ -521,7 +522,7 @@ fun AddEditCardScreen(
                                             CompactGradeButton(
                                                 grade = grade,
                                                 onClick = {
-                                                    viewModel.gradeCard(cardToEdit.id, grade, group.id) { updated ->
+                                                    viewModel.computeGradeCard(cardToEdit.id, grade, group.id) { updated ->
                                                         independentLearningEdits = independentLearningEdits + (group.id to IndependentLearningEdit(
                                                             fsrsStability = updated.fsrsStability.toString(),
                                                             fsrsDifficulty = updated.fsrsDifficulty.toString(),
@@ -533,11 +534,12 @@ fun AddEditCardScreen(
                                                             sm2Repetitions = updated.sm2Repetitions.toString()
                                                         ))
                                                         groupNextReviews = groupNextReviews + (group.id to updated.nextReview)
+                                                        isDirty = true
                                                         scope.launch {
                                                             val dateStr = SimpleDateFormat("MMM dd", Locale.getDefault())
                                                                 .format(Date(updated.nextReview))
                                                             snackbarHostState.showSnackbar(
-                                                                "${group.name}: Graded as ${grade.label} - Next: $dateStr"
+                                                                "${group.name}: Grade staged — save to apply (next: $dateStr)"
                                                             )
                                                         }
                                                     }
