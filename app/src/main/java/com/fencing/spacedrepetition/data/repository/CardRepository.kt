@@ -167,52 +167,6 @@ class CardRepository(
 
     fun getCardCountByGroup(groupId: Long): Flow<Int> = cardDao.getCardCountByGroup(groupId)
 
-    fun getDueCardCountByGroups(groupIds: List<Long>): Flow<Int> = cardDao.getDueCardCountByGroups(groupIds)
-
-    fun getCardCountByGroups(groupIds: List<Long>): Flow<Int> = cardDao.getCardCountByGroups(groupIds)
-
-    /**
-     * Get due cards from multiple groups, merged and deduplicated.
-     * Returns a list of pairs: (Card, groupId) where groupId is the first group the card was found in.
-     */
-    suspend fun getDueCardsByGroups(groupIds: List<Long>, limit: Int = 100): List<Pair<Card, Long>> {
-        val seen = mutableSetOf<Long>()
-        val result = mutableListOf<Pair<Card, Long>>()
-
-        for (groupId in groupIds) {
-            val cards = getDueCardsByGroup(groupId, limit = limit)
-            for (card in cards) {
-                if (card.id !in seen) {
-                    seen.add(card.id)
-                    result.add(card to groupId)
-                }
-            }
-        }
-
-        return result.take(limit)
-    }
-
-    /**
-     * Get all cards from multiple groups, merged and deduplicated.
-     * Returns a list of pairs: (Card, groupId) where groupId is the first group the card was found in.
-     */
-    suspend fun getCardsByGroupsSync(groupIds: List<Long>): List<Pair<Card, Long>> {
-        val seen = mutableSetOf<Long>()
-        val result = mutableListOf<Pair<Card, Long>>()
-
-        for (groupId in groupIds) {
-            val cards = getCardsByGroupSync(groupId)
-            for (card in cards) {
-                if (card.id !in seen) {
-                    seen.add(card.id)
-                    result.add(card to groupId)
-                }
-            }
-        }
-
-        return result
-    }
-
     fun getCardsByGroup(groupId: Long): Flow<List<Card>> = cardDao.getCardsByGroup(groupId)
 
     suspend fun insertCardWithGroups(card: Card, groupIds: List<Long>): Long {

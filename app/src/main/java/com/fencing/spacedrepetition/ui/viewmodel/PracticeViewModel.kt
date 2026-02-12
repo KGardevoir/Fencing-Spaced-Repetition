@@ -24,59 +24,32 @@ class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
 
     private var sessionId: Long? = null
     private var selectedGroupId: Long? = null
-    private var selectedGroupIds: List<Long> = emptyList()
-    // Maps card ID to the group it should be reviewed in
-    private var cardGroupAssociations: Map<Long, Long> = emptyMap()
 
     fun startNewSession(numberOfCards: Int = 3, groupId: Long? = null) {
-        startNewSession(numberOfCards, if (groupId != null) listOf(groupId) else emptyList())
-    }
-
-    fun startNewSession(numberOfCards: Int = 3, groupIds: List<Long> = emptyList()) {
-        selectedGroupIds = groupIds
-        selectedGroupId = groupIds.firstOrNull()
+        selectedGroupId = groupId
         viewModelScope.launch {
             _uiState.value = PracticeUiState.Loading
 
             try {
-                val cardsForSession: List<Card>
-                val associations = mutableMapOf<Long, Long>()
-
-                if (groupIds.isEmpty()) {
-                    // No group filter - practice all cards
-                    val dueCards = repository.getDueCards(limit = numberOfCards)
-                    cardsForSession = if (dueCards.size >= numberOfCards) {
-                        dueCards.take(numberOfCards)
-                    } else {
-                        repository.getAllCardsSync().take(numberOfCards)
-                    }
-                } else if (groupIds.size == 1) {
-                    // Single group - use existing behavior
-                    val groupId = groupIds.first()
-                    val dueCards = repository.getDueCardsByGroup(groupId, limit = numberOfCards)
-                    val cards = if (dueCards.size >= numberOfCards) {
-                        dueCards.take(numberOfCards)
-                    } else {
-                        repository.getCardsByGroupSync(groupId).take(numberOfCards)
-                    }
-                    cards.forEach { associations[it.id] = groupId }
-                    cardsForSession = cards
+                // Get due cards (randomized from the full pool if setting is enabled)
+                val dueCards = if (groupId != null) {
+                    repository.getDueCardsByGroup(groupId, limit = numberOfCards)
                 } else {
-                    // Multiple groups - merge and deduplicate
-                    val dueCardsWithGroups = repository.getDueCardsByGroups(groupIds, limit = numberOfCards)
-                    if (dueCardsWithGroups.size >= numberOfCards) {
-                        val taken = dueCardsWithGroups.take(numberOfCards)
-                        taken.forEach { (card, gId) -> associations[card.id] = gId }
-                        cardsForSession = taken.map { it.first }
-                    } else {
-                        val allCardsWithGroups = repository.getCardsByGroupsSync(groupIds)
-                        val taken = allCardsWithGroups.take(numberOfCards)
-                        taken.forEach { (card, gId) -> associations[card.id] = gId }
-                        cardsForSession = taken.map { it.first }
-                    }
+                    repository.getDueCards(limit = numberOfCards)
                 }
 
-                cardGroupAssociations = associations
+                // If we have enough due cards, use those
+                // Otherwise, get all cards to allow additional studying
+                val cardsForSession = if (dueCards.size >= numberOfCards) {
+                    dueCards.take(numberOfCards)
+                } else {
+                    val allCards = if (groupId != null) {
+                        repository.getCardsByGroupSync(groupId)
+                    } else {
+                        repository.getAllCardsSync()
+                    }
+                    allCards.take(numberOfCards)
+                }
 
                 if (cardsForSession.isEmpty()) {
                     _uiState.value = PracticeUiState.NoCards
@@ -207,15 +180,10 @@ class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
 
                 // Only call review methods if there are cards to review
                 if (cardsWithGrades.isNotEmpty()) {
-                    if (selectedGroupIds.isNotEmpty()) {
-                        // Use per-card group associations for group-aware review
+                    // If practicing within a group, use group-aware review method
+                    if (selectedGroupId != null) {
                         cardsWithGrades.forEach { (card, grade) ->
-                            val cardGroupId = cardGroupAssociations[card.id]
-                            if (cardGroupId != null) {
-                                repository.reviewCardWithGroup(card, grade, cardGroupId, sessionId)
-                            } else {
-                                repository.reviewCard(card, grade, sessionId)
-                            }
+                            repository.reviewCardWithGroup(card, grade, selectedGroupId!!, sessionId)
                         }
                     } else {
                         repository.reviewMultipleCards(cardsWithGrades, sessionId)
@@ -240,8 +208,6 @@ class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
         _currentCardIndex.value = 0
         sessionId = null
         selectedGroupId = null
-        selectedGroupIds = emptyList()
-        cardGroupAssociations = emptyMap()
         _uiState.value = PracticeUiState.Loading
     }
 }

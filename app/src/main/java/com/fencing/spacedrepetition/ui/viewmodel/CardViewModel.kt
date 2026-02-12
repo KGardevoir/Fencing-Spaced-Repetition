@@ -52,6 +52,9 @@ class CardViewModel(
     private val _selectedGroupFilter = MutableStateFlow<Group?>(null)
     val selectedGroupFilter: StateFlow<Group?> = _selectedGroupFilter.asStateFlow()
 
+    private val _selectedGroupFilters = MutableStateFlow<Set<Long>>(emptySet())
+    val selectedGroupFilters: StateFlow<Set<Long>> = _selectedGroupFilters.asStateFlow()
+
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
@@ -64,15 +67,15 @@ class CardViewModel(
 
     val filteredCards: StateFlow<List<Card>> = combine(
         allCardsWithGroups,
-        selectedGroupFilter,
+        _selectedGroupFilters,
         searchQuery,
         _cardSortOption
-    ) { cardsWithGroups, group, query, sortOption ->
-        var filtered = if (group == null) {
+    ) { cardsWithGroups, groupIds, query, sortOption ->
+        var filtered = if (groupIds.isEmpty()) {
             cardsWithGroups.map { it.card }
         } else {
             cardsWithGroups
-                .filter { cardWithGroups -> cardWithGroups.groups.any { it.id == group.id } }
+                .filter { cardWithGroups -> cardWithGroups.groups.any { it.id in groupIds } }
                 .map { it.card }
         }
 
@@ -108,6 +111,18 @@ class CardViewModel(
         _selectedGroupFilter.value = group
     }
 
+    fun toggleGroupFilter(groupId: Long) {
+        _selectedGroupFilters.value = if (groupId in _selectedGroupFilters.value) {
+            _selectedGroupFilters.value - groupId
+        } else {
+            _selectedGroupFilters.value + groupId
+        }
+    }
+
+    fun clearGroupFilters() {
+        _selectedGroupFilters.value = emptySet()
+    }
+
     fun updateSearchQuery(query: String) {
         _searchQuery.value = query
     }
@@ -130,12 +145,6 @@ class CardViewModel(
 
     fun getCardCountByGroup(groupId: Long): Flow<Int> =
         repository.getCardCountByGroup(groupId)
-
-    fun getDueCardCountByGroups(groupIds: List<Long>): Flow<Int> =
-        repository.getDueCardCountByGroups(groupIds)
-
-    fun getCardCountByGroups(groupIds: List<Long>): Flow<Int> =
-        repository.getCardCountByGroups(groupIds)
 
     fun addCard(
         question: String,
