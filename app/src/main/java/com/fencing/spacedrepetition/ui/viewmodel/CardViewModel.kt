@@ -27,6 +27,11 @@ enum class CardSortOption(val label: String) {
     DIFFICULTY("Difficulty")
 }
 
+enum class SortDirection {
+    ASCENDING,
+    DESCENDING
+}
+
 class CardViewModel(
     application: Application,
     private val repository: CardRepository,
@@ -61,16 +66,27 @@ class CardViewModel(
     private val _cardSortOption = MutableStateFlow(CardSortOption.DUE_DATE)
     val cardSortOption: StateFlow<CardSortOption> = _cardSortOption.asStateFlow()
 
+    private val _sortDirection = MutableStateFlow(SortDirection.ASCENDING)
+    val sortDirection: StateFlow<SortDirection> = _sortDirection.asStateFlow()
+
     fun setCardSortOption(option: CardSortOption) {
         _cardSortOption.value = option
+    }
+
+    fun toggleSortDirection() {
+        _sortDirection.value = when (_sortDirection.value) {
+            SortDirection.ASCENDING -> SortDirection.DESCENDING
+            SortDirection.DESCENDING -> SortDirection.ASCENDING
+        }
     }
 
     val filteredCards: StateFlow<List<Card>> = combine(
         allCardsWithGroups,
         _selectedGroupFilters,
         searchQuery,
-        _cardSortOption
-    ) { cardsWithGroups, groupIds, query, sortOption ->
+        _cardSortOption,
+        _sortDirection
+    ) { cardsWithGroups, groupIds, query, sortOption, direction ->
         var filtered = if (groupIds.isEmpty()) {
             cardsWithGroups.map { it.card }
         } else {
@@ -88,23 +104,26 @@ class CardViewModel(
             }
         }
 
-        // Apply sort
-        when (sortOption) {
+        // Apply sort with direction
+        val sorted = when (sortOption) {
             CardSortOption.DUE_DATE -> filtered.sortedBy { it.nextReview }
             CardSortOption.NAME -> filtered.sortedBy { it.question.lowercase() }
-            CardSortOption.REVIEWS -> filtered.sortedByDescending {
+            CardSortOption.REVIEWS -> filtered.sortedBy {
                 when (it.algorithm) {
                     AlgorithmType.FSRS -> it.fsrsReps
                     AlgorithmType.SM2 -> it.sm2Repetitions
                 }
             }
-            CardSortOption.DIFFICULTY -> filtered.sortedByDescending {
+            CardSortOption.DIFFICULTY -> filtered.sortedBy {
                 when (it.algorithm) {
                     AlgorithmType.FSRS -> it.fsrsDifficulty
                     AlgorithmType.SM2 -> 2.5 - it.sm2EaseFactor
                 }
             }
         }
+
+        // Apply direction
+        if (direction == SortDirection.DESCENDING) sorted.reversed() else sorted
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun selectGroupFilter(group: Group?) {

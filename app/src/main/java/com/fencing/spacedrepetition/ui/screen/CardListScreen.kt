@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.Group
@@ -33,6 +34,7 @@ import com.fencing.spacedrepetition.ui.viewmodel.CardSortOption
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.ImportExportState
+import com.fencing.spacedrepetition.ui.viewmodel.SortDirection
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -53,6 +55,7 @@ fun CardListScreen(
     val cardCount by viewModel.cardCount.collectAsState()
     val importExportState by viewModel.importExportState.collectAsState()
     val cardSortOption by viewModel.cardSortOption.collectAsState()
+    val sortDirection by viewModel.sortDirection.collectAsState()
     val context = LocalContext.current
 
     // Selection mode state
@@ -100,9 +103,9 @@ fun CardListScreen(
         BackHandler { viewModel.exitSelectionMode() }
     }
 
-    // Scroll to top when sort option changes
+    // Scroll to top when sort option or direction changes
     val cardListState = rememberLazyListState()
-    LaunchedEffect(cardSortOption) {
+    LaunchedEffect(cardSortOption, sortDirection) {
         cardListState.scrollToItem(0)
     }
 
@@ -154,6 +157,15 @@ fun CardListScreen(
                         }
                     },
                     actions = {
+                        IconButton(onClick = { viewModel.toggleSortDirection() }) {
+                            Icon(
+                                imageVector = if (sortDirection == SortDirection.ASCENDING)
+                                    Icons.Default.ArrowUpward
+                                else
+                                    Icons.Default.ArrowDownward,
+                                contentDescription = "Sort direction"
+                            )
+                        }
                         Box {
                             IconButton(onClick = { showSortMenu = true }) {
                                 Icon(Icons.Default.Sort, "Sort")
@@ -366,6 +378,7 @@ fun CardListScreen(
                             learningStates = learningStates,
                             isSelectionMode = isSelectionMode,
                             isSelected = card.id in selectedCardIds,
+                            sortOption = cardSortOption,
                             onEdit = { onNavigateToEditCard(card) },
                             onDelete = { showDeleteDialog = card },
                             onToggleSelection = { viewModel.toggleCardSelection(card.id) },
@@ -709,6 +722,7 @@ fun CardListItem(
     learningStates: List<CardGroupLearningState> = emptyList(),
     isSelectionMode: Boolean = false,
     isSelected: Boolean = false,
+    sortOption: CardSortOption = CardSortOption.DUE_DATE,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onToggleSelection: () -> Unit = {},
@@ -785,11 +799,36 @@ fun CardListItem(
                                 else -> MaterialTheme.colorScheme.onSurfaceVariant
                             }
                         }
-                        Text(
-                            text = dueDateText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = dueDateColor
-                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = dueDateText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = dueDateColor
+                            )
+
+                            // Display additional sort field info
+                            val reviews = when (card.algorithm) {
+                                AlgorithmType.FSRS -> card.fsrsReps
+                                AlgorithmType.SM2 -> card.sm2Repetitions
+                            }
+                            Text(
+                                text = "• $reviews reviews",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            val difficulty = when (card.algorithm) {
+                                AlgorithmType.FSRS -> String.format("%.1f", card.fsrsDifficulty)
+                                AlgorithmType.SM2 -> String.format("%.1f", 2.5 - card.sm2EaseFactor)
+                            }
+                            Text(
+                                text = "• Difficulty: $difficulty",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
 
                         Spacer(modifier = Modifier.height(4.dp))
                         Row(
