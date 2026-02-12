@@ -26,6 +26,7 @@ import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.Grade
+import androidx.activity.compose.BackHandler
 import kotlinx.coroutines.launch
 import com.fencing.spacedrepetition.ui.components.CardImagesEdit
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
@@ -69,6 +70,8 @@ fun AddEditCardScreen(
     var showAdvancedSettings by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
     var showCreateGroupDialog by remember { mutableStateOf(false) }
+    var isDirty by remember { mutableStateOf(false) }
+    var showUnsavedChangesDialog by remember { mutableStateOf(false) }
 
     // Image picker launcher
     val imagePickerLauncher = rememberLauncherForActivityResult(
@@ -79,6 +82,7 @@ fun AddEditCardScreen(
             val savedPath = saveImageToInternalStorage(context, it)
             if (savedPath != null) {
                 imagePaths = (imagePaths + savedPath).toMutableList()
+                isDirty = true
             }
         }
     }
@@ -134,13 +138,23 @@ fun AddEditCardScreen(
 
     val isEditing = cardToEdit != null
 
+    BackHandler(enabled = isDirty) {
+        showUnsavedChangesDialog = true
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(if (isEditing) "Edit Card" else "Add New Card") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(onClick = {
+                        if (isDirty) {
+                            showUnsavedChangesDialog = true
+                        } else {
+                            onNavigateBack()
+                        }
+                    }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                     }
                 },
@@ -161,7 +175,7 @@ fun AddEditCardScreen(
             // Question input
             OutlinedTextField(
                 value = question,
-                onValueChange = { question = it },
+                onValueChange = { question = it; isDirty = true },
                 label = { Text("Question / Concept") },
                 placeholder = { Text("e.g., En garde position") },
                 modifier = Modifier.fillMaxWidth(),
@@ -175,7 +189,7 @@ fun AddEditCardScreen(
             // Answer input
             OutlinedTextField(
                 value = answer,
-                onValueChange = { answer = it },
+                onValueChange = { answer = it; isDirty = true },
                 label = { Text("Description") },
                 placeholder = { Text("e.g., Front foot pointed forward, back foot at 90°...") },
                 modifier = Modifier.fillMaxWidth(),
@@ -225,6 +239,7 @@ fun AddEditCardScreen(
                             imagePaths = imagePaths,
                             onRemoveImage = { path ->
                                 imagePaths = imagePaths.filter { it != path }.toMutableList()
+                                isDirty = true
                             },
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -284,6 +299,7 @@ fun AddEditCardScreen(
                                 AssistChip(
                                     onClick = {
                                         selectedGroupIds = selectedGroupIds - group.id
+                                        isDirty = true
                                     },
                                     label = { Text(group.name) },
                                     trailingIcon = {
@@ -384,6 +400,159 @@ fun AddEditCardScreen(
                 }
             }
 
+            // Quick Grade section (only when editing)
+            if (isEditing && cardToEdit != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        var showGradeButtons by remember { mutableStateOf(false) }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showGradeButtons = !showGradeButtons },
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Star,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "Quick Grade",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                            Icon(
+                                if (showGradeButtons) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = if (showGradeButtons) "Collapse" else "Expand"
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Grade this card without a practice session",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        if (showGradeButtons) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            HorizontalDivider()
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // Global state grading
+                            Text(
+                                "Global State",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                listOf(Grade.AGAIN, Grade.HARD, Grade.GOOD, Grade.EASY).forEach { grade ->
+                                    CompactGradeButton(
+                                        grade = grade,
+                                        onClick = {
+                                            viewModel.gradeCard(cardToEdit.id, grade) { updated ->
+                                                fsrsStability = updated.fsrsStability.toString()
+                                                fsrsDifficulty = updated.fsrsDifficulty.toString()
+                                                fsrsReps = updated.fsrsReps.toString()
+                                                fsrsLapses = updated.fsrsLapses.toString()
+                                                fsrsState = updated.fsrsState
+                                                fsrsElapsedDays = updated.fsrsElapsedDays.toString()
+                                                fsrsScheduledDays = updated.fsrsScheduledDays.toString()
+                                                sm2EaseFactor = updated.sm2EaseFactor.toString()
+                                                sm2Interval = updated.sm2Interval.toString()
+                                                sm2Repetitions = updated.sm2Repetitions.toString()
+                                                lastReview = updated.lastReview
+                                                nextReview = updated.nextReview
+                                                scope.launch {
+                                                    val dateStr = SimpleDateFormat("MMM dd", Locale.getDefault())
+                                                        .format(Date(updated.nextReview))
+                                                    snackbarHostState.showSnackbar(
+                                                        "Graded as ${grade.label} - Next review: $dateStr"
+                                                    )
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+
+                            // Independent learning group grading
+                            val independentGradeGroups = allGroups.filter {
+                                it.independentLearning && it.id in selectedGroupIds
+                            }
+
+                            if (independentGradeGroups.isNotEmpty()) {
+                                independentGradeGroups.forEach { group ->
+                                    Spacer(modifier = Modifier.height(16.dp))
+
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Default.Folder,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.secondary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            "${group.name} (Independent)",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = MaterialTheme.colorScheme.secondary
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        listOf(Grade.AGAIN, Grade.HARD, Grade.GOOD, Grade.EASY).forEach { grade ->
+                                            CompactGradeButton(
+                                                grade = grade,
+                                                onClick = {
+                                                    viewModel.gradeCard(cardToEdit.id, grade, group.id) { updated ->
+                                                        independentLearningEdits = independentLearningEdits + (group.id to IndependentLearningEdit(
+                                                            fsrsStability = updated.fsrsStability.toString(),
+                                                            fsrsDifficulty = updated.fsrsDifficulty.toString(),
+                                                            fsrsReps = updated.fsrsReps.toString(),
+                                                            fsrsLapses = updated.fsrsLapses.toString(),
+                                                            fsrsState = updated.fsrsState,
+                                                            sm2EaseFactor = updated.sm2EaseFactor.toString(),
+                                                            sm2Interval = updated.sm2Interval.toString(),
+                                                            sm2Repetitions = updated.sm2Repetitions.toString()
+                                                        ))
+                                                        groupNextReviews = groupNextReviews + (group.id to updated.nextReview)
+                                                        scope.launch {
+                                                            val dateStr = SimpleDateFormat("MMM dd", Locale.getDefault())
+                                                                .format(Date(updated.nextReview))
+                                                            snackbarHostState.showSnackbar(
+                                                                "${group.name}: Graded as ${grade.label} - Next: $dateStr"
+                                                            )
+                                                        }
+                                                    }
+                                                },
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Algorithm selection
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -418,7 +587,7 @@ fun AddEditCardScreen(
                     ) {
                         RadioButton(
                             selected = selectedAlgorithm == AlgorithmType.FSRS,
-                            onClick = { selectedAlgorithm = AlgorithmType.FSRS }
+                            onClick = { selectedAlgorithm = AlgorithmType.FSRS; isDirty = true }
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column(modifier = Modifier.weight(1f)) {
@@ -443,7 +612,7 @@ fun AddEditCardScreen(
                     ) {
                         RadioButton(
                             selected = selectedAlgorithm == AlgorithmType.SM2,
-                            onClick = { selectedAlgorithm = AlgorithmType.SM2 }
+                            onClick = { selectedAlgorithm = AlgorithmType.SM2; isDirty = true }
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column(modifier = Modifier.weight(1f)) {
@@ -698,159 +867,6 @@ fun AddEditCardScreen(
                 }
             }
 
-            // Quick Grade section (only when editing)
-            if (isEditing && cardToEdit != null) {
-                Card(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        var showGradeButtons by remember { mutableStateOf(false) }
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { showGradeButtons = !showGradeButtons },
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.Star,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    "Quick Grade",
-                                    style = MaterialTheme.typography.titleMedium
-                                )
-                            }
-                            Icon(
-                                if (showGradeButtons) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                contentDescription = if (showGradeButtons) "Collapse" else "Expand"
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            "Grade this card without a practice session",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        if (showGradeButtons) {
-                            Spacer(modifier = Modifier.height(16.dp))
-                            HorizontalDivider()
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            // Global state grading
-                            Text(
-                                "Global State",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                listOf(Grade.AGAIN, Grade.HARD, Grade.GOOD, Grade.EASY).forEach { grade ->
-                                    CompactGradeButton(
-                                        grade = grade,
-                                        onClick = {
-                                            viewModel.gradeCard(cardToEdit.id, grade) { updated ->
-                                                fsrsStability = updated.fsrsStability.toString()
-                                                fsrsDifficulty = updated.fsrsDifficulty.toString()
-                                                fsrsReps = updated.fsrsReps.toString()
-                                                fsrsLapses = updated.fsrsLapses.toString()
-                                                fsrsState = updated.fsrsState
-                                                fsrsElapsedDays = updated.fsrsElapsedDays.toString()
-                                                fsrsScheduledDays = updated.fsrsScheduledDays.toString()
-                                                sm2EaseFactor = updated.sm2EaseFactor.toString()
-                                                sm2Interval = updated.sm2Interval.toString()
-                                                sm2Repetitions = updated.sm2Repetitions.toString()
-                                                lastReview = updated.lastReview
-                                                nextReview = updated.nextReview
-                                                scope.launch {
-                                                    val dateStr = SimpleDateFormat("MMM dd", Locale.getDefault())
-                                                        .format(Date(updated.nextReview))
-                                                    snackbarHostState.showSnackbar(
-                                                        "Graded as ${grade.label} - Next review: $dateStr"
-                                                    )
-                                                }
-                                            }
-                                        },
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-                            }
-
-                            // Independent learning group grading
-                            val independentGradeGroups = allGroups.filter {
-                                it.independentLearning && it.id in selectedGroupIds
-                            }
-
-                            if (independentGradeGroups.isNotEmpty()) {
-                                independentGradeGroups.forEach { group ->
-                                    Spacer(modifier = Modifier.height(16.dp))
-
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            Icons.Default.Folder,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.secondary,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            "${group.name} (Independent)",
-                                            style = MaterialTheme.typography.labelLarge,
-                                            color = MaterialTheme.colorScheme.secondary
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(8.dp))
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        listOf(Grade.AGAIN, Grade.HARD, Grade.GOOD, Grade.EASY).forEach { grade ->
-                                            CompactGradeButton(
-                                                grade = grade,
-                                                onClick = {
-                                                    viewModel.gradeCard(cardToEdit.id, grade, group.id) { updated ->
-                                                        independentLearningEdits = independentLearningEdits + (group.id to IndependentLearningEdit(
-                                                            fsrsStability = updated.fsrsStability.toString(),
-                                                            fsrsDifficulty = updated.fsrsDifficulty.toString(),
-                                                            fsrsReps = updated.fsrsReps.toString(),
-                                                            fsrsLapses = updated.fsrsLapses.toString(),
-                                                            fsrsState = updated.fsrsState,
-                                                            sm2EaseFactor = updated.sm2EaseFactor.toString(),
-                                                            sm2Interval = updated.sm2Interval.toString(),
-                                                            sm2Repetitions = updated.sm2Repetitions.toString()
-                                                        ))
-                                                        groupNextReviews = groupNextReviews + (group.id to updated.nextReview)
-                                                        scope.launch {
-                                                            val dateStr = SimpleDateFormat("MMM dd", Locale.getDefault())
-                                                                .format(Date(updated.nextReview))
-                                                            snackbarHostState.showSnackbar(
-                                                                "${group.name}: Graded as ${grade.label} - Next: $dateStr"
-                                                            )
-                                                        }
-                                                    }
-                                                },
-                                                modifier = Modifier.weight(1f)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
             Spacer(modifier = Modifier.weight(1f))
 
             // Save button
@@ -901,6 +917,7 @@ fun AddEditCardScreen(
                                             viewModel.updateLearningState(updatedState)
                                         }
                                     }
+                                    isDirty = false
                                     onNavigateBack()
                                 }
                             )
@@ -911,7 +928,7 @@ fun AddEditCardScreen(
                                 groupIds = selectedGroupIds.toList(),
                                 algorithm = selectedAlgorithm,
                                 imagePaths = imagePaths,
-                                onSuccess = onNavigateBack
+                                onSuccess = { isDirty = false; onNavigateBack() }
                             )
                         }
                     }
@@ -967,6 +984,7 @@ fun AddEditCardScreen(
                                     } else {
                                         selectedGroupIds + group.id
                                     }
+                                    isDirty = true
                                 }
                                 .padding(vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -979,6 +997,7 @@ fun AddEditCardScreen(
                                     } else {
                                         selectedGroupIds - group.id
                                     }
+                                    isDirty = true
                                 }
                             )
                             Spacer(modifier = Modifier.width(8.dp))
@@ -1202,6 +1221,35 @@ fun AddEditCardScreen(
             dismissButton = {
                 TextButton(onClick = { showCreateGroupDialog = false }) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Unsaved changes warning dialog
+    if (showUnsavedChangesDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnsavedChangesDialog = false },
+            icon = { Icon(Icons.Default.Warning, contentDescription = null) },
+            title = { Text("Unsaved Changes") },
+            text = { Text("You have unsaved changes. Leaving now will discard them.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showUnsavedChangesDialog = false
+                        isDirty = false
+                        onNavigateBack()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Discard Changes")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnsavedChangesDialog = false }) {
+                    Text("Keep Editing")
                 }
             }
         )
