@@ -63,6 +63,8 @@ class CardRepository(
 
     suspend fun insertCard(card: Card): Long = cardDao.insertCard(card)
 
+    suspend fun findCardByQuestion(question: String): Card? = cardDao.findCardByQuestion(question)
+
     suspend fun updateCard(card: Card) = cardDao.updateCard(card)
 
     suspend fun deleteCard(card: Card) {

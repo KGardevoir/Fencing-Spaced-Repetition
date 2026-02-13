@@ -857,4 +857,261 @@ object CardImportExport {
             buffered
         }
     }
+
+    // ========== CSV Import/Export ==========
+
+    private const val CSV_DELIMITER = ","
+    private const val CSV_HEADER_CONCEPT = "Concept"
+    private const val CSV_HEADER_DESCRIPTION = "Description"
+
+    /**
+     * Parses a CSV input stream into a list of ParsedCard objects.
+     * Expected format: Concept,Description,Image1,Image2,...
+     * Fields may be quoted with double quotes per RFC 4180.
+     * Returns pair of (valid cards, error messages).
+     */
+    fun parseCsvCards(inputStream: InputStream): Pair<List<ParsedCard>, List<String>> {
+        val cards = mutableListOf<ParsedCard>()
+        val errors = mutableListOf<String>()
+
+        try {
+            val content = inputStream.bufferedReader(Charsets.UTF_8).readText()
+            val lines = parseCsvLines(content)
+
+            if (lines.isEmpty()) {
+                return Pair(emptyList(), emptyList())
+            }
+
+            // Check if first row is a header
+            val firstRow = lines[0]
+            val hasHeader = firstRow.isNotEmpty() &&
+                firstRow[0].trim().equals(CSV_HEADER_CONCEPT, ignoreCase = true)
+
+            val dataLines = if (hasHeader) lines.drop(1) else lines
+
+            dataLines.forEachIndexed { index, fields ->
+                val lineNumber = if (hasHeader) index + 2 else index + 1
+
+                try {
+                    if (fields.isEmpty() || (fields.size == 1 && fields[0].isBlank())) {
+                        return@forEachIndexed // Skip empty lines
+                    }
+
+                    if (fields.size < 2) {
+                        errors.add("Line $lineNumber: Missing description (need at least Concept and Description columns)")
+                        return@forEachIndexed
+                    }
+
+                    val concept = fields[0].trim()
+                    val description = fields[1].trim()
+
+                    if (concept.isBlank()) {
+                        errors.add("Line $lineNumber: Empty concept")
+                        return@forEachIndexed
+                    }
+
+                    // Any additional columns are base64-encoded images
+                    val imageData = fields.drop(2)
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() }
+
+                    cards.add(
+                        ParsedCard(
+                            question = concept,
+                            answer = description,
+                            lineNumber = lineNumber,
+                            imageData = imageData
+                        )
+                    )
+                } catch (e: Exception) {
+                    errors.add("Line $lineNumber: ${e.message}")
+                }
+            }
+        } catch (e: Exception) {
+            errors.add("Failed to read CSV file: ${e.message}")
+        }
+
+        return Pair(cards, errors)
+    }
+
+    /**
+     * Exports cards to CSV format with columns: Concept, Description, Image1, Image2, ...
+     * Images are base64-encoded inline.
+     */
+    fun exportCardsToCsv(
+        cardsWithGroups: List<CardWithGroupNames>,
+        outputStream: OutputStream
+    ): ExportResult {
+        return try {
+            outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
+                // Determine max number of images across all cards
+                val maxImages = cardsWithGroups.maxOfOrNull { (card, _) ->
+                    card.imagePaths.size
+                } ?: 0
+
+                // Write header row
+                val headerParts = mutableListOf(CSV_HEADER_CONCEPT, CSV_HEADER_DESCRIPTION)
+                for (i in 1..maxImages) {
+                    headerParts.add("Image$i")
+                }
+                writer.write(headerParts.joinToString(CSV_DELIMITER) { escapeCsvField(it) })
+                writer.newLine()
+
+                // Write data rows
+                cardsWithGroups.forEach { (card, _) ->
+                    val fields = mutableListOf(
+                        escapeCsvField(card.question),
+                        escapeCsvField(card.answer)
+                    )
+
+                    // Add base64-encoded images
+                    val encodedImages = card.imagePaths.mapNotNull { encodeImageToBase64(it) }
+                    for (i in 0 until maxImages) {
+                        fields.add(
+                            if (i < encodedImages.size) escapeCsvField(encodedImages[i])
+                            else ""
+                        )
+                    }
+
+                    writer.write(fields.joinToString(CSV_DELIMITER))
+                    writer.newLine()
+                }
+            }
+            ExportResult.Success(cardsWithGroups.size)
+        } catch (e: Exception) {
+            ExportResult.Error("Failed to write CSV file: ${e.message}")
+        }
+    }
+
+    /**
+     * Generates a suggested filename for CSV export
+     */
+    fun generateCsvExportFilename(groupName: String): String {
+        val sanitized = groupName.replace(Regex("[^a-zA-Z0-9_\\-]"), "_")
+            .take(50)
+        return "${sanitized}_cards.csv"
+    }
+
+    /**
+     * Derives a group name from a filename.
+     * e.g. "parries_cards.csv" -> "parries cards", "My_Techniques.csv" -> "My Techniques"
+     */
+    fun deriveGroupNameFromFilename(filename: String): String {
+        // Remove file extension(s) - loop until no more known extensions remain
+        var name = filename
+        val extensions = listOf(".csv", ".tsv", ".gz", ".txt")
+        var changed = true
+        while (changed) {
+            changed = false
+            for (ext in extensions) {
+                if (name.endsWith(ext, ignoreCase = true)) {
+                    name = name.dropLast(ext.length)
+                    changed = true
+                }
+            }
+        }
+        // Remove trailing "_cards" if present
+        if (name.endsWith("_cards", ignoreCase = true)) {
+            name = name.dropLast("_cards".length)
+        }
+        // Replace underscores and hyphens with spaces
+        name = name.replace('_', ' ').replace('-', ' ')
+        // Trim and collapse multiple spaces
+        name = name.trim().replace(Regex("\\s+"), " ")
+        // Capitalize first letter of each word
+        return name.split(" ").joinToString(" ") { word ->
+            word.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        }
+    }
+
+    /**
+     * Escapes a field for CSV output per RFC 4180.
+     * Fields containing commas, double quotes, or newlines are enclosed in double quotes.
+     * Double quotes within fields are escaped as "".
+     */
+    fun escapeCsvField(field: String): String {
+        return if (field.contains(',') || field.contains('"') || field.contains('\n') || field.contains('\r')) {
+            "\"${field.replace("\"", "\"\"")}\""
+        } else {
+            field
+        }
+    }
+
+    /**
+     * Parses CSV content into a list of rows, where each row is a list of field values.
+     * Handles quoted fields with embedded commas, newlines, and escaped quotes per RFC 4180.
+     */
+    fun parseCsvLines(content: String): List<List<String>> {
+        val rows = mutableListOf<List<String>>()
+        val currentField = StringBuilder()
+        val currentRow = mutableListOf<String>()
+        var inQuotes = false
+        var i = 0
+
+        while (i < content.length) {
+            val c = content[i]
+
+            when {
+                inQuotes -> {
+                    if (c == '"') {
+                        // Check for escaped quote ""
+                        if (i + 1 < content.length && content[i + 1] == '"') {
+                            currentField.append('"')
+                            i += 2
+                            continue
+                        } else {
+                            // End of quoted field
+                            inQuotes = false
+                            i++
+                            continue
+                        }
+                    } else {
+                        currentField.append(c)
+                    }
+                }
+                c == '"' && currentField.isEmpty() -> {
+                    // Start of quoted field
+                    inQuotes = true
+                }
+                c == ',' -> {
+                    currentRow.add(currentField.toString())
+                    currentField.clear()
+                }
+                c == '\r' -> {
+                    // Handle \r\n or standalone \r
+                    currentRow.add(currentField.toString())
+                    currentField.clear()
+                    if (currentRow.any { it.isNotEmpty() } || currentRow.size > 1) {
+                        rows.add(currentRow.toList())
+                    }
+                    currentRow.clear()
+                    if (i + 1 < content.length && content[i + 1] == '\n') {
+                        i++ // Skip the \n in \r\n
+                    }
+                }
+                c == '\n' -> {
+                    currentRow.add(currentField.toString())
+                    currentField.clear()
+                    if (currentRow.any { it.isNotEmpty() } || currentRow.size > 1) {
+                        rows.add(currentRow.toList())
+                    }
+                    currentRow.clear()
+                }
+                else -> {
+                    currentField.append(c)
+                }
+            }
+            i++
+        }
+
+        // Handle last field/row
+        if (currentField.isNotEmpty() || currentRow.isNotEmpty()) {
+            currentRow.add(currentField.toString())
+            if (currentRow.any { it.isNotEmpty() } || currentRow.size > 1) {
+                rows.add(currentRow.toList())
+            }
+        }
+
+        return rows
+    }
 }

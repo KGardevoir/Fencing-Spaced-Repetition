@@ -14,7 +14,9 @@ import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.util.CardImportExport
+import com.fencing.spacedrepetition.util.CardWithGroupNames
 import com.fencing.spacedrepetition.util.ExportResult
+import com.fencing.spacedrepetition.util.ParsedCard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -564,6 +566,191 @@ class CardViewModel(
                 )
             } catch (e: Exception) {
                 _importExportState.value = ImportExportState.Error("Import failed: ${e.message}")
+            }
+        }
+    }
+
+    // ========== CSV Import/Export ==========
+
+    /**
+     * Step 1 of CSV import: parse the file and prompt the user for a group.
+     */
+    fun csvImportParseFile(
+        uri: Uri,
+        contentResolver: ContentResolver,
+        filename: String
+    ) {
+        viewModelScope.launch {
+            _importExportState.value = ImportExportState.Loading
+            try {
+                val parseResult = withContext(Dispatchers.IO) {
+                    contentResolver.openInputStream(uri)?.use { fileStream ->
+                        CardImportExport.parseCsvCards(fileStream)
+                    }
+                }
+
+                if (parseResult == null) {
+                    _importExportState.value = ImportExportState.Error("Failed to open file for reading")
+                    return@launch
+                }
+
+                val (parsedCards, parseErrors) = parseResult
+
+                if (parsedCards.isEmpty() && parseErrors.isEmpty()) {
+                    _importExportState.value = ImportExportState.Error("CSV file is empty")
+                    return@launch
+                }
+
+                if (parsedCards.isEmpty()) {
+                    _importExportState.value = ImportExportState.Error(
+                        "No valid cards found in CSV. Errors:\n${parseErrors.joinToString("\n")}"
+                    )
+                    return@launch
+                }
+
+                val suggestedName = CardImportExport.deriveGroupNameFromFilename(filename)
+                _importExportState.value = ImportExportState.CsvPendingGroupSelection(
+                    parsedCards = parsedCards,
+                    parseErrors = parseErrors,
+                    suggestedGroupName = suggestedName
+                )
+            } catch (e: Exception) {
+                _importExportState.value = ImportExportState.Error("CSV import failed: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Step 2 of CSV import: user has selected/created a group. Complete the import.
+     */
+    fun csvImportComplete(
+        parsedCards: List<ParsedCard>,
+        parseErrors: List<String>,
+        groupId: Long
+    ) {
+        viewModelScope.launch {
+            _importExportState.value = ImportExportState.Loading
+            try {
+                val importedCount = withContext(Dispatchers.IO) {
+                    var count = 0
+                    parsedCards.forEach { parsed ->
+                        val decodedImagePaths = parsed.imageData.mapNotNull { base64Data ->
+                            CardImportExport.decodeImageFromBase64(getApplication(), base64Data)
+                        }
+
+                        val existing = repository.findCardByQuestion(parsed.question)
+                        if (existing != null) {
+                            val updated = existing.copy(
+                                answer = parsed.answer,
+                                imagePaths = if (decodedImagePaths.isNotEmpty()) decodedImagePaths else existing.imagePaths,
+                                modified = System.currentTimeMillis()
+                            )
+                            repository.updateCard(updated)
+                            groupRepository.addCardToGroup(existing.id, groupId)
+                        } else {
+                            val card = Card(
+                                question = parsed.question,
+                                answer = parsed.answer,
+                                imagePaths = decodedImagePaths,
+                                algorithm = AlgorithmType.FSRS
+                            )
+                            val cardId = repository.insertCard(card)
+                            groupRepository.addCardToGroup(cardId, groupId)
+                        }
+                        count++
+                    }
+                    count
+                }
+
+                _importExportState.value = ImportExportState.ImportSuccess(
+                    importedCount = importedCount,
+                    skippedCount = parseErrors.size,
+                    errors = parseErrors
+                )
+            } catch (e: Exception) {
+                _importExportState.value = ImportExportState.Error("CSV import failed: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Export all cards to CSV format.
+     */
+    fun exportAllCardsCsv(uri: Uri, contentResolver: ContentResolver) {
+        viewModelScope.launch {
+            _importExportState.value = ImportExportState.Loading
+            try {
+                val cardsWithGroups = withContext(Dispatchers.IO) {
+                    repository.getAllCardsWithGroupNames().map { (card, groupNames) ->
+                        CardWithGroupNames(card, groupNames)
+                    }
+                }
+
+                if (cardsWithGroups.isEmpty()) {
+                    _importExportState.value = ImportExportState.Error("No cards to export")
+                    return@launch
+                }
+
+                val result = withContext(Dispatchers.IO) {
+                    contentResolver.openOutputStream(uri)?.use { fileStream ->
+                        CardImportExport.exportCardsToCsv(cardsWithGroups, fileStream)
+                    } ?: ExportResult.Error("Failed to open file for writing")
+                }
+
+                _importExportState.value = when (result) {
+                    is ExportResult.Success -> ImportExportState.ExportSuccess(result.exportedCount)
+                    is ExportResult.Error -> ImportExportState.Error(result.message)
+                }
+            } catch (e: Exception) {
+                _importExportState.value = ImportExportState.Error("CSV export failed: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Export selected groups' cards to CSV format.
+     */
+    fun exportSelectedGroupsCsv(selectedGroupIds: List<Long>, uri: Uri, contentResolver: ContentResolver) {
+        viewModelScope.launch {
+            _importExportState.value = ImportExportState.Loading
+            try {
+                val selectedGroups = withContext(Dispatchers.IO) {
+                    groupRepository.getAllGroupsSync().filter { it.id in selectedGroupIds }
+                }
+                val selectedGroupNames = selectedGroups.map { it.name }.toSet()
+
+                if (selectedGroupNames.isEmpty()) {
+                    _importExportState.value = ImportExportState.Error("No groups selected")
+                    return@launch
+                }
+
+                val allCardsWithGroups = withContext(Dispatchers.IO) {
+                    repository.getAllCardsWithGroupNames().map { (card, groupNames) ->
+                        CardWithGroupNames(card, groupNames)
+                    }
+                }
+
+                val filteredCards = allCardsWithGroups.filter { cwg ->
+                    cwg.groupNames.any { it in selectedGroupNames }
+                }
+
+                if (filteredCards.isEmpty()) {
+                    _importExportState.value = ImportExportState.Error("No cards found in selected groups")
+                    return@launch
+                }
+
+                val result = withContext(Dispatchers.IO) {
+                    contentResolver.openOutputStream(uri)?.use { fileStream ->
+                        CardImportExport.exportCardsToCsv(filteredCards, fileStream)
+                    } ?: ExportResult.Error("Failed to open file for writing")
+                }
+
+                _importExportState.value = when (result) {
+                    is ExportResult.Success -> ImportExportState.ExportSuccess(result.exportedCount)
+                    is ExportResult.Error -> ImportExportState.Error(result.message)
+                }
+            } catch (e: Exception) {
+                _importExportState.value = ImportExportState.Error("CSV export failed: ${e.message}")
             }
         }
     }
