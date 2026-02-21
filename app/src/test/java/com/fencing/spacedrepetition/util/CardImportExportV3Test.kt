@@ -1,6 +1,5 @@
 package com.fencing.spacedrepetition.util
 
-import android.util.Base64
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import org.junit.Assert.*
@@ -42,7 +41,7 @@ class CardImportExportV3Test {
             assertTrue(encoded!!.isNotEmpty())
 
             // Verify it can be decoded
-            val decoded = Base64.decode(encoded, Base64.NO_WRAP)
+            val decoded = java.util.Base64.getDecoder().decode(encoded)
             assertArrayEquals(createTestImageBytes(), decoded)
         } finally {
             tempFile.delete()
@@ -57,7 +56,8 @@ class CardImportExportV3Test {
 
     @Test
     fun `test GZIP compression and decompression`() {
-        val originalData = "This is a test string that should be compressed."
+        // Use a long repetitive string so GZIP overhead is outweighed by compression savings
+        val originalData = "This is a test string that should be compressed. ".repeat(20)
         val originalBytes = originalData.toByteArray(Charsets.UTF_8)
 
         // Compress
@@ -184,7 +184,7 @@ class CardImportExportV3Test {
             assertTrue(parsed.imageData[0].isNotEmpty())
 
             // Verify the image data is valid base64
-            val decodedImage = Base64.decode(parsed.imageData[0], Base64.NO_WRAP)
+            val decodedImage = java.util.Base64.getDecoder().decode(parsed.imageData[0])
             assertArrayEquals(createTestImageBytes(), decodedImage)
 
             // Verify state was preserved
