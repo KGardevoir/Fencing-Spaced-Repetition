@@ -648,9 +648,10 @@ class CardImportExportTest {
 
     @Test
     fun `generateExportFilename - group name with special characters`() {
-        // "My Group! @#$%" → My_Group + 6 underscores (one per: !, space, @, #, $, %)
+        // "My Group! @#$%" sanitizes to "My_Group______" (space between My/Group + !, space, @, #, $, %)
+        // then the function appends "_cards.tsv.gz", giving 7 underscores before "cards"
         val filename = CardImportExport.generateExportFilename("My Group! @#\$%")
-        assertEquals("My_Group______cards.tsv.gz", filename)
+        assertEquals("My_Group_______cards.tsv.gz", filename)
     }
 
     @Test

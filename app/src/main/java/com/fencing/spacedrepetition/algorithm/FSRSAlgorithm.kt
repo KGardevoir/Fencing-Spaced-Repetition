@@ -154,7 +154,7 @@ class FSRSAlgorithm(
             }
             Rating.HARD -> {
                 val newDifficulty = nextDifficulty(card.difficulty, Rating.HARD)
-                val newStab = nextStability(card.difficulty, card.stability, 1.0, rating)
+                val newStab = shortTermStability(card.stability, rating)
                 card.copy(
                     difficulty = newDifficulty,
                     stability = newStab,
@@ -165,7 +165,7 @@ class FSRSAlgorithm(
             }
             Rating.GOOD -> {
                 val newDifficulty = nextDifficulty(card.difficulty, Rating.GOOD)
-                val newStab = nextStability(card.difficulty, card.stability, 1.0, rating)
+                val newStab = shortTermStability(card.stability, rating)
                 card.copy(
                     difficulty = newDifficulty,
                     stability = newStab,
@@ -176,7 +176,7 @@ class FSRSAlgorithm(
             }
             Rating.EASY -> {
                 val newDifficulty = nextDifficulty(card.difficulty, Rating.EASY)
-                val newStab = nextStability(card.difficulty, card.stability, 1.0, rating)
+                val newStab = shortTermStability(card.stability, rating)
                 card.copy(
                     difficulty = newDifficulty,
                     stability = newStab,
@@ -260,8 +260,7 @@ class FSRSAlgorithm(
     }
 
     private fun nextInterval(stability: Double): Int {
-        val newInterval = (stability / requestRetention.pow(1.0 / w[8]) *
-                          (requestRetention.pow(1.0 / w[8]) - 1) * 9)
+        val newInterval = 9.0 * stability * (1.0 / requestRetention - 1)
         return newInterval.toInt().coerceIn(1, maximumInterval)
     }
 
@@ -292,6 +291,12 @@ class FSRSAlgorithm(
             hardPenalty *
             easyBonus
         )
+    }
+
+    private fun shortTermStability(stability: Double, rating: Rating): Double {
+        // Short-term stability formula for learning/relearning phase
+        // rating.ordinal is 0-indexed (AGAIN=0,HARD=1,GOOD=2,EASY=3); formula uses 1-indexed values
+        return stability * exp(w[17] * (rating.ordinal + 1 - 3 + w[18]))
     }
 
     private fun nextForgetStability(difficulty: Double, stability: Double, retrievability: Double): Double {
