@@ -717,25 +717,7 @@ class CardRepository(
         val calendarDow = calendar.get(Calendar.DAY_OF_WEEK)
         val targetDow = calendarDowToIso(calendarDow)
 
-        if (practiceDays.contains(targetDow)) return scheduledDays
-
-        // Find nearest practice day (forward and backward)
-        var bestForward = 7
-        var bestBackward = 7
-        for (day in practiceDays) {
-            val forward = (day - targetDow + 7) % 7
-            val backward = (targetDow - day + 7) % 7
-            if (forward in 1 until bestForward) bestForward = forward
-            if (backward in 1 until bestBackward) bestBackward = backward
-        }
-
-        // Prefer forward (later) to avoid reviewing too soon; if tie, pick forward
-        val adjustedDays = if (bestForward <= bestBackward) {
-            scheduledDays + bestForward
-        } else {
-            scheduledDays - bestBackward
-        }
-        return adjustedDays.coerceAtLeast(1)
+        return scheduledDays + forwardDaysToNearestPracticeDay(targetDow, practiceDays)
     }
 
     /**
@@ -873,5 +855,22 @@ class CardRepository(
             .flatMap { (_, cardsInBucket) ->
                 cardsInBucket.shuffled()
             }
+    }
+
+    companion object {
+        /**
+         * Given a target day-of-week (ISO-8601: 1=Monday..7=Sunday) and a set of practice
+         * days, returns how many days forward to advance to reach the nearest practice day.
+         * Returns 0 if targetDow is already a practice day. Never rounds backward.
+         */
+        internal fun forwardDaysToNearestPracticeDay(targetDow: Int, practiceDays: Set<Int>): Int {
+            if (practiceDays.contains(targetDow)) return 0
+            var best = 7
+            for (day in practiceDays) {
+                val forward = (day - targetDow + 7) % 7
+                if (forward in 1 until best) best = forward
+            }
+            return best
+        }
     }
 }
