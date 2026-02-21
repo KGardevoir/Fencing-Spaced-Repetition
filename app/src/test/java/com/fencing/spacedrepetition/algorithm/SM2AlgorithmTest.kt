@@ -203,12 +203,13 @@ class SM2AlgorithmTest {
     }
 
     @Test
-    fun testEaseFactor_IncreasesWithEasyRating() {
+    fun testEaseFactor_UnchangedWithEasyRating() {
+        // Quality.EASY = ordinal 4; formula: EF + (0.1 - (5-4)*(0.08+(5-4)*0.02)) = EF + 0 = EF
         val card = SM2Algorithm.SM2Card(easeFactor = 2.5)
 
         val result = algorithm.schedule(card, SM2Algorithm.Quality.EASY, testTimestamp)
 
-        assertTrue(result.card.easeFactor > 2.5)
+        assertDoubleEquals(2.5, result.card.easeFactor)
     }
 
     @Test
@@ -457,7 +458,7 @@ class SM2AlgorithmTest {
         val reviewTime = testTimestamp + (10 * oneDayMs)
         val result = algorithm.schedule(card, SM2Algorithm.Quality.EASY, reviewTime)
 
-        val expectedInterval = (10 * 2.6).toInt() // EF increases to ~2.6 with quality 4
+        val expectedInterval = (10 * 2.5).toInt() // Quality.EASY (q=4) leaves EF unchanged at 2.5
         val expectedNextReview = reviewTime + (expectedInterval * oneDayMs)
         assertEquals(expectedNextReview, result.nextReviewDate)
     }
