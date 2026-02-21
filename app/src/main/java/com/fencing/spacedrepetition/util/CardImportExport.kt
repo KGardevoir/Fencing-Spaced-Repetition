@@ -1,7 +1,6 @@
 package com.fencing.spacedrepetition.util
 
 import android.content.Context
-import android.util.Base64
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.Group
@@ -790,7 +789,7 @@ object CardImportExport {
                 return null
             }
             val bytes = file.readBytes()
-            Base64.encodeToString(bytes, Base64.NO_WRAP)
+            java.util.Base64.getEncoder().encodeToString(bytes)
         } catch (e: Exception) {
             e.printStackTrace()
             null
@@ -803,7 +802,7 @@ object CardImportExport {
      */
     fun decodeImageFromBase64(context: Context, base64Data: String): String? {
         return try {
-            val bytes = Base64.decode(base64Data, Base64.NO_WRAP)
+            val bytes = java.util.Base64.getDecoder().decode(base64Data)
 
             // Create images directory if it doesn't exist
             val imagesDir = File(context.filesDir, "card_images")

@@ -399,7 +399,7 @@ class CardImportExportTest {
         assertEquals(1, (result as ExportResult.Success).exportedCount)
 
         val output = outputStream.toString(Charsets.UTF_8.name())
-        assertTrue(output.startsWith("#FSR_EXPORT_V2"))
+        assertTrue(output.startsWith("#FSR_EXPORT_V3"))
         assertTrue(output.contains("Q1"))
         assertTrue(output.contains("GLOBAL"))
     }
@@ -451,7 +451,7 @@ class CardImportExportTest {
         val lines = output.lines()
 
         // Should have header, column names, and 2 data rows
-        assertTrue(lines[0].startsWith("#FSR_EXPORT_V2"))
+        assertTrue(lines[0].startsWith("#FSR_EXPORT_V3"))
         assertTrue(lines[1].startsWith("#Question"))
 
         // Find lines with actual data (skip empty lines)
@@ -643,20 +643,22 @@ class CardImportExportTest {
     @Test
     fun `generateExportFilename - simple group name`() {
         val filename = CardImportExport.generateExportFilename("MyGroup")
-        assertEquals("MyGroup_cards.txt", filename)
+        assertEquals("MyGroup_cards.tsv.gz", filename)
     }
 
     @Test
     fun `generateExportFilename - group name with special characters`() {
+        // "My Group! @#$%" sanitizes to "My_Group______" (space between My/Group + !, space, @, #, $, %)
+        // then the function appends "_cards.tsv.gz", giving 7 underscores before "cards"
         val filename = CardImportExport.generateExportFilename("My Group! @#\$%")
-        assertEquals("My_Group_______cards.txt", filename)
+        assertEquals("My_Group_______cards.tsv.gz", filename)
     }
 
     @Test
     fun `generateExportFilename - long group name is truncated`() {
         val longName = "A".repeat(100)
         val filename = CardImportExport.generateExportFilename(longName)
-        assertTrue(filename.length <= 61) // 50 chars + "_cards.txt"
+        assertTrue(filename.length <= 63) // 50 chars + "_cards.tsv.gz"
     }
 
     // ==================== EDGE CASES ====================
