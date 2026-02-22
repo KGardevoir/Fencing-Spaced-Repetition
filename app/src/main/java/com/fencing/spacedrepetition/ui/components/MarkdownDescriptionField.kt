@@ -1,34 +1,53 @@
 package com.fencing.spacedrepetition.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FormatBold
+import androidx.compose.material.icons.filled.FormatItalic
+import androidx.compose.material.icons.filled.FormatListBulleted
+import androidx.compose.material.icons.filled.FormatUnderlined
+import androidx.compose.material.icons.filled.Title
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalTextToolbar
-import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 
@@ -37,8 +56,8 @@ private enum class DescriptionTab { Edit, Preview }
 /**
  * A Description input field with:
  *   - Edit / Preview tab toggle
- *   - Markdown formatting actions (Bold, Italic, Underline, Code, Heading, Bullet)
- *     available in the long-press text-selection popup via a custom [TextToolbar]
+ *   - Markdown formatting toolbar that slides in above the field whenever it
+ *     is focused (i.e. the soft keyboard is open), then disappears on blur
  *   - Preview renders the markdown via [MarkdownText]
  */
 @Composable
@@ -51,17 +70,7 @@ fun MarkdownDescriptionField(
     maxLines: Int = 8
 ) {
     var activeTab by remember { mutableStateOf(DescriptionTab.Edit) }
-
-    val view = LocalView.current
-    val toolbar = remember(view) { MarkdownTextToolbar(view) }
-
-    // Reassign on every recomposition so lambdas always capture the latest value.
-    toolbar.onBold      = { onValueChange(applyInlineFormat(value, "**",  "**",   "bold"))      }
-    toolbar.onItalic    = { onValueChange(applyInlineFormat(value, "*",   "*",    "italic"))    }
-    toolbar.onUnderline = { onValueChange(applyInlineFormat(value, "<u>", "</u>", "underline")) }
-    toolbar.onCode      = { onValueChange(applyInlineFormat(value, "`",   "`",    "code"))      }
-    toolbar.onHeader    = { onValueChange(applyLinePrefix(value, "# "))  }
-    toolbar.onBullet    = { onValueChange(applyLinePrefix(value, "- "))  }
+    var isFocused by remember { mutableStateOf(false) }
 
     Surface(
         modifier = modifier,
@@ -69,6 +78,7 @@ fun MarkdownDescriptionField(
         color = MaterialTheme.colorScheme.surface
     ) {
         Column {
+            // Edit / Preview tabs
             TabRow(selectedTabIndex = activeTab.ordinal) {
                 Tab(
                     selected = activeTab == DescriptionTab.Edit,
@@ -98,21 +108,43 @@ fun MarkdownDescriptionField(
 
             when (activeTab) {
                 DescriptionTab.Edit -> {
-                    CompositionLocalProvider(LocalTextToolbar provides toolbar) {
-                        OutlinedTextField(
-                            value = value,
-                            onValueChange = onValueChange,
-                            label = { Text(label) },
-                            placeholder = { Text("Long-press selected text to format: bold, italic, underline, code, heading, bullet...") },
-                            modifier = Modifier.fillMaxWidth(),
-                            leadingIcon = {
-                                Icon(Icons.Default.CheckCircle, contentDescription = null)
-                            },
-                            minLines = minLines,
-                            maxLines = maxLines,
-                            shape = RoundedCornerShape(bottomStart = 4.dp, bottomEnd = 4.dp)
-                        )
+                    // Formatting toolbar — slides in when the field is focused
+                    AnimatedVisibility(
+                        visible = isFocused,
+                        enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+                        exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
+                    ) {
+                        Column {
+                            MarkdownToolbar(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                                onBold      = { onValueChange(applyInlineFormat(value, "**",  "**",   "bold"))      },
+                                onItalic    = { onValueChange(applyInlineFormat(value, "*",   "*",    "italic"))    },
+                                onUnderline = { onValueChange(applyInlineFormat(value, "<u>", "</u>", "underline")) },
+                                onCode      = { onValueChange(applyInlineFormat(value, "`",   "`",    "code"))      },
+                                onHeader    = { onValueChange(applyLinePrefix(value, "# ")) },
+                                onBullet    = { onValueChange(applyLinePrefix(value, "- ")) }
+                            )
+                            HorizontalDivider()
+                        }
                     }
+
+                    OutlinedTextField(
+                        value = value,
+                        onValueChange = onValueChange,
+                        label = { Text(label) },
+                        placeholder = { Text("Supports **bold**, *italic*, <u>underline</u>, # headings, - bullets...") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { isFocused = it.isFocused },
+                        leadingIcon = {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null)
+                        },
+                        minLines = minLines,
+                        maxLines = maxLines,
+                        shape = RoundedCornerShape(bottomStart = 4.dp, bottomEnd = 4.dp)
+                    )
                 }
 
                 DescriptionTab.Preview -> {
@@ -151,31 +183,79 @@ fun MarkdownDescriptionField(
     }
 }
 
+@Composable
+fun MarkdownToolbar(
+    onBold:      () -> Unit,
+    onItalic:    () -> Unit,
+    onUnderline: () -> Unit,
+    onCode:      () -> Unit,
+    onHeader:    () -> Unit,
+    onBullet:    () -> Unit,
+    modifier:    Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.Start,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        ToolbarIconButton(Icons.Default.FormatBold,          "Bold (**text**)",         onBold)
+        ToolbarIconButton(Icons.Default.FormatItalic,        "Italic (*text*)",          onItalic)
+        ToolbarIconButton(Icons.Default.FormatUnderlined,    "Underline (<u>text</u>)",  onUnderline)
+        VerticalDivider(modifier = Modifier.height(24.dp).padding(horizontal = 4.dp))
+        ToolbarIconButton(Icons.Default.Title,               "Heading (# text)",         onHeader)
+        ToolbarIconButton(Icons.Default.FormatListBulleted,  "Bullet list (- text)",     onBullet)
+        VerticalDivider(modifier = Modifier.height(24.dp).padding(horizontal = 4.dp))
+        TextButton(
+            onClick = onCode,
+            modifier = Modifier.size(36.dp),
+            contentPadding = PaddingValues(0.dp)
+        ) {
+            Text(
+                text = "</>",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+            )
+        }
+    }
+}
+
+@Composable
+private fun ToolbarIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit
+) {
+    IconButton(onClick = onClick, modifier = Modifier.size(36.dp)) {
+        Icon(icon, contentDescription = contentDescription, modifier = Modifier.size(20.dp))
+    }
+}
+
 /**
  * Wraps the current selection (or inserts a placeholder) with [prefix] and [suffix].
- * After insertion the placeholder text is selected so the user can type over it.
  */
 fun applyInlineFormat(
     fieldValue: TextFieldValue,
-    prefix: String,
-    suffix: String,
+    prefix:      String,
+    suffix:      String,
     placeholder: String
 ): TextFieldValue {
-    val sel = fieldValue.selection
+    val sel  = fieldValue.selection
     val text = fieldValue.text
     return if (sel.collapsed) {
-        val insert = "$prefix$placeholder$suffix"
+        val insert  = "$prefix$placeholder$suffix"
         val newText = text.substring(0, sel.start) + insert + text.substring(sel.start)
         TextFieldValue(
-            text = newText,
+            text      = newText,
             selection = TextRange(sel.start + prefix.length, sel.start + prefix.length + placeholder.length)
         )
     } else {
         val selected = text.substring(sel.min, sel.max)
-        val insert = "$prefix$selected$suffix"
-        val newText = text.substring(0, sel.min) + insert + text.substring(sel.max)
+        val insert   = "$prefix$selected$suffix"
+        val newText  = text.substring(0, sel.min) + insert + text.substring(sel.max)
         TextFieldValue(
-            text = newText,
+            text      = newText,
             selection = TextRange(sel.min + prefix.length, sel.min + prefix.length + selected.length)
         )
     }
@@ -186,18 +266,15 @@ fun applyInlineFormat(
  */
 fun applyLinePrefix(
     fieldValue: TextFieldValue,
-    linePrefix: String
+    linePrefix:  String
 ): TextFieldValue {
-    val text = fieldValue.text
-    val cursor = fieldValue.selection.min
+    val text      = fieldValue.text
+    val cursor    = fieldValue.selection.min
     val lineStart = (text.lastIndexOf('\n', cursor - 1) + 1).coerceAtLeast(0)
-    val newText = text.substring(0, lineStart) + linePrefix + text.substring(lineStart)
-    val shift = linePrefix.length
+    val newText   = text.substring(0, lineStart) + linePrefix + text.substring(lineStart)
+    val shift     = linePrefix.length
     return TextFieldValue(
-        text = newText,
-        selection = TextRange(
-            fieldValue.selection.start + shift,
-            fieldValue.selection.end + shift
-        )
+        text      = newText,
+        selection = TextRange(fieldValue.selection.start + shift, fieldValue.selection.end + shift)
     )
 }
