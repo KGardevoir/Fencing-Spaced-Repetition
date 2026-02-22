@@ -552,7 +552,7 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
             HorizontalDivider()
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             // Danger Zone section
             Text(
@@ -560,7 +560,7 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.error
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Button(
                 onClick = { showDeleteAllDialog = true },
@@ -577,12 +577,13 @@ fun SettingsScreen(
                     contentDescription = null,
                     modifier = Modifier.size(24.dp)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = "Delete All Cards",
                     style = MaterialTheme.typography.titleMedium
                 )
             }
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "Permanently remove all cards, review history, and group assignments",
                 style = MaterialTheme.typography.bodySmall,
