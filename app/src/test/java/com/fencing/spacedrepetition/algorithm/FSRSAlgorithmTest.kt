@@ -33,7 +33,7 @@ class FSRSAlgorithmTest {
         assertEquals(FSRSAlgorithm.CardState.LEARNING, result.card.state)
         assertEquals(0, result.card.scheduledDays)
         assertEquals(1, result.card.reps)
-        assertEquals(1, result.card.lapses)
+        assertEquals(0, result.card.lapses)
         assertTrue(result.card.difficulty > 0.0)
         assertTrue(result.card.stability > 0.0)
     }
@@ -124,7 +124,7 @@ class FSRSAlgorithmTest {
         assertEquals(FSRSAlgorithm.CardState.LEARNING, result.card.state)
         assertEquals(0, result.card.scheduledDays)
         assertEquals(2, result.card.reps)
-        assertEquals(1, result.card.lapses)
+        assertEquals(0, result.card.lapses)
     }
 
     @Test
@@ -312,7 +312,7 @@ class FSRSAlgorithmTest {
         assertEquals(FSRSAlgorithm.CardState.LEARNING, result.card.state)
         assertEquals(0, result.card.scheduledDays)
         assertEquals(7, result.card.reps)
-        assertEquals(2, result.card.lapses)
+        assertEquals(1, result.card.lapses)
     }
 
     // ========== Review Log Tests ==========
@@ -493,11 +493,12 @@ class FSRSAlgorithmTest {
 
         assertEquals(0, card.lapses)
 
+        // Lapses only increment when a REVIEW card fails; NEW and LEARNING failures do not count
         card = algorithm.schedule(card, FSRSAlgorithm.Rating.AGAIN, testTimestamp).card
-        assertEquals(1, card.lapses)
+        assertEquals(0, card.lapses) // NEW state: not a lapse
 
         card = algorithm.schedule(card, FSRSAlgorithm.Rating.AGAIN, testTimestamp + (24 * 60 * 60 * 1000)).card
-        assertEquals(2, card.lapses)
+        assertEquals(0, card.lapses) // LEARNING state: not a lapse
     }
 
     @Test

@@ -1,12 +1,11 @@
 package com.fencing.spacedrepetition.algorithm
 
 import kotlin.math.exp
-import kotlin.math.ln
 import kotlin.math.pow
 
 /**
  * FSRS (Free Spaced Repetition Scheduler) Algorithm Implementation
- * Based on the FSRS-4.5 specification
+ * Based on the FSRS-5 specification
  */
 class FSRSAlgorithm(
     private var maximumInterval: Int = 36500 // Default: 100 years
@@ -47,17 +46,17 @@ class FSRSAlgorithm(
         val state: CardState
     )
 
-    // FSRS Parameters (optimized defaults)
+    // FSRS-5 Parameters (optimized defaults)
     private val w = doubleArrayOf(
-        0.4072, 1.1829, 3.1262, 15.4722, 7.2102,
-        0.5316, 1.0651, 0.0234, 1.616, 0.1544,
-        1.0824, 1.9813, 0.0953, 0.2975, 2.2042,
-        0.2407, 2.9466, 0.5034, 0.6567
+        0.40255, 1.18385, 3.173, 15.69105, 7.1949,
+        0.5345, 1.4604, 0.0046, 1.54575, 0.1192,
+        1.01925, 1.9395, 0.11, 0.29605, 2.2698,
+        0.2315, 2.9898, 0.51655, 0.6621
     )
 
     private val requestRetention = 0.9 // Target retention rate
-    private val easyBonus = 1.3
-    private val hardInterval = 1.2
+    private val DECAY = -0.5
+    private val FACTOR = 19.0 / 81.0
 
     /**
      * Update the maximum interval setting
@@ -112,8 +111,7 @@ class FSRSAlgorithm(
                 stability = stability,
                 state = CardState.LEARNING,
                 scheduledDays = 0,
-                reps = 1,
-                lapses = card.lapses + 1
+                reps = 1
             )
             Rating.HARD -> card.copy(
                 difficulty = difficulty,
@@ -133,23 +131,23 @@ class FSRSAlgorithm(
                 difficulty = difficulty,
                 stability = stability,
                 state = CardState.REVIEW,
-                scheduledDays = (stability * easyBonus).toInt().coerceAtMost(maximumInterval),
+                scheduledDays = nextInterval(stability),
                 reps = 1
             )
         }
     }
 
     private fun scheduleLearning(card: FSRSCard, rating: Rating): FSRSCard {
-        val newStability = when (rating) {
+        return when (rating) {
             Rating.AGAIN -> {
                 val newDifficulty = nextDifficulty(card.difficulty, Rating.AGAIN)
+                val newStab = shortTermStability(card.stability, rating)
                 card.copy(
                     difficulty = newDifficulty,
-                    stability = card.stability,
+                    stability = newStab,
                     state = CardState.LEARNING,
                     scheduledDays = 0,
-                    reps = card.reps + 1,
-                    lapses = card.lapses + 1
+                    reps = card.reps + 1
                 )
             }
             Rating.HARD -> {
@@ -181,12 +179,11 @@ class FSRSAlgorithm(
                     difficulty = newDifficulty,
                     stability = newStab,
                     state = CardState.REVIEW,
-                    scheduledDays = (nextInterval(newStab) * easyBonus).toInt().coerceAtMost(maximumInterval),
+                    scheduledDays = nextInterval(newStab),
                     reps = card.reps + 1
                 )
             }
         }
-        return newStability
     }
 
     private fun scheduleReview(card: FSRSCard, rating: Rating, elapsedDays: Int): FSRSCard {
@@ -212,7 +209,7 @@ class FSRSAlgorithm(
                     difficulty = newDifficulty,
                     stability = newStab,
                     state = CardState.REVIEW,
-                    scheduledDays = (nextInterval(newStab) * hardInterval).toInt().coerceAtMost(maximumInterval),
+                    scheduledDays = nextInterval(newStab),
                     reps = card.reps + 1
                 )
             }
@@ -234,7 +231,7 @@ class FSRSAlgorithm(
                     difficulty = newDifficulty,
                     stability = newStab,
                     state = CardState.REVIEW,
-                    scheduledDays = (nextInterval(newStab) * easyBonus).toInt().coerceAtMost(maximumInterval),
+                    scheduledDays = nextInterval(newStab),
                     reps = card.reps + 1
                 )
             }
@@ -251,27 +248,28 @@ class FSRSAlgorithm(
     }
 
     private fun initDifficulty(rating: Rating): Double {
-        val difficulty = w[4] - (rating.ordinal) * w[5]
-        return difficulty.coerceIn(1.0, 10.0)
+        val g = rating.ordinal + 1  // 1-indexed grade (AGAIN=1, HARD=2, GOOD=3, EASY=4)
+        return (w[4] - exp(w[5] * (g - 1)) + 1).coerceIn(1.0, 10.0)
     }
 
     private fun forgettingCurve(elapsedDays: Int, stability: Double): Double {
-        return (1 + elapsedDays / (9 * stability)).pow(-1.0)
+        return (1.0 + FACTOR * elapsedDays / stability).pow(DECAY)
     }
 
     private fun nextInterval(stability: Double): Int {
-        val newInterval = 9.0 * stability * (1.0 / requestRetention - 1)
+        val newInterval = stability / FACTOR * (requestRetention.pow(1.0 / DECAY) - 1)
         return newInterval.toInt().coerceIn(1, maximumInterval)
     }
 
     private fun nextDifficulty(difficulty: Double, rating: Rating): Double {
-        val deltaDifficulty = rating.ordinal - 3 // -2, -1, 0, 1
-        val newDifficulty = difficulty - w[6] * deltaDifficulty
-        return meanReversion(w[4], newDifficulty).coerceIn(1.0, 10.0)
+        val g = rating.ordinal + 1  // 1-indexed grade (AGAIN=1, HARD=2, GOOD=3, EASY=4)
+        val delta = -w[6] * (g - 3)
+        val newDifficulty = difficulty + delta * (10.0 - difficulty) / 9.0
+        return meanReversion(initDifficulty(Rating.EASY), newDifficulty).coerceIn(1.0, 10.0)
     }
 
     private fun meanReversion(init: Double, current: Double): Double {
-        return w[7] * init + (1 - w[7]) * current
+        return w[7] * init + (1.0 - w[7]) * current
     }
 
     private fun nextRecallStability(
@@ -294,8 +292,6 @@ class FSRSAlgorithm(
     }
 
     private fun shortTermStability(stability: Double, rating: Rating): Double {
-        // Short-term stability formula for learning/relearning phase
-        // rating.ordinal is 0-indexed (AGAIN=0,HARD=1,GOOD=2,EASY=3); formula uses 1-indexed values
         return stability * exp(w[17] * (rating.ordinal + 1 - 3 + w[18]))
     }
 
@@ -303,19 +299,5 @@ class FSRSAlgorithm(
         return w[11] * difficulty.pow(-w[12]) *
                ((stability + 1).pow(w[13]) - 1) *
                exp((1 - retrievability) * w[14])
-    }
-
-    private fun nextStability(difficulty: Double, stability: Double, retrievability: Double, rating: Rating): Double {
-        val hardPenalty = if (rating == Rating.HARD) w[15] else 1.0
-        val easyBonus = if (rating == Rating.EASY) w[16] else 1.0
-
-        return stability * (
-            exp(w[17]) *
-            (11 - difficulty) *
-            stability.pow(-w[18]) *
-            (exp((1 - retrievability) * w[10]) - 1) *
-            hardPenalty *
-            easyBonus + 1
-        )
     }
 }
