@@ -19,11 +19,34 @@ import java.io.ByteArrayOutputStream
  */
 class CardImportExportTest {
 
-    // ==================== SIMPLE FORMAT PARSING TESTS ====================
+    // ==================== HEADER VALIDATION TESTS ====================
 
     @Test
-    fun `parseCards - simple format with single card`() {
-        val input = "What is 2+2?\t4"
+    fun `parseCards - rejects file without recognized FSR_EXPORT header`() {
+        val input = "Question 1\tAnswer 1\nQuestion 2\tAnswer 2"
+        val (cards, errors) = CardImportExport.parseCards(input.byteInputStream())
+
+        assertEquals(0, cards.size)
+        assertEquals(1, errors.size)
+        assertTrue(errors[0].contains("FSR_EXPORT"))
+    }
+
+    @Test
+    fun `parseCards - rejects file starting with comment instead of header`() {
+        val input = "# This is not a valid header\nQuestion 1\tAnswer 1"
+        val (cards, errors) = CardImportExport.parseCards(input.byteInputStream())
+
+        assertEquals(0, cards.size)
+        assertEquals(1, errors.size)
+        assertTrue(errors[0].contains("FSR_EXPORT"))
+    }
+
+    // ==================== SIMPLE FORMAT PARSING TESTS ====================
+    // Simple two-column (question\tanswer) data is accepted when inside a valid FSR export file.
+
+    @Test
+    fun `parseCards - two-column data with V1 header parses correctly`() {
+        val input = "#FSR_EXPORT_V1\nWhat is 2+2?\t4"
         val (cards, errors) = CardImportExport.parseCards(input.byteInputStream())
 
         assertEquals(1, cards.size)
@@ -34,8 +57,9 @@ class CardImportExportTest {
     }
 
     @Test
-    fun `parseCards - simple format with multiple cards`() {
+    fun `parseCards - multiple two-column rows with V1 header`() {
         val input = """
+            #FSR_EXPORT_V1
             Question 1	Answer 1
             Question 2	Answer 2
             Question 3	Answer 3
@@ -50,21 +74,20 @@ class CardImportExportTest {
     }
 
     @Test
-    fun `parseCards - simple format with trailing tab only is treated as missing answer`() {
-        // Note: Lines are trimmed before parsing, so "Question\t" becomes "Question"
-        // which has no tab delimiter -> error
-        val input = "Question with empty answer\t"
+    fun `parseCards - trailing tab trimmed produces missing answer error`() {
+        // Lines are trimmed before parsing, so "Question\t" becomes "Question" -> missing answer
+        val input = "#FSR_EXPORT_V1\nQuestion with empty answer\t"
         val (cards, errors) = CardImportExport.parseCards(input.byteInputStream())
 
-        // Trailing tab is trimmed, so this is treated as missing answer
         assertEquals(0, cards.size)
         assertEquals(1, errors.size)
-        assertTrue(errors[0].contains("no tab delimiter"))
+        assertTrue(errors[0].contains("Missing answer"))
     }
 
     @Test
-    fun `parseCards - simple format skips empty lines`() {
+    fun `parseCards - skips empty lines within V1 file`() {
         val input = """
+            #FSR_EXPORT_V1
             Question 1	Answer 1
 
             Question 2	Answer 2
@@ -76,8 +99,9 @@ class CardImportExportTest {
     }
 
     @Test
-    fun `parseCards - simple format skips comment lines`() {
+    fun `parseCards - skips comment lines within V1 file`() {
         val input = """
+            #FSR_EXPORT_V1
             # This is a comment
             Question 1	Answer 1
             #Another comment
@@ -90,8 +114,8 @@ class CardImportExportTest {
     }
 
     @Test
-    fun `parseCards - simple format handles newline escaping`() {
-        val input = "Question with<br>newline\tAnswer with<br>multiple<br>lines"
+    fun `parseCards - handles newline escaping within V1 file`() {
+        val input = "#FSR_EXPORT_V1\nQuestion with<br>newline\tAnswer with<br>multiple<br>lines"
         val (cards, errors) = CardImportExport.parseCards(input.byteInputStream())
 
         assertEquals(1, cards.size)
@@ -100,26 +124,24 @@ class CardImportExportTest {
     }
 
     @Test
-    fun `parseCards - simple format error on missing tab`() {
-        val input = "Question without answer"
+    fun `parseCards - error on missing tab within V1 file`() {
+        val input = "#FSR_EXPORT_V1\nQuestion without answer"
         val (cards, errors) = CardImportExport.parseCards(input.byteInputStream())
 
         assertEquals(0, cards.size)
         assertEquals(1, errors.size)
-        assertTrue(errors[0].contains("Line 1"))
+        assertTrue(errors[0].contains("Line 2"))
     }
 
     @Test
-    fun `parseCards - simple format with leading tab only is treated as missing delimiter`() {
-        // Note: Lines are trimmed before parsing, so "\tAnswer" becomes "Answer"
-        // which has no tab delimiter -> error
-        val input = "\tAnswer without question"
+    fun `parseCards - leading tab trimmed produces missing answer error`() {
+        // Lines are trimmed before parsing, so "\tAnswer" becomes "Answer" -> missing answer
+        val input = "#FSR_EXPORT_V1\n\tAnswer without question"
         val (cards, errors) = CardImportExport.parseCards(input.byteInputStream())
 
         assertEquals(0, cards.size)
         assertEquals(1, errors.size)
-        // The leading tab is trimmed, so error is about missing delimiter, not empty question
-        assertTrue(errors[0].contains("no tab delimiter"))
+        assertTrue(errors[0].contains("Missing answer"))
     }
 
     // ==================== V1 FORMAT PARSING TESTS ====================
@@ -673,8 +695,9 @@ class CardImportExportTest {
     }
 
     @Test
-    fun `parseCards - only comments and whitespace`() {
+    fun `parseCards - only comments and whitespace within valid V1 file`() {
         val input = """
+            #FSR_EXPORT_V1
             # Comment 1
 
             # Comment 2
@@ -687,8 +710,9 @@ class CardImportExportTest {
     }
 
     @Test
-    fun `parseCards - mixed valid and invalid lines`() {
+    fun `parseCards - mixed valid and invalid lines within V1 file`() {
         val input = """
+            #FSR_EXPORT_V1
             Valid question 1	Valid answer 1
             Invalid line without tab
             Valid question 2	Valid answer 2
@@ -715,7 +739,7 @@ class CardImportExportTest {
 
     @Test
     fun `parseCards - handles Windows line endings`() {
-        val input = "Question 1\tAnswer 1\r\nQuestion 2\tAnswer 2\r\n"
+        val input = "#FSR_EXPORT_V1\r\nQuestion 1\tAnswer 1\r\nQuestion 2\tAnswer 2\r\n"
         val (cards, errors) = CardImportExport.parseCards(input.byteInputStream())
 
         assertEquals(2, cards.size)
@@ -724,7 +748,7 @@ class CardImportExportTest {
 
     @Test
     fun `parseCards - handles mixed line endings`() {
-        val input = "Question 1\tAnswer 1\nQuestion 2\tAnswer 2\r\nQuestion 3\tAnswer 3\r"
+        val input = "#FSR_EXPORT_V1\nQuestion 1\tAnswer 1\nQuestion 2\tAnswer 2\r\nQuestion 3\tAnswer 3\r"
         val (cards, errors) = CardImportExport.parseCards(input.byteInputStream())
 
         // The exact count may vary based on how Java handles \r, but should parse at least 2
