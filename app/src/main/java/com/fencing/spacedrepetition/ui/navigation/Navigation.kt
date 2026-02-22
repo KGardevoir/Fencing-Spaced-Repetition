@@ -226,6 +226,7 @@ fun AppNavigation(
         composable(Screen.Settings.route) {
             SettingsScreen(
                 settingsViewModel = settingsViewModel,
+                cardViewModel = cardViewModel,
                 onNavigateBack = {
                     navController.popBackStack()
                 }

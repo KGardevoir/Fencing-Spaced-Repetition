@@ -263,6 +263,7 @@ fun HomeScreen(
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
+
             }
         }
     }
@@ -280,6 +281,7 @@ fun HomeScreen(
             onDismiss = { showGroupSelectionDialog = false }
         )
     }
+
 }
 
 @Composable

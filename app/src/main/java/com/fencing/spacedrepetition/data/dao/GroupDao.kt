@@ -107,4 +107,10 @@ interface GroupDao {
 
     @Query("DELETE FROM card_group_learning_state WHERE groupId = :groupId")
     suspend fun deleteAllLearningStatesForGroup(groupId: Long)
+
+    @Query("DELETE FROM card_group_cross_ref")
+    suspend fun deleteAllCardGroupCrossRefs()
+
+    @Query("DELETE FROM card_group_learning_state")
+    suspend fun deleteAllLearningStates()
 }
