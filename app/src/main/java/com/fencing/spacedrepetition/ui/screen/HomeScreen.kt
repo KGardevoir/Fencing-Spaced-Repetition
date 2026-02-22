@@ -233,16 +233,18 @@ fun HomeScreen(
                 }
 
                 if (cardsForSelectedGroup < 1) {
+                    Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         text = if (totalCards == 0) "Add some cards to get started"
                         else if (selectedGroup != null) "No cards in ${selectedGroup.name}"
                         else "No cards available",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
                     )
+                    Spacer(modifier = Modifier.height(16.dp))
                 } else {
-                    // Add spacing when helper text is not shown
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
