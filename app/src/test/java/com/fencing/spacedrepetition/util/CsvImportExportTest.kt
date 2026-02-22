@@ -111,14 +111,24 @@ class CsvImportExportTest {
     }
 
     @Test
-    fun `parseCsvCards - without header row`() {
+    fun `parseCsvCards - without header row is rejected`() {
         val csv = "Parry 4,Blade defense\nRiposte,Attack after parry\n"
         val (cards, errors) = CardImportExport.parseCsvCards(csv.byteInputStream())
 
-        assertEquals(2, cards.size)
-        assertEquals(0, errors.size)
-        assertEquals("Parry 4", cards[0].concept)
-        assertEquals("Blade defense", cards[0].answer)
+        // Files without a 'Concept' header row are now rejected
+        assertEquals(0, cards.size)
+        assertEquals(1, errors.size)
+        assertTrue(errors[0].contains("Concept"))
+    }
+
+    @Test
+    fun `parseCsvCards - rejects file whose first column header is not Concept`() {
+        val csv = "Name,Value\nSword,A weapon\n"
+        val (cards, errors) = CardImportExport.parseCsvCards(csv.byteInputStream())
+
+        assertEquals(0, cards.size)
+        assertEquals(1, errors.size)
+        assertTrue(errors[0].contains("Concept"))
     }
 
     @Test

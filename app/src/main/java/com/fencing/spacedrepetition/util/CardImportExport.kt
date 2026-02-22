@@ -180,10 +180,17 @@ object CardImportExport {
                 firstLine.startsWith(HEADER_MARKER_V3) -> 3
                 firstLine.startsWith(HEADER_MARKER_V2) -> 2
                 firstLine.startsWith(HEADER_MARKER_V1) -> 1
-                else -> 0 // Simple format
+                else -> 0
             }
 
-            val dataLines = if (formatVersion > 0) lines.drop(1) else lines
+            if (formatVersion == 0) {
+                return Pair(
+                    emptyList(),
+                    listOf("Invalid file format: file must begin with $HEADER_MARKER_V1, $HEADER_MARKER_V2, or $HEADER_MARKER_V3")
+                )
+            }
+
+            val dataLines = lines.drop(1)
 
             dataLines.forEachIndexed { index, line ->
                 val lineNumber = if (formatVersion > 0) index + 2 else index + 1
@@ -890,12 +897,19 @@ object CardImportExport {
                 return Pair(emptyList(), emptyList())
             }
 
-            // Check if first row is a header
+            // Require that the first row is a header with 'Concept' as the first column
             val firstRow = lines[0]
             val hasHeader = firstRow.isNotEmpty() &&
                 firstRow[0].trim().equals(CSV_HEADER_CONCEPT, ignoreCase = true)
 
-            val dataLines = if (hasHeader) lines.drop(1) else lines
+            if (!hasHeader) {
+                return Pair(
+                    emptyList(),
+                    listOf("Invalid CSV format: first row must have '$CSV_HEADER_CONCEPT' as the first column header")
+                )
+            }
+
+            val dataLines = lines.drop(1)
 
             dataLines.forEachIndexed { index, fields ->
                 val lineNumber = if (hasHeader) index + 2 else index + 1
