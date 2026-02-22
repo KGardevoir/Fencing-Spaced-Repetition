@@ -85,16 +85,14 @@ class CsvImportExportTest {
     }
 
     @Test
-    fun `parseCsvLines - multiple image columns`() {
-        val csv = "Concept,Description,Image1,Image2,Image3\nTest,Desc,abc,def,ghi\n"
+    fun `parseCsvLines - three columns with pipe-separated images`() {
+        val csv = "Concept,Description,Images\nTest,Desc,abc|def|ghi\n"
         val rows = CardImportExport.parseCsvLines(csv)
 
         assertEquals(2, rows.size)
-        assertEquals(5, rows[0].size)
-        assertEquals(5, rows[1].size)
-        assertEquals("abc", rows[1][2])
-        assertEquals("def", rows[1][3])
-        assertEquals("ghi", rows[1][4])
+        assertEquals(3, rows[0].size)
+        assertEquals(3, rows[1].size)
+        assertEquals("abc|def|ghi", rows[1][2])
     }
 
     // ==================== CSV CARD PARSING TESTS ====================
@@ -124,8 +122,8 @@ class CsvImportExportTest {
     }
 
     @Test
-    fun `parseCsvCards - with image columns`() {
-        val csv = "Concept,Description,Image1,Image2\nTest,Desc,abc123,def456\n"
+    fun `parseCsvCards - with pipe-separated images`() {
+        val csv = "Concept,Description,Images\nTest,Desc,abc123|def456\n"
         val (cards, errors) = CardImportExport.parseCsvCards(csv.byteInputStream())
 
         assertEquals(1, cards.size)
@@ -138,13 +136,23 @@ class CsvImportExportTest {
     }
 
     @Test
-    fun `parseCsvCards - mixed image columns (some empty)`() {
-        val csv = "Concept,Description,Image1,Image2\nTest,Desc,abc123,\nTest2,Desc2,,\n"
+    fun `parseCsvCards - single image in images column`() {
+        val csv = "Concept,Description,Images\nTest,Desc,abc123\n"
+        val (cards, errors) = CardImportExport.parseCsvCards(csv.byteInputStream())
+
+        assertEquals(1, cards.size)
+        assertEquals(0, errors.size)
+        assertEquals(1, cards[0].imageData.size)
+        assertEquals("abc123", cards[0].imageData[0])
+    }
+
+    @Test
+    fun `parseCsvCards - empty images column`() {
+        val csv = "Concept,Description,Images\nTest,Desc,\nTest2,Desc2,\n"
         val (cards, errors) = CardImportExport.parseCsvCards(csv.byteInputStream())
 
         assertEquals(2, cards.size)
-        assertEquals(1, cards[0].imageData.size)
-        assertEquals("abc123", cards[0].imageData[0])
+        assertEquals(0, cards[0].imageData.size)
         assertEquals(0, cards[1].imageData.size)
     }
 
@@ -293,6 +301,26 @@ class CsvImportExportTest {
         val content = outputStream.toString(Charsets.UTF_8.name())
         // Should contain quoted field with newline
         assertTrue(content.contains("\"Step 1: Extend\nStep 2: Lunge\""))
+    }
+
+    @Test
+    fun `exportCardsToCsv - no images omits Images column`() {
+        val card = Card(
+            id = 1,
+            question = "Test",
+            answer = "Desc",
+            imagePaths = emptyList(),
+            algorithm = AlgorithmType.FSRS
+        )
+
+        val cardsWithGroups = listOf(CardWithGroupNames(card, emptyList()))
+        val outputStream = ByteArrayOutputStream()
+        CardImportExport.exportCardsToCsv(cardsWithGroups, outputStream)
+
+        val content = outputStream.toString(Charsets.UTF_8.name())
+        val header = content.lines().first()
+        assertEquals("Concept,Description", header)
+        assertFalse(header.contains("Images"))
     }
 
     // Note: Tests for image encoding in CSV export require android.util.Base64

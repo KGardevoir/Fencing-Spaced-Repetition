@@ -864,9 +864,13 @@ object CardImportExport {
     private const val CSV_HEADER_CONCEPT = "Concept"
     private const val CSV_HEADER_DESCRIPTION = "Description"
 
+    private const val CSV_HEADER_IMAGES = "Images"
+    private const val CSV_IMAGE_SEPARATOR = "|"
+
     /**
      * Parses a CSV input stream into a list of ParsedCard objects.
-     * Expected format: Concept,Description,Image1,Image2,...
+     * Expected format: Concept,Description,Images
+     * The Images column contains a pipe-separated list of base64-encoded files.
      * Fields may be quoted with double quotes per RFC 4180.
      * Returns pair of (valid cards, error messages).
      */
@@ -910,10 +914,14 @@ object CardImportExport {
                         return@forEachIndexed
                     }
 
-                    // Any additional columns are base64-encoded images
-                    val imageData = fields.drop(2)
-                        .map { it.trim() }
-                        .filter { it.isNotEmpty() }
+                    // Third column (if present) is pipe-separated base64 images
+                    val imageData = if (fields.size >= 3 && fields[2].trim().isNotEmpty()) {
+                        fields[2].trim().split(CSV_IMAGE_SEPARATOR)
+                            .map { it.trim() }
+                            .filter { it.isNotEmpty() }
+                    } else {
+                        emptyList()
+                    }
 
                     cards.add(
                         ParsedCard(
@@ -935,24 +943,23 @@ object CardImportExport {
     }
 
     /**
-     * Exports cards to CSV format with columns: Concept, Description, Image1, Image2, ...
-     * Images are base64-encoded inline.
+     * Exports cards to CSV format with columns: Concept, Description, Images.
+     * The Images column contains a pipe-separated list of base64-encoded files.
      */
     fun exportCardsToCsv(
         cardsWithGroups: List<CardWithGroupNames>,
         outputStream: OutputStream
     ): ExportResult {
         return try {
-            outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
-                // Determine max number of images across all cards
-                val maxImages = cardsWithGroups.maxOfOrNull { (card, _) ->
-                    card.imagePaths.size
-                } ?: 0
+            val anyCardHasImages = cardsWithGroups.any { (card, _) ->
+                card.imagePaths.isNotEmpty()
+            }
 
+            outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
                 // Write header row
                 val headerParts = mutableListOf(CSV_HEADER_CONCEPT, CSV_HEADER_DESCRIPTION)
-                for (i in 1..maxImages) {
-                    headerParts.add("Image$i")
+                if (anyCardHasImages) {
+                    headerParts.add(CSV_HEADER_IMAGES)
                 }
                 writer.write(headerParts.joinToString(CSV_DELIMITER) { escapeCsvField(it) })
                 writer.newLine()
@@ -964,13 +971,11 @@ object CardImportExport {
                         escapeCsvField(card.answer)
                     )
 
-                    // Add base64-encoded images
-                    val encodedImages = card.imagePaths.mapNotNull { encodeImageToBase64(it) }
-                    for (i in 0 until maxImages) {
-                        fields.add(
-                            if (i < encodedImages.size) escapeCsvField(encodedImages[i])
-                            else ""
-                        )
+                    if (anyCardHasImages) {
+                        // Encode all images and join with pipe separator
+                        val encodedImages = card.imagePaths.mapNotNull { encodeImageToBase64(it) }
+                        val imagesField = encodedImages.joinToString(CSV_IMAGE_SEPARATOR)
+                        fields.add(escapeCsvField(imagesField))
                     }
 
                     writer.write(fields.joinToString(CSV_DELIMITER))
