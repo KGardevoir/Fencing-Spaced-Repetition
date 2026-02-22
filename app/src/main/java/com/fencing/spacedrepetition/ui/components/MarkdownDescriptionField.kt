@@ -1,47 +1,34 @@
 package com.fencing.spacedrepetition.ui.components
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.FormatBold
-import androidx.compose.material.icons.filled.FormatItalic
-import androidx.compose.material.icons.filled.FormatListBulleted
-import androidx.compose.material.icons.filled.FormatUnderlined
-import androidx.compose.material.icons.filled.Title
 import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalTextToolbar
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 
@@ -50,7 +37,8 @@ private enum class DescriptionTab { Edit, Preview }
 /**
  * A Description input field with:
  *   - Edit / Preview tab toggle
- *   - Markdown formatting toolbar (Bold, Italic, Code, Header, Bullet)
+ *   - Markdown formatting actions (Bold, Italic, Underline, Code, Heading, Bullet)
+ *     available in the long-press text-selection popup via a custom [TextToolbar]
  *   - Preview renders the markdown via [MarkdownText]
  */
 @Composable
@@ -64,13 +52,23 @@ fun MarkdownDescriptionField(
 ) {
     var activeTab by remember { mutableStateOf(DescriptionTab.Edit) }
 
+    val view = LocalView.current
+    val toolbar = remember(view) { MarkdownTextToolbar(view) }
+
+    // Reassign on every recomposition so lambdas always capture the latest value.
+    toolbar.onBold      = { onValueChange(applyInlineFormat(value, "**",  "**",   "bold"))      }
+    toolbar.onItalic    = { onValueChange(applyInlineFormat(value, "*",   "*",    "italic"))    }
+    toolbar.onUnderline = { onValueChange(applyInlineFormat(value, "<u>", "</u>", "underline")) }
+    toolbar.onCode      = { onValueChange(applyInlineFormat(value, "`",   "`",    "code"))      }
+    toolbar.onHeader    = { onValueChange(applyLinePrefix(value, "# "))  }
+    toolbar.onBullet    = { onValueChange(applyLinePrefix(value, "- "))  }
+
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(4.dp),
         color = MaterialTheme.colorScheme.surface
     ) {
-        androidx.compose.foundation.layout.Column {
-            // Edit / Preview tabs
+        Column {
             TabRow(selectedTabIndex = activeTab.ordinal) {
                 Tab(
                     selected = activeTab == DescriptionTab.Edit,
@@ -100,36 +98,21 @@ fun MarkdownDescriptionField(
 
             when (activeTab) {
                 DescriptionTab.Edit -> {
-                    // Formatting toolbar
-                    MarkdownToolbar(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 4.dp, vertical = 2.dp),
-                        onBold = { onValueChange(applyInlineFormat(value, "**", "**", "bold")) },
-                        onItalic = { onValueChange(applyInlineFormat(value, "*", "*", "italic")) },
-                        onUnderline = { onValueChange(applyInlineFormat(value, "<u>", "</u>", "underline")) },
-                        onCode = { onValueChange(applyInlineFormat(value, "`", "`", "code")) },
-                        onHeader = { onValueChange(applyLinePrefix(value, "# ")) },
-                        onBullet = { onValueChange(applyLinePrefix(value, "- ")) }
-                    )
-
-                    HorizontalDivider()
-
-                    OutlinedTextField(
-                        value = value,
-                        onValueChange = onValueChange,
-                        label = { Text(label) },
-                        placeholder = { Text("Supports **bold**, *italic*, <u>underline</u>, # headers, - bullets...") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp),
-                        leadingIcon = {
-                            Icon(Icons.Default.CheckCircle, contentDescription = null)
-                        },
-                        minLines = minLines,
-                        maxLines = maxLines,
-                        shape = RoundedCornerShape(bottomStart = 4.dp, bottomEnd = 4.dp)
-                    )
+                    CompositionLocalProvider(LocalTextToolbar provides toolbar) {
+                        OutlinedTextField(
+                            value = value,
+                            onValueChange = onValueChange,
+                            label = { Text(label) },
+                            placeholder = { Text("Long-press selected text to format: bold, italic, underline, code, heading, bullet...") },
+                            modifier = Modifier.fillMaxWidth(),
+                            leadingIcon = {
+                                Icon(Icons.Default.CheckCircle, contentDescription = null)
+                            },
+                            minLines = minLines,
+                            maxLines = maxLines,
+                            shape = RoundedCornerShape(bottomStart = 4.dp, bottomEnd = 4.dp)
+                        )
+                    }
                 }
 
                 DescriptionTab.Preview -> {
@@ -165,91 +148,6 @@ fun MarkdownDescriptionField(
                 }
             }
         }
-    }
-}
-
-@Composable
-fun MarkdownToolbar(
-    onBold: () -> Unit,
-    onItalic: () -> Unit,
-    onUnderline: () -> Unit,
-    onCode: () -> Unit,
-    onHeader: () -> Unit,
-    onBullet: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.Start,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        ToolbarIconButton(
-            icon = Icons.Default.FormatBold,
-            contentDescription = "Bold (**text**)",
-            onClick = onBold
-        )
-        ToolbarIconButton(
-            icon = Icons.Default.FormatItalic,
-            contentDescription = "Italic (*text*)",
-            onClick = onItalic
-        )
-        ToolbarIconButton(
-            icon = Icons.Default.FormatUnderlined,
-            contentDescription = "Underline (<u>text</u>)",
-            onClick = onUnderline
-        )
-        VerticalDivider(
-            modifier = Modifier
-                .height(24.dp)
-                .padding(horizontal = 4.dp)
-        )
-        ToolbarIconButton(
-            icon = Icons.Default.Title,
-            contentDescription = "Heading (# text)",
-            onClick = onHeader
-        )
-        ToolbarIconButton(
-            icon = Icons.Default.FormatListBulleted,
-            contentDescription = "Bullet list (- text)",
-            onClick = onBullet
-        )
-        VerticalDivider(
-            modifier = Modifier
-                .height(24.dp)
-                .padding(horizontal = 4.dp)
-        )
-        // Code button — text label since there's no perfect icon
-        androidx.compose.material3.TextButton(
-            onClick = onCode,
-            modifier = Modifier.size(36.dp),
-            contentPadding = PaddingValues(0.dp)
-        ) {
-            Text(
-                text = "</>",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-                )
-            )
-        }
-    }
-}
-
-@Composable
-private fun ToolbarIconButton(
-    icon: ImageVector,
-    contentDescription: String,
-    onClick: () -> Unit
-) {
-    IconButton(
-        onClick = onClick,
-        modifier = Modifier.size(36.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            modifier = Modifier.size(20.dp)
-        )
     }
 }
 
