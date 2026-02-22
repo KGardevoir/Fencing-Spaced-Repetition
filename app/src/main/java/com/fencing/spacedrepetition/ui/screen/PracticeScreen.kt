@@ -30,6 +30,9 @@ import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.SessionCard
 import com.fencing.spacedrepetition.ui.components.CardImagesDisplay
 import com.fencing.spacedrepetition.ui.components.CardImagesEdit
+import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
+import com.fencing.spacedrepetition.ui.components.MarkdownText
+import androidx.compose.ui.text.input.TextFieldValue
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeUiState
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
@@ -432,10 +435,9 @@ fun PracticeCardView(
                             color = MaterialTheme.colorScheme.secondary
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
+                        MarkdownText(
                             text = sessionCard.card.answer,
-                            style = MaterialTheme.typography.bodyLarge,
-                            textAlign = TextAlign.Center
+                            modifier = Modifier.fillMaxWidth()
                         )
 
                         // Display images if available
@@ -550,7 +552,7 @@ fun EditCardDialog(
     onSave: (question: String, answer: String, imagePaths: List<String>) -> Unit
 ) {
     var question by remember(card.id) { mutableStateOf(card.question) }
-    var answer by remember(card.id) { mutableStateOf(card.answer) }
+    var answerFieldValue by remember(card.id) { mutableStateOf(TextFieldValue(card.answer)) }
     var imagePaths by remember(card.id) { mutableStateOf(card.imagePaths.toMutableList()) }
 
     val context = LocalContext.current
@@ -598,10 +600,9 @@ fun EditCardDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                OutlinedTextField(
-                    value = answer,
-                    onValueChange = { answer = it },
-                    label = { Text("Description") },
+                MarkdownDescriptionField(
+                    value = answerFieldValue,
+                    onValueChange = { answerFieldValue = it },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 3,
                     maxLines = 6
@@ -682,8 +683,8 @@ fun EditCardDialog(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
-                        onClick = { onSave(question, answer, imagePaths) },
-                        enabled = question.isNotBlank() && answer.isNotBlank()
+                        onClick = { onSave(question, answerFieldValue.text, imagePaths) },
+                        enabled = question.isNotBlank() && answerFieldValue.text.isNotBlank()
                     ) {
                         Text("Save")
                     }

@@ -36,6 +36,7 @@ import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.ImportExportState
 import com.fencing.spacedrepetition.ui.viewmodel.SortDirection
+import com.fencing.spacedrepetition.ui.components.MarkdownText
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -1151,9 +1152,8 @@ fun CardListItem(
                     color = MaterialTheme.colorScheme.primary
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = card.answer,
-                    style = MaterialTheme.typography.bodyMedium
+                MarkdownText(
+                    text = card.answer
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
