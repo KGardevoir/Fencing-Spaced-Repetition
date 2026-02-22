@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.FormatItalic
 import androidx.compose.material.icons.filled.FormatListBulleted
+import androidx.compose.material.icons.filled.FormatUnderlined
 import androidx.compose.material.icons.filled.Title
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.HorizontalDivider
@@ -106,6 +107,7 @@ fun MarkdownDescriptionField(
                             .padding(horizontal = 4.dp, vertical = 2.dp),
                         onBold = { onValueChange(applyInlineFormat(value, "**", "**", "bold")) },
                         onItalic = { onValueChange(applyInlineFormat(value, "*", "*", "italic")) },
+                        onUnderline = { onValueChange(applyInlineFormat(value, "<u>", "</u>", "underline")) },
                         onCode = { onValueChange(applyInlineFormat(value, "`", "`", "code")) },
                         onHeader = { onValueChange(applyLinePrefix(value, "# ")) },
                         onBullet = { onValueChange(applyLinePrefix(value, "- ")) }
@@ -117,7 +119,7 @@ fun MarkdownDescriptionField(
                         value = value,
                         onValueChange = onValueChange,
                         label = { Text(label) },
-                        placeholder = { Text("Supports **bold**, *italic*, # headers, - bullets...") },
+                        placeholder = { Text("Supports **bold**, *italic*, <u>underline</u>, # headers, - bullets...") },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 4.dp),
@@ -170,6 +172,7 @@ fun MarkdownDescriptionField(
 fun MarkdownToolbar(
     onBold: () -> Unit,
     onItalic: () -> Unit,
+    onUnderline: () -> Unit,
     onCode: () -> Unit,
     onHeader: () -> Unit,
     onBullet: () -> Unit,
@@ -189,6 +192,11 @@ fun MarkdownToolbar(
             icon = Icons.Default.FormatItalic,
             contentDescription = "Italic (*text*)",
             onClick = onItalic
+        )
+        ToolbarIconButton(
+            icon = Icons.Default.FormatUnderlined,
+            contentDescription = "Underline (<u>text</u>)",
+            onClick = onUnderline
         )
         VerticalDivider(
             modifier = Modifier

@@ -15,6 +15,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 
@@ -74,12 +75,25 @@ fun MarkdownText(
 }
 
 /**
- * Parses inline markdown spans (**bold**, *italic*, `code`) into an [AnnotatedString].
+ * Parses inline markdown spans (**bold**, *italic*, `code`, <u>underline</u>) into an [AnnotatedString].
  */
 fun parseInlineMarkdown(text: String): AnnotatedString = buildAnnotatedString {
     var i = 0
     while (i < text.length) {
         when {
+            // <u>underline</u>
+            text.startsWith("<u>", i) -> {
+                val end = text.indexOf("</u>", i + 3)
+                if (end != -1) {
+                    withStyle(SpanStyle(textDecoration = TextDecoration.Underline)) {
+                        append(text.substring(i + 3, end))
+                    }
+                    i = end + 4
+                } else {
+                    append(text[i])
+                    i++
+                }
+            }
             // **bold** — must be checked before single *
             text.startsWith("**", i) -> {
                 val end = text.indexOf("**", i + 2)
