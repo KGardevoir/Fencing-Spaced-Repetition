@@ -4,6 +4,16 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+val gitCommit: String = try {
+    val process = ProcessBuilder("git", "rev-parse", "--short", "HEAD")
+        .directory(rootDir)
+        .redirectErrorStream(true)
+        .start()
+    process.inputStream.bufferedReader().readLine()?.trim() ?: "unknown"
+} catch (e: Exception) {
+    "unknown"
+}
+
 android {
     namespace = "com.fencing.spacedrepetition"
     compileSdk = 36
@@ -19,6 +29,7 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+        buildConfigField("String", "GIT_COMMIT", "\"$gitCommit\"")
     }
 
     signingConfigs {
@@ -71,6 +82,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     packaging {
         resources {

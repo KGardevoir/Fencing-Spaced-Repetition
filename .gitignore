@@ -41,3 +41,5 @@ captures/
 keystore.properties
 release-keystore.jks
 upload-keystore.jks
+# Exception: shared debug keystore (standard debug credentials, not for release)
+!app/debug-keystore.jks
