@@ -605,7 +605,8 @@ class FSRSAlgorithmTest {
 
     @Test
     fun testSetRequestRetention_DoesNotAffectLearningState() {
-        // requestRetention only influences REVIEW-state interval; LEARNING steps are fixed
+        // requestRetention only influences REVIEW-state interval calculation; LEARNING→LEARNING
+        // steps (e.g. AGAIN) use a fixed scheduledDays=0 that is independent of retention.
         val learningCard = FSRSAlgorithm.FSRSCard(
             stability = 3.0,
             difficulty = 5.0,
@@ -620,10 +621,13 @@ class FSRSAlgorithmTest {
         val lowRetentionAlgo = FSRSAlgorithm()
         lowRetentionAlgo.setRequestRetention(70)
 
-        val highResult = highRetentionAlgo.schedule(learningCard, FSRSAlgorithm.Rating.GOOD, reviewTime)
-        val lowResult = lowRetentionAlgo.schedule(learningCard, FSRSAlgorithm.Rating.GOOD, reviewTime)
+        // AGAIN keeps the card in LEARNING with a fixed step (scheduledDays = 0)
+        val highResult = highRetentionAlgo.schedule(learningCard, FSRSAlgorithm.Rating.AGAIN, reviewTime)
+        val lowResult = lowRetentionAlgo.schedule(learningCard, FSRSAlgorithm.Rating.AGAIN, reviewTime)
 
-        // Both should graduate to REVIEW with the same fixed-step scheduled days
+        // Both should stay in LEARNING and have identical scheduledDays (fixed step, not retention-dependent)
+        assertEquals(FSRSAlgorithm.CardState.LEARNING, highResult.card.state)
+        assertEquals(FSRSAlgorithm.CardState.LEARNING, lowResult.card.state)
         assertEquals(highResult.card.scheduledDays, lowResult.card.scheduledDays)
     }
 
