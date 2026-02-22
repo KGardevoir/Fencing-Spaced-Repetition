@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import android.provider.OpenableColumns
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
@@ -70,6 +71,8 @@ fun CardListScreen(
     var showBulkResetDialog by remember { mutableStateOf(false) }
     var showGroupSelectionDialog by remember { mutableStateOf(false) }
     var selectedGroupsForExport by remember { mutableStateOf<List<Long>>(emptyList()) }
+    var showCsvGroupSelectionForExport by remember { mutableStateOf(false) }
+    var selectedGroupsForCsvExport by remember { mutableStateOf<List<Long>>(emptyList()) }
 
     // File picker for import
     val importLauncher = rememberLauncherForActivityResult(
@@ -95,6 +98,35 @@ fun CardListScreen(
     ) { uri: Uri? ->
         uri?.let {
             viewModel.exportSelectedGroups(selectedGroupsForExport, uri, context.contentResolver)
+        }
+    }
+
+    // CSV file picker for import
+    val csvImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let {
+            // Extract filename from URI
+            val filename = getFilenameFromUri(context, uri) ?: "import.csv"
+            viewModel.csvImportParseFile(uri, context.contentResolver, filename)
+        }
+    }
+
+    // CSV file picker for export all cards
+    val csvExportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri: Uri? ->
+        uri?.let {
+            viewModel.exportAllCardsCsv(uri, context.contentResolver)
+        }
+    }
+
+    // CSV file picker for export selected groups
+    val csvExportSelectedGroupsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri: Uri? ->
+        uri?.let {
+            viewModel.exportSelectedGroupsCsv(selectedGroupsForCsvExport, uri, context.contentResolver)
         }
     }
 
@@ -234,6 +266,38 @@ fun CardListScreen(
                                     onClick = {
                                         showMenu = false
                                         showGroupSelectionDialog = true
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.FolderOpen, contentDescription = null)
+                                    },
+                                    enabled = groups.isNotEmpty()
+                                )
+                                HorizontalDivider()
+                                DropdownMenuItem(
+                                    text = { Text("Import CSV") },
+                                    onClick = {
+                                        showMenu = false
+                                        csvImportLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "application/octet-stream", "*/*"))
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.TableChart, contentDescription = null)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Export All as CSV") },
+                                    onClick = {
+                                        showMenu = false
+                                        csvExportLauncher.launch("all_cards.csv")
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.GridOn, contentDescription = null)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Export Groups as CSV") },
+                                    onClick = {
+                                        showMenu = false
+                                        showCsvGroupSelectionForExport = true
                                     },
                                     leadingIcon = {
                                         Icon(Icons.Default.FolderOpen, contentDescription = null)
@@ -490,6 +554,22 @@ fun CardListScreen(
                 }
             )
         }
+        is ImportExportState.CsvPendingGroupSelection -> {
+            CsvGroupSelectionDialog(
+                suggestedGroupName = state.suggestedGroupName,
+                existingGroups = groups,
+                cardCount = state.parsedCards.size,
+                onConfirm = { groupId ->
+                    viewModel.csvImportComplete(state.parsedCards, state.parseErrors, groupId)
+                },
+                onCreateGroup = { groupName ->
+                    groupViewModel.addGroup(groupName) { newGroupId ->
+                        viewModel.csvImportComplete(state.parsedCards, state.parseErrors, newGroupId)
+                    }
+                },
+                onDismiss = { viewModel.resetImportExportState() }
+            )
+        }
         is ImportExportState.Idle -> { /* No dialog */ }
     }
 
@@ -564,6 +644,19 @@ fun CardListScreen(
                 selectedGroupsForExport = selectedGroupIds
                 showGroupSelectionDialog = false
                 exportSelectedGroupsLauncher.launch("selected_groups_cards.tsv.gz")
+            }
+        )
+    }
+
+    // CSV export selected groups dialog
+    if (showCsvGroupSelectionForExport) {
+        ExportGroupSelectionDialog(
+            groups = groups,
+            onDismiss = { showCsvGroupSelectionForExport = false },
+            onConfirm = { selectedGroupIds ->
+                selectedGroupsForCsvExport = selectedGroupIds
+                showCsvGroupSelectionForExport = false
+                csvExportSelectedGroupsLauncher.launch("selected_groups_cards.csv")
             }
         )
     }
@@ -712,6 +805,177 @@ fun ExportGroupSelectionDialog(
             }
         }
     )
+}
+
+/**
+ * Dialog for selecting or creating a group during CSV import.
+ * Shows a text field pre-populated with a name derived from the filename,
+ * and a list of existing groups to select from.
+ */
+@Composable
+fun CsvGroupSelectionDialog(
+    suggestedGroupName: String,
+    existingGroups: List<Group>,
+    cardCount: Int,
+    onConfirm: (Long) -> Unit,
+    onCreateGroup: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var groupName by remember { mutableStateOf(suggestedGroupName) }
+    var selectedGroupId by remember { mutableStateOf<Long?>(null) }
+    var useExistingGroup by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.TableChart, contentDescription = null) },
+        title = { Text("Import $cardCount Cards") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    "Choose a group for the imported cards:",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Option 1: Create new group
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { useExistingGroup = false },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = !useExistingGroup,
+                        onClick = { useExistingGroup = false }
+                    )
+                    Text(
+                        "Create new group",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+
+                if (!useExistingGroup) {
+                    OutlinedTextField(
+                        value = groupName,
+                        onValueChange = { groupName = it },
+                        label = { Text("Group name") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 40.dp, top = 4.dp, bottom = 8.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+
+                // Option 2: Use existing group
+                if (existingGroups.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { useExistingGroup = true },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = useExistingGroup,
+                            onClick = { useExistingGroup = true }
+                        )
+                        Text(
+                            "Use existing group",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+
+                    if (useExistingGroup) {
+                        Column(
+                            modifier = Modifier.padding(start = 40.dp, top = 4.dp)
+                        ) {
+                            existingGroups.forEach { group ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { selectedGroupId = group.id }
+                                        .padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(
+                                        selected = selectedGroupId == group.id,
+                                        onClick = { selectedGroupId = group.id }
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Column {
+                                        Text(
+                                            group.name,
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        if (group.description.isNotBlank()) {
+                                            Text(
+                                                group.description,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (useExistingGroup && selectedGroupId != null) {
+                        onConfirm(selectedGroupId!!)
+                    } else if (!useExistingGroup && groupName.isNotBlank()) {
+                        // Check if group name matches an existing group
+                        val matchingGroup = existingGroups.find {
+                            it.name.equals(groupName.trim(), ignoreCase = true)
+                        }
+                        if (matchingGroup != null) {
+                            onConfirm(matchingGroup.id)
+                        } else {
+                            onCreateGroup(groupName.trim())
+                        }
+                    }
+                },
+                enabled = if (useExistingGroup) selectedGroupId != null else groupName.isNotBlank()
+            ) {
+                Text("Import")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+/**
+ * Extracts the display name (filename) from a content URI.
+ */
+fun getFilenameFromUri(context: android.content.Context, uri: Uri): String? {
+    var result: String? = null
+    if (uri.scheme == "content") {
+        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index >= 0) {
+                    result = cursor.getString(index)
+                }
+            }
+        }
+    }
+    if (result == null) {
+        result = uri.path?.substringAfterLast('/')
+    }
+    return result
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)

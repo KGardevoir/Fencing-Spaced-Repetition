@@ -63,6 +63,8 @@ class CardRepository(
 
     suspend fun insertCard(card: Card): Long = cardDao.insertCard(card)
 
+    suspend fun findCardByQuestion(question: String): Card? = cardDao.findCardByQuestion(question)
+
     suspend fun updateCard(card: Card) = cardDao.updateCard(card)
 
     suspend fun deleteCard(card: Card) {
@@ -293,8 +295,8 @@ class CardRepository(
         parsedCards: List<com.fencing.spacedrepetition.util.ParsedCard>,
         existingGroups: Map<String, Long>
     ): Int {
-        // Group parsed cards by question (same card, different state contexts)
-        val cardsByQuestion = parsedCards.groupBy { it.question }
+        // Group parsed cards by concept (same card, different state contexts)
+        val cardsByQuestion = parsedCards.groupBy { it.concept }
         var importedCount = 0
 
         cardsByQuestion.forEach { (question, states) ->

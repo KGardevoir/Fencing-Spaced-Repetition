@@ -37,6 +37,8 @@ fun GroupListScreen(
     var showDeleteDialog by remember { mutableStateOf<Group?>(null) }
     var groupForImport by remember { mutableStateOf<Group?>(null) }
     var groupForExport by remember { mutableStateOf<Group?>(null) }
+    var groupForCsvImport by remember { mutableStateOf<Group?>(null) }
+    var groupForCsvExport by remember { mutableStateOf<Group?>(null) }
     var showSortMenu by remember { mutableStateOf(false) }
 
     // Scroll to top when sort option changes
@@ -67,6 +69,33 @@ fun GroupListScreen(
             }
         }
         groupForExport = null
+    }
+
+    // CSV file picker for import
+    val csvImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let {
+            groupForCsvImport?.let { group ->
+                val filename = getFilenameFromUri(context, uri) ?: "import.csv"
+                groupViewModel.csvImportParseFile(uri, context.contentResolver, filename)
+            }
+        }
+        if (uri == null) {
+            groupForCsvImport = null
+        }
+    }
+
+    // CSV file picker for export
+    val csvExportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri: Uri? ->
+        uri?.let {
+            groupForCsvExport?.let { group ->
+                groupViewModel.exportGroupCardsCsv(group.id, uri, context.contentResolver)
+            }
+        }
+        groupForCsvExport = null
     }
 
     Scaffold(
@@ -167,6 +196,14 @@ fun GroupListScreen(
                         onExport = {
                             groupForExport = group
                             exportLauncher.launch(groupViewModel.generateExportFilename(group.name))
+                        },
+                        onCsvImport = {
+                            groupForCsvImport = group
+                            csvImportLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "application/octet-stream", "*/*"))
+                        },
+                        onCsvExport = {
+                            groupForCsvExport = group
+                            csvExportLauncher.launch(groupViewModel.generateCsvExportFilename(group.name))
                         }
                     )
                 }
@@ -269,6 +306,32 @@ fun GroupListScreen(
                 }
             )
         }
+        is ImportExportState.CsvPendingGroupSelection -> {
+            // For group-level CSV import, we already know the target group
+            val targetGroup = groupForCsvImport
+            if (targetGroup != null) {
+                // Skip the group selection dialog and import directly into the target group
+                LaunchedEffect(state) {
+                    groupViewModel.csvImportComplete(state.parsedCards, state.parseErrors, targetGroup.id)
+                    groupForCsvImport = null
+                }
+            } else {
+                CsvGroupSelectionDialog(
+                    suggestedGroupName = state.suggestedGroupName,
+                    existingGroups = groups,
+                    cardCount = state.parsedCards.size,
+                    onConfirm = { groupId ->
+                        groupViewModel.csvImportComplete(state.parsedCards, state.parseErrors, groupId)
+                    },
+                    onCreateGroup = { groupName ->
+                        groupViewModel.addGroup(groupName) { newGroupId ->
+                            groupViewModel.csvImportComplete(state.parsedCards, state.parseErrors, newGroupId)
+                        }
+                    },
+                    onDismiss = { groupViewModel.resetImportExportState() }
+                )
+            }
+        }
         is ImportExportState.Idle -> { /* No dialog */ }
     }
 }
@@ -281,7 +344,9 @@ fun GroupListItem(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onImport: () -> Unit,
-    onExport: () -> Unit
+    onExport: () -> Unit,
+    onCsvImport: () -> Unit = {},
+    onCsvExport: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -388,6 +453,27 @@ fun GroupListItem(
                         },
                         leadingIcon = {
                             Icon(Icons.Default.FileDownload, contentDescription = null)
+                        }
+                    )
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text("Import CSV") },
+                        onClick = {
+                            showMenu = false
+                            onCsvImport()
+                        },
+                        leadingIcon = {
+                            Icon(Icons.Default.TableChart, contentDescription = null)
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Export CSV") },
+                        onClick = {
+                            showMenu = false
+                            onCsvExport()
+                        },
+                        leadingIcon = {
+                            Icon(Icons.Default.GridOn, contentDescription = null)
                         }
                     )
                     HorizontalDivider()

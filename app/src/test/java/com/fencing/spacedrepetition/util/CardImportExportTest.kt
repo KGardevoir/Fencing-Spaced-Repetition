@@ -28,7 +28,7 @@ class CardImportExportTest {
 
         assertEquals(1, cards.size)
         assertEquals(0, errors.size)
-        assertEquals("What is 2+2?", cards[0].question)
+        assertEquals("What is 2+2?", cards[0].concept)
         assertEquals("4", cards[0].answer)
         assertFalse(cards[0].hasFullState)
     }
@@ -44,9 +44,9 @@ class CardImportExportTest {
 
         assertEquals(3, cards.size)
         assertEquals(0, errors.size)
-        assertEquals("Question 1", cards[0].question)
-        assertEquals("Question 2", cards[1].question)
-        assertEquals("Question 3", cards[2].question)
+        assertEquals("Question 1", cards[0].concept)
+        assertEquals("Question 2", cards[1].concept)
+        assertEquals("Question 3", cards[2].concept)
     }
 
     @Test
@@ -95,7 +95,7 @@ class CardImportExportTest {
         val (cards, errors) = CardImportExport.parseCards(input.byteInputStream())
 
         assertEquals(1, cards.size)
-        assertEquals("Question with\nnewline", cards[0].question)
+        assertEquals("Question with\nnewline", cards[0].concept)
         assertEquals("Answer with\nmultiple\nlines", cards[0].answer)
     }
 
@@ -140,7 +140,7 @@ class CardImportExportTest {
         assertTrue(card.hasFullState)
         assertTrue(card.isGlobalState)
         assertFalse(card.isGroupSpecificState)
-        assertEquals("What is 2+2?", card.question)
+        assertEquals("What is 2+2?", card.concept)
         assertEquals("4", card.answer)
         assertEquals(AlgorithmType.FSRS, card.algorithm)
         assertEquals("GLOBAL", card.stateContext)
@@ -211,7 +211,7 @@ class CardImportExportTest {
 
         assertEquals(1, cards.size)
         assertFalse(cards[0].hasFullState)
-        assertEquals("Simple Question", cards[0].question)
+        assertEquals("Simple Question", cards[0].concept)
         assertEquals("Simple Answer", cards[0].answer)
     }
 
@@ -509,7 +509,7 @@ class CardImportExportTest {
         assertEquals(1, parsedCards.size)
 
         val parsed = parsedCards[0]
-        assertEquals(originalCard.question, parsed.question)
+        assertEquals(originalCard.question, parsed.concept)
         assertEquals(originalCard.answer, parsed.answer)
         assertEquals(originalCard.algorithm, parsed.algorithm)
         assertEquals(originalCard.fsrsStability, parsed.fsrsStability!!, 0.001)
@@ -573,13 +573,13 @@ class CardImportExportTest {
 
         // Check global state row
         val globalRow = parsedCards.find { it.isGlobalState }!!
-        assertEquals(originalCard.question, globalRow.question)
+        assertEquals(originalCard.question, globalRow.concept)
         assertEquals(originalCard.fsrsStability, globalRow.fsrsStability!!, 0.001)
         assertEquals(originalCard.fsrsReps, globalRow.fsrsReps)
 
         // Check group-specific state row
         val groupRow = parsedCards.find { it.isGroupSpecificState }!!
-        assertEquals(originalCard.question, groupRow.question)
+        assertEquals(originalCard.question, groupRow.concept)
         assertEquals("IndependentGroup", groupRow.stateContext)
         assertEquals(groupState.fsrsStability, groupRow.fsrsStability!!, 0.001)
         assertEquals(groupState.fsrsReps, groupRow.fsrsReps)
@@ -590,7 +590,7 @@ class CardImportExportTest {
     @Test
     fun `parsedCardToCard - simple card without state`() {
         val parsed = ParsedCard(
-            question = "Simple Q",
+            concept = "Simple Q",
             answer = "Simple A",
             lineNumber = 1
         )
@@ -608,7 +608,7 @@ class CardImportExportTest {
     @Test
     fun `parsedCardToCard - card with full state`() {
         val parsed = ParsedCard(
-            question = "Full state Q",
+            concept = "Full state Q",
             answer = "Full state A",
             lineNumber = 1,
             algorithm = AlgorithmType.SM2,

@@ -176,7 +176,7 @@ fun AddEditCardScreen(
             OutlinedTextField(
                 value = question,
                 onValueChange = { question = it; isDirty = true },
-                label = { Text("Question / Concept") },
+                label = { Text("Concept") },
                 placeholder = { Text("e.g., En garde position") },
                 modifier = Modifier.fillMaxWidth(),
                 leadingIcon = {

@@ -370,7 +370,7 @@ class GroupSettingsExportTest {
 
         // Verify global state
         val global = parsedCards.find { it.isGlobalState }!!
-        assertEquals("Parry-Riposte", global.question)
+        assertEquals("Parry-Riposte", global.concept)
         assertEquals(2.0, global.fsrsStability!!, 0.001)
 
         // Verify group-specific state
