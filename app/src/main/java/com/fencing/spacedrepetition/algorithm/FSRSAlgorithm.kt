@@ -54,7 +54,7 @@ class FSRSAlgorithm(
         0.2315, 2.9898, 0.51655, 0.6621
     )
 
-    private val requestRetention = 0.9 // Target retention rate
+    private var requestRetention = 0.9 // Target retention rate (0.70–0.97)
     private val DECAY = -0.5
     private val FACTOR = 19.0 / 81.0
 
@@ -63,6 +63,14 @@ class FSRSAlgorithm(
      */
     fun setMaximumInterval(days: Int) {
         maximumInterval = days.coerceAtLeast(1)
+    }
+
+    /**
+     * Update the desired retention rate.
+     * @param retentionPercent Integer percentage, e.g. 90 for 90 % (0.90).
+     */
+    fun setRequestRetention(retentionPercent: Int) {
+        requestRetention = (retentionPercent / 100.0).coerceIn(0.1, 0.99)
     }
 
     /**

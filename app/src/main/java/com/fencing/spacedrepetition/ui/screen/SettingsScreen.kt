@@ -43,6 +43,8 @@ fun SettingsScreen(
     val randomizeBucketHours by settingsViewModel.randomizeBucketHours.collectAsState()
     val maximumInterval by settingsViewModel.maximumInterval.collectAsState()
     val practiceDays by settingsViewModel.practiceDays.collectAsState()
+    val fsrsRetention by settingsViewModel.fsrsRetention.collectAsState()
+    val sm2IntervalModifier by settingsViewModel.sm2IntervalModifier.collectAsState()
 
     // Donation state
     val context = LocalContext.current
@@ -73,6 +75,12 @@ fun SettingsScreen(
 
     val intervalPresets = SettingsConstants.INTERVAL_PRESETS
     val currentPresetIndex = SettingsConstants.findPresetIndex(intervalPresets, maximumInterval)
+
+    val fsrsRetentionPresets = SettingsConstants.FSRS_RETENTION_PRESETS
+    val currentFsrsRetentionIndex = SettingsConstants.findPresetIndex(fsrsRetentionPresets, fsrsRetention)
+
+    val sm2ModifierPresets = SettingsConstants.SM2_MODIFIER_PRESETS
+    val currentSm2ModifierIndex = SettingsConstants.findPresetIndex(sm2ModifierPresets, sm2IntervalModifier)
 
     Scaffold(
         topBar = {
@@ -382,6 +390,90 @@ fun SettingsScreen(
                 )
                 Text(
                     text = "Maximum time between reviews",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // FSRS desired retention
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "FSRS Desired Retention",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Text(
+                        text = fsrsRetentionPresets[currentFsrsRetentionIndex].second,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Slider(
+                    value = currentFsrsRetentionIndex.toFloat(),
+                    onValueChange = { newIndex ->
+                        val presetValue = fsrsRetentionPresets[newIndex.roundToInt()].first
+                        settingsViewModel.setFsrsRetention(presetValue)
+                    },
+                    valueRange = 0f..(fsrsRetentionPresets.size - 1).toFloat(),
+                    steps = fsrsRetentionPresets.size - 2,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = "Target probability of remembering a card when it comes due (FSRS only). " +
+                        "80\u201392\u00a0% suits most learners \u2014 higher values increase reviews, lower values extend intervals.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // SM-2 interval modifier
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "SM-2 Interval Modifier",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Text(
+                        text = sm2ModifierPresets[currentSm2ModifierIndex].second,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Slider(
+                    value = currentSm2ModifierIndex.toFloat(),
+                    onValueChange = { newIndex ->
+                        val presetValue = sm2ModifierPresets[newIndex.roundToInt()].first
+                        settingsViewModel.setSm2IntervalModifier(presetValue)
+                    },
+                    valueRange = 0f..(sm2ModifierPresets.size - 1).toFloat(),
+                    steps = sm2ModifierPresets.size - 2,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = "Scales all SM-2 review intervals (SM-2 only). " +
+                        "100\u00a0% = default behaviour. " +
+                        "Lower values (e.g.\u00a075\u00a0%) mean shorter intervals and more reviews; " +
+                        "higher values (e.g.\u00a0150\u00a0%) mean longer intervals and fewer reviews.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -41,6 +41,12 @@ class SettingsViewModel(
     val randomizeBucketHours: StateFlow<Int> = themePreferences.randomizeBucketHours
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_RANDOMIZE_BUCKET_HOURS)
 
+    val fsrsRetention: StateFlow<Int> = themePreferences.fsrsRetention
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_FSRS_RETENTION)
+
+    val sm2IntervalModifier: StateFlow<Int> = themePreferences.sm2IntervalModifier
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_SM2_INTERVAL_MODIFIER)
+
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch {
             themePreferences.setThemeMode(mode)
@@ -105,6 +111,18 @@ class SettingsViewModel(
     fun setRandomizeBucketHours(hours: Int) {
         viewModelScope.launch {
             themePreferences.setRandomizeBucketHours(hours)
+        }
+    }
+
+    fun setFsrsRetention(percent: Int) {
+        viewModelScope.launch {
+            themePreferences.setFsrsRetention(percent)
+        }
+    }
+
+    fun setSm2IntervalModifier(percent: Int) {
+        viewModelScope.launch {
+            themePreferences.setSm2IntervalModifier(percent)
         }
     }
 }
