@@ -25,7 +25,7 @@ sealed class ExportResult {
  * Represents a parsed card with optional full state
  */
 data class ParsedCard(
-    val question: String,
+    val concept: String,
     val answer: String,
     val lineNumber: Int,
     val imagePaths: List<String> = emptyList(), // For export (file paths)
@@ -233,7 +233,7 @@ object CardImportExport {
             parts.size < 2 -> throw IllegalArgumentException("Missing answer (no tab delimiter found)")
             parts[0].isBlank() -> throw IllegalArgumentException("Empty question")
             else -> ParsedCard(
-                question = unescapeNewlines(parts[0].trim()),
+                concept = unescapeNewlines(parts[0].trim()),
                 answer = unescapeNewlines(parts[1].trim()),
                 lineNumber = lineNumber
             )
@@ -247,14 +247,14 @@ object CardImportExport {
             throw IllegalArgumentException("Missing answer")
         }
 
-        val question = unescapeNewlines(parts.getOrNull(COL_V1_QUESTION)?.trim() ?: "")
+        val concept = unescapeNewlines(parts.getOrNull(COL_V1_QUESTION)?.trim() ?: "")
         val answer = unescapeNewlines(parts.getOrNull(COL_V1_ANSWER)?.trim() ?: "")
 
-        if (question.isBlank()) throw IllegalArgumentException("Empty question")
+        if (concept.isBlank()) throw IllegalArgumentException("Empty question")
 
         // If only 2 columns, treat as simple format
         if (parts.size == 2) {
-            return ParsedCard(question = question, answer = answer, lineNumber = lineNumber)
+            return ParsedCard(concept = concept, answer = answer, lineNumber = lineNumber)
         }
 
         // Parse full format
@@ -273,7 +273,7 @@ object CardImportExport {
         }
 
         return ParsedCard(
-            question = question,
+            concept = concept,
             answer = answer,
             lineNumber = lineNumber,
             algorithm = algorithm,
@@ -301,14 +301,14 @@ object CardImportExport {
             throw IllegalArgumentException("Missing answer")
         }
 
-        val question = unescapeNewlines(parts.getOrNull(COL_V2_QUESTION)?.trim() ?: "")
+        val concept = unescapeNewlines(parts.getOrNull(COL_V2_QUESTION)?.trim() ?: "")
         val answer = unescapeNewlines(parts.getOrNull(COL_V2_ANSWER)?.trim() ?: "")
 
-        if (question.isBlank()) throw IllegalArgumentException("Empty question")
+        if (concept.isBlank()) throw IllegalArgumentException("Empty question")
 
         // If only 2 columns, treat as simple format
         if (parts.size == 2) {
-            return ParsedCard(question = question, answer = answer, lineNumber = lineNumber)
+            return ParsedCard(concept = concept, answer = answer, lineNumber = lineNumber)
         }
 
         // Parse V2 full format
@@ -329,7 +329,7 @@ object CardImportExport {
         }
 
         return ParsedCard(
-            question = question,
+            concept = concept,
             answer = answer,
             lineNumber = lineNumber,
             algorithm = algorithm,
@@ -357,14 +357,14 @@ object CardImportExport {
             throw IllegalArgumentException("Missing answer")
         }
 
-        val question = unescapeNewlines(parts.getOrNull(COL_V3_QUESTION)?.trim() ?: "")
+        val concept = unescapeNewlines(parts.getOrNull(COL_V3_QUESTION)?.trim() ?: "")
         val answer = unescapeNewlines(parts.getOrNull(COL_V3_ANSWER)?.trim() ?: "")
 
-        if (question.isBlank()) throw IllegalArgumentException("Empty question")
+        if (concept.isBlank()) throw IllegalArgumentException("Empty question")
 
         // If only 2 columns, treat as simple format
         if (parts.size == 2) {
-            return ParsedCard(question = question, answer = answer, lineNumber = lineNumber)
+            return ParsedCard(concept = concept, answer = answer, lineNumber = lineNumber)
         }
 
         // Parse image data (base64 encoded)
@@ -393,7 +393,7 @@ object CardImportExport {
         }
 
         return ParsedCard(
-            question = question,
+            concept = concept,
             answer = answer,
             lineNumber = lineNumber,
             imageData = imageData,  // Store base64 data for later decoding
@@ -628,7 +628,7 @@ object CardImportExport {
 
         return if (parsed.hasFullState) {
             Card(
-                question = parsed.question,
+                question = parsed.concept,
                 answer = parsed.answer,
                 imagePaths = parsed.imagePaths,
                 algorithm = parsed.algorithm ?: AlgorithmType.FSRS,
@@ -649,7 +649,7 @@ object CardImportExport {
             )
         } else {
             Card(
-                question = parsed.question,
+                question = parsed.concept,
                 answer = parsed.answer,
                 imagePaths = parsed.imagePaths,
                 algorithm = AlgorithmType.FSRS,
@@ -672,7 +672,7 @@ object CardImportExport {
 
         return if (parsed.hasFullState) {
             Card(
-                question = parsed.question,
+                question = parsed.concept,
                 answer = parsed.answer,
                 imagePaths = decodedImagePaths,
                 algorithm = parsed.algorithm ?: AlgorithmType.FSRS,
@@ -693,7 +693,7 @@ object CardImportExport {
             )
         } else {
             Card(
-                question = parsed.question,
+                question = parsed.concept,
                 answer = parsed.answer,
                 imagePaths = decodedImagePaths,
                 algorithm = AlgorithmType.FSRS,
@@ -925,7 +925,7 @@ object CardImportExport {
 
                     cards.add(
                         ParsedCard(
-                            question = concept,
+                            concept = concept,
                             answer = description,
                             lineNumber = lineNumber,
                             imageData = imageData

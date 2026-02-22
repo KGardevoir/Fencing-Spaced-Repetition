@@ -104,9 +104,9 @@ class CsvImportExportTest {
 
         assertEquals(2, cards.size)
         assertEquals(0, errors.size)
-        assertEquals("Parry 4", cards[0].question)
+        assertEquals("Parry 4", cards[0].concept)
         assertEquals("Blade defense", cards[0].answer)
-        assertEquals("Riposte", cards[1].question)
+        assertEquals("Riposte", cards[1].concept)
         assertEquals("Attack after parry", cards[1].answer)
     }
 
@@ -117,7 +117,7 @@ class CsvImportExportTest {
 
         assertEquals(2, cards.size)
         assertEquals(0, errors.size)
-        assertEquals("Parry 4", cards[0].question)
+        assertEquals("Parry 4", cards[0].concept)
         assertEquals("Blade defense", cards[0].answer)
     }
 
@@ -128,7 +128,7 @@ class CsvImportExportTest {
 
         assertEquals(1, cards.size)
         assertEquals(0, errors.size)
-        assertEquals("Test", cards[0].question)
+        assertEquals("Test", cards[0].concept)
         assertEquals("Desc", cards[0].answer)
         assertEquals(2, cards[0].imageData.size)
         assertEquals("abc123", cards[0].imageData[0])
@@ -201,7 +201,7 @@ class CsvImportExportTest {
 
         assertEquals(1, cards.size)
         assertEquals(0, errors.size)
-        assertEquals("Parry 4, 6, 7", cards[0].question)
+        assertEquals("Parry 4, 6, 7", cards[0].concept)
         assertEquals("Defense to inside, outside, and high line", cards[0].answer)
     }
 
@@ -212,7 +212,7 @@ class CsvImportExportTest {
 
         assertEquals(1, cards.size)
         assertEquals(0, errors.size)
-        assertEquals("Attack", cards[0].question)
+        assertEquals("Attack", cards[0].concept)
         assertTrue(cards[0].answer.contains("\n"))
         assertEquals("Step 1: Extend arm\nStep 2: Lunge forward", cards[0].answer)
     }
@@ -363,9 +363,9 @@ class CsvImportExportTest {
 
         assertEquals(0, errors.size)
         assertEquals(2, parsedCards.size)
-        assertEquals("Parry 4", parsedCards[0].question)
+        assertEquals("Parry 4", parsedCards[0].concept)
         assertEquals("Blade defense", parsedCards[0].answer)
-        assertEquals("Riposte", parsedCards[1].question)
+        assertEquals("Riposte", parsedCards[1].concept)
         assertEquals("Attack after parry", parsedCards[1].answer)
     }
 
@@ -390,7 +390,7 @@ class CsvImportExportTest {
 
         assertEquals(0, errors.size)
         assertEquals(1, parsedCards.size)
-        assertEquals("Complex, question", parsedCards[0].question)
+        assertEquals("Complex, question", parsedCards[0].concept)
         assertEquals("Line 1\nLine 2\nLine 3", parsedCards[0].answer)
     }
 
@@ -415,7 +415,7 @@ class CsvImportExportTest {
 
         assertEquals(0, errors.size)
         assertEquals(1, parsedCards.size)
-        assertEquals("He said \"hello\"", parsedCards[0].question)
+        assertEquals("He said \"hello\"", parsedCards[0].concept)
         assertEquals("She replied \"goodbye\"", parsedCards[0].answer)
     }
 

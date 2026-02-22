@@ -106,7 +106,7 @@ class CardImportExportV2Test {
         assertEquals(2, cards.size)
 
         // Both rows have the same question/answer
-        assertTrue(cards.all { it.question == "What is 2+2?" })
+        assertTrue(cards.all { it.concept == "What is 2+2?" })
         assertTrue(cards.all { it.answer == "4" })
 
         // But different state contexts
@@ -171,15 +171,15 @@ class CardImportExportV2Test {
         assertEquals(4, cards.size)
 
         // Card1 and Card3 only have global state
-        val card1Cards = cards.filter { it.question == "Card1" }
-        val card3Cards = cards.filter { it.question == "Card3" }
+        val card1Cards = cards.filter { it.concept == "Card1" }
+        val card3Cards = cards.filter { it.concept == "Card3" }
         assertEquals(1, card1Cards.size)
         assertEquals(1, card3Cards.size)
         assertTrue(card1Cards[0].isGlobalState)
         assertTrue(card3Cards[0].isGlobalState)
 
         // Card2 has global + group-specific
-        val card2Cards = cards.filter { it.question == "Card2" }
+        val card2Cards = cards.filter { it.concept == "Card2" }
         assertEquals(2, card2Cards.size)
         assertEquals(1, card2Cards.count { it.isGlobalState })
         assertEquals(1, card2Cards.count { it.isGroupSpecificState })
@@ -376,7 +376,7 @@ class CardImportExportV2Test {
 
         // Verify global state
         val globalParsed = parsed.find { it.isGlobalState }!!
-        assertEquals(originalCard.question, globalParsed.question)
+        assertEquals(originalCard.question, globalParsed.concept)
         assertEquals("Answer with\nnewlines", globalParsed.answer) // Newlines unescaped
         assertEquals(originalCard.algorithm, globalParsed.algorithm)
         assertEquals(originalCard.fsrsStability, globalParsed.fsrsStability!!, 0.001)

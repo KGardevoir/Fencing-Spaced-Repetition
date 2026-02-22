@@ -177,7 +177,7 @@ class CardImportExportV3Test {
             assertEquals(1, parsedCards.size)
 
             val parsed = parsedCards[0]
-            assertEquals("Test Question", parsed.question)
+            assertEquals("Test Question", parsed.concept)
             assertEquals("Test Answer", parsed.answer)
             assertEquals(1, parsed.imageData.size) // Should have one base64-encoded image
             assertNotNull(parsed.imageData[0])

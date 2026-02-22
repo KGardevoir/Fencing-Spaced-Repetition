@@ -553,7 +553,7 @@ class CardViewModel(
                         }
                         else -> {
                             // Simple import
-                            val cardsToImport = parsedCards.map { it.question to it.answer }
+                            val cardsToImport = parsedCards.map { it.concept to it.answer }
                             repository.importCards(cardsToImport, algorithm)
                         }
                     }
@@ -638,7 +638,7 @@ class CardViewModel(
                             CardImportExport.decodeImageFromBase64(getApplication(), base64Data)
                         }
 
-                        val existing = repository.findCardByQuestion(parsed.question)
+                        val existing = repository.findCardByQuestion(parsed.concept)
                         if (existing != null) {
                             val updated = existing.copy(
                                 answer = parsed.answer,
@@ -649,7 +649,7 @@ class CardViewModel(
                             groupRepository.addCardToGroup(existing.id, groupId)
                         } else {
                             val card = Card(
-                                question = parsed.question,
+                                question = parsed.concept,
                                 answer = parsed.answer,
                                 imagePaths = decodedImagePaths,
                                 algorithm = AlgorithmType.FSRS

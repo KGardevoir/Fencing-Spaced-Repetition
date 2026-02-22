@@ -75,7 +75,7 @@ class SmartInputStreamTest {
 
         assertEquals(0, errors.size)
         assertEquals(1, cards.size)
-        assertEquals("Q1", cards[0].question)
+        assertEquals("Q1", cards[0].concept)
         assertEquals("A1", cards[0].answer)
     }
 
@@ -88,7 +88,7 @@ class SmartInputStreamTest {
 
         assertEquals(0, errors.size)
         assertEquals(1, cards.size)
-        assertEquals("Q1", cards[0].question)
+        assertEquals("Q1", cards[0].concept)
     }
 
     @Test

@@ -278,7 +278,7 @@ class GroupViewModel(
                         }
                         else -> {
                             // Simple import to specific group
-                            val cardsToImport = parsedCards.map { it.question to it.answer }
+                            val cardsToImport = parsedCards.map { it.concept to it.answer }
                             cardRepository.importCardsToGroup(cardsToImport, groupId, algorithm)
                         }
                     }
@@ -366,7 +366,7 @@ class GroupViewModel(
                         val decodedImagePaths = parsed.imageData.mapNotNull { base64Data ->
                             CardImportExport.decodeImageFromBase64(getApplication(), base64Data)
                         }
-                        parsed.question to Pair(parsed.answer, decodedImagePaths)
+                        parsed.concept to Pair(parsed.answer, decodedImagePaths)
                     }
 
                     var count = 0

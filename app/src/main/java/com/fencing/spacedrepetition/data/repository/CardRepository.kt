@@ -295,8 +295,8 @@ class CardRepository(
         parsedCards: List<com.fencing.spacedrepetition.util.ParsedCard>,
         existingGroups: Map<String, Long>
     ): Int {
-        // Group parsed cards by question (same card, different state contexts)
-        val cardsByQuestion = parsedCards.groupBy { it.question }
+        // Group parsed cards by concept (same card, different state contexts)
+        val cardsByQuestion = parsedCards.groupBy { it.concept }
         var importedCount = 0
 
         cardsByQuestion.forEach { (question, states) ->
