@@ -7,7 +7,8 @@ import kotlin.math.max
  * Classic spaced repetition algorithm
  */
 class SM2Algorithm(
-    private var maximumInterval: Int = 36500 // Default: 100 years
+    private var maximumInterval: Int = 36500, // Default: 100 years
+    private var intervalModifier: Double = 1.0 // 1.0 = 100 %, scales all review intervals
 ) {
 
     /**
@@ -15,6 +16,15 @@ class SM2Algorithm(
      */
     fun setMaximumInterval(days: Int) {
         maximumInterval = days.coerceAtLeast(1)
+    }
+
+    /**
+     * Update the interval modifier.
+     * @param modifierPercent Integer percentage, e.g. 100 for no change, 50 to halve
+     *   intervals (more reviews), 200 to double them (fewer reviews).
+     */
+    fun setIntervalModifier(modifierPercent: Int) {
+        intervalModifier = (modifierPercent / 100.0).coerceIn(0.1, 10.0)
     }
 
     data class SM2Card(
@@ -70,11 +80,11 @@ class SM2Algorithm(
             return SM2SchedulingInfo(newCard, nextReview)
         }
 
-        // Calculate new interval
+        // Calculate new interval, applying the interval modifier from the third review onwards
         val newInterval = when (card.repetitions) {
             0 -> 1
             1 -> 6
-            else -> (card.interval * newEaseFactor).toInt().coerceAtMost(maximumInterval)
+            else -> (card.interval * newEaseFactor * intervalModifier).toInt().coerceIn(1, maximumInterval)
         }
 
         val newCard = card.copy(

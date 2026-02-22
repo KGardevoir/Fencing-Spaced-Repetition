@@ -22,12 +22,16 @@ data class Group(
     val randomizeDueCards: Boolean? = null,
     val randomizeBucketHours: Int? = null,
     val practiceDays: String? = null,  // comma-separated ISO-8601 day ints (1=Mon..7=Sun)
-    val maximumInterval: Int? = null
+    val maximumInterval: Int? = null,
+    // Retention overrides (null = use global default)
+    val fsrsRetention: Int? = null,         // integer percent 70–97, e.g. 90 for 90 %
+    val sm2IntervalModifier: Int? = null    // integer percent 50–200, e.g. 100 for no change
 ) {
     /** Returns true if any per-group setting override is set */
     fun hasCustomSettings(): Boolean =
         cardsPerSession != null || autoShowAnswer != null || randomizeDueCards != null ||
-        randomizeBucketHours != null || practiceDays != null || maximumInterval != null
+        randomizeBucketHours != null || practiceDays != null || maximumInterval != null ||
+        fsrsRetention != null || sm2IntervalModifier != null
 
     /** Parse the practiceDays string to a Set<Int>, or null if not overridden */
     fun parsePracticeDays(): Set<Int>? {

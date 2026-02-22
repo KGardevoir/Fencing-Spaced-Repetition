@@ -30,6 +30,8 @@ class ThemePreferences(private val context: Context) {
     private val PRACTICES_PER_WEEK_KEY = intPreferencesKey("practices_per_week")
     private val PRACTICE_DAYS_KEY = stringPreferencesKey("practice_days")
     private val RANDOMIZE_BUCKET_HOURS_KEY = intPreferencesKey("randomize_bucket_hours")
+    private val FSRS_RETENTION_KEY = intPreferencesKey("fsrs_retention")
+    private val SM2_INTERVAL_MODIFIER_KEY = intPreferencesKey("sm2_interval_modifier")
 
     companion object {
         const val DEFAULT_CARDS_PER_SESSION = 3
@@ -44,6 +46,16 @@ class ThemePreferences(private val context: Context) {
         const val DEFAULT_RANDOMIZE_BUCKET_HOURS = 24 // 1 day
         // All days of week selected by default (1=Monday through 7=Sunday, ISO-8601 convention)
         val DEFAULT_PRACTICE_DAYS: Set<Int> = setOf(1, 2, 3, 4, 5, 6, 7)
+
+        // FSRS desired retention as integer percent (70–97), default 90 %
+        const val DEFAULT_FSRS_RETENTION = 90
+        const val MIN_FSRS_RETENTION = 70
+        const val MAX_FSRS_RETENTION = 97
+
+        // SM-2 interval modifier as integer percent (50–200), default 100 %
+        const val DEFAULT_SM2_INTERVAL_MODIFIER = 100
+        const val MIN_SM2_INTERVAL_MODIFIER = 50
+        const val MAX_SM2_INTERVAL_MODIFIER = 200
     }
 
     val themeMode: Flow<ThemeMode> = context.dataStore.data
@@ -105,6 +117,16 @@ class ThemePreferences(private val context: Context) {
             preferences[RANDOMIZE_BUCKET_HOURS_KEY] ?: DEFAULT_RANDOMIZE_BUCKET_HOURS
         }
 
+    val fsrsRetention: Flow<Int> = context.dataStore.data
+        .map { preferences ->
+            preferences[FSRS_RETENTION_KEY] ?: DEFAULT_FSRS_RETENTION
+        }
+
+    val sm2IntervalModifier: Flow<Int> = context.dataStore.data
+        .map { preferences ->
+            preferences[SM2_INTERVAL_MODIFIER_KEY] ?: DEFAULT_SM2_INTERVAL_MODIFIER
+        }
+
     suspend fun setThemeMode(mode: ThemeMode) {
         context.dataStore.edit { preferences ->
             preferences[THEME_KEY] = mode.name
@@ -164,6 +186,20 @@ class ThemePreferences(private val context: Context) {
     suspend fun setRandomizeBucketHours(hours: Int) {
         context.dataStore.edit { preferences ->
             preferences[RANDOMIZE_BUCKET_HOURS_KEY] = hours
+        }
+    }
+
+    suspend fun setFsrsRetention(percent: Int) {
+        val valid = percent.coerceIn(MIN_FSRS_RETENTION, MAX_FSRS_RETENTION)
+        context.dataStore.edit { preferences ->
+            preferences[FSRS_RETENTION_KEY] = valid
+        }
+    }
+
+    suspend fun setSm2IntervalModifier(percent: Int) {
+        val valid = percent.coerceIn(MIN_SM2_INTERVAL_MODIFIER, MAX_SM2_INTERVAL_MODIFIER)
+        context.dataStore.edit { preferences ->
+            preferences[SM2_INTERVAL_MODIFIER_KEY] = valid
         }
     }
 }

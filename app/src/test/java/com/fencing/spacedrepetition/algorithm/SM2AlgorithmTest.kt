@@ -517,6 +517,170 @@ class SM2AlgorithmTest {
         assertEquals(newReviewTime, result.card.lastReview)
     }
 
+    // ========== setIntervalModifier Tests ==========
+
+    @Test
+    fun testSetIntervalModifier_100Percent_SameAsDefault() {
+        val card = SM2Algorithm.SM2Card(
+            easeFactor = 2.5,
+            interval = 6,
+            repetitions = 2,
+            lastReview = testTimestamp
+        )
+        val reviewTime = testTimestamp + (6 * oneDayMs)
+
+        val defaultAlgo = SM2Algorithm()
+        val explicit100Algo = SM2Algorithm()
+        explicit100Algo.setIntervalModifier(100)
+
+        val defaultResult = defaultAlgo.schedule(card, SM2Algorithm.Quality.EASY, reviewTime)
+        val explicit100Result = explicit100Algo.schedule(card, SM2Algorithm.Quality.EASY, reviewTime)
+
+        assertEquals(defaultResult.card.interval, explicit100Result.card.interval)
+    }
+
+    @Test
+    fun testSetIntervalModifier_50Percent_HalvesThirdPlusIntervals() {
+        // Third repetition: default interval = (6 * 2.5 * 1.0).toInt() = 15
+        // With 50 % modifier:                (6 * 2.5 * 0.5).toInt() = 7
+        val card = SM2Algorithm.SM2Card(
+            easeFactor = 2.5,
+            interval = 6,
+            repetitions = 2,
+            lastReview = testTimestamp
+        )
+        val reviewTime = testTimestamp + (6 * oneDayMs)
+
+        val modifiedAlgo = SM2Algorithm()
+        modifiedAlgo.setIntervalModifier(50)
+
+        val modifiedResult = modifiedAlgo.schedule(card, SM2Algorithm.Quality.EASY, reviewTime)
+
+        // Quality.EASY (q=4) leaves EF unchanged at 2.5
+        val expectedInterval = (6 * 2.5 * 0.5).toInt()
+        assertEquals(expectedInterval, modifiedResult.card.interval)
+        // Sanity: shorter than default (15)
+        assertTrue(modifiedResult.card.interval < 15)
+    }
+
+    @Test
+    fun testSetIntervalModifier_200Percent_DoublesThirdPlusIntervals() {
+        // Third repetition: default = 15; with 200 % modifier = (6 * 2.5 * 2.0).toInt() = 30
+        val card = SM2Algorithm.SM2Card(
+            easeFactor = 2.5,
+            interval = 6,
+            repetitions = 2,
+            lastReview = testTimestamp
+        )
+        val reviewTime = testTimestamp + (6 * oneDayMs)
+
+        val modifiedAlgo = SM2Algorithm()
+        modifiedAlgo.setIntervalModifier(200)
+
+        val modifiedResult = modifiedAlgo.schedule(card, SM2Algorithm.Quality.EASY, reviewTime)
+
+        val expectedInterval = (6 * 2.5 * 2.0).toInt()
+        assertEquals(expectedInterval, modifiedResult.card.interval)
+        assertTrue(modifiedResult.card.interval > 15)
+    }
+
+    @Test
+    fun testSetIntervalModifier_NotApplied_ToFirstRepetition() {
+        // First repetition (rep=0): interval is always 1, modifier must not change this
+        val newCard = SM2Algorithm.SM2Card()
+        val modifiedAlgo = SM2Algorithm()
+        modifiedAlgo.setIntervalModifier(50)
+
+        val result = modifiedAlgo.schedule(newCard, SM2Algorithm.Quality.EASY, testTimestamp)
+        assertEquals(1, result.card.interval)
+    }
+
+    @Test
+    fun testSetIntervalModifier_NotApplied_ToSecondRepetition() {
+        // Second repetition (rep=1): interval is always 6, modifier must not change this
+        val card = SM2Algorithm.SM2Card(
+            interval = 1,
+            repetitions = 1,
+            lastReview = testTimestamp
+        )
+        val modifiedAlgo = SM2Algorithm()
+        modifiedAlgo.setIntervalModifier(50)
+
+        val result = modifiedAlgo.schedule(card, SM2Algorithm.Quality.EASY, testTimestamp + oneDayMs)
+        assertEquals(6, result.card.interval)
+    }
+
+    @Test
+    fun testSetIntervalModifier_LowerValue_ShorterIntervals() {
+        val card = SM2Algorithm.SM2Card(
+            easeFactor = 2.5,
+            interval = 10,
+            repetitions = 3,
+            lastReview = testTimestamp
+        )
+        val reviewTime = testTimestamp + (10 * oneDayMs)
+
+        val highModifierAlgo = SM2Algorithm()
+        highModifierAlgo.setIntervalModifier(150)
+        val lowModifierAlgo = SM2Algorithm()
+        lowModifierAlgo.setIntervalModifier(50)
+
+        val highResult = highModifierAlgo.schedule(card, SM2Algorithm.Quality.EASY, reviewTime)
+        val lowResult = lowModifierAlgo.schedule(card, SM2Algorithm.Quality.EASY, reviewTime)
+
+        assertTrue(
+            "Lower modifier should produce shorter interval: low=${lowResult.card.interval} high=${highResult.card.interval}",
+            lowResult.card.interval < highResult.card.interval
+        )
+    }
+
+    @Test
+    fun testSetIntervalModifier_ClampsLowValues_IntervalAtLeastOne() {
+        val card = SM2Algorithm.SM2Card(
+            easeFactor = 1.3,
+            interval = 1,
+            repetitions = 2,
+            lastReview = testTimestamp
+        )
+        val algo = SM2Algorithm()
+        algo.setIntervalModifier(0) // clamped to 0.1 internally
+
+        val result = algo.schedule(card, SM2Algorithm.Quality.DIFFICULT, testTimestamp + oneDayMs)
+        assertTrue(result.card.interval >= 1)
+    }
+
+    @Test
+    fun testSetIntervalModifier_ClampsHighValues_IntervalDoesNotExceedMaximum() {
+        val algo = SM2Algorithm()
+        algo.setIntervalModifier(2000) // clamped to 10.0
+
+        val card = SM2Algorithm.SM2Card(
+            easeFactor = 2.5,
+            interval = 10000,
+            repetitions = 5,
+            lastReview = testTimestamp
+        )
+        val result = algo.schedule(card, SM2Algorithm.Quality.EASY, testTimestamp + (10000 * oneDayMs))
+        assertTrue(result.card.interval <= 36500)
+    }
+
+    @Test
+    fun testSetIntervalModifier_ResetsDoNotApplyModifier() {
+        // Failing ratings reset the card; the reset interval (1) should not be scaled
+        val card = SM2Algorithm.SM2Card(
+            easeFactor = 2.5,
+            interval = 15,
+            repetitions = 3,
+            lastReview = testTimestamp
+        )
+        val algo = SM2Algorithm()
+        algo.setIntervalModifier(50)
+
+        val result = algo.schedule(card, SM2Algorithm.Quality.COMPLETE_BLACKOUT, testTimestamp + (15 * oneDayMs))
+        assertEquals(1, result.card.interval)
+        assertEquals(0, result.card.repetitions)
+    }
+
     // ========== Realistic Scenario Tests ==========
 
     @Test

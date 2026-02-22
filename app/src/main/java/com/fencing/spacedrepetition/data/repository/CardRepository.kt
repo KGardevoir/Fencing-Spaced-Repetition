@@ -612,9 +612,11 @@ class CardRepository(
     }
 
     private suspend fun reviewWithFSRS(card: Card, grade: Grade, now: Long, elapsedDays: Int, groupId: Long? = null): Card {
-        // Resolve maximum interval (group override or global)
+        // Resolve maximum interval and desired retention (group override or global)
         val maxInterval = resolveMaximumInterval(groupId)
         fsrsAlgorithm.setMaximumInterval(maxInterval)
+        val retention = resolveFsrsRetention(groupId)
+        fsrsAlgorithm.setRequestRetention(retention)
 
         val fsrsCard = FSRSAlgorithm.FSRSCard(
             stability = card.fsrsStability,
@@ -654,9 +656,11 @@ class CardRepository(
     }
 
     private suspend fun reviewWithSM2(card: Card, grade: Grade, now: Long, groupId: Long? = null): Card {
-        // Resolve maximum interval (group override or global)
+        // Resolve maximum interval and interval modifier (group override or global)
         val maxInterval = resolveMaximumInterval(groupId)
         sm2Algorithm.setMaximumInterval(maxInterval)
+        val modifier = resolveSm2IntervalModifier(groupId)
+        sm2Algorithm.setIntervalModifier(modifier)
 
         val sm2Card = SM2Algorithm.SM2Card(
             easeFactor = card.sm2EaseFactor,
@@ -714,6 +718,24 @@ class CardRepository(
             if (groupDays != null) return groupDays
         }
         return preferences.practiceDays.first()
+    }
+
+    /** Resolve FSRS desired retention (integer percent): group override takes precedence over global. */
+    private suspend fun resolveFsrsRetention(groupId: Long?): Int {
+        if (groupId != null) {
+            val group = groupDao.getGroupById(groupId)
+            if (group?.fsrsRetention != null) return group.fsrsRetention
+        }
+        return preferences.fsrsRetention.first()
+    }
+
+    /** Resolve SM-2 interval modifier (integer percent): group override takes precedence over global. */
+    private suspend fun resolveSm2IntervalModifier(groupId: Long?): Int {
+        if (groupId != null) {
+            val group = groupDao.getGroupById(groupId)
+            if (group?.sm2IntervalModifier != null) return group.sm2IntervalModifier
+        }
+        return preferences.sm2IntervalModifier.first()
     }
 
     private suspend fun adjustForPracticeFrequency(scheduledDays: Int, groupId: Long? = null): Int {

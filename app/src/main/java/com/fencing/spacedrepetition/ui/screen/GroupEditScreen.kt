@@ -26,6 +26,8 @@ fun GroupEditScreen(
     globalRandomizeBucketHours: Int,
     globalPracticeDays: Set<Int>,
     globalMaximumInterval: Int,
+    globalFsrsRetention: Int,
+    globalSm2IntervalModifier: Int,
     onSave: (Group) -> Unit,
     onNavigateBack: () -> Unit
 ) {
@@ -54,8 +56,16 @@ fun GroupEditScreen(
     var overrideMaximumInterval by remember { mutableStateOf(group.maximumInterval != null) }
     var maximumInterval by remember { mutableIntStateOf(group.maximumInterval ?: globalMaximumInterval) }
 
+    var overrideFsrsRetention by remember { mutableStateOf(group.fsrsRetention != null) }
+    var fsrsRetention by remember { mutableIntStateOf(group.fsrsRetention ?: globalFsrsRetention) }
+
+    var overrideSm2IntervalModifier by remember { mutableStateOf(group.sm2IntervalModifier != null) }
+    var sm2IntervalModifier by remember { mutableIntStateOf(group.sm2IntervalModifier ?: globalSm2IntervalModifier) }
+
     val intervalPresets = SettingsConstants.INTERVAL_PRESETS
     val bucketPresets = SettingsConstants.BUCKET_PRESETS
+    val fsrsRetentionPresets = SettingsConstants.FSRS_RETENTION_PRESETS
+    val sm2ModifierPresets = SettingsConstants.SM2_MODIFIER_PRESETS
 
     Scaffold(
         topBar = {
@@ -78,7 +88,9 @@ fun GroupEditScreen(
                                 randomizeDueCards = if (overrideRandomizeDueCards) randomizeDueCards else null,
                                 randomizeBucketHours = if (overrideRandomizeBucketHours) randomizeBucketHours else null,
                                 practiceDays = if (overridePracticeDays) practiceDays.sorted().joinToString(",") else null,
-                                maximumInterval = if (overrideMaximumInterval) maximumInterval else null
+                                maximumInterval = if (overrideMaximumInterval) maximumInterval else null,
+                                fsrsRetention = if (overrideFsrsRetention) fsrsRetention else null,
+                                sm2IntervalModifier = if (overrideSm2IntervalModifier) sm2IntervalModifier else null
                             )
                             onSave(updatedGroup)
                         },
@@ -338,6 +350,64 @@ fun GroupEditScreen(
                     steps = intervalPresets.size - 2,
                     modifier = Modifier.fillMaxWidth(),
                     enabled = overrideMaximumInterval
+                )
+            }
+
+            // FSRS desired retention override
+            SettingOverrideSection(
+                label = "FSRS Desired Retention",
+                overridden = overrideFsrsRetention,
+                onOverrideChange = { overrideFsrsRetention = it }
+            ) {
+                val currentRetentionIndex = SettingsConstants.findPresetIndex(fsrsRetentionPresets, fsrsRetention)
+                Text(
+                    fsrsRetentionPresets[currentRetentionIndex].second,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Slider(
+                    value = currentRetentionIndex.toFloat(),
+                    onValueChange = { newIndex ->
+                        fsrsRetention = fsrsRetentionPresets[newIndex.roundToInt()].first
+                    },
+                    valueRange = 0f..(fsrsRetentionPresets.size - 1).toFloat(),
+                    steps = fsrsRetentionPresets.size - 2,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = overrideFsrsRetention
+                )
+                Text(
+                    "Target recall probability when a card comes due (FSRS). 80–92\u00a0% suits most learners.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            // SM-2 interval modifier override
+            SettingOverrideSection(
+                label = "SM-2 Interval Modifier",
+                overridden = overrideSm2IntervalModifier,
+                onOverrideChange = { overrideSm2IntervalModifier = it }
+            ) {
+                val currentModifierIndex = SettingsConstants.findPresetIndex(sm2ModifierPresets, sm2IntervalModifier)
+                Text(
+                    sm2ModifierPresets[currentModifierIndex].second,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Slider(
+                    value = currentModifierIndex.toFloat(),
+                    onValueChange = { newIndex ->
+                        sm2IntervalModifier = sm2ModifierPresets[newIndex.roundToInt()].first
+                    },
+                    valueRange = 0f..(sm2ModifierPresets.size - 1).toFloat(),
+                    steps = sm2ModifierPresets.size - 2,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = overrideSm2IntervalModifier
+                )
+                Text(
+                    "Scales SM-2 review intervals. 100\u00a0% = default; lower = more reviews; higher = fewer reviews.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 

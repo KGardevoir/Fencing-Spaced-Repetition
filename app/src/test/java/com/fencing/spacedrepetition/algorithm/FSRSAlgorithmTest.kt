@@ -515,6 +515,122 @@ class FSRSAlgorithmTest {
         assertEquals(0, card.lapses)
     }
 
+    // ========== setRequestRetention Tests ==========
+
+    @Test
+    fun testSetRequestRetention_HigherRetention_ShorterIntervals() {
+        val reviewCard = FSRSAlgorithm.FSRSCard(
+            stability = 10.0,
+            difficulty = 5.0,
+            state = FSRSAlgorithm.CardState.REVIEW,
+            scheduledDays = 10,
+            reps = 5,
+            lastReview = testTimestamp
+        )
+        val reviewTime = testTimestamp + (10L * 24 * 60 * 60 * 1000)
+
+        val highRetentionAlgo = FSRSAlgorithm()
+        highRetentionAlgo.setRequestRetention(95) // 95 % → shorter intervals
+        val lowRetentionAlgo = FSRSAlgorithm()
+        lowRetentionAlgo.setRequestRetention(75) // 75 % → longer intervals
+
+        val highResult = highRetentionAlgo.schedule(reviewCard, FSRSAlgorithm.Rating.GOOD, reviewTime)
+        val lowResult = lowRetentionAlgo.schedule(reviewCard, FSRSAlgorithm.Rating.GOOD, reviewTime)
+
+        assertTrue(
+            "Higher retention should produce shorter interval: high=${highResult.card.scheduledDays} low=${lowResult.card.scheduledDays}",
+            highResult.card.scheduledDays < lowResult.card.scheduledDays
+        )
+    }
+
+    @Test
+    fun testSetRequestRetention_90Percent_MatchesDefault() {
+        val reviewCard = FSRSAlgorithm.FSRSCard(
+            stability = 10.0,
+            difficulty = 5.0,
+            state = FSRSAlgorithm.CardState.REVIEW,
+            scheduledDays = 10,
+            reps = 5,
+            lastReview = testTimestamp
+        )
+        val reviewTime = testTimestamp + (10L * 24 * 60 * 60 * 1000)
+
+        val defaultAlgo = FSRSAlgorithm()
+        val explicit90Algo = FSRSAlgorithm()
+        explicit90Algo.setRequestRetention(90)
+
+        val defaultResult = defaultAlgo.schedule(reviewCard, FSRSAlgorithm.Rating.GOOD, reviewTime)
+        val explicit90Result = explicit90Algo.schedule(reviewCard, FSRSAlgorithm.Rating.GOOD, reviewTime)
+
+        assertEquals(defaultResult.card.scheduledDays, explicit90Result.card.scheduledDays)
+    }
+
+    @Test
+    fun testSetRequestRetention_ClampsLowValues_ReturnsValidInterval() {
+        val reviewCard = FSRSAlgorithm.FSRSCard(
+            stability = 10.0,
+            difficulty = 5.0,
+            state = FSRSAlgorithm.CardState.REVIEW,
+            scheduledDays = 10,
+            reps = 5,
+            lastReview = testTimestamp
+        )
+        val reviewTime = testTimestamp + (10L * 24 * 60 * 60 * 1000)
+
+        val algo = FSRSAlgorithm()
+        algo.setRequestRetention(5) // well below range; clamped to 0.10
+
+        val result = algo.schedule(reviewCard, FSRSAlgorithm.Rating.GOOD, reviewTime)
+        assertTrue(result.card.scheduledDays >= 1)
+    }
+
+    @Test
+    fun testSetRequestRetention_ClampsHighValues_ReturnsValidInterval() {
+        val reviewCard = FSRSAlgorithm.FSRSCard(
+            stability = 10.0,
+            difficulty = 5.0,
+            state = FSRSAlgorithm.CardState.REVIEW,
+            scheduledDays = 10,
+            reps = 5,
+            lastReview = testTimestamp
+        )
+        val reviewTime = testTimestamp + (10L * 24 * 60 * 60 * 1000)
+
+        val algo = FSRSAlgorithm()
+        algo.setRequestRetention(200) // well above range; clamped to 0.99
+
+        val result = algo.schedule(reviewCard, FSRSAlgorithm.Rating.GOOD, reviewTime)
+        assertTrue(result.card.scheduledDays >= 1)
+    }
+
+    @Test
+    fun testSetRequestRetention_DoesNotAffectLearningState() {
+        // requestRetention only influences REVIEW-state interval calculation; LEARNING→LEARNING
+        // steps (e.g. AGAIN) use a fixed scheduledDays=0 that is independent of retention.
+        val learningCard = FSRSAlgorithm.FSRSCard(
+            stability = 3.0,
+            difficulty = 5.0,
+            state = FSRSAlgorithm.CardState.LEARNING,
+            reps = 1,
+            lastReview = testTimestamp
+        )
+        val reviewTime = testTimestamp + (24 * 60 * 60 * 1000L)
+
+        val highRetentionAlgo = FSRSAlgorithm()
+        highRetentionAlgo.setRequestRetention(97)
+        val lowRetentionAlgo = FSRSAlgorithm()
+        lowRetentionAlgo.setRequestRetention(70)
+
+        // AGAIN keeps the card in LEARNING with a fixed step (scheduledDays = 0)
+        val highResult = highRetentionAlgo.schedule(learningCard, FSRSAlgorithm.Rating.AGAIN, reviewTime)
+        val lowResult = lowRetentionAlgo.schedule(learningCard, FSRSAlgorithm.Rating.AGAIN, reviewTime)
+
+        // Both should stay in LEARNING and have identical scheduledDays (fixed step, not retention-dependent)
+        assertEquals(FSRSAlgorithm.CardState.LEARNING, highResult.card.state)
+        assertEquals(FSRSAlgorithm.CardState.LEARNING, lowResult.card.state)
+        assertEquals(highResult.card.scheduledDays, lowResult.card.scheduledDays)
+    }
+
     // ========== Realistic Scenario Tests ==========
 
     @Test

@@ -733,6 +733,8 @@ object CardImportExport {
             group.randomizeBucketHours?.let { append("\trandomizeBucketHours=$it") }
             group.practiceDays?.let { append("\tpracticeDays=$it") }
             group.maximumInterval?.let { append("\tmaximumInterval=$it") }
+            group.fsrsRetention?.let { append("\tfsrsRetention=$it") }
+            group.sm2IntervalModifier?.let { append("\tsm2IntervalModifier=$it") }
         }
     }
 
@@ -766,7 +768,9 @@ object CardImportExport {
             randomizeDueCards = settings["randomizeDueCards"]?.toBooleanStrictOrNull(),
             randomizeBucketHours = settings["randomizeBucketHours"]?.toIntOrNull(),
             practiceDays = settings["practiceDays"],
-            maximumInterval = settings["maximumInterval"]?.toIntOrNull()
+            maximumInterval = settings["maximumInterval"]?.toIntOrNull(),
+            fsrsRetention = settings["fsrsRetention"]?.toIntOrNull(),
+            sm2IntervalModifier = settings["sm2IntervalModifier"]?.toIntOrNull()
         )
     }
 

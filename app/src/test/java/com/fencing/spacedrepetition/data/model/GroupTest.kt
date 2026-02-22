@@ -53,6 +53,18 @@ class GroupTest {
     }
 
     @Test
+    fun `hasCustomSettings - fsrsRetention override`() {
+        val group = Group(name = "Test", fsrsRetention = 85)
+        assertTrue(group.hasCustomSettings())
+    }
+
+    @Test
+    fun `hasCustomSettings - sm2IntervalModifier override`() {
+        val group = Group(name = "Test", sm2IntervalModifier = 75)
+        assertTrue(group.hasCustomSettings())
+    }
+
+    @Test
     fun `hasCustomSettings - multiple overrides`() {
         val group = Group(
             name = "Test",

@@ -34,6 +34,34 @@ object SettingsConstants {
         7 to "S", 1 to "M", 2 to "T", 3 to "W", 4 to "T", 5 to "F", 6 to "S"
     )
 
+    /**
+     * Preset values for FSRS desired retention (integer percent → label).
+     * Range 70 %–97 %; the FSRS team recommends 80 %–95 % for most learners.
+     */
+    val FSRS_RETENTION_PRESETS = listOf(
+        70 to "70%",
+        75 to "75%",
+        80 to "80%",
+        85 to "85%",
+        90 to "90%",
+        92 to "92%",
+        95 to "95%",
+        97 to "97%"
+    )
+
+    /**
+     * Preset values for SM-2 interval modifier (integer percent → label).
+     * 100 % = default SM-2 behaviour; lower = more frequent reviews; higher = longer intervals.
+     */
+    val SM2_MODIFIER_PRESETS = listOf(
+        50  to "50%",
+        75  to "75%",
+        100 to "100%",
+        125 to "125%",
+        150 to "150%",
+        200 to "200%"
+    )
+
     /** Find the closest preset index for a given value. */
     fun findPresetIndex(presets: List<Pair<Int, String>>, value: Int): Int =
         presets.indexOfFirst { it.first >= value }.let { if (it == -1) presets.size - 1 else it }
