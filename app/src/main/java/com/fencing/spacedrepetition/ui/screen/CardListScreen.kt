@@ -245,7 +245,7 @@ fun CardListScreen(
                                     text = { Text("Import Cards") },
                                     onClick = {
                                         showMenu = false
-                                        importLauncher.launch(arrayOf("application/gzip", "application/x-gzip", "text/plain", "text/tab-separated-values", "application/octet-stream", "*/*"))
+                                        importLauncher.launch(arrayOf("application/gzip", "application/x-gzip", "text/plain", "text/tab-separated-values"))
                                     },
                                     leadingIcon = {
                                         Icon(Icons.Default.FileUpload, contentDescription = null)
@@ -277,7 +277,7 @@ fun CardListScreen(
                                     text = { Text("Import CSV") },
                                     onClick = {
                                         showMenu = false
-                                        csvImportLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "application/octet-stream", "*/*"))
+                                        csvImportLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain"))
                                     },
                                     leadingIcon = {
                                         Icon(Icons.Default.TableChart, contentDescription = null)

@@ -191,7 +191,7 @@ fun GroupListScreen(
                         onDelete = { showDeleteDialog = group },
                         onImport = {
                             groupForImport = group
-                            importLauncher.launch(arrayOf("application/gzip", "application/x-gzip", "text/plain", "text/tab-separated-values", "application/octet-stream", "*/*"))
+                            importLauncher.launch(arrayOf("application/gzip", "application/x-gzip", "text/plain", "text/tab-separated-values"))
                         },
                         onExport = {
                             groupForExport = group
@@ -199,7 +199,7 @@ fun GroupListScreen(
                         },
                         onCsvImport = {
                             groupForCsvImport = group
-                            csvImportLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "application/octet-stream", "*/*"))
+                            csvImportLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain"))
                         },
                         onCsvExport = {
                             groupForCsvExport = group

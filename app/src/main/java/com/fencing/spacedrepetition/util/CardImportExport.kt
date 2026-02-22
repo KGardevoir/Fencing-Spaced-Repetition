@@ -183,6 +183,16 @@ object CardImportExport {
                 else -> 0 // Simple format
             }
 
+            // Reject files that don't look like TSV: for simple format, require at least
+            // one tab character in the file; for versioned formats the header already
+            // confirms the file type.
+            if (formatVersion == 0) {
+                val hasTabContent = lines.any { it.contains('\t') }
+                if (!hasTabContent) {
+                    return Pair(emptyList(), listOf("File does not appear to be a valid tab-separated import file"))
+                }
+            }
+
             val dataLines = if (formatVersion > 0) lines.drop(1) else lines
 
             dataLines.forEachIndexed { index, line ->
@@ -894,6 +904,12 @@ object CardImportExport {
             val firstRow = lines[0]
             val hasHeader = firstRow.isNotEmpty() &&
                 firstRow[0].trim().equals(CSV_HEADER_CONCEPT, ignoreCase = true)
+
+            // Reject files that don't look like CSV: require either a recognised header
+            // or at least one row with 2 or more columns.
+            if (!hasHeader && lines.none { row -> row.size >= 2 }) {
+                return Pair(emptyList(), listOf("File does not appear to be a valid CSV file. Expected columns: Concept, Description"))
+            }
 
             val dataLines = if (hasHeader) lines.drop(1) else lines
 
