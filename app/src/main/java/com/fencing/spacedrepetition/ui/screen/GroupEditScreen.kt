@@ -28,6 +28,7 @@ fun GroupEditScreen(
     globalMaximumInterval: Int,
     globalFsrsRetention: Int,
     globalSm2IntervalModifier: Int,
+    globalFsrsEnableFuzzing: Boolean,
     onSave: (Group) -> Unit,
     onNavigateBack: () -> Unit
 ) {
@@ -62,6 +63,9 @@ fun GroupEditScreen(
     var overrideSm2IntervalModifier by remember { mutableStateOf(group.sm2IntervalModifier != null) }
     var sm2IntervalModifier by remember { mutableIntStateOf(group.sm2IntervalModifier ?: globalSm2IntervalModifier) }
 
+    var overrideFsrsEnableFuzzing by remember { mutableStateOf(group.fsrsEnableFuzzing != null) }
+    var fsrsEnableFuzzing by remember { mutableStateOf(group.fsrsEnableFuzzing ?: globalFsrsEnableFuzzing) }
+
     val intervalPresets = SettingsConstants.INTERVAL_PRESETS
     val bucketPresets = SettingsConstants.BUCKET_PRESETS
     val fsrsRetentionPresets = SettingsConstants.FSRS_RETENTION_PRESETS
@@ -90,7 +94,8 @@ fun GroupEditScreen(
                                 practiceDays = if (overridePracticeDays) practiceDays.sorted().joinToString(",") else null,
                                 maximumInterval = if (overrideMaximumInterval) maximumInterval else null,
                                 fsrsRetention = if (overrideFsrsRetention) fsrsRetention else null,
-                                sm2IntervalModifier = if (overrideSm2IntervalModifier) sm2IntervalModifier else null
+                                sm2IntervalModifier = if (overrideSm2IntervalModifier) sm2IntervalModifier else null,
+                                fsrsEnableFuzzing = if (overrideFsrsEnableFuzzing) fsrsEnableFuzzing else null
                             )
                             onSave(updatedGroup)
                         },
@@ -409,6 +414,33 @@ fun GroupEditScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+
+            // FSRS interval fuzzing override
+            SettingOverrideSection(
+                label = "FSRS Interval Fuzzing",
+                overridden = overrideFsrsEnableFuzzing,
+                onOverrideChange = { overrideFsrsEnableFuzzing = it }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = overrideFsrsEnableFuzzing) { fsrsEnableFuzzing = !fsrsEnableFuzzing },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        "Add \u22645\u00a0% random variance to FSRS intervals to spread reviews",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(
+                        checked = fsrsEnableFuzzing,
+                        onCheckedChange = { fsrsEnableFuzzing = it },
+                        enabled = overrideFsrsEnableFuzzing
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(32.dp))

@@ -5,6 +5,13 @@ import org.junit.Before
 import org.junit.Test
 import kotlin.math.abs
 
+/**
+ * Unit tests for the FSRS-6 algorithm.
+ *
+ * Tests focus on behavioural invariants (state transitions, ordering of stability/difficulty,
+ * interval bounds) rather than exact floating-point values, keeping them valid across the
+ * FSRS-6 parameter set and minor future weight updates.
+ */
 class FSRSAlgorithmTest {
 
     private lateinit var algorithm: FSRSAlgorithm
@@ -660,6 +667,86 @@ class FSRSAlgorithmTest {
         // Card should have accumulated reviews and increased intervals
         assertTrue(card.reps >= 6)
         assertTrue(card.scheduledDays > 10)
+    }
+
+    // ========== FSRS-6 Specific Tests ==========
+
+    @Test
+    fun testFuzzing_Disabled_ProducesDeterministicInterval() {
+        // With fuzzing disabled (default), the same card and rating always produce the same interval.
+        val reviewCard = FSRSAlgorithm.FSRSCard(
+            stability = 10.0,
+            difficulty = 5.0,
+            state = FSRSAlgorithm.CardState.REVIEW,
+            scheduledDays = 10,
+            reps = 5,
+            lastReview = testTimestamp
+        )
+        val reviewTime = testTimestamp + (10L * 24 * 60 * 60 * 1000)
+
+        val result1 = algorithm.schedule(reviewCard, FSRSAlgorithm.Rating.GOOD, reviewTime)
+        val result2 = algorithm.schedule(reviewCard, FSRSAlgorithm.Rating.GOOD, reviewTime)
+
+        assertEquals(result1.card.scheduledDays, result2.card.scheduledDays)
+    }
+
+    @Test
+    fun testFuzzing_Enabled_IntervalWithinExpectedRange() {
+        // With fuzzing enabled the interval should stay close to the raw value (within ±5 % + 1 day).
+        val fuzzingAlgo = FSRSAlgorithm()
+        fuzzingAlgo.setEnableFuzzing(true)
+
+        val reviewCard = FSRSAlgorithm.FSRSCard(
+            stability = 20.0,
+            difficulty = 5.0,
+            state = FSRSAlgorithm.CardState.REVIEW,
+            scheduledDays = 20,
+            reps = 5,
+            lastReview = testTimestamp
+        )
+        val reviewTime = testTimestamp + (20L * 24 * 60 * 60 * 1000)
+
+        // Run many times and verify all results stay within ±5 % + 2 days of the no-fuzz interval
+        val noFuzzAlgo = FSRSAlgorithm()
+        val rawInterval = noFuzzAlgo.schedule(reviewCard, FSRSAlgorithm.Rating.GOOD, reviewTime).card.scheduledDays
+        val maxDelta = (rawInterval * 0.05).toInt() + 2
+
+        repeat(50) {
+            val result = fuzzingAlgo.schedule(reviewCard, FSRSAlgorithm.Rating.GOOD, reviewTime)
+            assertTrue(
+                "Fuzzed interval ${result.card.scheduledDays} should be within [${ rawInterval - maxDelta }, ${ rawInterval + maxDelta }]",
+                result.card.scheduledDays in (rawInterval - maxDelta)..(rawInterval + maxDelta)
+            )
+        }
+    }
+
+    @Test
+    fun testShortTermStability_LargerStabilityGrowsSlower() {
+        // FSRS-6: the S^(-w19) factor makes short-term stability growth slower for large S.
+        // A card with high stability should get a smaller *relative* boost from a same-day GOOD
+        // than a card with low stability.
+        val lowStabilityCard = FSRSAlgorithm.FSRSCard(
+            stability = 1.0, difficulty = 5.0,
+            state = FSRSAlgorithm.CardState.LEARNING, reps = 1,
+            lastReview = testTimestamp
+        )
+        val highStabilityCard = FSRSAlgorithm.FSRSCard(
+            stability = 50.0, difficulty = 5.0,
+            state = FSRSAlgorithm.CardState.LEARNING, reps = 1,
+            lastReview = testTimestamp
+        )
+        val reviewTime = testTimestamp + (24 * 60 * 60 * 1000)
+
+        val lowResult = algorithm.schedule(lowStabilityCard, FSRSAlgorithm.Rating.GOOD, reviewTime)
+        val highResult = algorithm.schedule(highStabilityCard, FSRSAlgorithm.Rating.GOOD, reviewTime)
+
+        val lowRelativeGain = lowResult.card.stability / lowStabilityCard.stability
+        val highRelativeGain = highResult.card.stability / highStabilityCard.stability
+
+        assertTrue(
+            "Low-stability card should have a higher relative stability gain than high-stability card",
+            lowRelativeGain > highRelativeGain
+        )
     }
 
     @Test

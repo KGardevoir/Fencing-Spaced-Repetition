@@ -170,6 +170,7 @@ fun AppNavigation(
             val globalMaximumInterval by settingsViewModel.maximumInterval.collectAsState()
             val globalFsrsRetention by settingsViewModel.fsrsRetention.collectAsState()
             val globalSm2IntervalModifier by settingsViewModel.sm2IntervalModifier.collectAsState()
+            val globalFsrsEnableFuzzing by settingsViewModel.fsrsEnableFuzzing.collectAsState()
 
             GroupEditScreen(
                 group = Group(name = ""),
@@ -181,6 +182,7 @@ fun AppNavigation(
                 globalMaximumInterval = globalMaximumInterval,
                 globalFsrsRetention = globalFsrsRetention,
                 globalSm2IntervalModifier = globalSm2IntervalModifier,
+                globalFsrsEnableFuzzing = globalFsrsEnableFuzzing,
                 onSave = { newGroup ->
                     groupViewModel.addGroupWithSettings(newGroup) {
                         navController.popBackStack()
@@ -203,6 +205,7 @@ fun AppNavigation(
                 val globalMaximumInterval by settingsViewModel.maximumInterval.collectAsState()
                 val globalFsrsRetention by settingsViewModel.fsrsRetention.collectAsState()
                 val globalSm2IntervalModifier by settingsViewModel.sm2IntervalModifier.collectAsState()
+                val globalFsrsEnableFuzzing by settingsViewModel.fsrsEnableFuzzing.collectAsState()
 
                 GroupEditScreen(
                     group = group,
@@ -214,6 +217,7 @@ fun AppNavigation(
                     globalMaximumInterval = globalMaximumInterval,
                     globalFsrsRetention = globalFsrsRetention,
                     globalSm2IntervalModifier = globalSm2IntervalModifier,
+                    globalFsrsEnableFuzzing = globalFsrsEnableFuzzing,
                     onSave = { updatedGroup ->
                         // Handle independent learning toggle specially (initializes learning states)
                         if (updatedGroup.independentLearning != group.independentLearning) {

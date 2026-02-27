@@ -612,11 +612,13 @@ class CardRepository(
     }
 
     private suspend fun reviewWithFSRS(card: Card, grade: Grade, now: Long, elapsedDays: Int, groupId: Long? = null): Card {
-        // Resolve maximum interval and desired retention (group override or global)
+        // Resolve maximum interval, desired retention, and fuzzing (group override or global)
         val maxInterval = resolveMaximumInterval(groupId)
         fsrsAlgorithm.setMaximumInterval(maxInterval)
         val retention = resolveFsrsRetention(groupId)
         fsrsAlgorithm.setRequestRetention(retention)
+        val fuzzing = resolveFsrsEnableFuzzing(groupId)
+        fsrsAlgorithm.setEnableFuzzing(fuzzing)
 
         val fsrsCard = FSRSAlgorithm.FSRSCard(
             stability = card.fsrsStability,
@@ -729,6 +731,15 @@ class CardRepository(
         return preferences.fsrsRetention.first()
     }
 
+    /** Resolve FSRS interval fuzzing flag: group override takes precedence over global. */
+    private suspend fun resolveFsrsEnableFuzzing(groupId: Long?): Boolean {
+        if (groupId != null) {
+            val group = groupDao.getGroupById(groupId)
+            if (group?.fsrsEnableFuzzing != null) return group.fsrsEnableFuzzing
+        }
+        return preferences.fsrsEnableFuzzing.first()
+    }
+
     /** Resolve SM-2 interval modifier (integer percent): group override takes precedence over global. */
     private suspend fun resolveSm2IntervalModifier(groupId: Long?): Int {
         if (groupId != null) {
@@ -772,9 +783,13 @@ class CardRepository(
         elapsedDays: Int,
         groupId: Long? = null
     ): CardGroupLearningState {
-        // Resolve maximum interval (group override or global)
+        // Resolve maximum interval, desired retention, and fuzzing (group override or global)
         val maxInterval = resolveMaximumInterval(groupId)
         fsrsAlgorithm.setMaximumInterval(maxInterval)
+        val retention = resolveFsrsRetention(groupId)
+        fsrsAlgorithm.setRequestRetention(retention)
+        val fuzzing = resolveFsrsEnableFuzzing(groupId)
+        fsrsAlgorithm.setEnableFuzzing(fuzzing)
 
         val fsrsCard = FSRSAlgorithm.FSRSCard(
             stability = learningState.fsrsStability,
