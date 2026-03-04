@@ -383,4 +383,123 @@ class ReviewHistoryImportExportTest {
         val grades = entities.map { it.grade }.sorted()
         assertEquals(listOf(2, 3, 4), grades)
     }
+
+    // ==================== SKIP grade (grade = 0) TESTS ====================
+
+    @Test
+    fun `parseReviewHistory - parses SKIP grade (0) correctly`() {
+        val lines = listOf(
+            "#REVIEW_HISTORY_START",
+            "What is a lunge?\t1000\t0\tFSRS\tNEW\tNEW\t0\t0",
+            "#REVIEW_HISTORY_END"
+        )
+        val result = CardImportExport.parseReviewHistory(lines)
+        assertEquals(1, result.size)
+        assertEquals(0, result[0].grade)
+        assertEquals("NEW", result[0].stateBefore)
+        assertEquals("NEW", result[0].stateAfter)  // unchanged because skipped
+    }
+
+    @Test
+    fun `exportCardsWithGroupStates - SKIP log has identical stateBefore and stateAfter`() {
+        val card = makeCard(1L, "Skip me")
+        val skipLog = makeReviewLog(
+            cardId = 1L,
+            grade = 0,
+            stateBefore = "S:4.5,D:3.2,ST:REVIEW",
+            stateAfter = "S:4.5,D:3.2,ST:REVIEW"  // same – card state unchanged
+        )
+        val output = ByteArrayOutputStream()
+        CardImportExport.exportCardsWithGroupStates(
+            listOf(CardWithGroupStates(card, emptyList(), emptyMap())),
+            output,
+            reviewLogs = listOf(skipLog),
+            cardQuestions = mapOf(1L to "Skip me")
+        )
+        val content = output.toString(Charsets.UTF_8.name())
+        assertTrue(content.contains("#REVIEW_HISTORY_START"))
+
+        val lines = content.lines()
+        val historyStart = lines.indexOfFirst { it.trim() == "#REVIEW_HISTORY_START" }
+        val historyEnd = lines.indexOfFirst { it.trim() == "#REVIEW_HISTORY_END" }
+        val dataLines = lines.subList(historyStart + 1, historyEnd)
+            .filter { it.isNotBlank() && !it.startsWith("#") }
+        assertEquals(1, dataLines.size)
+        val parts = dataLines[0].split("\t")
+        assertEquals("0", parts[2])         // grade = SKIP
+        assertEquals(parts[4], parts[5])    // stateBefore == stateAfter
+    }
+
+    @Test
+    fun `round-trip - SKIP log is preserved correctly through export and parse`() {
+        val cardId = 9L
+        val cardQuestion = "Easy parry"
+        val skipLog = makeReviewLog(
+            cardId = cardId,
+            grade = 0,
+            reviewTime = 77777L,
+            stateBefore = "S:2.0,D:4.0,ST:LEARNING",
+            stateAfter = "S:2.0,D:4.0,ST:LEARNING"
+        )
+
+        val card = makeCard(cardId, cardQuestion)
+        val output = ByteArrayOutputStream()
+        CardImportExport.exportCardsWithGroupStates(
+            listOf(CardWithGroupStates(card, emptyList(), emptyMap())),
+            output,
+            reviewLogs = listOf(skipLog),
+            cardQuestions = mapOf(cardId to cardQuestion)
+        )
+
+        val input = ByteArrayInputStream(output.toByteArray())
+        CardImportExport.parseCards(input)
+
+        assertEquals(1, CardImportExport.lastParsedReviewHistory.size)
+        val parsed = CardImportExport.lastParsedReviewHistory[0]
+        assertEquals(0, parsed.grade)
+        assertEquals(77777L, parsed.reviewTime)
+        assertEquals(parsed.stateBefore, parsed.stateAfter)
+
+        val entities = CardImportExport.parsedReviewLogsToEntities(
+            CardImportExport.lastParsedReviewHistory,
+            mapOf(cardQuestion to cardId)
+        )
+        assertEquals(1, entities.size)
+        assertEquals(0, entities[0].grade)
+        assertEquals(cardId, entities[0].cardId)
+    }
+
+    @Test
+    fun `round-trip - mixed SKIP and non-SKIP logs are all preserved`() {
+        val cardId = 11L
+        val cardQuestion = "Mixed grades card"
+        val logs = listOf(
+            makeReviewLog(cardId, grade = 0, reviewTime = 1000L,
+                stateBefore = "NEW", stateAfter = "NEW"),
+            makeReviewLog(cardId, grade = 3, reviewTime = 2000L,
+                stateBefore = "NEW", stateAfter = "LEARNING"),
+            makeReviewLog(cardId, grade = 0, reviewTime = 3000L,
+                stateBefore = "LEARNING", stateAfter = "LEARNING")
+        )
+
+        val card = makeCard(cardId, cardQuestion)
+        val output = ByteArrayOutputStream()
+        CardImportExport.exportCardsWithGroupStates(
+            listOf(CardWithGroupStates(card, emptyList(), emptyMap())),
+            output,
+            reviewLogs = logs,
+            cardQuestions = mapOf(cardId to cardQuestion)
+        )
+
+        val input = ByteArrayInputStream(output.toByteArray())
+        CardImportExport.parseCards(input)
+
+        val entities = CardImportExport.parsedReviewLogsToEntities(
+            CardImportExport.lastParsedReviewHistory,
+            mapOf(cardQuestion to cardId)
+        )
+        assertEquals(3, entities.size)
+        val grades = entities.map { it.grade }.sorted()
+        assertEquals(listOf(0, 0, 3), grades)
+    }
 }

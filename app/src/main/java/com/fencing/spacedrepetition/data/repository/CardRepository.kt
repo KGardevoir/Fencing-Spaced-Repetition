@@ -466,6 +466,22 @@ class CardRepository(
         val elapsedDays = if (card.lastReview == 0L) 0 else
             ((now - card.lastReview) / (1000 * 60 * 60 * 24)).toInt()
 
+        if (grade == Grade.SKIP) {
+            val stateBefore = serializeCardState(card)
+            reviewLogDao.insertReviewLog(ReviewLog(
+                cardId = card.id,
+                sessionId = sessionId,
+                reviewTime = now,
+                grade = grade.value,
+                algorithm = card.algorithm.name,
+                stateBefore = stateBefore,
+                stateAfter = stateBefore,
+                scheduledDays = card.fsrsScheduledDays,
+                elapsedDays = elapsedDays
+            ))
+            return card
+        }
+
         val updatedCard = when (card.algorithm) {
             AlgorithmType.FSRS -> reviewWithFSRS(card, grade, now, elapsedDays, groupId)
             AlgorithmType.SM2 -> reviewWithSM2(card, grade, now, groupId)
@@ -510,6 +526,22 @@ class CardRepository(
 
         val elapsedDays = if (learningState.lastReview == 0L) 0 else
             ((now - learningState.lastReview) / (1000 * 60 * 60 * 24)).toInt()
+
+        if (grade == Grade.SKIP) {
+            val stateBefore = serializeLearningState(learningState, card.algorithm)
+            reviewLogDao.insertReviewLog(ReviewLog(
+                cardId = card.id,
+                sessionId = sessionId,
+                reviewTime = now,
+                grade = grade.value,
+                algorithm = card.algorithm.name,
+                stateBefore = stateBefore,
+                stateAfter = stateBefore,
+                scheduledDays = learningState.fsrsScheduledDays,
+                elapsedDays = elapsedDays
+            ))
+            return card
+        }
 
         val updatedState = when (card.algorithm) {
             AlgorithmType.FSRS -> reviewLearningStateWithFSRS(learningState, grade, now, elapsedDays, groupId)
@@ -599,6 +631,22 @@ class CardRepository(
         cardsWithGrades.forEach { (card, grade) ->
             val elapsedDays = if (card.lastReview == 0L) 0 else
                 ((now - card.lastReview) / (1000 * 60 * 60 * 24)).toInt()
+
+            if (grade == Grade.SKIP) {
+                val stateBefore = serializeCardState(card)
+                reviewLogs.add(ReviewLog(
+                    cardId = card.id,
+                    sessionId = sessionId,
+                    reviewTime = now,
+                    grade = grade.value,
+                    algorithm = card.algorithm.name,
+                    stateBefore = stateBefore,
+                    stateAfter = stateBefore,
+                    scheduledDays = card.fsrsScheduledDays,
+                    elapsedDays = elapsedDays
+                ))
+                return@forEach
+            }
 
             val updatedCard = when (card.algorithm) {
                 AlgorithmType.FSRS -> reviewWithFSRS(card, grade, now, elapsedDays)
