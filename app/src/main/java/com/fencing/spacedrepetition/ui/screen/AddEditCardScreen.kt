@@ -23,6 +23,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
@@ -964,10 +965,14 @@ fun AddEditCardScreen(
                 )
             }
         } // end scrollable Column
-        // Markdown toolbar pinned above the keyboard — only when software keyboard is visible
+        // Markdown toolbar pinned above the keyboard — show when software keyboard is visible
+        // or when a physical keyboard is connected
         val isImeVisible = WindowInsets.isImeVisible
+        val configuration = LocalConfiguration.current
+        val hasPhysicalKeyboard = configuration.keyboard == android.content.res.Configuration.KEYBOARD_QWERTY ||
+                configuration.keyboard == android.content.res.Configuration.KEYBOARD_12KEY
         AnimatedVisibility(
-            visible = isDescriptionFocused && isImeVisible,
+            visible = isDescriptionFocused && (isImeVisible || hasPhysicalKeyboard),
             enter = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(),
             exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut()
         ) {
