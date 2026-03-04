@@ -16,6 +16,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.PracticeSession
+import com.fencing.spacedrepetition.data.repository.GROUP_NAME_CARD_EDIT
+import com.fencing.spacedrepetition.ui.viewmodel.HistoryItem
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.ReviewLogWithCard
 import java.text.SimpleDateFormat
@@ -27,8 +29,7 @@ fun HistoryScreen(
     viewModel: HistoryViewModel,
     onNavigateBack: () -> Unit
 ) {
-    val sessions by viewModel.completedSessions.collectAsState()
-    val standaloneLogs by viewModel.standaloneReviewLogs.collectAsState()
+    val historyItems by viewModel.historyItems.collectAsState()
 
     Scaffold(
         topBar = {
@@ -45,7 +46,7 @@ fun HistoryScreen(
             )
         }
     ) { paddingValues ->
-        if (sessions.isEmpty() && standaloneLogs.isEmpty()) {
+        if (historyItems.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -83,16 +84,19 @@ fun HistoryScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(vertical = 16.dp)
             ) {
-                if (standaloneLogs.isNotEmpty()) {
-                    item {
-                        StandaloneGradesCard(logs = standaloneLogs)
+                items(historyItems, key = { item ->
+                    when (item) {
+                        is HistoryItem.Session -> "session-${item.session.id}"
+                        is HistoryItem.QuickGrade -> "quickgrade-${item.log.reviewLog.id}"
                     }
-                }
-                items(sessions, key = { it.id }) { session ->
-                    SessionHistoryCard(
-                        session = session,
-                        viewModel = viewModel
-                    )
+                }) { item ->
+                    when (item) {
+                        is HistoryItem.Session -> SessionHistoryCard(
+                            session = item.session,
+                            viewModel = viewModel
+                        )
+                        is HistoryItem.QuickGrade -> QuickGradeCard(item.log)
+                    }
                 }
             }
         }
@@ -197,6 +201,85 @@ fun SessionHistoryCard(
     }
 }
 
+/** A single non-session grade (from the Add/Edit card screen), shown inline in the list. */
+@Composable
+private fun QuickGradeCard(logWithCard: ReviewLogWithCard) {
+    val log = logWithCard.reviewLog
+    val grade = Grade.fromValue(log.grade)
+    val dateFormatter = remember { SimpleDateFormat("MMM d, yyyy h:mm a", Locale.getDefault()) }
+
+    val gradeColor = when (grade) {
+        Grade.AGAIN -> MaterialTheme.colorScheme.errorContainer
+        Grade.HARD -> MaterialTheme.colorScheme.tertiaryContainer
+        Grade.GOOD -> MaterialTheme.colorScheme.secondaryContainer
+        Grade.EASY -> MaterialTheme.colorScheme.primaryContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val gradeLabel = when (grade) {
+        Grade.AGAIN -> "Again"
+        Grade.HARD -> "Hard"
+        Grade.GOOD -> "Good"
+        Grade.EASY -> "Easy"
+        Grade.SKIP -> "Skip"
+        null -> "?"
+    }
+    val gradeContentColor = when (grade) {
+        Grade.AGAIN -> MaterialTheme.colorScheme.onErrorContainer
+        Grade.HARD -> MaterialTheme.colorScheme.onTertiaryContainer
+        Grade.GOOD -> MaterialTheme.colorScheme.onSecondaryContainer
+        Grade.EASY -> MaterialTheme.colorScheme.onPrimaryContainer
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Surface(shape = MaterialTheme.shapes.small, color = gradeColor) {
+                Text(
+                    text = gradeLabel,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = gradeContentColor
+                )
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = logWithCard.cardQuestion,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                val groupLabel = log.groupName?.takeIf { it != GROUP_NAME_CARD_EDIT }
+                Text(
+                    text = buildString {
+                        append("Quick Grade")
+                        if (groupLabel != null) append(" · $groupLabel")
+                        append(" · ")
+                        append(dateFormatter.format(Date(log.reviewTime)))
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Text(
+                text = "+${log.scheduledDays}d",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
 @Composable
 private fun GradeChipIfNonZero(
     count: Int?,
@@ -220,63 +303,7 @@ private fun GradeChipIfNonZero(
 }
 
 @Composable
-fun StandaloneGradesCard(logs: List<ReviewLogWithCard>) {
-    var expanded by remember { mutableStateOf(false) }
-    val dateFormatter = remember { SimpleDateFormat("MMM d, yyyy h:mm a", Locale.getDefault()) }
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { expanded = !expanded },
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Card Edit Grades",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Text(
-                        text = "${logs.size} grade${if (logs.size != 1) "s" else ""} applied outside sessions",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Icon(
-                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = if (expanded) "Collapse" else "Expand",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            AnimatedVisibility(visible = expanded) {
-                Column(
-                    modifier = Modifier.padding(top = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    HorizontalDivider()
-                    Spacer(modifier = Modifier.height(4.dp))
-                    logs.forEach { logWithCard ->
-                        ReviewLogRow(
-                            logWithCard = logWithCard,
-                            subtitle = dateFormatter.format(Date(logWithCard.reviewLog.reviewTime))
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReviewLogRow(logWithCard: ReviewLogWithCard, subtitle: String? = null) {
+private fun ReviewLogRow(logWithCard: ReviewLogWithCard) {
     val log = logWithCard.reviewLog
     val grade = Grade.fromValue(log.grade)
 
@@ -285,7 +312,6 @@ private fun ReviewLogRow(logWithCard: ReviewLogWithCard, subtitle: String? = nul
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // Grade indicator
         val gradeColor = when (grade) {
             Grade.AGAIN -> MaterialTheme.colorScheme.errorContainer
             Grade.HARD -> MaterialTheme.colorScheme.tertiaryContainer
@@ -329,12 +355,10 @@ private fun ReviewLogRow(logWithCard: ReviewLogWithCard, subtitle: String? = nul
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            val tag = subtitle ?: log.groupName?.let {
-                if (it == "card_edit") null else it
-            }
-            if (tag != null) {
+            val groupLabel = log.groupName?.takeIf { it != GROUP_NAME_CARD_EDIT }
+            if (groupLabel != null) {
                 Text(
-                    text = tag,
+                    text = groupLabel,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
