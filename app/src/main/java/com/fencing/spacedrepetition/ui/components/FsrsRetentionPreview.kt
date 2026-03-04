@@ -72,26 +72,21 @@ fun FsrsRetentionPreview(retentionPercent: Int) {
     val retrievability = retentionPercent / 100.0
     val diff = 5.0 // average difficulty
 
-    // Stability milestones (days) → row label; null = new card (uses w[0..3] directly)
-    data class RowSpec(val label: String, val stability: Double?)
+    // Rows: each represents a card after its very first grading (w[0..3] = initial stabilities)
+    data class RowSpec(val label: String, val stability: Double)
     val rows = listOf(
-        RowSpec("New",        null),
-        RowSpec("Young  (7d)",   7.0),
-        RowSpec("Mid   (30d)",  30.0),
-        RowSpec("Mature(180d)", 180.0)
+        RowSpec("Again (0.2d)", PREVIEW_W0),
+        RowSpec("Hard  (1.3d)", PREVIEW_W1),
+        RowSpec("Good  (2.3d)", PREVIEW_W2),
+        RowSpec("Easy  (8.3d)", PREVIEW_W3)
     )
 
-    // Grade columns: label, initial stability for new cards, recall penalty/bonus for existing
-    data class GradeSpec(
-        val label: String,
-        val initStab: Double,
-        val hardPenalty: Double,
-        val easyBonus: Double
-    )
+    // Grade columns: label + recall penalty/bonus for the 2nd review
+    data class GradeSpec(val label: String, val hardPenalty: Double, val easyBonus: Double)
     val grades = listOf(
-        GradeSpec("Hard", PREVIEW_W1, PREVIEW_W15, 1.0),
-        GradeSpec("Good", PREVIEW_W2, 1.0,         1.0),
-        GradeSpec("Easy", PREVIEW_W3, 1.0,         PREVIEW_W16)
+        GradeSpec("Hard", PREVIEW_W15, 1.0),
+        GradeSpec("Good", 1.0,         1.0),
+        GradeSpec("Easy", 1.0,         PREVIEW_W16)
     )
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -120,7 +115,7 @@ fun FsrsRetentionPreview(retentionPercent: Int) {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    "Next interval after grading an on-schedule card at $retentionPercent% retention (avg. difficulty):",
+                    "2nd-review interval after a new card's first grading (avg. difficulty, $retentionPercent% retention):",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -168,29 +163,19 @@ fun FsrsRetentionPreview(retentionPercent: Int) {
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                // Again: new cards have no prior stability so show their
-                                // first interval; existing cards relearn from scratch
+                                // Again on 2nd review always sends the card back to relearning
                                 Text(
-                                    text = if (row.stability == null)
-                                        formatDays(previewInterval(PREVIEW_W0, retentionPercent))
-                                    else
-                                        "Relearn",
+                                    text = "Relearn",
                                     modifier = Modifier.weight(1f),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurface,
                                     textAlign = TextAlign.Center
                                 )
                                 grades.forEach { grade ->
-                                    val nextStab = if (row.stability == null) {
-                                        // New card: initial stability assigned by grade
-                                        grade.initStab
-                                    } else {
-                                        // Existing card: recall stability formula
-                                        previewRecallStability(
-                                            row.stability, diff, retrievability,
-                                            grade.hardPenalty, grade.easyBonus
-                                        )
-                                    }
+                                    val nextStab = previewRecallStability(
+                                        row.stability, diff, retrievability,
+                                        grade.hardPenalty, grade.easyBonus
+                                    )
                                     Text(
                                         text = formatDays(previewInterval(nextStab, retentionPercent)),
                                         modifier = Modifier.weight(1f),
