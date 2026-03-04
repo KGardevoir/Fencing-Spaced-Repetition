@@ -964,16 +964,15 @@ fun AddEditCardScreen(
                 )
             }
         } // end scrollable Column
-        // Markdown toolbar pinned above the keyboard
+        // Markdown toolbar pinned above the keyboard — only when software keyboard is visible
+        val isImeVisible = WindowInsets.isImeVisible
         AnimatedVisibility(
-            visible = isDescriptionFocused,
-            enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
-            exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
+            visible = isDescriptionFocused && isImeVisible,
+            enter = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(),
+            exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut()
         ) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                tonalElevation = 2.dp
-            ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                HorizontalDivider()
                 MarkdownToolbar(
                     modifier = Modifier
                         .fillMaxWidth()

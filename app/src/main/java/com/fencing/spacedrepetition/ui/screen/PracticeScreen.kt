@@ -8,6 +8,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -553,6 +554,7 @@ fun PracticeCardView(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EditCardDialog(
     card: Card,
@@ -684,15 +686,14 @@ fun EditCardDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
+                val isImeVisible = WindowInsets.isImeVisible
                 AnimatedVisibility(
-                    visible = isDescriptionFocused,
-                    enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
-                    exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
+                    visible = isDescriptionFocused && isImeVisible,
+                    enter = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(),
+                    exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut()
                 ) {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        tonalElevation = 2.dp
-                    ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        HorizontalDivider()
                         MarkdownToolbar(
                             modifier = Modifier
                                 .fillMaxWidth()
