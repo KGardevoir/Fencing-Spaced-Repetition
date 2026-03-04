@@ -972,7 +972,6 @@ fun AddEditCardScreen(
         ) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shadowElevation = 8.dp,
                 tonalElevation = 2.dp
             ) {
                 MarkdownToolbar(
