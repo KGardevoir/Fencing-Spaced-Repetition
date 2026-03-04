@@ -81,6 +81,14 @@ jobs:
           keytool -list -keystore ${{ runner.temp }}/debug-keystore.jks -storepass android -storetype JKS 2>/dev/null \
             || keytool -list -keystore ${{ runner.temp }}/debug-keystore.jks -storepass android 2>/dev/null \
             || echo "WARNING: could not list keystore entries"
+          # Verify the key password works before handing off to Gradle
+          KEY_ALIAS="${{ secrets.DEBUG_KEY_ALIAS }}"
+          KEY_PASS="${{ secrets.DEBUG_KEY_PASSWORD }}"
+          keytool -exportcert -keystore ${{ runner.temp }}/debug-keystore.jks \
+            -storepass android -alias "${KEY_ALIAS:-androiddebugkey}" \
+            -keypass "${KEY_PASS:-android}" > /dev/null \
+            && echo "Key password verified OK" \
+            || echo "WARNING: key password check failed"
 
       - name: Build debug APK
         env:
