@@ -33,10 +33,11 @@ android {
         create("sharedDebug") {
             // Shared debug keystore supplied via GitHub Actions secrets (DEBUG_KEYSTORE_BASE64).
             // When DEBUG_KEYSTORE_FILE is not set (local dev) Android uses the default debug keystore.
-            storeFile = file(System.getenv("DEBUG_KEYSTORE_FILE") ?: "debug-keystore.jks")
-            storePassword = System.getenv("DEBUG_KEYSTORE_PASSWORD") ?: "android"
-            keyAlias = System.getenv("DEBUG_KEY_ALIAS") ?: "androiddebugkey"
-            keyPassword = System.getenv("DEBUG_KEY_PASSWORD") ?: "android"
+            fun env(key: String, default: String) = System.getenv(key)?.takeIf { it.isNotEmpty() } ?: default
+            storeFile = file(env("DEBUG_KEYSTORE_FILE", "debug-keystore.jks"))
+            storePassword = env("DEBUG_KEYSTORE_PASSWORD", "android")
+            keyAlias = env("DEBUG_KEY_ALIAS", "androiddebugkey")
+            keyPassword = env("DEBUG_KEY_PASSWORD", "android")
         }
     }
 
