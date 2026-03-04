@@ -18,6 +18,9 @@ interface ReviewLogDao {
     @Query("SELECT * FROM review_logs WHERE sessionId = :sessionId ORDER BY reviewTime ASC")
     fun getReviewLogsBySession(sessionId: Long): Flow<List<ReviewLog>>
 
+    @Query("SELECT * FROM review_logs WHERE sessionId IS NULL ORDER BY reviewTime DESC")
+    fun getReviewLogsWithoutSession(): Flow<List<ReviewLog>>
+
     @Query("SELECT * FROM review_logs WHERE reviewTime >= :startTime AND reviewTime <= :endTime ORDER BY reviewTime DESC")
     fun getReviewLogsByDateRange(startTime: Long, endTime: Long): Flow<List<ReviewLog>>
 

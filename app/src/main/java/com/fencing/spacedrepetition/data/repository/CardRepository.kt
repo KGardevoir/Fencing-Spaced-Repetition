@@ -148,6 +148,9 @@ class CardRepository(
     fun getReviewLogsBySession(sessionId: Long): Flow<List<ReviewLog>> =
         reviewLogDao.getReviewLogsBySession(sessionId)
 
+    fun getReviewLogsWithoutSession(): Flow<List<ReviewLog>> =
+        reviewLogDao.getReviewLogsWithoutSession()
+
     fun getReviewLogsByCard(cardId: Long): Flow<List<ReviewLog>> =
         reviewLogDao.getReviewLogsByCard(cardId)
 

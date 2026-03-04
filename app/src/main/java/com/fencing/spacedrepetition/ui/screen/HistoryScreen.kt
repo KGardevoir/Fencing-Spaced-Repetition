@@ -28,6 +28,7 @@ fun HistoryScreen(
     onNavigateBack: () -> Unit
 ) {
     val sessions by viewModel.completedSessions.collectAsState()
+    val standaloneLogs by viewModel.standaloneReviewLogs.collectAsState()
 
     Scaffold(
         topBar = {
@@ -44,7 +45,7 @@ fun HistoryScreen(
             )
         }
     ) { paddingValues ->
-        if (sessions.isEmpty()) {
+        if (sessions.isEmpty() && standaloneLogs.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -82,6 +83,11 @@ fun HistoryScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(vertical = 16.dp)
             ) {
+                if (standaloneLogs.isNotEmpty()) {
+                    item {
+                        StandaloneGradesCard(logs = standaloneLogs)
+                    }
+                }
                 items(sessions, key = { it.id }) { session ->
                     SessionHistoryCard(
                         session = session,
@@ -214,7 +220,63 @@ private fun GradeChipIfNonZero(
 }
 
 @Composable
-private fun ReviewLogRow(logWithCard: ReviewLogWithCard) {
+fun StandaloneGradesCard(logs: List<ReviewLogWithCard>) {
+    var expanded by remember { mutableStateOf(false) }
+    val dateFormatter = remember { SimpleDateFormat("MMM d, yyyy h:mm a", Locale.getDefault()) }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { expanded = !expanded },
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Card Edit Grades",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = "${logs.size} grade${if (logs.size != 1) "s" else ""} applied outside sessions",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(
+                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (expanded) "Collapse" else "Expand",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            AnimatedVisibility(visible = expanded) {
+                Column(
+                    modifier = Modifier.padding(top = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(4.dp))
+                    logs.forEach { logWithCard ->
+                        ReviewLogRow(
+                            logWithCard = logWithCard,
+                            subtitle = dateFormatter.format(Date(logWithCard.reviewLog.reviewTime))
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReviewLogRow(logWithCard: ReviewLogWithCard, subtitle: String? = null) {
     val log = logWithCard.reviewLog
     val grade = Grade.fromValue(log.grade)
 
@@ -260,13 +322,24 @@ private fun ReviewLogRow(logWithCard: ReviewLogWithCard) {
             )
         }
 
-        Text(
-            text = logWithCard.cardQuestion,
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = logWithCard.cardQuestion,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            val tag = subtitle ?: log.groupName?.let {
+                if (it == "card_edit") null else it
+            }
+            if (tag != null) {
+                Text(
+                    text = tag,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
 
         Text(
             text = "+${log.scheduledDays}d",

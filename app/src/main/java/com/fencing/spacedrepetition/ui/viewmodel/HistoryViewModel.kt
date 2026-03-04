@@ -26,6 +26,15 @@ class HistoryViewModel(
     val completedSessions: StateFlow<List<PracticeSession>> = repository.getCompletedSessions()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val standaloneReviewLogs: StateFlow<List<ReviewLogWithCard>> =
+        repository.getReviewLogsWithoutSession().transform { logs ->
+            val logsWithCards = logs.map { log ->
+                val card = repository.getCardById(log.cardId)
+                ReviewLogWithCard(log, card?.question ?: "Deleted Card")
+            }
+            emit(logsWithCards)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     fun getReviewLogsForSession(sessionId: Long): Flow<List<ReviewLogWithCard>> =
         repository.getReviewLogsBySession(sessionId).transform { logs ->
             val logsWithCards = logs.map { log ->
