@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.preferences.SettingsConstants
+import com.fencing.spacedrepetition.ui.components.FsrsRetentionPreview
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -385,6 +386,7 @@ fun GroupEditScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                FsrsRetentionPreview(retentionPercent = fsrsRetention)
             }
 
             // SM-2 interval modifier override
