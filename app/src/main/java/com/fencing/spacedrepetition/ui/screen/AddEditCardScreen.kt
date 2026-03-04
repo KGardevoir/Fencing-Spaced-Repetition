@@ -4,6 +4,11 @@ import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -18,8 +23,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.AlgorithmType
@@ -29,6 +36,10 @@ import com.fencing.spacedrepetition.data.model.Grade
 import androidx.activity.compose.BackHandler
 import kotlinx.coroutines.launch
 import com.fencing.spacedrepetition.ui.components.CardImagesEdit
+import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
+import com.fencing.spacedrepetition.ui.components.MarkdownToolbar
+import com.fencing.spacedrepetition.ui.components.applyInlineFormat
+import com.fencing.spacedrepetition.ui.components.applyLinePrefix
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import java.io.File
@@ -47,7 +58,7 @@ fun AddEditCardScreen(
 ) {
     val context = LocalContext.current
     var question by remember { mutableStateOf(cardToEdit?.question ?: "") }
-    var answer by remember { mutableStateOf(cardToEdit?.answer ?: "") }
+    var answerFieldValue by remember { mutableStateOf(TextFieldValue(cardToEdit?.answer ?: "")) }
     var selectedAlgorithm by remember { mutableStateOf(cardToEdit?.algorithm ?: AlgorithmType.FSRS) }
     var imagePaths by remember { mutableStateOf<List<String>>(cardToEdit?.imagePaths?.toMutableList() ?: mutableListOf()) }
 
@@ -72,6 +83,7 @@ fun AddEditCardScreen(
     var showCreateGroupDialog by remember { mutableStateOf(false) }
     var isDirty by remember { mutableStateOf(false) }
     var showUnsavedChangesDialog by remember { mutableStateOf(false) }
+    var isDescriptionFocused by remember { mutableStateOf(false) }
 
     // Image picker launcher
     val imagePickerLauncher = rememberLauncherForActivityResult(
@@ -168,10 +180,16 @@ fun AddEditCardScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .imePadding()
         ) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
             // Question input
             OutlinedTextField(
                 value = question,
@@ -186,18 +204,12 @@ fun AddEditCardScreen(
                 maxLines = 4
             )
 
-            // Answer input
-            OutlinedTextField(
-                value = answer,
-                onValueChange = { answer = it; isDirty = true },
-                label = { Text("Description") },
-                placeholder = { Text("e.g., Front foot pointed forward, back foot at 90°...") },
+            // Answer input with markdown toolbar and preview toggle
+            MarkdownDescriptionField(
+                value = answerFieldValue,
+                onValueChange = { answerFieldValue = it; isDirty = true },
                 modifier = Modifier.fillMaxWidth(),
-                leadingIcon = {
-                    Icon(Icons.Default.CheckCircle, contentDescription = null)
-                },
-                minLines = 3,
-                maxLines = 8
+                onFocusChanged = { isDescriptionFocused = it }
             )
 
             // Images section
@@ -881,7 +893,7 @@ fun AddEditCardScreen(
                             // Build updated card with learning state if advanced settings were used
                             val updatedCard = cardToEdit.copy(
                                 question = question,
-                                answer = answer,
+                                answer = answerFieldValue.text,
                                 algorithm = selectedAlgorithm,
                                 imagePaths = imagePaths,
                                 // FSRS state
@@ -928,7 +940,7 @@ fun AddEditCardScreen(
                         } else {
                             viewModel.addCard(
                                 question = question,
-                                answer = answer,
+                                answer = answerFieldValue.text,
                                 groupIds = selectedGroupIds.toList(),
                                 algorithm = selectedAlgorithm,
                                 imagePaths = imagePaths,
@@ -952,7 +964,34 @@ fun AddEditCardScreen(
                     style = MaterialTheme.typography.titleMedium
                 )
             }
+        } // end scrollable Column
+        // Markdown toolbar pinned above the keyboard — show when software keyboard is visible
+        // or when a physical keyboard is connected
+        val isImeVisible = WindowInsets.isImeVisible
+        val configuration = LocalConfiguration.current
+        val hasPhysicalKeyboard = configuration.keyboard == android.content.res.Configuration.KEYBOARD_QWERTY ||
+                configuration.keyboard == android.content.res.Configuration.KEYBOARD_12KEY
+        AnimatedVisibility(
+            visible = isDescriptionFocused && (isImeVisible || hasPhysicalKeyboard),
+            enter = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(),
+            exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut()
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                HorizontalDivider()
+                MarkdownToolbar(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    onBold      = { answerFieldValue = applyInlineFormat(answerFieldValue, "**",  "**",   "bold") },
+                    onItalic    = { answerFieldValue = applyInlineFormat(answerFieldValue, "*",   "*",    "italic") },
+                    onUnderline = { answerFieldValue = applyInlineFormat(answerFieldValue, "<u>", "</u>", "underline") },
+                    onCode      = { answerFieldValue = applyInlineFormat(answerFieldValue, "`",   "`",    "code") },
+                    onHeader    = { answerFieldValue = applyLinePrefix(answerFieldValue, "# ") },
+                    onBullet    = { answerFieldValue = applyLinePrefix(answerFieldValue, "- ") }
+                )
+            }
         }
+    } // end outer Column
     }
 
     // Group selection bottom sheet

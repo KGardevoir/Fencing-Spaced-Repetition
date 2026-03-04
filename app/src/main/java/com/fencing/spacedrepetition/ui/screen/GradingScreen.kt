@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.SessionCard
 import com.fencing.spacedrepetition.ui.components.CardImagesDisplay
+import com.fencing.spacedrepetition.ui.components.MarkdownText
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeUiState
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 
@@ -254,9 +255,8 @@ fun GradingCardItem(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.secondary
                 )
-                Text(
+                MarkdownText(
                     text = sessionCard.card.answer,
-                    style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(top = 4.dp)
                 )
 

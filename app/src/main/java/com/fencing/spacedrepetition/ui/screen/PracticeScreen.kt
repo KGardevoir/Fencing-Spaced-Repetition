@@ -8,6 +8,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -19,6 +20,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -28,8 +30,19 @@ import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.launch
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.SessionCard
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import com.fencing.spacedrepetition.ui.components.CardImagesDisplay
 import com.fencing.spacedrepetition.ui.components.CardImagesEdit
+import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
+import com.fencing.spacedrepetition.ui.components.MarkdownText
+import com.fencing.spacedrepetition.ui.components.MarkdownToolbar
+import com.fencing.spacedrepetition.ui.components.applyInlineFormat
+import com.fencing.spacedrepetition.ui.components.applyLinePrefix
+import androidx.compose.ui.text.input.TextFieldValue
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeUiState
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
@@ -432,10 +445,9 @@ fun PracticeCardView(
                             color = MaterialTheme.colorScheme.secondary
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
+                        MarkdownText(
                             text = sessionCard.card.answer,
-                            style = MaterialTheme.typography.bodyLarge,
-                            textAlign = TextAlign.Center
+                            modifier = Modifier.fillMaxWidth()
                         )
 
                         // Display images if available
@@ -543,6 +555,7 @@ fun PracticeCardView(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EditCardDialog(
     card: Card,
@@ -550,8 +563,9 @@ fun EditCardDialog(
     onSave: (question: String, answer: String, imagePaths: List<String>) -> Unit
 ) {
     var question by remember(card.id) { mutableStateOf(card.question) }
-    var answer by remember(card.id) { mutableStateOf(card.answer) }
+    var answerFieldValue by remember(card.id) { mutableStateOf(TextFieldValue(card.answer)) }
     var imagePaths by remember(card.id) { mutableStateOf(card.imagePaths.toMutableList()) }
+    var isDescriptionFocused by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
 
@@ -598,13 +612,13 @@ fun EditCardDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                OutlinedTextField(
-                    value = answer,
-                    onValueChange = { answer = it },
-                    label = { Text("Description") },
+                MarkdownDescriptionField(
+                    value = answerFieldValue,
+                    onValueChange = { answerFieldValue = it },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 3,
-                    maxLines = 6
+                    maxLines = 6,
+                    onFocusChanged = { isDescriptionFocused = it }
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -671,7 +685,34 @@ fun EditCardDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                val isImeVisible = WindowInsets.isImeVisible
+                val configuration = LocalConfiguration.current
+                val hasPhysicalKeyboard = configuration.keyboard == android.content.res.Configuration.KEYBOARD_QWERTY ||
+                        configuration.keyboard == android.content.res.Configuration.KEYBOARD_12KEY
+                AnimatedVisibility(
+                    visible = isDescriptionFocused && (isImeVisible || hasPhysicalKeyboard),
+                    enter = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(),
+                    exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut()
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        HorizontalDivider()
+                        MarkdownToolbar(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
+                            onBold      = { answerFieldValue = applyInlineFormat(answerFieldValue, "**",  "**",   "bold") },
+                            onItalic    = { answerFieldValue = applyInlineFormat(answerFieldValue, "*",   "*",    "italic") },
+                            onUnderline = { answerFieldValue = applyInlineFormat(answerFieldValue, "<u>", "</u>", "underline") },
+                            onCode      = { answerFieldValue = applyInlineFormat(answerFieldValue, "`",   "`",    "code") },
+                            onHeader    = { answerFieldValue = applyLinePrefix(answerFieldValue, "# ") },
+                            onBullet    = { answerFieldValue = applyLinePrefix(answerFieldValue, "- ") }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -682,8 +723,8 @@ fun EditCardDialog(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
-                        onClick = { onSave(question, answer, imagePaths) },
-                        enabled = question.isNotBlank() && answer.isNotBlank()
+                        onClick = { onSave(question, answerFieldValue.text, imagePaths) },
+                        enabled = question.isNotBlank() && answerFieldValue.text.isNotBlank()
                     ) {
                         Text("Save")
                     }
