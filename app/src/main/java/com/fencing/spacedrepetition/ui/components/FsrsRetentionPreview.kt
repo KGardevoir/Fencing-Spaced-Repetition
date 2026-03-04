@@ -72,13 +72,18 @@ fun FsrsRetentionPreview(retentionPercent: Int) {
     val retrievability = retentionPercent / 100.0
     val diff = 5.0 // average difficulty
 
-    // Rows: each represents a card after its very first grading (w[0..3] = initial stabilities)
-    data class RowSpec(val label: String, val stability: Double)
+    // Rows grouped by section; null stability = section divider label only
+    data class RowSpec(val label: String, val stability: Double?, val isSectionHeader: Boolean = false)
     val rows = listOf(
+        RowSpec("1st review",    null,         isSectionHeader = true),
         RowSpec("Again (0.2d)", PREVIEW_W0),
         RowSpec("Hard  (1.3d)", PREVIEW_W1),
         RowSpec("Good  (2.3d)", PREVIEW_W2),
-        RowSpec("Easy  (8.3d)", PREVIEW_W3)
+        RowSpec("Easy  (8.3d)", PREVIEW_W3),
+        RowSpec("Later reviews", null,         isSectionHeader = true),
+        RowSpec("Young  (7d)",   7.0),
+        RowSpec("Mid   (30d)",  30.0),
+        RowSpec("Mature(180d)", 180.0)
     )
 
     // Grade columns: label + recall penalty/bonus for the 2nd review
@@ -115,7 +120,7 @@ fun FsrsRetentionPreview(retentionPercent: Int) {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    "2nd-review interval after a new card's first grading (avg. difficulty, $retentionPercent% retention):",
+                    "Next interval after grading an on-schedule card at $retentionPercent% retention (avg. difficulty):",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -151,38 +156,48 @@ fun FsrsRetentionPreview(retentionPercent: Int) {
                         HorizontalDivider(modifier = Modifier.padding(vertical = 3.dp))
 
                         rows.forEach { row ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 1.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                            if (row.isSectionHeader) {
+                                HorizontalDivider(modifier = Modifier.padding(top = 4.dp, bottom = 1.dp))
                                 Text(
                                     text = row.label,
-                                    modifier = Modifier.width(80.dp),
+                                    modifier = Modifier.padding(bottom = 1.dp),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                                 )
-                                // Again on 2nd review always sends the card back to relearning
-                                Text(
-                                    text = "Relearn",
-                                    modifier = Modifier.weight(1f),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    textAlign = TextAlign.Center
-                                )
-                                grades.forEach { grade ->
-                                    val nextStab = previewRecallStability(
-                                        row.stability, diff, retrievability,
-                                        grade.hardPenalty, grade.easyBonus
-                                    )
+                            } else {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 1.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
                                     Text(
-                                        text = formatDays(previewInterval(nextStab, retentionPercent)),
+                                        text = row.label,
+                                        modifier = Modifier.width(80.dp),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    // Again always sends the card back to relearning
+                                    Text(
+                                        text = "Relearn",
                                         modifier = Modifier.weight(1f),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurface,
                                         textAlign = TextAlign.Center
                                     )
+                                    grades.forEach { grade ->
+                                        val nextStab = previewRecallStability(
+                                            row.stability!!, diff, retrievability,
+                                            grade.hardPenalty, grade.easyBonus
+                                        )
+                                        Text(
+                                            text = formatDays(previewInterval(nextStab, retentionPercent)),
+                                            modifier = Modifier.weight(1f),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
                                 }
                             }
                         }
