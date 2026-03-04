@@ -12,6 +12,8 @@ import java.util.Calendar
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
+const val GROUP_NAME_CARD_EDIT = "card_edit"
+
 class CardRepository(
     private val cardDao: CardDao,
     private val sessionDao: PracticeSessionDao,
@@ -139,6 +141,49 @@ class CardRepository(
     fun getCardCount(): Flow<Int> = cardDao.getCardCount()
 
     fun getAllCategories(): Flow<List<String>> = cardDao.getAllCategories()
+
+    // History operations
+    fun getCompletedSessions(): Flow<List<PracticeSession>> = sessionDao.getCompletedSessions()
+
+    fun getReviewLogsBySession(sessionId: Long): Flow<List<ReviewLog>> =
+        reviewLogDao.getReviewLogsBySession(sessionId)
+
+    fun getReviewLogsWithoutSession(): Flow<List<ReviewLog>> =
+        reviewLogDao.getReviewLogsWithoutSession()
+
+    fun getReviewLogsByCard(cardId: Long): Flow<List<ReviewLog>> =
+        reviewLogDao.getReviewLogsByCard(cardId)
+
+    fun getAllReviewLogs(): Flow<List<ReviewLog>> = reviewLogDao.getAllReviewLogs()
+
+    suspend fun getAllReviewLogsSync(): List<ReviewLog> = reviewLogDao.getAllReviewLogsSync()
+
+    suspend fun importReviewLogs(reviewLogs: List<ReviewLog>) {
+        reviewLogDao.insertReviewLogs(reviewLogs)
+    }
+
+    /**
+     * Records a review log entry for a grade applied from the Add/Edit card screen.
+     * Does not update card state (the caller is responsible for that via updateCard).
+     */
+    suspend fun logGradeFromEdit(cardBefore: Card, cardAfter: Card, grade: Grade, groupId: Long? = null) {
+        val now = System.currentTimeMillis()
+        val elapsedDays = if (cardBefore.lastReview == 0L) 0 else
+            ((now - cardBefore.lastReview) / (1000 * 60 * 60 * 24)).toInt()
+        val groupName = groupId?.let { groupDao.getGroupById(it)?.name }
+        reviewLogDao.insertReviewLog(ReviewLog(
+            cardId = cardBefore.id,
+            sessionId = null,
+            reviewTime = now,
+            grade = grade.value,
+            algorithm = cardBefore.algorithm.name,
+            stateBefore = serializeCardState(cardBefore),
+            stateAfter = serializeCardState(cardAfter),
+            scheduledDays = cardAfter.fsrsScheduledDays,
+            elapsedDays = elapsedDays,
+            groupName = groupName ?: GROUP_NAME_CARD_EDIT
+        ))
+    }
 
     // Group-aware card operations
     fun getAllCardsWithGroups(): Flow<List<CardWithGroups>> = cardDao.getAllCardsWithGroups()
@@ -426,8 +471,6 @@ class CardRepository(
 
     fun getAllSessions(): Flow<List<PracticeSession>> = sessionDao.getAllSessions()
 
-    fun getCompletedSessions(): Flow<List<PracticeSession>> = sessionDao.getCompletedSessions()
-
     // Independent learning state operations
     suspend fun getLearningState(cardId: Long, groupId: Long): CardGroupLearningState? =
         groupDao.getLearningState(cardId, groupId)
@@ -451,6 +494,25 @@ class CardRepository(
         val elapsedDays = if (card.lastReview == 0L) 0 else
             ((now - card.lastReview) / (1000 * 60 * 60 * 24)).toInt()
 
+        val groupName = groupId?.let { groupDao.getGroupById(it)?.name }
+
+        if (grade == Grade.SKIP) {
+            val stateBefore = serializeCardState(card)
+            reviewLogDao.insertReviewLog(ReviewLog(
+                cardId = card.id,
+                sessionId = sessionId,
+                reviewTime = now,
+                grade = grade.value,
+                algorithm = card.algorithm.name,
+                stateBefore = stateBefore,
+                stateAfter = stateBefore,
+                scheduledDays = card.fsrsScheduledDays,
+                elapsedDays = elapsedDays,
+                groupName = groupName
+            ))
+            return card
+        }
+
         val updatedCard = when (card.algorithm) {
             AlgorithmType.FSRS -> reviewWithFSRS(card, grade, now, elapsedDays, groupId)
             AlgorithmType.SM2 -> reviewWithSM2(card, grade, now, groupId)
@@ -466,7 +528,8 @@ class CardRepository(
             stateBefore = serializeCardState(card),
             stateAfter = serializeCardState(updatedCard),
             scheduledDays = updatedCard.fsrsScheduledDays,
-            elapsedDays = elapsedDays
+            elapsedDays = elapsedDays,
+            groupName = groupName
         )
 
         reviewLogDao.insertReviewLog(reviewLog)
@@ -496,6 +559,23 @@ class CardRepository(
         val elapsedDays = if (learningState.lastReview == 0L) 0 else
             ((now - learningState.lastReview) / (1000 * 60 * 60 * 24)).toInt()
 
+        if (grade == Grade.SKIP) {
+            val stateBefore = serializeLearningState(learningState, card.algorithm)
+            reviewLogDao.insertReviewLog(ReviewLog(
+                cardId = card.id,
+                sessionId = sessionId,
+                reviewTime = now,
+                grade = grade.value,
+                algorithm = card.algorithm.name,
+                stateBefore = stateBefore,
+                stateAfter = stateBefore,
+                scheduledDays = learningState.fsrsScheduledDays,
+                elapsedDays = elapsedDays,
+                groupName = group.name
+            ))
+            return card
+        }
+
         val updatedState = when (card.algorithm) {
             AlgorithmType.FSRS -> reviewLearningStateWithFSRS(learningState, grade, now, elapsedDays, groupId)
             AlgorithmType.SM2 -> reviewLearningStateWithSM2(learningState, grade, now, groupId)
@@ -511,7 +591,8 @@ class CardRepository(
             stateBefore = serializeLearningState(learningState, card.algorithm),
             stateAfter = serializeLearningState(updatedState, card.algorithm),
             scheduledDays = updatedState.fsrsScheduledDays,
-            elapsedDays = elapsedDays
+            elapsedDays = elapsedDays,
+            groupName = group.name
         )
 
         reviewLogDao.insertReviewLog(reviewLog)
@@ -584,6 +665,22 @@ class CardRepository(
         cardsWithGrades.forEach { (card, grade) ->
             val elapsedDays = if (card.lastReview == 0L) 0 else
                 ((now - card.lastReview) / (1000 * 60 * 60 * 24)).toInt()
+
+            if (grade == Grade.SKIP) {
+                val stateBefore = serializeCardState(card)
+                reviewLogs.add(ReviewLog(
+                    cardId = card.id,
+                    sessionId = sessionId,
+                    reviewTime = now,
+                    grade = grade.value,
+                    algorithm = card.algorithm.name,
+                    stateBefore = stateBefore,
+                    stateAfter = stateBefore,
+                    scheduledDays = card.fsrsScheduledDays,
+                    elapsedDays = elapsedDays
+                ))
+                return@forEach
+            }
 
             val updatedCard = when (card.algorithm) {
                 AlgorithmType.FSRS -> reviewWithFSRS(card, grade, now, elapsedDays)
@@ -876,11 +973,6 @@ class CardRepository(
             AlgorithmType.SM2 -> "EF:${learningState.sm2EaseFactor},I:${learningState.sm2Interval},R:${learningState.sm2Repetitions}"
         }
     }
-
-    // Review log operations
-    fun getReviewLogsByCard(cardId: Long): Flow<List<ReviewLog>> = reviewLogDao.getReviewLogsByCard(cardId)
-
-    fun getAllReviewLogs(): Flow<List<ReviewLog>> = reviewLogDao.getAllReviewLogs()
 
     /**
      * Randomize cards by grouping them into time buckets of the given size.

@@ -74,6 +74,9 @@ fun CardListScreen(
     var selectedGroupsForExport by remember { mutableStateOf<List<Long>>(emptyList()) }
     var showCsvGroupSelectionForExport by remember { mutableStateOf(false) }
     var selectedGroupsForCsvExport by remember { mutableStateOf<List<Long>>(emptyList()) }
+    var showExportHistoryDialog by remember { mutableStateOf(false) }
+    var exportHistoryPendingGroupIds by remember { mutableStateOf<List<Long>?>(null) } // null = export all
+    var includeHistoryInExport by remember { mutableStateOf(false) }
 
     // File picker for import
     val importLauncher = rememberLauncherForActivityResult(
@@ -89,7 +92,7 @@ fun CardListScreen(
         contract = ActivityResultContracts.CreateDocument("application/gzip")
     ) { uri: Uri? ->
         uri?.let {
-            viewModel.exportAllCards(uri, context.contentResolver)
+            viewModel.exportAllCards(uri, context.contentResolver, includeHistoryInExport)
         }
     }
 
@@ -98,7 +101,7 @@ fun CardListScreen(
         contract = ActivityResultContracts.CreateDocument("application/gzip")
     ) { uri: Uri? ->
         uri?.let {
-            viewModel.exportSelectedGroups(selectedGroupsForExport, uri, context.contentResolver)
+            viewModel.exportSelectedGroups(selectedGroupsForExport, uri, context.contentResolver, includeHistoryInExport)
         }
     }
 
@@ -256,7 +259,8 @@ fun CardListScreen(
                                     text = { Text("Export All Cards") },
                                     onClick = {
                                         showMenu = false
-                                        exportLauncher.launch("all_cards.tsv.gz")
+                                        exportHistoryPendingGroupIds = null
+                                        showExportHistoryDialog = true
                                     },
                                     leadingIcon = {
                                         Icon(Icons.Default.FileDownload, contentDescription = null)
@@ -644,7 +648,54 @@ fun CardListScreen(
             onConfirm = { selectedGroupIds ->
                 selectedGroupsForExport = selectedGroupIds
                 showGroupSelectionDialog = false
-                exportSelectedGroupsLauncher.launch("selected_groups_cards.tsv.gz")
+                exportHistoryPendingGroupIds = selectedGroupIds
+                showExportHistoryDialog = true
+            }
+        )
+    }
+
+    // Export history option dialog
+    if (showExportHistoryDialog) {
+        AlertDialog(
+            onDismissRequest = { showExportHistoryDialog = false },
+            icon = { Icon(Icons.Default.FileDownload, contentDescription = null) },
+            title = { Text("Export Options") },
+            text = {
+                Column {
+                    Text("Would you like to include your practice history in the export?")
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { includeHistoryInExport = !includeHistoryInExport },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = includeHistoryInExport,
+                            onCheckedChange = { includeHistoryInExport = it }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Include practice history")
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    showExportHistoryDialog = false
+                    val pendingGroups = exportHistoryPendingGroupIds
+                    if (pendingGroups == null) {
+                        exportLauncher.launch("all_cards.tsv.gz")
+                    } else {
+                        exportSelectedGroupsLauncher.launch("selected_groups_cards.tsv.gz")
+                    }
+                }) {
+                    Text("Export")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showExportHistoryDialog = false }) {
+                    Text("Cancel")
+                }
             }
         )
     }

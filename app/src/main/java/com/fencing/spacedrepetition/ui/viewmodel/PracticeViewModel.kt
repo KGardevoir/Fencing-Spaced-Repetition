@@ -166,16 +166,8 @@ class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
                     return@launch
                 }
 
-                // Review only non-skipped cards
                 val cardsWithGrades = cards.mapNotNull { sessionCard ->
-                    sessionCard.grade?.let { grade ->
-                        // Skip cards marked with SKIP grade
-                        if (grade != Grade.SKIP) {
-                            Pair(sessionCard.card, grade)
-                        } else {
-                            null
-                        }
-                    }
+                    sessionCard.grade?.let { grade -> Pair(sessionCard.card, grade) }
                 }
 
                 // Only call review methods if there are cards to review

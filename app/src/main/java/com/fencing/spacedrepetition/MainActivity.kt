@@ -18,6 +18,7 @@ import com.fencing.spacedrepetition.ui.navigation.AppNavigation
 import com.fencing.spacedrepetition.ui.theme.FencingSpacedRepetitionTheme
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
 
@@ -66,12 +67,16 @@ class MainActivity : ComponentActivity() {
                     val groupViewModel: GroupViewModel = viewModel(
                         factory = GroupViewModelFactory(application, groupRepository, repository)
                     )
+                    val historyViewModel: HistoryViewModel = viewModel(
+                        factory = HistoryViewModelFactory(repository)
+                    )
 
                     AppNavigation(
                         cardViewModel = cardViewModel,
                         practiceViewModel = practiceViewModel,
                         groupViewModel = groupViewModel,
-                        settingsViewModel = settingsViewModel
+                        settingsViewModel = settingsViewModel,
+                        historyViewModel = historyViewModel
                     )
                 }
             }
@@ -127,6 +132,18 @@ class SettingsViewModelFactory(
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(SettingsViewModel::class.java)) {
             return SettingsViewModel(themePreferences) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
+    }
+}
+
+class HistoryViewModelFactory(
+    private val repository: CardRepository
+) : androidx.lifecycle.ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(HistoryViewModel::class.java)) {
+            return HistoryViewModel(repository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

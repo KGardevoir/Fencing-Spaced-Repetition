@@ -23,5 +23,9 @@ data class ReviewLog(
 
     // Interval info
     val scheduledDays: Int,
-    val elapsedDays: Int
+    val elapsedDays: Int,
+
+    // Source context: null = all-cards practice, group name = within-group practice,
+    // "card_edit" = graded from the Add/Edit card screen
+    val groupName: String? = null
 )
