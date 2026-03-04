@@ -4,6 +4,11 @@ import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -31,6 +36,9 @@ import androidx.activity.compose.BackHandler
 import kotlinx.coroutines.launch
 import com.fencing.spacedrepetition.ui.components.CardImagesEdit
 import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
+import com.fencing.spacedrepetition.ui.components.MarkdownToolbar
+import com.fencing.spacedrepetition.ui.components.applyInlineFormat
+import com.fencing.spacedrepetition.ui.components.applyLinePrefix
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import java.io.File
@@ -74,6 +82,7 @@ fun AddEditCardScreen(
     var showCreateGroupDialog by remember { mutableStateOf(false) }
     var isDirty by remember { mutableStateOf(false) }
     var showUnsavedChangesDialog by remember { mutableStateOf(false) }
+    var isDescriptionFocused by remember { mutableStateOf(false) }
 
     // Image picker launcher
     val imagePickerLauncher = rememberLauncherForActivityResult(
@@ -170,10 +179,16 @@ fun AddEditCardScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .imePadding()
         ) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
             // Question input
             OutlinedTextField(
                 value = question,
@@ -192,7 +207,8 @@ fun AddEditCardScreen(
             MarkdownDescriptionField(
                 value = answerFieldValue,
                 onValueChange = { answerFieldValue = it; isDirty = true },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                onFocusChanged = { isDescriptionFocused = it }
             )
 
             // Images section
@@ -947,7 +963,32 @@ fun AddEditCardScreen(
                     style = MaterialTheme.typography.titleMedium
                 )
             }
+        } // end scrollable Column
+        // Markdown toolbar pinned above the keyboard
+        AnimatedVisibility(
+            visible = isDescriptionFocused,
+            enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+            exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shadowElevation = 8.dp,
+                tonalElevation = 2.dp
+            ) {
+                MarkdownToolbar(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    onBold      = { answerFieldValue = applyInlineFormat(answerFieldValue, "**",  "**",   "bold") },
+                    onItalic    = { answerFieldValue = applyInlineFormat(answerFieldValue, "*",   "*",    "italic") },
+                    onUnderline = { answerFieldValue = applyInlineFormat(answerFieldValue, "<u>", "</u>", "underline") },
+                    onCode      = { answerFieldValue = applyInlineFormat(answerFieldValue, "`",   "`",    "code") },
+                    onHeader    = { answerFieldValue = applyLinePrefix(answerFieldValue, "# ") },
+                    onBullet    = { answerFieldValue = applyLinePrefix(answerFieldValue, "- ") }
+                )
+            }
         }
+    } // end outer Column
     }
 
     // Group selection bottom sheet

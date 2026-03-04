@@ -28,10 +28,18 @@ import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.launch
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.SessionCard
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import com.fencing.spacedrepetition.ui.components.CardImagesDisplay
 import com.fencing.spacedrepetition.ui.components.CardImagesEdit
 import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
 import com.fencing.spacedrepetition.ui.components.MarkdownText
+import com.fencing.spacedrepetition.ui.components.MarkdownToolbar
+import com.fencing.spacedrepetition.ui.components.applyInlineFormat
+import com.fencing.spacedrepetition.ui.components.applyLinePrefix
 import androidx.compose.ui.text.input.TextFieldValue
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeUiState
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
@@ -554,6 +562,7 @@ fun EditCardDialog(
     var question by remember(card.id) { mutableStateOf(card.question) }
     var answerFieldValue by remember(card.id) { mutableStateOf(TextFieldValue(card.answer)) }
     var imagePaths by remember(card.id) { mutableStateOf(card.imagePaths.toMutableList()) }
+    var isDescriptionFocused by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
 
@@ -605,7 +614,8 @@ fun EditCardDialog(
                     onValueChange = { answerFieldValue = it },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 3,
-                    maxLines = 6
+                    maxLines = 6,
+                    onFocusChanged = { isDescriptionFocused = it }
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -672,7 +682,32 @@ fun EditCardDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                AnimatedVisibility(
+                    visible = isDescriptionFocused,
+                    enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+                    exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
+                ) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        tonalElevation = 2.dp
+                    ) {
+                        MarkdownToolbar(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
+                            onBold      = { answerFieldValue = applyInlineFormat(answerFieldValue, "**",  "**",   "bold") },
+                            onItalic    = { answerFieldValue = applyInlineFormat(answerFieldValue, "*",   "*",    "italic") },
+                            onUnderline = { answerFieldValue = applyInlineFormat(answerFieldValue, "<u>", "</u>", "underline") },
+                            onCode      = { answerFieldValue = applyInlineFormat(answerFieldValue, "`",   "`",    "code") },
+                            onHeader    = { answerFieldValue = applyLinePrefix(answerFieldValue, "# ") },
+                            onBullet    = { answerFieldValue = applyLinePrefix(answerFieldValue, "- ") }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),

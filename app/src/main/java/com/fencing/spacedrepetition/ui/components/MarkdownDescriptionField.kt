@@ -1,11 +1,5 @@
 package com.fencing.spacedrepetition.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -25,7 +19,6 @@ import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.FormatUnderlined
 import androidx.compose.material.icons.filled.Title
 import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -67,10 +60,10 @@ fun MarkdownDescriptionField(
     modifier: Modifier = Modifier,
     label: String = "Description",
     minLines: Int = 3,
-    maxLines: Int = 8
+    maxLines: Int = 8,
+    onFocusChanged: (Boolean) -> Unit = {}
 ) {
     var activeTab by remember { mutableStateOf(DescriptionTab.Edit) }
-    var isFocused by remember { mutableStateOf(false) }
 
     Surface(
         modifier = modifier,
@@ -108,28 +101,6 @@ fun MarkdownDescriptionField(
 
             when (activeTab) {
                 DescriptionTab.Edit -> {
-                    // Formatting toolbar — slides in when the field is focused
-                    AnimatedVisibility(
-                        visible = isFocused,
-                        enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
-                        exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
-                    ) {
-                        Column {
-                            MarkdownToolbar(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 4.dp, vertical = 2.dp),
-                                onBold      = { onValueChange(applyInlineFormat(value, "**",  "**",   "bold"))      },
-                                onItalic    = { onValueChange(applyInlineFormat(value, "*",   "*",    "italic"))    },
-                                onUnderline = { onValueChange(applyInlineFormat(value, "<u>", "</u>", "underline")) },
-                                onCode      = { onValueChange(applyInlineFormat(value, "`",   "`",    "code"))      },
-                                onHeader    = { onValueChange(applyLinePrefix(value, "# ")) },
-                                onBullet    = { onValueChange(applyLinePrefix(value, "- ")) }
-                            )
-                            HorizontalDivider()
-                        }
-                    }
-
                     OutlinedTextField(
                         value = value,
                         onValueChange = onValueChange,
@@ -137,7 +108,7 @@ fun MarkdownDescriptionField(
                         placeholder = { Text("Supports **bold**, *italic*, <u>underline</u>, # headings, - bullets...") },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .onFocusChanged { isFocused = it.isFocused },
+                            .onFocusChanged { onFocusChanged(it.isFocused) },
                         leadingIcon = {
                             Icon(Icons.Default.CheckCircle, contentDescription = null)
                         },
