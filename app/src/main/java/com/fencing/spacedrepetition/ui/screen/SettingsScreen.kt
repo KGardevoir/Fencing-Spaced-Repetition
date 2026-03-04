@@ -20,6 +20,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fencing.spacedrepetition.billing.BillingManager
 import com.fencing.spacedrepetition.data.preferences.SettingsConstants
 import com.fencing.spacedrepetition.data.preferences.ThemeMode
+import com.fencing.spacedrepetition.ui.components.FsrsRetentionPreview
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.DonationViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
@@ -45,6 +46,7 @@ fun SettingsScreen(
     val practiceDays by settingsViewModel.practiceDays.collectAsState()
     val fsrsRetention by settingsViewModel.fsrsRetention.collectAsState()
     val sm2IntervalModifier by settingsViewModel.sm2IntervalModifier.collectAsState()
+    val fsrsEnableFuzzing by settingsViewModel.fsrsEnableFuzzing.collectAsState()
 
     // Donation state
     val context = LocalContext.current
@@ -351,7 +353,7 @@ fun SettingsScreen(
 
             // Algorithm section
             Text(
-                "Algorithm",
+                "Algorithm (FSRS-6 / SM-2)",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -433,6 +435,35 @@ fun SettingsScreen(
                         "80\u201392\u00a0% suits most learners \u2014 higher values increase reviews, lower values extend intervals.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                FsrsRetentionPreview(retentionPercent = fsrsRetention)
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // FSRS interval fuzzing
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { settingsViewModel.setFsrsEnableFuzzing(!fsrsEnableFuzzing) }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "FSRS Interval Fuzzing",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Text(
+                        text = "Add a small random variance (\u22645\u00a0%) to FSRS intervals to spread reviews and prevent pile-ups (FSRS only).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = fsrsEnableFuzzing,
+                    onCheckedChange = { settingsViewModel.setFsrsEnableFuzzing(it) }
                 )
             }
 

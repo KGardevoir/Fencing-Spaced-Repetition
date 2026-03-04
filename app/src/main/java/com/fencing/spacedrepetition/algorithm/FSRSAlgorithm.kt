@@ -1,11 +1,21 @@
 package com.fencing.spacedrepetition.algorithm
 
 import kotlin.math.exp
+import kotlin.math.max
 import kotlin.math.pow
+import kotlin.math.round
+import kotlin.random.Random
 
 /**
  * FSRS (Free Spaced Repetition Scheduler) Algorithm Implementation
- * Based on the FSRS-5 specification
+ * Based on the FSRS-6 specification
+ *
+ * Key changes from FSRS-5:
+ * - 21 parameters (was 19); w[19] and w[20] added
+ * - Trainable forgetting-curve decay: DECAY = -w[20], FACTOR = 0.9^(-1/w[20]) - 1
+ * - Short-term stability (same-day): multiplied by stability^(-w[19]), causing the
+ *   increment to slow down as stability grows
+ * - Optional interval fuzzing to prevent review pile-ups
  */
 class FSRSAlgorithm(
     private var maximumInterval: Int = 36500 // Default: 100 years
@@ -46,20 +56,26 @@ class FSRSAlgorithm(
         val state: CardState
     )
 
-    // FSRS-5 Parameters (optimized defaults)
+    // FSRS-6 Parameters (optimized defaults, 21 values)
     private val w = doubleArrayOf(
-        0.40255, 1.18385, 3.173, 15.69105, 7.1949,
-        0.5345, 1.4604, 0.0046, 1.54575, 0.1192,
-        1.01925, 1.9395, 0.11, 0.29605, 2.2698,
-        0.2315, 2.9898, 0.51655, 0.6621
+        0.212,  1.2931, 2.3065, 8.2956, 6.4133,
+        0.8334, 3.0194, 0.001,  1.8722, 0.1666,
+        0.796,  1.4835, 0.0614, 0.2629, 1.6483,
+        0.6014, 1.8729, 0.5425, 0.0912, 0.0658,
+        0.1542
     )
 
     private var requestRetention = 0.9 // Target retention rate (0.70–0.97)
-    private val DECAY = -0.5
-    private val FACTOR = 19.0 / 81.0
+    private var enableFuzzing = false   // Add small random variance to intervals
+
+    // FSRS-6: DECAY is trainable (-w[20]).
+    // FACTOR is derived so R(S, S) = 90 % (the curve is anchored at the 90 % point):
+    //   (1 + FACTOR)^DECAY = 0.9  →  FACTOR = 0.9^(1/DECAY) - 1 = 0.9^(-1/w[20]) - 1
+    private fun getDecay(): Double = -w[20]
+    private fun getFactor(): Double = 0.9.pow(-1.0 / w[20]) - 1
 
     /**
-     * Update the maximum interval setting
+     * Update the maximum interval setting.
      */
     fun setMaximumInterval(days: Int) {
         maximumInterval = days.coerceAtLeast(1)
@@ -74,7 +90,16 @@ class FSRSAlgorithm(
     }
 
     /**
-     * Schedule a card review based on rating
+     * Enable or disable interval fuzzing.
+     * When enabled, a small random offset (≤ 5 % of the interval, min 1 day) is
+     * added to each computed review interval to prevent review pile-ups.
+     */
+    fun setEnableFuzzing(enable: Boolean) {
+        enableFuzzing = enable
+    }
+
+    /**
+     * Schedule a card review based on rating.
      */
     fun schedule(card: FSRSCard, rating: Rating, now: Long = System.currentTimeMillis()): SchedulingInfo {
         val elapsedDays = if (card.lastReview == 0L) {
@@ -101,7 +126,7 @@ class FSRSAlgorithm(
     }
 
     /**
-     * Get all possible scheduling outcomes for a card
+     * Get all possible scheduling outcomes for a card.
      */
     fun getSchedulingCards(card: FSRSCard, now: Long = System.currentTimeMillis()): Map<Rating, FSRSCard> {
         return Rating.values().associateWith { rating ->
@@ -249,9 +274,9 @@ class FSRSAlgorithm(
     private fun initStability(rating: Rating): Double {
         return when (rating) {
             Rating.AGAIN -> w[0]
-            Rating.HARD -> w[1]
-            Rating.GOOD -> w[2]
-            Rating.EASY -> w[3]
+            Rating.HARD  -> w[1]
+            Rating.GOOD  -> w[2]
+            Rating.EASY  -> w[3]
         }
     }
 
@@ -261,12 +286,28 @@ class FSRSAlgorithm(
     }
 
     private fun forgettingCurve(elapsedDays: Int, stability: Double): Double {
-        return (1.0 + FACTOR * elapsedDays / stability).pow(DECAY)
+        // FSRS-6: R(t, S) = (1 + factor * t / S)^(-w[20])
+        return (1.0 + getFactor() * elapsedDays / stability).pow(getDecay())
     }
 
     private fun nextInterval(stability: Double): Int {
-        val newInterval = stability / FACTOR * (requestRetention.pow(1.0 / DECAY) - 1)
-        return newInterval.toInt().coerceIn(1, maximumInterval)
+        // Solve R(t, S) = requestRetention for t:
+        //   t = S / factor * (requestRetention^(1/decay) - 1)
+        val factor = getFactor()
+        val decay = getDecay()
+        val rawInterval = (stability / factor * (requestRetention.pow(1.0 / decay) - 1)).toInt()
+            .coerceIn(1, maximumInterval)
+        return if (enableFuzzing) applyFuzz(rawInterval) else rawInterval
+    }
+
+    /**
+     * Add a small random offset to [interval] to prevent review pile-ups.
+     * Fuzz is ≤ 5 % of the interval (minimum ±1 day for intervals ≥ 3).
+     */
+    private fun applyFuzz(interval: Int): Int {
+        if (interval < 3) return interval
+        val delta = max(1, round(interval * 0.05).toInt())
+        return (interval + Random.nextInt(-delta, delta + 1)).coerceIn(1, maximumInterval)
     }
 
     private fun nextDifficulty(difficulty: Double, rating: Rating): Double {
@@ -287,7 +328,7 @@ class FSRSAlgorithm(
         rating: Rating
     ): Double {
         val hardPenalty = if (rating == Rating.HARD) w[15] else 1.0
-        val easyBonus = if (rating == Rating.EASY) w[16] else 1.0
+        val easyBonus  = if (rating == Rating.EASY) w[16] else 1.0
 
         return stability * (
             1 + exp(w[8]) *
@@ -299,8 +340,18 @@ class FSRSAlgorithm(
         )
     }
 
+    /**
+     * FSRS-6 short-term stability (same-day review in LEARNING / RELEARNING).
+     *
+     * S'_sn(S, G) = S · exp(w[17] · (G − 3 + w[18])) · S^(−w[19])
+     *
+     * The S^(−w[19]) term causes the stability increment to slow down as stability grows,
+     * converging to Δ ≈ 1 day, so same-day reviews are most valuable for weak memories.
+     */
     private fun shortTermStability(stability: Double, rating: Rating): Double {
-        return stability * exp(w[17] * (rating.ordinal + 1 - 3 + w[18]))
+        val g = rating.ordinal + 1 // 1-indexed: AGAIN=1, HARD=2, GOOD=3, EASY=4
+        val s = stability.coerceAtLeast(0.001) // guard against zero-stability edge case
+        return s * exp(w[17] * (g - 3 + w[18])) * s.pow(-w[19])
     }
 
     private fun nextForgetStability(difficulty: Double, stability: Double, retrievability: Double): Double {

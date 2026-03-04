@@ -30,12 +30,26 @@ android {
             keyAlias = System.getenv("KEY_ALIAS") ?: ""
             keyPassword = System.getenv("KEY_PASSWORD") ?: ""
         }
+        create("sharedDebug") {
+            // Shared debug keystore supplied via GitHub Actions secrets (DEBUG_KEYSTORE_BASE64).
+            // When DEBUG_KEYSTORE_FILE is not set (local dev) Android uses the default debug keystore.
+            fun env(key: String, default: String) = System.getenv(key)?.trim()?.takeIf { it.isNotEmpty() } ?: default
+            storeFile = file(env("DEBUG_KEYSTORE_FILE", "debug-keystore.jks"))
+            storePassword = env("DEBUG_KEYSTORE_PASSWORD", "android")
+            keyAlias = env("DEBUG_KEY_ALIAS", "androiddebugkey")
+            keyPassword = env("DEBUG_KEY_PASSWORD", "android")
+        }
     }
 
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-DEBUG"
+            // Use shared signing when DEBUG_KEYSTORE_FILE is provided (e.g. CI via GitHub Secrets)
+            // so that the APK can be installed over a previous CI build without uninstalling.
+            if (System.getenv("DEBUG_KEYSTORE_FILE") != null) {
+                signingConfig = signingConfigs.getByName("sharedDebug")
+            }
         }
         release {
             isMinifyEnabled = true

@@ -47,6 +47,9 @@ class SettingsViewModel(
     val sm2IntervalModifier: StateFlow<Int> = themePreferences.sm2IntervalModifier
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_SM2_INTERVAL_MODIFIER)
 
+    val fsrsEnableFuzzing: StateFlow<Boolean> = themePreferences.fsrsEnableFuzzing
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_FSRS_ENABLE_FUZZING)
+
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch {
             themePreferences.setThemeMode(mode)
@@ -123,6 +126,12 @@ class SettingsViewModel(
     fun setSm2IntervalModifier(percent: Int) {
         viewModelScope.launch {
             themePreferences.setSm2IntervalModifier(percent)
+        }
+    }
+
+    fun setFsrsEnableFuzzing(enabled: Boolean) {
+        viewModelScope.launch {
+            themePreferences.setFsrsEnableFuzzing(enabled)
         }
     }
 }

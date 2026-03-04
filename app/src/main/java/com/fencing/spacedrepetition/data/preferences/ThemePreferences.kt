@@ -32,6 +32,7 @@ class ThemePreferences(private val context: Context) {
     private val RANDOMIZE_BUCKET_HOURS_KEY = intPreferencesKey("randomize_bucket_hours")
     private val FSRS_RETENTION_KEY = intPreferencesKey("fsrs_retention")
     private val SM2_INTERVAL_MODIFIER_KEY = intPreferencesKey("sm2_interval_modifier")
+    private val FSRS_ENABLE_FUZZING_KEY = booleanPreferencesKey("fsrs_enable_fuzzing")
 
     companion object {
         const val DEFAULT_CARDS_PER_SESSION = 3
@@ -56,6 +57,9 @@ class ThemePreferences(private val context: Context) {
         const val DEFAULT_SM2_INTERVAL_MODIFIER = 100
         const val MIN_SM2_INTERVAL_MODIFIER = 50
         const val MAX_SM2_INTERVAL_MODIFIER = 200
+
+        // FSRS interval fuzzing (adds ≤5 % random variance to prevent review pile-ups)
+        const val DEFAULT_FSRS_ENABLE_FUZZING = false
     }
 
     val themeMode: Flow<ThemeMode> = context.dataStore.data
@@ -125,6 +129,11 @@ class ThemePreferences(private val context: Context) {
     val sm2IntervalModifier: Flow<Int> = context.dataStore.data
         .map { preferences ->
             preferences[SM2_INTERVAL_MODIFIER_KEY] ?: DEFAULT_SM2_INTERVAL_MODIFIER
+        }
+
+    val fsrsEnableFuzzing: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[FSRS_ENABLE_FUZZING_KEY] ?: DEFAULT_FSRS_ENABLE_FUZZING
         }
 
     suspend fun setThemeMode(mode: ThemeMode) {
@@ -200,6 +209,12 @@ class ThemePreferences(private val context: Context) {
         val valid = percent.coerceIn(MIN_SM2_INTERVAL_MODIFIER, MAX_SM2_INTERVAL_MODIFIER)
         context.dataStore.edit { preferences ->
             preferences[SM2_INTERVAL_MODIFIER_KEY] = valid
+        }
+    }
+
+    suspend fun setFsrsEnableFuzzing(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[FSRS_ENABLE_FUZZING_KEY] = enabled
         }
     }
 }
