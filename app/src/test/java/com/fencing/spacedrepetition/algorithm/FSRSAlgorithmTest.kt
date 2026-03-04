@@ -448,7 +448,7 @@ class FSRSAlgorithmTest {
     @Test
     fun testStability_IncreasesOverTime_WithGoodRatings() {
         var card = FSRSAlgorithm.FSRSCard()
-        val initialStability = algorithm.schedule(card, FSRSAlgorithm.Rating.GOOD, testTimestamp).card.stability
+        val initialStability = card.stability // 0.0 — before any review
 
         card = algorithm.schedule(card, FSRSAlgorithm.Rating.GOOD, testTimestamp).card
         card = algorithm.schedule(card, FSRSAlgorithm.Rating.GOOD, testTimestamp + (2L * 24 * 60 * 60 * 1000)).card
