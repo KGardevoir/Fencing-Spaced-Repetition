@@ -87,14 +87,14 @@ jobs:
           echo "aab_path=app/build/outputs/bundle/release/${AAB_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Upload release APK artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           path: ${{ steps.artifact.outputs.apk_path }}
           archive: false
           retention-days: 90
 
       - name: Upload release AAB artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           path: ${{ steps.artifact.outputs.aab_path }}
           archive: false
