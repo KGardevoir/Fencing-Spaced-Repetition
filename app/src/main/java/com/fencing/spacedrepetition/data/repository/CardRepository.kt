@@ -140,6 +140,23 @@ class CardRepository(
 
     fun getAllCategories(): Flow<List<String>> = cardDao.getAllCategories()
 
+    // History operations
+    fun getCompletedSessions(): Flow<List<PracticeSession>> = sessionDao.getCompletedSessions()
+
+    fun getReviewLogsBySession(sessionId: Long): Flow<List<ReviewLog>> =
+        reviewLogDao.getReviewLogsBySession(sessionId)
+
+    fun getReviewLogsByCard(cardId: Long): Flow<List<ReviewLog>> =
+        reviewLogDao.getReviewLogsByCard(cardId)
+
+    fun getAllReviewLogs(): Flow<List<ReviewLog>> = reviewLogDao.getAllReviewLogs()
+
+    suspend fun getAllReviewLogsSync(): List<ReviewLog> = reviewLogDao.getAllReviewLogsSync()
+
+    suspend fun importReviewLogs(reviewLogs: List<ReviewLog>) {
+        reviewLogDao.insertReviewLogs(reviewLogs)
+    }
+
     // Group-aware card operations
     fun getAllCardsWithGroups(): Flow<List<CardWithGroups>> = cardDao.getAllCardsWithGroups()
 

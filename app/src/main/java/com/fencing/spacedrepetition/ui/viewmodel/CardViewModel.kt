@@ -386,7 +386,7 @@ class CardViewModel(
         _importExportState.value = ImportExportState.Idle
     }
 
-    fun exportAllCards(uri: Uri, contentResolver: ContentResolver) {
+    fun exportAllCards(uri: Uri, contentResolver: ContentResolver, includeHistory: Boolean = false) {
         viewModelScope.launch {
             _importExportState.value = ImportExportState.Loading
             try {
@@ -405,11 +405,19 @@ class CardViewModel(
                     groupRepository.getAllGroupsSync().filter { it.name in allGroupNames }
                 }
 
+                val reviewLogs = if (includeHistory) withContext(Dispatchers.IO) {
+                    repository.getAllReviewLogsSync()
+                } else emptyList()
+
+                val cardQuestions = if (includeHistory) {
+                    cardsWithStates.associate { it.card.id to it.card.question }
+                } else emptyMap()
+
                 val result = withContext(Dispatchers.IO) {
                     contentResolver.openOutputStream(uri)?.use { fileStream ->
                         val outputStream = CardImportExport.createCompressedOutputStream(fileStream)
                         val exportResult = CardImportExport.exportCardsWithGroupStates(
-                            cardsWithStates, outputStream, allGroups
+                            cardsWithStates, outputStream, allGroups, reviewLogs, cardQuestions
                         )
                         outputStream.close()
                         exportResult
@@ -426,7 +434,7 @@ class CardViewModel(
         }
     }
 
-    fun exportSelectedGroups(selectedGroupIds: List<Long>, uri: Uri, contentResolver: ContentResolver) {
+    fun exportSelectedGroups(selectedGroupIds: List<Long>, uri: Uri, contentResolver: ContentResolver, includeHistory: Boolean = false) {
         viewModelScope.launch {
             _importExportState.value = ImportExportState.Loading
             try {
@@ -456,11 +464,20 @@ class CardViewModel(
                     return@launch
                 }
 
+                val exportedCardIds = filteredCardsWithStates.map { it.card.id }.toSet()
+                val reviewLogs = if (includeHistory) withContext(Dispatchers.IO) {
+                    repository.getAllReviewLogsSync().filter { it.cardId in exportedCardIds }
+                } else emptyList()
+
+                val cardQuestions = if (includeHistory) {
+                    filteredCardsWithStates.associate { it.card.id to it.card.question }
+                } else emptyMap()
+
                 val result = withContext(Dispatchers.IO) {
                     contentResolver.openOutputStream(uri)?.use { fileStream ->
                         val outputStream = CardImportExport.createCompressedOutputStream(fileStream)
                         val exportResult = CardImportExport.exportCardsWithGroupStates(
-                            filteredCardsWithStates, outputStream, selectedGroups
+                            filteredCardsWithStates, outputStream, selectedGroups, reviewLogs, cardQuestions
                         )
                         outputStream.close()
                         exportResult
@@ -562,6 +579,21 @@ class CardViewModel(
                             // Simple import
                             val cardsToImport = parsedCards.map { it.concept to it.answer }
                             repository.importCards(cardsToImport, algorithm)
+                        }
+                    }
+                }
+
+                // Import review history if present in the file
+                val parsedReviewHistory = CardImportExport.lastParsedReviewHistory
+                if (parsedReviewHistory.isNotEmpty()) {
+                    withContext(Dispatchers.IO) {
+                        val questionToCardId = repository.getAllCardsSync()
+                            .associate { it.question to it.id }
+                        val reviewLogs = CardImportExport.parsedReviewLogsToEntities(
+                            parsedReviewHistory, questionToCardId
+                        )
+                        if (reviewLogs.isNotEmpty()) {
+                            repository.importReviewLogs(reviewLogs)
                         }
                     }
                 }

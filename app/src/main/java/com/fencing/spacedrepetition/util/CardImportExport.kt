@@ -4,6 +4,7 @@ import android.content.Context
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.ReviewLog
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.InputStream
@@ -78,6 +79,9 @@ object CardImportExport {
     private const val HEADER_MARKER_V2 = "#FSR_EXPORT_V2"
     private const val HEADER_MARKER_V3 = "#FSR_EXPORT_V3"
     private const val GROUP_SETTINGS_PREFIX = "#GROUP_SETTINGS:"
+    private const val REVIEW_HISTORY_START = "#REVIEW_HISTORY_START"
+    private const val REVIEW_HISTORY_END = "#REVIEW_HISTORY_END"
+    private const val REVIEW_HISTORY_HEADERS = "#CardQuestion\tReviewTime\tGrade\tAlgorithm\tStateBefore\tStateAfter\tScheduledDays\tElapsedDays"
 
     // Column indices for V1 export format
     private const val COL_V1_QUESTION = 0
@@ -163,6 +167,10 @@ object CardImportExport {
     var lastParsedGroupSettings: Map<String, Map<String, String>> = emptyMap()
         private set
 
+    /** Parsed review history from an import file (populated after calling parseCards) */
+    var lastParsedReviewHistory: List<ParsedReviewLog> = emptyList()
+        private set
+
     fun parseCards(inputStream: InputStream): Pair<List<ParsedCard>, List<String>> {
         val cards = mutableListOf<ParsedCard>()
         val errors = mutableListOf<String>()
@@ -170,6 +178,7 @@ object CardImportExport {
 
         try {
             val lines = inputStream.bufferedReader(Charsets.UTF_8).readLines()
+            lastParsedReviewHistory = parseReviewHistory(lines)
             if (lines.isEmpty()) {
                 return Pair(emptyList(), emptyList())
             }
@@ -192,11 +201,16 @@ object CardImportExport {
 
             val dataLines = lines.drop(1)
 
+            var inHistorySection = false
             dataLines.forEachIndexed { index, line ->
                 val lineNumber = if (formatVersion > 0) index + 2 else index + 1
                 val trimmedLine = line.trim()
 
                 if (trimmedLine.isEmpty()) return@forEachIndexed
+                // Skip review history section
+                if (trimmedLine == REVIEW_HISTORY_START) { inHistorySection = true; return@forEachIndexed }
+                if (trimmedLine == REVIEW_HISTORY_END) { inHistorySection = false; return@forEachIndexed }
+                if (inHistorySection) return@forEachIndexed
                 // Capture group settings lines
                 if (trimmedLine.startsWith(GROUP_SETTINGS_PREFIX)) {
                     parseGroupSettingsLine(trimmedLine)?.let { (name, settings) ->
@@ -484,44 +498,81 @@ object CardImportExport {
     }
 
     /**
-     * Exports cards with group-specific learning states to V3 format TSV
+     * Exports cards with group-specific learning states to V3 format TSV.
+     * Optionally includes a REVIEW_HISTORY section at the end.
      */
     fun exportCardsWithGroupStates(
         cardsWithStates: List<CardWithGroupStates>,
         outputStream: OutputStream,
-        groupSettings: List<Group> = emptyList()
+        groupSettings: List<Group> = emptyList(),
+        reviewLogs: List<ReviewLog> = emptyList(),
+        cardQuestions: Map<Long, String> = emptyMap()
     ): ExportResult {
         return try {
             var rowCount = 0
-            outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
-                // Write format marker (V3)
-                writer.write(HEADER_MARKER_V3)
+            val writer = outputStream.bufferedWriter(Charsets.UTF_8)
+
+            // Write format marker (V3)
+            writer.write(HEADER_MARKER_V3)
+            writer.newLine()
+
+            // Write group settings metadata
+            groupSettings.filter { it.hasCustomSettings() }.forEach { group ->
+                writer.write(buildGroupSettingsLine(group))
                 writer.newLine()
+            }
 
-                // Write group settings metadata
-                groupSettings.filter { it.hasCustomSettings() }.forEach { group ->
-                    writer.write(buildGroupSettingsLine(group))
-                    writer.newLine()
-                }
+            // Write column headers
+            writer.write(COLUMN_HEADERS_V3)
+            writer.newLine()
 
-                // Write column headers
-                writer.write(COLUMN_HEADERS_V3)
+            cardsWithStates.forEach { (card, groupNames, groupSpecificStates) ->
+                // Write global state row
+                writer.write(buildCardStateLine(card, groupNames, "GLOBAL"))
                 writer.newLine()
+                rowCount++
 
-                cardsWithStates.forEach { (card, groupNames, groupSpecificStates) ->
-                    // Write global state row
-                    writer.write(buildCardStateLine(card, groupNames, "GLOBAL"))
+                // Write group-specific state rows
+                groupSpecificStates.forEach { (groupName, learningState) ->
+                    writer.write(buildGroupStateLine(card, groupName, learningState))
                     writer.newLine()
                     rowCount++
-
-                    // Write group-specific state rows
-                    groupSpecificStates.forEach { (groupName, learningState) ->
-                        writer.write(buildGroupStateLine(card, groupName, learningState))
-                        writer.newLine()
-                        rowCount++
-                    }
                 }
             }
+
+            // Optionally append review history section
+            if (reviewLogs.isNotEmpty() && cardQuestions.isNotEmpty()) {
+                writer.write(REVIEW_HISTORY_START)
+                writer.newLine()
+                writer.write(REVIEW_HISTORY_HEADERS)
+                writer.newLine()
+                reviewLogs.forEach { log ->
+                    val question = cardQuestions[log.cardId] ?: return@forEach
+                    val line = buildString {
+                        append(escapeNewlines(question))
+                        append(DELIMITER)
+                        append(log.reviewTime)
+                        append(DELIMITER)
+                        append(log.grade)
+                        append(DELIMITER)
+                        append(log.algorithm)
+                        append(DELIMITER)
+                        append(escapeNewlines(log.stateBefore))
+                        append(DELIMITER)
+                        append(escapeNewlines(log.stateAfter))
+                        append(DELIMITER)
+                        append(log.scheduledDays)
+                        append(DELIMITER)
+                        append(log.elapsedDays)
+                    }
+                    writer.write(line)
+                    writer.newLine()
+                }
+                writer.write(REVIEW_HISTORY_END)
+                writer.newLine()
+            }
+
+            writer.flush()
             ExportResult.Success(rowCount)
         } catch (e: Exception) {
             ExportResult.Error("Failed to write file: ${e.message}")
@@ -866,6 +917,128 @@ object CardImportExport {
             GZIPInputStream(buffered)
         } else {
             buffered
+        }
+    }
+
+    // ========== Review History Export/Import ==========
+
+    /**
+     * Appends a REVIEW_HISTORY section to an already-open writer.
+     * Each log entry is keyed by cardQuestion so it can be re-linked on import.
+     * @param reviewLogs list of review logs to export
+     * @param cardQuestions map of cardId -> question text
+     */
+    fun appendReviewHistory(
+        reviewLogs: List<ReviewLog>,
+        cardQuestions: Map<Long, String>,
+        outputStream: OutputStream
+    ) {
+        outputStream.bufferedWriter(Charsets.UTF_8).let { writer ->
+            writer.write(REVIEW_HISTORY_START)
+            writer.newLine()
+            writer.write(REVIEW_HISTORY_HEADERS)
+            writer.newLine()
+            reviewLogs.forEach { log ->
+                val question = cardQuestions[log.cardId] ?: return@forEach
+                val line = buildString {
+                    append(escapeNewlines(question))
+                    append(DELIMITER)
+                    append(log.reviewTime)
+                    append(DELIMITER)
+                    append(log.grade)
+                    append(DELIMITER)
+                    append(log.algorithm)
+                    append(DELIMITER)
+                    append(escapeNewlines(log.stateBefore))
+                    append(DELIMITER)
+                    append(escapeNewlines(log.stateAfter))
+                    append(DELIMITER)
+                    append(log.scheduledDays)
+                    append(DELIMITER)
+                    append(log.elapsedDays)
+                }
+                writer.write(line)
+                writer.newLine()
+            }
+            writer.write(REVIEW_HISTORY_END)
+            writer.newLine()
+            writer.flush()
+        }
+    }
+
+    /**
+     * Parsed review log from the REVIEW_HISTORY section of an export file.
+     * Uses cardQuestion instead of cardId (IDs differ between devices).
+     */
+    data class ParsedReviewLog(
+        val cardQuestion: String,
+        val reviewTime: Long,
+        val grade: Int,
+        val algorithm: String,
+        val stateBefore: String,
+        val stateAfter: String,
+        val scheduledDays: Int,
+        val elapsedDays: Int
+    )
+
+    /**
+     * Parses the REVIEW_HISTORY section from a list of all lines in the file.
+     * Returns the parsed review logs, or empty list if no history section found.
+     */
+    fun parseReviewHistory(lines: List<String>): List<ParsedReviewLog> {
+        val startIndex = lines.indexOfFirst { it.trim() == REVIEW_HISTORY_START }
+        if (startIndex < 0) return emptyList()
+
+        val endIndex = lines.indexOfFirst { it.trim() == REVIEW_HISTORY_END }
+        val historyLines = if (endIndex > startIndex) {
+            lines.subList(startIndex + 1, endIndex)
+        } else {
+            lines.subList(startIndex + 1, lines.size)
+        }
+
+        return historyLines.mapNotNull { line ->
+            val trimmed = line.trim()
+            if (trimmed.isEmpty() || trimmed.startsWith("#")) return@mapNotNull null
+            val parts = trimmed.split(DELIMITER)
+            if (parts.size < 8) return@mapNotNull null
+            try {
+                ParsedReviewLog(
+                    cardQuestion = unescapeNewlines(parts[0]),
+                    reviewTime = parts[1].toLong(),
+                    grade = parts[2].toInt(),
+                    algorithm = parts[3],
+                    stateBefore = unescapeNewlines(parts[4]),
+                    stateAfter = unescapeNewlines(parts[5]),
+                    scheduledDays = parts[6].toInt(),
+                    elapsedDays = parts[7].toInt()
+                )
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+
+    /**
+     * Converts ParsedReviewLogs to ReviewLog entities using a question->cardId map.
+     * Skips logs for cards not found in the map.
+     */
+    fun parsedReviewLogsToEntities(
+        parsed: List<ParsedReviewLog>,
+        questionToCardId: Map<String, Long>
+    ): List<ReviewLog> {
+        return parsed.mapNotNull { p ->
+            val cardId = questionToCardId[p.cardQuestion] ?: return@mapNotNull null
+            ReviewLog(
+                cardId = cardId,
+                sessionId = null,
+                reviewTime = p.reviewTime,
+                grade = p.grade,
+                algorithm = p.algorithm,
+                stateBefore = p.stateBefore,
+                stateAfter = p.stateAfter,
+                scheduledDays = p.scheduledDays,
+                elapsedDays = p.elapsedDays
+            )
         }
     }
 

@@ -9,6 +9,9 @@ interface ReviewLogDao {
     @Query("SELECT * FROM review_logs ORDER BY reviewTime DESC")
     fun getAllReviewLogs(): Flow<List<ReviewLog>>
 
+    @Query("SELECT * FROM review_logs ORDER BY reviewTime DESC")
+    suspend fun getAllReviewLogsSync(): List<ReviewLog>
+
     @Query("SELECT * FROM review_logs WHERE cardId = :cardId ORDER BY reviewTime DESC")
     fun getReviewLogsByCard(cardId: Long): Flow<List<ReviewLog>>
 

@@ -29,7 +29,8 @@ fun HomeScreen(
     onNavigateToPractice: () -> Unit,
     onNavigateToCards: () -> Unit,
     onNavigateToGroups: () -> Unit,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    onNavigateToHistory: () -> Unit
 ) {
     val dueCardCount by cardViewModel.dueCardCount.collectAsState()
     val totalCards by cardViewModel.cardCount.collectAsState()
@@ -248,22 +249,44 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                OutlinedButton(
-                    onClick = onNavigateToCards,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.LibraryBooks,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Manage Cards",
-                        style = MaterialTheme.typography.titleMedium
-                    )
+                    OutlinedButton(
+                        onClick = onNavigateToCards,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp)
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.LibraryBooks,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Cards",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = onNavigateToHistory,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.History,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "History",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
                 }
 
             }
