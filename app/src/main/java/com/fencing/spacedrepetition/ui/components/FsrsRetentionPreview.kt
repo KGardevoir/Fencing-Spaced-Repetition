@@ -1,7 +1,6 @@
 package com.fencing.spacedrepetition.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
@@ -26,7 +25,6 @@ private const val PREVIEW_W20 = 0.1542  // forgetting-curve decay (trainable in 
 // factor derived so that R(S, S) = 90 % regardless of the user's retention setting
 private val PREVIEW_FACTOR: Double = 0.9.pow(-1.0 / PREVIEW_W20) - 1 // ≈ 0.980
 
-/** Compute the FSRS-6 next review interval (days) for a given stability and retention target. */
 private fun previewInterval(stability: Double, retentionPercent: Int): Int {
     val retention = (retentionPercent / 100.0).coerceIn(0.1, 0.99)
     val decay = -PREVIEW_W20
@@ -34,15 +32,6 @@ private fun previewInterval(stability: Double, retentionPercent: Int): Int {
         .toInt().coerceIn(1, 3650)
 }
 
-/**
- * Compute the post-recall stability for HARD, GOOD, or EASY using FSRS-6 default weights.
- *
- * @param stability   Current card stability (days).
- * @param difficulty  Card difficulty (1–10; 5 = average).
- * @param retrievability Probability of recall at review time (e.g. 0.9 for an on-time review).
- * @param hardPenalty Use [PREVIEW_W15] for HARD, 1.0 otherwise.
- * @param easyBonus   Use [PREVIEW_W16] for EASY, 1.0 otherwise.
- */
 private fun previewRecallStability(
     stability: Double,
     difficulty: Double,
@@ -64,15 +53,11 @@ private fun formatDays(days: Int): String = when {
 }
 
 /**
- * Expandable preview that shows how different FSRS-6 retention targets and card grades
- * translate to review intervals, helping users choose a meaningful retention value.
+ * Expandable preview showing how grading a card affects its next review interval at the
+ * current retention target.
  *
- * **Retention table** – columns are a set of key retention values (always including the
- * current selection, highlighted in primary colour); rows are three typical stability
- * milestones (Young / Mid / Mature).
- *
- * **Grade effects** – shows the next interval for HARD / GOOD / EASY on a 30-day card
- * reviewed exactly on schedule, using FSRS-6 default weights and average difficulty.
+ * Rows are three card-age milestones; columns are the four possible grades. All cells
+ * assume the card is reviewed exactly on schedule and has average difficulty.
  *
  * @param retentionPercent The currently selected desired-retention value (integer %, e.g. 90).
  */
@@ -80,20 +65,25 @@ private fun formatDays(days: Int): String = when {
 fun FsrsRetentionPreview(retentionPercent: Int) {
     var expanded by remember { mutableStateOf(false) }
 
-    // Always include the selected value in the comparison columns (sorted).
-    val baseColumns = listOf(70, 80, 90, 95, 97)
-    val columns = if (retentionPercent in baseColumns) baseColumns
-                  else (baseColumns + retentionPercent).sorted()
+    val retrievability = retentionPercent / 100.0
+    val diff = 5.0 // average difficulty
 
-    // Stability milestones (days) → row label.
-    val stabilityRows = listOf(
+    // Stability milestones (days) → row label
+    val rows = listOf(
         7   to "Young  (7d)",
         30  to "Mid   (30d)",
         180 to "Mature(180d)"
     )
 
+    // Grade columns: label + (hardPenalty, easyBonus) or null for Again
+    data class GradeSpec(val label: String, val hardPenalty: Double, val easyBonus: Double)
+    val grades = listOf(
+        GradeSpec("Hard", PREVIEW_W15, 1.0),
+        GradeSpec("Good", 1.0,         1.0),
+        GradeSpec("Easy", 1.0,         PREVIEW_W16)
+    )
+
     Column(modifier = Modifier.fillMaxWidth()) {
-        // ── Toggle button ──────────────────────────────────────────────────────
         TextButton(
             onClick = { expanded = !expanded },
             modifier = Modifier.align(Alignment.Start),
@@ -116,11 +106,10 @@ fun FsrsRetentionPreview(retentionPercent: Int) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // ── Part 1: Interval vs retention table ────────────────────────
                 Text(
-                    "Next interval by retention — lower % = longer gaps, fewer reviews",
+                    "Next interval after grading an on-schedule card at $retentionPercent% retention (avg. difficulty):",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -134,37 +123,28 @@ fun FsrsRetentionPreview(retentionPercent: Int) {
                         // Header row
                         Row(modifier = Modifier.fillMaxWidth()) {
                             Spacer(Modifier.width(80.dp))
-                            columns.forEach { r ->
-                                val isSelected = r == retentionPercent
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .then(
-                                            if (isSelected) Modifier.background(
-                                                MaterialTheme.colorScheme.primaryContainer,
-                                                MaterialTheme.shapes.extraSmall
-                                            ) else Modifier
-                                        )
-                                        .padding(vertical = 2.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "$r%",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = if (isSelected)
-                                            MaterialTheme.colorScheme.onPrimaryContainer
-                                        else
-                                            MaterialTheme.colorScheme.onSurfaceVariant,
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
+                            // Again column header
+                            Text(
+                                text = "Again",
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                            grades.forEach { grade ->
+                                Text(
+                                    text = grade.label,
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
+                                )
                             }
                         }
 
                         HorizontalDivider(modifier = Modifier.padding(vertical = 3.dp))
 
-                        // Data rows
-                        stabilityRows.forEach { (stab, label) ->
+                        rows.forEach { (stab, label) ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -177,101 +157,34 @@ fun FsrsRetentionPreview(retentionPercent: Int) {
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                columns.forEach { r ->
-                                    val interval = previewInterval(stab.toDouble(), r)
-                                    val isSelected = r == retentionPercent
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .then(
-                                                if (isSelected) Modifier.background(
-                                                    MaterialTheme.colorScheme.primaryContainer,
-                                                    MaterialTheme.shapes.extraSmall
-                                                ) else Modifier
-                                            )
-                                            .padding(vertical = 2.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = formatDays(interval),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = if (isSelected)
-                                                MaterialTheme.colorScheme.onPrimaryContainer
-                                            else
-                                                MaterialTheme.colorScheme.onSurface,
-                                            textAlign = TextAlign.Center
-                                        )
-                                    }
+                                // Again always relearns
+                                Text(
+                                    text = "Relearn",
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    textAlign = TextAlign.Center
+                                )
+                                grades.forEach { grade ->
+                                    val newStab = previewRecallStability(
+                                        stab.toDouble(), diff, retrievability,
+                                        grade.hardPenalty, grade.easyBonus
+                                    )
+                                    Text(
+                                        text = formatDays(previewInterval(newStab, retentionPercent)),
+                                        modifier = Modifier.weight(1f),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        textAlign = TextAlign.Center
+                                    )
                                 }
                             }
                         }
                     }
                 }
 
-                // ── Part 2: Grade effects at current retention ─────────────────
-                val r30 = retentionPercent / 100.0   // retrievability for on-time review
-                val stab30 = 30.0                    // representative "established" card
-                val diff   = 5.0                     // average difficulty
-
-                val hardNextInterval = previewInterval(
-                    previewRecallStability(stab30, diff, r30, PREVIEW_W15, 1.0),
-                    retentionPercent
-                )
-                val goodNextInterval = previewInterval(
-                    previewRecallStability(stab30, diff, r30, 1.0, 1.0),
-                    retentionPercent
-                )
-                val easyNextInterval = previewInterval(
-                    previewRecallStability(stab30, diff, r30, 1.0, PREVIEW_W16),
-                    retentionPercent
-                )
-
                 Text(
-                    "Grade effects on a 30-day card reviewed on schedule at $retentionPercent% (avg. difficulty):",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Surface(
-                    shape = MaterialTheme.shapes.small,
-                    tonalElevation = 1.dp,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        listOf(
-                            "Again" to "Relearn",
-                            "Hard"  to formatDays(hardNextInterval),
-                            "Good"  to formatDays(goodNextInterval),
-                            "Easy"  to formatDays(easyNextInterval)
-                        ).forEach { (grade, next) ->
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(
-                                    text = grade,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Center
-                                )
-                                Text(
-                                    text = next,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    textAlign = TextAlign.Center
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Text(
-                    "Estimates use FSRS-6 default weights. Actual intervals vary by card difficulty and review history.",
+                    "Estimates use FSRS-6 default weights. Actual intervals vary by card history.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
