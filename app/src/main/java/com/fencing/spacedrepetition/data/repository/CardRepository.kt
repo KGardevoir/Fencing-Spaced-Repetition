@@ -443,8 +443,6 @@ class CardRepository(
 
     fun getAllSessions(): Flow<List<PracticeSession>> = sessionDao.getAllSessions()
 
-    fun getCompletedSessions(): Flow<List<PracticeSession>> = sessionDao.getCompletedSessions()
-
     // Independent learning state operations
     suspend fun getLearningState(cardId: Long, groupId: Long): CardGroupLearningState? =
         groupDao.getLearningState(cardId, groupId)
@@ -893,11 +891,6 @@ class CardRepository(
             AlgorithmType.SM2 -> "EF:${learningState.sm2EaseFactor},I:${learningState.sm2Interval},R:${learningState.sm2Repetitions}"
         }
     }
-
-    // Review log operations
-    fun getReviewLogsByCard(cardId: Long): Flow<List<ReviewLog>> = reviewLogDao.getReviewLogsByCard(cardId)
-
-    fun getAllReviewLogs(): Flow<List<ReviewLog>> = reviewLogDao.getAllReviewLogs()
 
     /**
      * Randomize cards by grouping them into time buckets of the given size.
