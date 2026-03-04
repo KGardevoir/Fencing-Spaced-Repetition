@@ -138,6 +138,10 @@ fun AddEditCardScreen(
     var fsrsElapsedDays by remember { mutableStateOf(cardToEdit?.fsrsElapsedDays?.toString() ?: "0") }
     var fsrsScheduledDays by remember { mutableStateOf(cardToEdit?.fsrsScheduledDays?.toString() ?: "0") }
 
+    // Track the last grade applied via the grade buttons (null = none yet); used to log history on save
+    var appliedGrade by remember { mutableStateOf<Grade?>(null) }
+    var appliedGradeGroupId by remember { mutableStateOf<Long?>(null) }
+
     // Track per-group next review dates for instant UI updates after grading
     var groupNextReviews by remember(learningStates) {
         mutableStateOf(
@@ -486,6 +490,8 @@ fun AddEditCardScreen(
                                                 sm2Repetitions = updated.sm2Repetitions.toString()
                                                 lastReview = updated.lastReview
                                                 nextReview = updated.nextReview
+                                                appliedGrade = grade
+                                                appliedGradeGroupId = null
                                                 isDirty = true
                                                 scope.launch {
                                                     val dateStr = SimpleDateFormat("MMM dd", Locale.getDefault())
@@ -546,6 +552,8 @@ fun AddEditCardScreen(
                                                             sm2Repetitions = updated.sm2Repetitions.toString()
                                                         ))
                                                         groupNextReviews = groupNextReviews + (group.id to updated.nextReview)
+                                                        appliedGrade = grade
+                                                        appliedGradeGroupId = group.id
                                                         isDirty = true
                                                         scope.launch {
                                                             val dateStr = SimpleDateFormat("MMM dd", Locale.getDefault())
@@ -916,6 +924,11 @@ fun AddEditCardScreen(
                                 updatedCard,
                                 groupIds = selectedGroupIds.toList(),
                                 onSuccess = {
+                                    // Record a history entry if a grade was applied via the grade buttons
+                                    val grade = appliedGrade
+                                    if (grade != null && cardToEdit != null) {
+                                        viewModel.recordGradeFromEdit(cardToEdit, updatedCard, grade, appliedGradeGroupId)
+                                    }
                                     // Save independent learning state changes
                                     independentLearningEdits.forEach { (groupId, edit) ->
                                         val existingState = learningStates.find { it.groupId == groupId }

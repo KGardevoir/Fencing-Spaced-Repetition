@@ -81,7 +81,7 @@ object CardImportExport {
     private const val GROUP_SETTINGS_PREFIX = "#GROUP_SETTINGS:"
     private const val REVIEW_HISTORY_START = "#REVIEW_HISTORY_START"
     private const val REVIEW_HISTORY_END = "#REVIEW_HISTORY_END"
-    private const val REVIEW_HISTORY_HEADERS = "#CardQuestion\tReviewTime\tGrade\tAlgorithm\tStateBefore\tStateAfter\tScheduledDays\tElapsedDays"
+    private const val REVIEW_HISTORY_HEADERS = "#CardQuestion\tReviewTime\tGrade\tAlgorithm\tStateBefore\tStateAfter\tScheduledDays\tElapsedDays\tGroupName"
 
     // Column indices for V1 export format
     private const val COL_V1_QUESTION = 0
@@ -564,6 +564,8 @@ object CardImportExport {
                         append(log.scheduledDays)
                         append(DELIMITER)
                         append(log.elapsedDays)
+                        append(DELIMITER)
+                        append(log.groupName ?: "")
                     }
                     writer.write(line)
                     writer.newLine()
@@ -978,7 +980,8 @@ object CardImportExport {
         val stateBefore: String,
         val stateAfter: String,
         val scheduledDays: Int,
-        val elapsedDays: Int
+        val elapsedDays: Int,
+        val groupName: String? = null
     )
 
     /**
@@ -1010,7 +1013,8 @@ object CardImportExport {
                     stateBefore = unescapeNewlines(parts[4]),
                     stateAfter = unescapeNewlines(parts[5]),
                     scheduledDays = parts[6].toInt(),
-                    elapsedDays = parts[7].toInt()
+                    elapsedDays = parts[7].toInt(),
+                    groupName = parts.getOrNull(8)?.let { it.ifEmpty { null } }
                 )
             } catch (e: Exception) {
                 null
@@ -1037,7 +1041,8 @@ object CardImportExport {
                 stateBefore = p.stateBefore,
                 stateAfter = p.stateAfter,
                 scheduledDays = p.scheduledDays,
-                elapsedDays = p.elapsedDays
+                elapsedDays = p.elapsedDays,
+                groupName = p.groupName
             )
         }
     }

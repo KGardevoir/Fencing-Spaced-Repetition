@@ -18,7 +18,8 @@ class ReviewHistoryImportExportTest {
         stateBefore: String = "NEW",
         stateAfter: String = "LEARNING",
         scheduledDays: Int = 1,
-        elapsedDays: Int = 0
+        elapsedDays: Int = 0,
+        groupName: String? = null
     ) = ReviewLog(
         id = 0,
         cardId = cardId,
@@ -29,7 +30,8 @@ class ReviewHistoryImportExportTest {
         stateBefore = stateBefore,
         stateAfter = stateAfter,
         scheduledDays = scheduledDays,
-        elapsedDays = elapsedDays
+        elapsedDays = elapsedDays,
+        groupName = groupName
     )
 
     private fun makeCard(id: Long, question: String, answer: String = "Answer") = Card(
@@ -501,5 +503,137 @@ class ReviewHistoryImportExportTest {
         assertEquals(3, entities.size)
         val grades = entities.map { it.grade }.sorted()
         assertEquals(listOf(0, 0, 3), grades)
+    }
+
+    // ==================== groupName field TESTS ====================
+
+    @Test
+    fun `parseReviewHistory - reads groupName column when present`() {
+        val lines = listOf(
+            "#REVIEW_HISTORY_START",
+            "#CardQuestion\tReviewTime\tGrade\tAlgorithm\tStateBefore\tStateAfter\tScheduledDays\tElapsedDays\tGroupName",
+            "Card One\t1000\t3\tFSRS\tNEW\tLEARNING\t1\t0\tSword Basics",
+            "#REVIEW_HISTORY_END"
+        )
+        val result = CardImportExport.parseReviewHistory(lines)
+        assertEquals(1, result.size)
+        assertEquals("Sword Basics", result[0].groupName)
+    }
+
+    @Test
+    fun `parseReviewHistory - groupName is null when column is empty`() {
+        val lines = listOf(
+            "#REVIEW_HISTORY_START",
+            "Card One\t1000\t3\tFSRS\tNEW\tLEARNING\t1\t0\t",
+            "#REVIEW_HISTORY_END"
+        )
+        val result = CardImportExport.parseReviewHistory(lines)
+        assertEquals(1, result.size)
+        assertNull(result[0].groupName)
+    }
+
+    @Test
+    fun `parseReviewHistory - groupName is null when column is absent (old format)`() {
+        val lines = listOf(
+            "#REVIEW_HISTORY_START",
+            "Card One\t1000\t3\tFSRS\tNEW\tLEARNING\t1\t0",
+            "#REVIEW_HISTORY_END"
+        )
+        val result = CardImportExport.parseReviewHistory(lines)
+        assertEquals(1, result.size)
+        assertNull(result[0].groupName)
+    }
+
+    @Test
+    fun `parseReviewHistory - card_edit source is read correctly`() {
+        val lines = listOf(
+            "#REVIEW_HISTORY_START",
+            "Card One\t1000\t3\tFSRS\tNEW\tLEARNING\t1\t0\tcard_edit",
+            "#REVIEW_HISTORY_END"
+        )
+        val result = CardImportExport.parseReviewHistory(lines)
+        assertEquals(1, result.size)
+        assertEquals("card_edit", result[0].groupName)
+    }
+
+    @Test
+    fun `round-trip - groupName is preserved for group practice log`() {
+        val cardId = 20L
+        val cardQuestion = "Lunge with extension"
+        val log = makeReviewLog(cardId, grade = 3, reviewTime = 5000L, groupName = "Footwork Group")
+
+        val card = makeCard(cardId, cardQuestion)
+        val output = ByteArrayOutputStream()
+        CardImportExport.exportCardsWithGroupStates(
+            listOf(CardWithGroupStates(card, emptyList(), emptyMap())),
+            output,
+            reviewLogs = listOf(log),
+            cardQuestions = mapOf(cardId to cardQuestion)
+        )
+
+        val input = ByteArrayInputStream(output.toByteArray())
+        CardImportExport.parseCards(input)
+
+        assertEquals(1, CardImportExport.lastParsedReviewHistory.size)
+        assertEquals("Footwork Group", CardImportExport.lastParsedReviewHistory[0].groupName)
+
+        val entities = CardImportExport.parsedReviewLogsToEntities(
+            CardImportExport.lastParsedReviewHistory,
+            mapOf(cardQuestion to cardId)
+        )
+        assertEquals("Footwork Group", entities[0].groupName)
+    }
+
+    @Test
+    fun `round-trip - null groupName (all-cards practice) is preserved`() {
+        val cardId = 21L
+        val cardQuestion = "Basic guard position"
+        val log = makeReviewLog(cardId, grade = 4, reviewTime = 6000L, groupName = null)
+
+        val card = makeCard(cardId, cardQuestion)
+        val output = ByteArrayOutputStream()
+        CardImportExport.exportCardsWithGroupStates(
+            listOf(CardWithGroupStates(card, emptyList(), emptyMap())),
+            output,
+            reviewLogs = listOf(log),
+            cardQuestions = mapOf(cardId to cardQuestion)
+        )
+
+        val input = ByteArrayInputStream(output.toByteArray())
+        CardImportExport.parseCards(input)
+
+        assertEquals(1, CardImportExport.lastParsedReviewHistory.size)
+        assertNull(CardImportExport.lastParsedReviewHistory[0].groupName)
+
+        val entities = CardImportExport.parsedReviewLogsToEntities(
+            CardImportExport.lastParsedReviewHistory,
+            mapOf(cardQuestion to cardId)
+        )
+        assertNull(entities[0].groupName)
+    }
+
+    @Test
+    fun `round-trip - card_edit groupName is preserved through export and import`() {
+        val cardId = 22L
+        val cardQuestion = "Advanced footwork"
+        val log = makeReviewLog(cardId, grade = 2, reviewTime = 7000L, groupName = "card_edit")
+
+        val card = makeCard(cardId, cardQuestion)
+        val output = ByteArrayOutputStream()
+        CardImportExport.exportCardsWithGroupStates(
+            listOf(CardWithGroupStates(card, emptyList(), emptyMap())),
+            output,
+            reviewLogs = listOf(log),
+            cardQuestions = mapOf(cardId to cardQuestion)
+        )
+
+        val input = ByteArrayInputStream(output.toByteArray())
+        CardImportExport.parseCards(input)
+
+        val entities = CardImportExport.parsedReviewLogsToEntities(
+            CardImportExport.lastParsedReviewHistory,
+            mapOf(cardQuestion to cardId)
+        )
+        assertEquals("card_edit", entities[0].groupName)
     }
 }

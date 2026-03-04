@@ -12,6 +12,8 @@ import java.util.Calendar
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
+const val GROUP_NAME_CARD_EDIT = "card_edit"
+
 class CardRepository(
     private val cardDao: CardDao,
     private val sessionDao: PracticeSessionDao,
@@ -155,6 +157,29 @@ class CardRepository(
 
     suspend fun importReviewLogs(reviewLogs: List<ReviewLog>) {
         reviewLogDao.insertReviewLogs(reviewLogs)
+    }
+
+    /**
+     * Records a review log entry for a grade applied from the Add/Edit card screen.
+     * Does not update card state (the caller is responsible for that via updateCard).
+     */
+    suspend fun logGradeFromEdit(cardBefore: Card, cardAfter: Card, grade: Grade, groupId: Long? = null) {
+        val now = System.currentTimeMillis()
+        val elapsedDays = if (cardBefore.lastReview == 0L) 0 else
+            ((now - cardBefore.lastReview) / (1000 * 60 * 60 * 24)).toInt()
+        val groupName = groupId?.let { groupDao.getGroupById(it)?.name }
+        reviewLogDao.insertReviewLog(ReviewLog(
+            cardId = cardBefore.id,
+            sessionId = null,
+            reviewTime = now,
+            grade = grade.value,
+            algorithm = cardBefore.algorithm.name,
+            stateBefore = serializeCardState(cardBefore),
+            stateAfter = serializeCardState(cardAfter),
+            scheduledDays = cardAfter.fsrsScheduledDays,
+            elapsedDays = elapsedDays,
+            groupName = groupName ?: GROUP_NAME_CARD_EDIT
+        ))
     }
 
     // Group-aware card operations
@@ -466,6 +491,8 @@ class CardRepository(
         val elapsedDays = if (card.lastReview == 0L) 0 else
             ((now - card.lastReview) / (1000 * 60 * 60 * 24)).toInt()
 
+        val groupName = groupId?.let { groupDao.getGroupById(it)?.name }
+
         if (grade == Grade.SKIP) {
             val stateBefore = serializeCardState(card)
             reviewLogDao.insertReviewLog(ReviewLog(
@@ -477,7 +504,8 @@ class CardRepository(
                 stateBefore = stateBefore,
                 stateAfter = stateBefore,
                 scheduledDays = card.fsrsScheduledDays,
-                elapsedDays = elapsedDays
+                elapsedDays = elapsedDays,
+                groupName = groupName
             ))
             return card
         }
@@ -497,7 +525,8 @@ class CardRepository(
             stateBefore = serializeCardState(card),
             stateAfter = serializeCardState(updatedCard),
             scheduledDays = updatedCard.fsrsScheduledDays,
-            elapsedDays = elapsedDays
+            elapsedDays = elapsedDays,
+            groupName = groupName
         )
 
         reviewLogDao.insertReviewLog(reviewLog)
@@ -538,7 +567,8 @@ class CardRepository(
                 stateBefore = stateBefore,
                 stateAfter = stateBefore,
                 scheduledDays = learningState.fsrsScheduledDays,
-                elapsedDays = elapsedDays
+                elapsedDays = elapsedDays,
+                groupName = group.name
             ))
             return card
         }
@@ -558,7 +588,8 @@ class CardRepository(
             stateBefore = serializeLearningState(learningState, card.algorithm),
             stateAfter = serializeLearningState(updatedState, card.algorithm),
             scheduledDays = updatedState.fsrsScheduledDays,
-            elapsedDays = elapsedDays
+            elapsedDays = elapsedDays,
+            groupName = group.name
         )
 
         reviewLogDao.insertReviewLog(reviewLog)

@@ -361,6 +361,17 @@ class CardViewModel(
         }
     }
 
+    /** Records a review log for a grade applied from the Add/Edit card screen, without updating card state. */
+    fun recordGradeFromEdit(cardBefore: Card, cardAfter: Card, grade: Grade, groupId: Long? = null) {
+        viewModelScope.launch {
+            try {
+                repository.logGradeFromEdit(cardBefore, cardAfter, grade, groupId)
+            } catch (e: Exception) {
+                // Non-fatal: history logging should not break the save flow
+            }
+        }
+    }
+
     /** Compute the result of grading a card without persisting. Used for staged Quick Grade. */
     fun computeGradeCard(cardId: Long, grade: Grade, groupId: Long? = null, onComplete: (Card) -> Unit = {}) {
         viewModelScope.launch {
