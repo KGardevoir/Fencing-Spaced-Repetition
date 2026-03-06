@@ -27,5 +27,9 @@ data class ReviewLog(
 
     // Source context: null = all-cards practice, group name = within-group practice,
     // "card_edit" = graded from the Add/Edit card screen
-    val groupName: String? = null
+    val groupName: String? = null,
+
+    // User notes (markdown) and attached images for this review
+    val notes: String = "",
+    val imagePaths: String = "" // Comma-separated file paths
 )

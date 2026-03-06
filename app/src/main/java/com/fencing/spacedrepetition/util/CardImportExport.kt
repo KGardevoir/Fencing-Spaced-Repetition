@@ -81,7 +81,7 @@ object CardImportExport {
     private const val GROUP_SETTINGS_PREFIX = "#GROUP_SETTINGS:"
     private const val REVIEW_HISTORY_START = "#REVIEW_HISTORY_START"
     private const val REVIEW_HISTORY_END = "#REVIEW_HISTORY_END"
-    private const val REVIEW_HISTORY_HEADERS = "#CardQuestion\tReviewTime\tGrade\tAlgorithm\tStateBefore\tStateAfter\tScheduledDays\tElapsedDays\tGroupName"
+    private const val REVIEW_HISTORY_HEADERS = "#CardQuestion\tReviewTime\tGrade\tAlgorithm\tStateBefore\tStateAfter\tScheduledDays\tElapsedDays\tGroupName\tNotes\tImagePaths"
 
     // Column indices for V1 export format
     private const val COL_V1_QUESTION = 0
@@ -548,26 +548,7 @@ object CardImportExport {
                 writer.newLine()
                 reviewLogs.forEach { log ->
                     val question = cardQuestions[log.cardId] ?: return@forEach
-                    val line = buildString {
-                        append(escapeNewlines(question))
-                        append(DELIMITER)
-                        append(log.reviewTime)
-                        append(DELIMITER)
-                        append(log.grade)
-                        append(DELIMITER)
-                        append(log.algorithm)
-                        append(DELIMITER)
-                        append(escapeNewlines(log.stateBefore))
-                        append(DELIMITER)
-                        append(escapeNewlines(log.stateAfter))
-                        append(DELIMITER)
-                        append(log.scheduledDays)
-                        append(DELIMITER)
-                        append(log.elapsedDays)
-                        append(DELIMITER)
-                        append(log.groupName ?: "")
-                    }
-                    writer.write(line)
+                    writer.write(buildReviewLogLine(log, question))
                     writer.newLine()
                 }
                 writer.write(REVIEW_HISTORY_END)
@@ -864,19 +845,19 @@ object CardImportExport {
      * Decodes base64 string and saves to internal storage
      * Returns the saved file path or null if failed
      */
-    fun decodeImageFromBase64(context: Context, base64Data: String): String? {
+    fun decodeImageFromBase64(context: Context, base64Data: String, subDir: String = "card_images"): String? {
         return try {
             val bytes = java.util.Base64.getDecoder().decode(base64Data)
 
             // Create images directory if it doesn't exist
-            val imagesDir = File(context.filesDir, "card_images")
+            val imagesDir = File(context.filesDir, subDir)
             if (!imagesDir.exists()) {
                 imagesDir.mkdirs()
             }
 
             // Generate unique filename
             val timestamp = System.currentTimeMillis()
-            val fileName = "card_image_${timestamp}.jpg"
+            val fileName = "${subDir}_${timestamp}.jpg"
             val outputFile = File(imagesDir, fileName)
 
             // Write file
@@ -942,29 +923,42 @@ object CardImportExport {
             writer.newLine()
             reviewLogs.forEach { log ->
                 val question = cardQuestions[log.cardId] ?: return@forEach
-                val line = buildString {
-                    append(escapeNewlines(question))
-                    append(DELIMITER)
-                    append(log.reviewTime)
-                    append(DELIMITER)
-                    append(log.grade)
-                    append(DELIMITER)
-                    append(log.algorithm)
-                    append(DELIMITER)
-                    append(escapeNewlines(log.stateBefore))
-                    append(DELIMITER)
-                    append(escapeNewlines(log.stateAfter))
-                    append(DELIMITER)
-                    append(log.scheduledDays)
-                    append(DELIMITER)
-                    append(log.elapsedDays)
-                }
-                writer.write(line)
+                writer.write(buildReviewLogLine(log, question))
                 writer.newLine()
             }
             writer.write(REVIEW_HISTORY_END)
             writer.newLine()
             writer.flush()
+        }
+    }
+
+    private fun buildReviewLogLine(log: ReviewLog, question: String): String {
+        return buildString {
+            append(escapeNewlines(question))
+            append(DELIMITER)
+            append(log.reviewTime)
+            append(DELIMITER)
+            append(log.grade)
+            append(DELIMITER)
+            append(log.algorithm)
+            append(DELIMITER)
+            append(escapeNewlines(log.stateBefore))
+            append(DELIMITER)
+            append(escapeNewlines(log.stateAfter))
+            append(DELIMITER)
+            append(log.scheduledDays)
+            append(DELIMITER)
+            append(log.elapsedDays)
+            append(DELIMITER)
+            append(log.groupName ?: "")
+            append(DELIMITER)
+            append(escapeNewlines(log.notes))
+            append(DELIMITER)
+            // Encode review-log images as base64, pipe-separated
+            val encodedImages = log.imagePaths.split(",")
+                .filter { it.isNotBlank() }
+                .mapNotNull { encodeImageToBase64(it) }
+            append(encodedImages.joinToString("|"))
         }
     }
 
@@ -981,7 +975,9 @@ object CardImportExport {
         val stateAfter: String,
         val scheduledDays: Int,
         val elapsedDays: Int,
-        val groupName: String? = null
+        val groupName: String? = null,
+        val notes: String = "",
+        val imageData: List<String> = emptyList() // base64-encoded images
     )
 
     /**
@@ -1005,6 +1001,12 @@ object CardImportExport {
             val parts = trimmed.split(DELIMITER)
             if (parts.size < 8) return@mapNotNull null
             try {
+                val imageDataRaw = parts.getOrNull(10)?.trim() ?: ""
+                val imageData = if (imageDataRaw.isNotEmpty()) {
+                    imageDataRaw.split("|").filter { it.isNotEmpty() }
+                } else {
+                    emptyList()
+                }
                 ParsedReviewLog(
                     cardQuestion = unescapeNewlines(parts[0]),
                     reviewTime = parts[1].toLong(),
@@ -1014,7 +1016,9 @@ object CardImportExport {
                     stateAfter = unescapeNewlines(parts[5]),
                     scheduledDays = parts[6].toInt(),
                     elapsedDays = parts[7].toInt(),
-                    groupName = parts.getOrNull(8)?.let { it.ifEmpty { null } }
+                    groupName = parts.getOrNull(8)?.let { it.ifEmpty { null } },
+                    notes = parts.getOrNull(9)?.let { unescapeNewlines(it) } ?: "",
+                    imageData = imageData
                 )
             } catch (e: Exception) {
                 null
@@ -1025,6 +1029,40 @@ object CardImportExport {
     /**
      * Converts ParsedReviewLogs to ReviewLog entities using a question->cardId map.
      * Skips logs for cards not found in the map.
+     * Decodes base64 images and saves them to internal storage.
+     */
+    fun parsedReviewLogsToEntities(
+        context: Context,
+        parsed: List<ParsedReviewLog>,
+        questionToCardId: Map<String, Long>
+    ): List<ReviewLog> {
+        return parsed.mapNotNull { p ->
+            val cardId = questionToCardId[p.cardQuestion] ?: return@mapNotNull null
+            // Decode base64 images for review log notes
+            val decodedImagePaths = p.imageData.mapNotNull { base64 ->
+                decodeImageFromBase64(context, base64, "review_images")
+            }
+            ReviewLog(
+                cardId = cardId,
+                sessionId = null,
+                reviewTime = p.reviewTime,
+                grade = p.grade,
+                algorithm = p.algorithm,
+                stateBefore = p.stateBefore,
+                stateAfter = p.stateAfter,
+                scheduledDays = p.scheduledDays,
+                elapsedDays = p.elapsedDays,
+                groupName = p.groupName,
+                notes = p.notes,
+                imagePaths = decodedImagePaths.joinToString(",")
+            )
+        }
+    }
+
+    /**
+     * Converts ParsedReviewLogs to ReviewLog entities using a question->cardId map.
+     * Skips logs for cards not found in the map.
+     * Does not decode images (legacy overload for backward compatibility).
      */
     fun parsedReviewLogsToEntities(
         parsed: List<ParsedReviewLog>,
@@ -1042,7 +1080,8 @@ object CardImportExport {
                 stateAfter = p.stateAfter,
                 scheduledDays = p.scheduledDays,
                 elapsedDays = p.elapsedDays,
-                groupName = p.groupName
+                groupName = p.groupName,
+                notes = p.notes
             )
         }
     }

@@ -4,11 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.Grade
+import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.model.SessionCard
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
@@ -22,11 +24,17 @@ class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
     private val _currentCardIndex = MutableStateFlow(0)
     val currentCardIndex: StateFlow<Int> = _currentCardIndex.asStateFlow()
 
+    /** Review logs created during this session, available after grading for adding notes. */
+    private val _sessionReviewLogs = MutableStateFlow<List<ReviewLog>>(emptyList())
+    val sessionReviewLogs: StateFlow<List<ReviewLog>> = _sessionReviewLogs.asStateFlow()
+
     private var sessionId: Long? = null
     private var selectedGroupId: Long? = null
+    private var sessionStartTime: Long = 0L
 
     fun startNewSession(numberOfCards: Int = 3, groupId: Long? = null) {
         selectedGroupId = groupId
+        sessionStartTime = System.currentTimeMillis()
         viewModelScope.launch {
             _uiState.value = PracticeUiState.Loading
 
@@ -153,7 +161,7 @@ class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
         }
     }
 
-    fun submitGrades(onComplete: () -> Unit) {
+    fun submitGrades() {
         viewModelScope.launch {
             _uiState.value = PracticeUiState.Submitting
 
@@ -187,19 +195,43 @@ class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
                     repository.completeSession(id, cards.mapNotNull { it.grade })
                 }
 
-                _uiState.value = PracticeUiState.Completed
-                onComplete()
+                // Fetch the review logs created for this session so the user can add notes
+                val sid = sessionId
+                if (sid != null) {
+                    val logs = repository.getReviewLogsBySession(sid).first()
+                    _sessionReviewLogs.value = logs
+                }
+
+                _uiState.value = PracticeUiState.AddingNotes(sessionStartTime)
             } catch (e: Exception) {
                 _uiState.value = PracticeUiState.Error(e.message ?: "Failed to submit grades")
             }
         }
     }
 
+    fun updateReviewLogNotes(reviewLogId: Long, notes: String, imagePaths: List<String>) {
+        viewModelScope.launch {
+            val logs = _sessionReviewLogs.value.toMutableList()
+            val index = logs.indexOfFirst { it.id == reviewLogId }
+            if (index >= 0) {
+                val updated = logs[index].copy(
+                    notes = notes,
+                    imagePaths = imagePaths.joinToString(",")
+                )
+                repository.updateReviewLog(updated)
+                logs[index] = updated
+                _sessionReviewLogs.value = logs
+            }
+        }
+    }
+
     fun resetSession() {
         _sessionCards.value = emptyList()
+        _sessionReviewLogs.value = emptyList()
         _currentCardIndex.value = 0
         sessionId = null
         selectedGroupId = null
+        sessionStartTime = 0L
         _uiState.value = PracticeUiState.Loading
     }
 }
@@ -209,6 +241,8 @@ sealed class PracticeUiState {
     object Practicing : PracticeUiState()
     object ReadyToGrade : PracticeUiState()
     object Submitting : PracticeUiState()
+    /** Grades submitted; user can optionally add notes/images to review logs. */
+    data class AddingNotes(val practiceStartTime: Long) : PracticeUiState()
     object Completed : PracticeUiState()
     object NoCards : PracticeUiState()
     data class Error(val message: String) : PracticeUiState()

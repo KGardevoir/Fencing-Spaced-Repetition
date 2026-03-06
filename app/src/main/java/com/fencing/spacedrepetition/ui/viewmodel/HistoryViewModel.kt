@@ -6,6 +6,7 @@ import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 
 data class ReviewLogWithCard(
     val reviewLog: ReviewLog,
@@ -62,4 +63,15 @@ class HistoryViewModel(
 
     fun getReviewLogsForCard(cardId: Long): Flow<List<ReviewLog>> =
         repository.getReviewLogsByCard(cardId)
+
+    fun updateReviewLogNotes(reviewLog: ReviewLog, notes: String, imagePaths: List<String>) {
+        viewModelScope.launch {
+            repository.updateReviewLog(
+                reviewLog.copy(
+                    notes = notes,
+                    imagePaths = imagePaths.joinToString(",")
+                )
+            )
+        }
+    }
 }
