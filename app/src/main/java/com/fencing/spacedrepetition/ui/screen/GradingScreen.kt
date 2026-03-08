@@ -149,6 +149,9 @@ fun GradingScreen(
                                             cardNumber = index + 1,
                                             onGradeSelected = { grade ->
                                                 viewModel.updateGrade(index, grade)
+                                            },
+                                            onNotesChanged = { notes, images ->
+                                                viewModel.updateNotes(index, notes, images)
                                             }
                                         )
                                     }
@@ -495,9 +498,30 @@ fun ReviewLogNoteEditor(
 fun GradingCardItem(
     sessionCard: SessionCard,
     cardNumber: Int,
-    onGradeSelected: (Grade) -> Unit
+    onGradeSelected: (Grade) -> Unit,
+    onNotesChanged: (String, List<String>) -> Unit
 ) {
+    val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
+    var notesExpanded by remember { mutableStateOf(false) }
+    var notesValue by remember(sessionCard.card.id) {
+        mutableStateOf(TextFieldValue(sessionCard.notes))
+    }
+    var noteImages by remember(sessionCard.card.id) {
+        mutableStateOf(sessionCard.noteImagePaths)
+    }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            val savedPath = saveImageToInternalStorage(context, it, "review_images")
+            if (savedPath != null) {
+                noteImages = noteImages + savedPath
+                onNotesChanged(notesValue.text, noteImages)
+            }
+        }
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -595,6 +619,83 @@ fun GradingCardItem(
                         onClick = { onGradeSelected(grade) },
                         modifier = Modifier.weight(1f)
                     )
+                }
+            }
+
+            // Notes section
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider()
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Notes",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                IconButton(onClick = { notesExpanded = !notesExpanded }) {
+                    Icon(
+                        imageVector = if (notesExpanded) Icons.Default.ExpandLess
+                            else if (sessionCard.notes.isNotBlank() || sessionCard.noteImagePaths.isNotEmpty()) Icons.Default.EditNote
+                            else Icons.Default.NoteAdd,
+                        contentDescription = if (notesExpanded) "Collapse notes" else "Add notes"
+                    )
+                }
+            }
+
+            // Show note preview when collapsed
+            if (!notesExpanded && (sessionCard.notes.isNotBlank() || sessionCard.noteImagePaths.isNotEmpty())) {
+                if (sessionCard.notes.isNotBlank()) {
+                    MarkdownText(
+                        text = sessionCard.notes,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                }
+                if (sessionCard.noteImagePaths.isNotEmpty()) {
+                    CardImagesDisplay(
+                        imagePaths = sessionCard.noteImagePaths,
+                        modifier = Modifier.fillMaxWidth(),
+                        maxHeight = 80
+                    )
+                }
+            }
+
+            // Expanded notes editor
+            if (notesExpanded) {
+                MarkdownDescriptionField(
+                    value = notesValue,
+                    onValueChange = {
+                        notesValue = it
+                        onNotesChanged(it.text, noteImages)
+                    },
+                    label = "Notes",
+                    minLines = 2,
+                    maxLines = 5
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (noteImages.isNotEmpty()) {
+                    CardImagesEdit(
+                        imagePaths = noteImages,
+                        onRemoveImage = { path ->
+                            noteImages = noteImages - path
+                            onNotesChanged(notesValue.text, noteImages)
+                        },
+                        maxHeight = 100
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                OutlinedButton(
+                    onClick = { imagePickerLauncher.launch("image/*") }
+                ) {
+                    Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Add Image")
                 }
             }
         }

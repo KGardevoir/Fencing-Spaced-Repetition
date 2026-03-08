@@ -110,6 +110,14 @@ class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
         }
     }
 
+    fun updateNotes(cardIndex: Int, notes: String, imagePaths: List<String>) {
+        val cards = _sessionCards.value.toMutableList()
+        if (cardIndex in cards.indices) {
+            cards[cardIndex] = cards[cardIndex].copy(notes = notes, noteImagePaths = imagePaths)
+            _sessionCards.value = cards
+        }
+    }
+
     fun updateCardText(cardIndex: Int, question: String, answer: String) {
         viewModelScope.launch {
             val cards = _sessionCards.value.toMutableList()
@@ -199,7 +207,22 @@ class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
                 val sid = sessionId
                 if (sid != null) {
                     val logs = repository.getReviewLogsBySession(sid).first()
-                    _sessionReviewLogs.value = logs
+
+                    // Apply any notes/images that were entered during grading
+                    val updatedLogs = logs.map { log ->
+                        val sessionCard = cards.find { it.card.id == log.cardId }
+                        if (sessionCard != null && (sessionCard.notes.isNotBlank() || sessionCard.noteImagePaths.isNotEmpty())) {
+                            val updated = log.copy(
+                                notes = sessionCard.notes,
+                                imagePaths = sessionCard.noteImagePaths.joinToString(",")
+                            )
+                            repository.updateReviewLog(updated)
+                            updated
+                        } else {
+                            log
+                        }
+                    }
+                    _sessionReviewLogs.value = updatedLogs
                 }
 
                 _uiState.value = PracticeUiState.AddingNotes(sessionStartTime)
