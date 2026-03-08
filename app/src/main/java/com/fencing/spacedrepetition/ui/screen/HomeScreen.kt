@@ -4,6 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.filled.*
@@ -93,10 +95,13 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp),
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            Spacer(modifier = Modifier.height(8.dp))
+
             // App title card
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -104,39 +109,31 @@ fun HomeScreen(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 )
             ) {
-                Column(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 40.dp, horizontal = 32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .padding(horizontal = 24.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = Icons.Default.Sports,
                         contentDescription = null,
-                        modifier = Modifier.size(80.dp),
+                        modifier = Modifier.size(40.dp),
                         tint = MaterialTheme.colorScheme.primary
                     )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Text(
-                        text = "AnkiFlex",
-                        style = MaterialTheme.typography.displaySmall,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Delayed Choice · Spaced Repetition",
-                        style = MaterialTheme.typography.titleMedium,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Practice $cardsPerSession ${if (cardsPerSession == 1) "card" else "cards"}, grade at the end",
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
-                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text(
+                            text = "AnkiFlex",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Text(
+                            text = "Practice $cardsPerSession ${if (cardsPerSession == 1) "card" else "cards"}, grade at the end",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        )
+                    }
                 }
             }
 
@@ -162,138 +159,121 @@ fun HomeScreen(
                 )
             }
 
-            Column(
-                modifier = Modifier.fillMaxSize()
-            ){
-                Spacer(modifier = Modifier.weight(1f))
-
-                // Group selection card
-                if (groups.isNotEmpty()) {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showGroupSelectionDialog = true }
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .padding(16.dp)
-                                .fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Default.Folder,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Practice Group",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = selectedGroup?.name ?: "Select a group",
-                                    style = MaterialTheme.typography.titleMedium
-                                )
-                            }
-                            Text(
-                                text = "$dueForSelectedGroup due",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Icon(
-                                Icons.Default.ArrowDropDown,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-
-
-                // Main actions
-                Button(
-                    onClick = {
-                        practiceViewModel.startNewSession(cardsPerSession, selectedGroup?.id)
-                        onNavigateToPractice()
-                    },
+            // Group selection card
+            if (groups.isNotEmpty()) {
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(72.dp),
-                    enabled = cardsForSelectedGroup >= 1
+                        .clickable { showGroupSelectionDialog = true }
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Folder,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Practice Group",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = selectedGroup?.name ?: "Select a group",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                        Text(
+                            text = "$dueForSelectedGroup due",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(
+                            Icons.Default.ArrowDropDown,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            // Main actions
+            Button(
+                onClick = {
+                    practiceViewModel.startNewSession(cardsPerSession, selectedGroup?.id)
+                    onNavigateToPractice()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(64.dp),
+                enabled = cardsForSelectedGroup >= 1
+            ) {
+                Icon(
+                    Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    modifier = Modifier.size(28.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "Start Practice",
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
+
+            if (cardsForSelectedGroup < 1) {
+                Text(
+                    text = if (totalCards == 0) "Add some cards to get started"
+                    else if (selectedGroup != null) "No cards in ${selectedGroup.name}"
+                    else "No cards available",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onNavigateToCards,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp)
                 ) {
                     Icon(
-                        Icons.Default.PlayArrow,
+                        Icons.AutoMirrored.Filled.LibraryBooks,
                         contentDescription = null,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(20.dp)
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = "Start Practice",
-                        style = MaterialTheme.typography.headlineSmall
-                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = "Cards")
                 }
-
-                if (cardsForSelectedGroup < 1) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = if (totalCards == 0) "Add some cards to get started"
-                        else if (selectedGroup != null) "No cards in ${selectedGroup.name}"
-                        else "No cards available",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                } else {
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                OutlinedButton(
+                    onClick = onNavigateToHistory,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp)
                 ) {
-                    OutlinedButton(
-                        onClick = onNavigateToCards,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(56.dp)
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.LibraryBooks,
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Cards",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
-                    OutlinedButton(
-                        onClick = onNavigateToHistory,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(56.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.History,
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "History",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
+                    Icon(
+                        Icons.Default.History,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = "History")
                 }
-
             }
+
+            Spacer(modifier = Modifier.height(8.dp))
         }
     }
 
