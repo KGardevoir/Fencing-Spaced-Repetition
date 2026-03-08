@@ -25,7 +25,9 @@ data class PracticeSession(
  */
 data class SessionCard(
     val card: Card,
-    val grade: Grade? = null
+    val grade: Grade? = null,
+    val notes: String = "",
+    val noteImagePaths: List<String> = emptyList()
 )
 
 enum class Grade(val value: Int, val label: String) {

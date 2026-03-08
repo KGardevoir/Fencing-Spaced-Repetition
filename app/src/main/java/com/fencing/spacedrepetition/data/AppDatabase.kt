@@ -20,7 +20,7 @@ import com.fencing.spacedrepetition.data.model.ReviewLog
 
 @Database(
     entities = [Card::class, PracticeSession::class, ReviewLog::class, Group::class, CardGroupCrossRef::class, CardGroupLearningState::class],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -161,6 +161,14 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Add notes and imagePaths columns to review_logs for history annotations
+                db.execSQL("ALTER TABLE `review_logs` ADD COLUMN `notes` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `review_logs` ADD COLUMN `imagePaths` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -168,7 +176,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "fencing_spaced_repetition_database"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                 INSTANCE = instance

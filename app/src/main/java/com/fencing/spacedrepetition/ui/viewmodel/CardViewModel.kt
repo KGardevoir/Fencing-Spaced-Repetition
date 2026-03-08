@@ -601,7 +601,7 @@ class CardViewModel(
                         val questionToCardId = repository.getAllCardsSync()
                             .associate { it.question to it.id }
                         val reviewLogs = CardImportExport.parsedReviewLogsToEntities(
-                            parsedReviewHistory, questionToCardId
+                            getApplication(), parsedReviewHistory, questionToCardId
                         )
                         if (reviewLogs.isNotEmpty()) {
                             repository.importReviewLogs(reviewLogs)

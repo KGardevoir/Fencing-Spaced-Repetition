@@ -62,7 +62,8 @@ fun MarkdownDescriptionField(
     label: String = "Description",
     minLines: Int = 3,
     maxLines: Int = 8,
-    onFocusChanged: (Boolean) -> Unit = {}
+    onFocusChanged: (Boolean) -> Unit = {},
+    toolbarState: MarkdownToolbarState? = null
 ) {
     var activeTab by remember { mutableStateOf(DescriptionTab.Edit) }
 
@@ -104,12 +105,24 @@ fun MarkdownDescriptionField(
                 DescriptionTab.Edit -> {
                     OutlinedTextField(
                         value = value,
-                        onValueChange = onValueChange,
+                        onValueChange = { newValue ->
+                            onValueChange(newValue)
+                            toolbarState?.onFieldValueChanged(newValue)
+                        },
                         label = { Text(label) },
                         placeholder = { Text("Supports **bold**, *italic*, <u>underline</u>, # headings, - bullets...") },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .onFocusChanged { onFocusChanged(it.isFocused) },
+                            .onFocusChanged { focusState ->
+                                onFocusChanged(focusState.isFocused)
+                                if (toolbarState != null) {
+                                    if (focusState.isFocused) {
+                                        toolbarState.onFieldFocused(value, onValueChange)
+                                    } else {
+                                        toolbarState.onFieldBlurred()
+                                    }
+                                }
+                            },
                         leadingIcon = {
                             Icon(Icons.Default.CheckCircle, contentDescription = null)
                         },

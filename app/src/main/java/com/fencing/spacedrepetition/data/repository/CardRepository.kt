@@ -162,6 +162,10 @@ class CardRepository(
         reviewLogDao.insertReviewLogs(reviewLogs)
     }
 
+    suspend fun updateReviewLog(reviewLog: ReviewLog) {
+        reviewLogDao.updateReviewLog(reviewLog)
+    }
+
     /**
      * Records a review log entry for a grade applied from the Add/Edit card screen.
      * Does not update card state (the caller is responsible for that via updateCard).

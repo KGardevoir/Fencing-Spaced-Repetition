@@ -1,5 +1,8 @@
 package com.fencing.spacedrepetition.ui.screen
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -12,14 +15,25 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.PracticeSession
+import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.repository.GROUP_NAME_CARD_EDIT
+import com.fencing.spacedrepetition.ui.components.CardImagesDisplay
+import com.fencing.spacedrepetition.ui.components.CardImagesEdit
+import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
+import com.fencing.spacedrepetition.ui.components.MarkdownKeyboardToolbar
+import com.fencing.spacedrepetition.ui.components.MarkdownText
+import com.fencing.spacedrepetition.ui.components.MarkdownToolbarState
+import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryItem
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.ReviewLogWithCard
+import com.fencing.spacedrepetition.util.saveImageToInternalStorage
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -30,6 +44,7 @@ fun HistoryScreen(
     onNavigateBack: () -> Unit
 ) {
     val historyItems by viewModel.historyItems.collectAsState()
+    val markdownToolbarState = rememberMarkdownToolbarState()
 
     Scaffold(
         topBar = {
@@ -46,58 +61,71 @@ fun HistoryScreen(
             )
         }
     ) { paddingValues ->
-        if (historyItems.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .imePadding()
+        ) {
+            if (historyItems.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        Icons.Default.History,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                    )
-                    Text(
-                        text = "No practice history yet",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "Complete a practice session to see it here",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                    )
-                }
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(vertical = 16.dp)
-            ) {
-                items(historyItems, key = { item ->
-                    when (item) {
-                        is HistoryItem.Session -> "session-${item.session.id}"
-                        is HistoryItem.QuickGrade -> "quickgrade-${item.log.reviewLog.id}"
-                    }
-                }) { item ->
-                    when (item) {
-                        is HistoryItem.Session -> SessionHistoryCard(
-                            session = item.session,
-                            viewModel = viewModel
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.History,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                         )
-                        is HistoryItem.QuickGrade -> QuickGradeCard(item.log)
+                        Text(
+                            text = "No practice history yet",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "Complete a practice session to see it here",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
                     }
                 }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(vertical = 16.dp)
+                ) {
+                    items(historyItems, key = { item ->
+                        when (item) {
+                            is HistoryItem.Session -> "session-${item.session.id}"
+                            is HistoryItem.QuickGrade -> "quickgrade-${item.log.reviewLog.id}"
+                        }
+                    }) { item ->
+                        when (item) {
+                            is HistoryItem.Session -> SessionHistoryCard(
+                                session = item.session,
+                                viewModel = viewModel,
+                                toolbarState = markdownToolbarState
+                            )
+                            is HistoryItem.QuickGrade -> QuickGradeCard(
+                                logWithCard = item.log,
+                                viewModel = viewModel,
+                                toolbarState = markdownToolbarState
+                            )
+                        }
+                    }
+                }
+
+                // Markdown toolbar pinned above the keyboard
+                MarkdownKeyboardToolbar(markdownToolbarState)
             }
         }
     }
@@ -106,7 +134,8 @@ fun HistoryScreen(
 @Composable
 fun SessionHistoryCard(
     session: PracticeSession,
-    viewModel: HistoryViewModel
+    viewModel: HistoryViewModel,
+    toolbarState: MarkdownToolbarState? = null
 ) {
     var expanded by remember { mutableStateOf(false) }
     val reviewLogs by viewModel.getReviewLogsForSession(session.id).collectAsState(initial = emptyList())
@@ -192,7 +221,11 @@ fun SessionHistoryCard(
                         )
                     } else {
                         reviewLogs.forEach { logWithCard ->
-                            ReviewLogRow(logWithCard = logWithCard)
+                            ReviewLogRow(
+                                logWithCard = logWithCard,
+                                viewModel = viewModel,
+                                toolbarState = toolbarState
+                            )
                         }
                     }
                 }
@@ -203,10 +236,15 @@ fun SessionHistoryCard(
 
 /** A single non-session grade (from the Add/Edit card screen), shown inline in the list. */
 @Composable
-private fun QuickGradeCard(logWithCard: ReviewLogWithCard) {
+private fun QuickGradeCard(
+    logWithCard: ReviewLogWithCard,
+    viewModel: HistoryViewModel,
+    toolbarState: MarkdownToolbarState? = null
+) {
     val log = logWithCard.reviewLog
     val grade = Grade.fromValue(log.grade)
     val dateFormatter = remember { SimpleDateFormat("MMM d, yyyy h:mm a", Locale.getDefault()) }
+    var showNoteEditor by remember { mutableStateOf(false) }
 
     val gradeColor = when (grade) {
         Grade.AGAIN -> MaterialTheme.colorScheme.errorContainer
@@ -231,51 +269,92 @@ private fun QuickGradeCard(logWithCard: ReviewLogWithCard) {
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 
+    val noteImages = remember(log.imagePaths) {
+        log.imagePaths.split(",").filter { it.isNotBlank() }
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Surface(shape = MaterialTheme.shapes.small, color = gradeColor) {
-                Text(
-                    text = gradeLabel,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = gradeContentColor
-                )
-            }
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Surface(shape = MaterialTheme.shapes.small, color = gradeColor) {
+                    Text(
+                        text = gradeLabel,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = gradeContentColor
+                    )
+                }
 
-            Column(modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = logWithCard.cardQuestion,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    val groupLabel = log.groupName?.takeIf { it != GROUP_NAME_CARD_EDIT }
+                    Text(
+                        text = buildString {
+                            append("Quick Grade")
+                            if (groupLabel != null) append(" · $groupLabel")
+                            append(" · ")
+                            append(dateFormatter.format(Date(log.reviewTime)))
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
                 Text(
-                    text = logWithCard.cardQuestion,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                val groupLabel = log.groupName?.takeIf { it != GROUP_NAME_CARD_EDIT }
-                Text(
-                    text = buildString {
-                        append("Quick Grade")
-                        if (groupLabel != null) append(" · $groupLabel")
-                        append(" · ")
-                        append(dateFormatter.format(Date(log.reviewTime)))
-                    },
+                    text = "+${log.scheduledDays}d",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                IconButton(
+                    onClick = { showNoteEditor = !showNoteEditor },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = if (log.notes.isNotBlank() || noteImages.isNotEmpty())
+                            Icons.Default.EditNote else Icons.Default.NoteAdd,
+                        contentDescription = "Edit notes",
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
 
-            Text(
-                text = "+${log.scheduledDays}d",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            // Display existing notes/images inline when not editing
+            if (!showNoteEditor && (log.notes.isNotBlank() || noteImages.isNotEmpty())) {
+                Spacer(modifier = Modifier.height(8.dp))
+                if (log.notes.isNotBlank()) {
+                    MarkdownText(text = log.notes)
+                }
+                if (noteImages.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    CardImagesDisplay(imagePaths = noteImages, maxHeight = 80)
+                }
+            }
+
+            // Note editor
+            AnimatedVisibility(visible = showNoteEditor) {
+                HistoryNoteEditor(
+                    reviewLog = log,
+                    onSave = { notes, images ->
+                        viewModel.updateReviewLogNotes(log, notes, images)
+                        showNoteEditor = false
+                    },
+                    toolbarState = toolbarState
+                )
+            }
         }
     }
 }
@@ -303,72 +382,207 @@ private fun GradeChipIfNonZero(
 }
 
 @Composable
-private fun ReviewLogRow(logWithCard: ReviewLogWithCard) {
+private fun ReviewLogRow(
+    logWithCard: ReviewLogWithCard,
+    viewModel: HistoryViewModel,
+    toolbarState: MarkdownToolbarState? = null
+) {
     val log = logWithCard.reviewLog
     val grade = Grade.fromValue(log.grade)
+    var showNoteEditor by remember { mutableStateOf(false) }
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        val gradeColor = when (grade) {
-            Grade.AGAIN -> MaterialTheme.colorScheme.errorContainer
-            Grade.HARD -> MaterialTheme.colorScheme.tertiaryContainer
-            Grade.GOOD -> MaterialTheme.colorScheme.secondaryContainer
-            Grade.EASY -> MaterialTheme.colorScheme.primaryContainer
-            else -> MaterialTheme.colorScheme.surfaceVariant
-        }
-        val gradeLabel = when (grade) {
-            Grade.AGAIN -> "Again"
-            Grade.HARD -> "Hard"
-            Grade.GOOD -> "Good"
-            Grade.EASY -> "Easy"
-            Grade.SKIP -> "Skip"
-            null -> "?"
-        }
-        val gradeContentColor = when (grade) {
-            Grade.AGAIN -> MaterialTheme.colorScheme.onErrorContainer
-            Grade.HARD -> MaterialTheme.colorScheme.onTertiaryContainer
-            Grade.GOOD -> MaterialTheme.colorScheme.onSecondaryContainer
-            Grade.EASY -> MaterialTheme.colorScheme.onPrimaryContainer
-            else -> MaterialTheme.colorScheme.onSurfaceVariant
-        }
+    val gradeColor = when (grade) {
+        Grade.AGAIN -> MaterialTheme.colorScheme.errorContainer
+        Grade.HARD -> MaterialTheme.colorScheme.tertiaryContainer
+        Grade.GOOD -> MaterialTheme.colorScheme.secondaryContainer
+        Grade.EASY -> MaterialTheme.colorScheme.primaryContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val gradeLabel = when (grade) {
+        Grade.AGAIN -> "Again"
+        Grade.HARD -> "Hard"
+        Grade.GOOD -> "Good"
+        Grade.EASY -> "Easy"
+        Grade.SKIP -> "Skip"
+        null -> "?"
+    }
+    val gradeContentColor = when (grade) {
+        Grade.AGAIN -> MaterialTheme.colorScheme.onErrorContainer
+        Grade.HARD -> MaterialTheme.colorScheme.onTertiaryContainer
+        Grade.GOOD -> MaterialTheme.colorScheme.onSecondaryContainer
+        Grade.EASY -> MaterialTheme.colorScheme.onPrimaryContainer
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
 
-        Surface(
-            shape = MaterialTheme.shapes.small,
-            color = gradeColor,
-            modifier = Modifier.width(52.dp)
+    val noteImages = remember(log.imagePaths) {
+        log.imagePaths.split(",").filter { it.isNotBlank() }
+    }
+
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = gradeLabel,
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                style = MaterialTheme.typography.labelSmall,
-                color = gradeContentColor
-            )
-        }
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = logWithCard.cardQuestion,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            val groupLabel = log.groupName?.takeIf { it != GROUP_NAME_CARD_EDIT }
-            if (groupLabel != null) {
+            Surface(
+                shape = MaterialTheme.shapes.small,
+                color = gradeColor,
+                modifier = Modifier.width(52.dp)
+            ) {
                 Text(
-                    text = groupLabel,
+                    text = gradeLabel,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = gradeContentColor
+                )
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = logWithCard.cardQuestion,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                val groupLabel = log.groupName?.takeIf { it != GROUP_NAME_CARD_EDIT }
+                if (groupLabel != null) {
+                    Text(
+                        text = groupLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Text(
+                text = "+${log.scheduledDays}d",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            IconButton(
+                onClick = { showNoteEditor = !showNoteEditor },
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    imageVector = if (log.notes.isNotBlank() || noteImages.isNotEmpty())
+                        Icons.Default.EditNote else Icons.Default.NoteAdd,
+                    contentDescription = "Edit notes",
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
 
-        Text(
-            text = "+${log.scheduledDays}d",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+        // Display existing notes/images inline when not editing
+        if (!showNoteEditor && (log.notes.isNotBlank() || noteImages.isNotEmpty())) {
+            Spacer(modifier = Modifier.height(4.dp))
+            if (log.notes.isNotBlank()) {
+                MarkdownText(
+                    text = log.notes,
+                    modifier = Modifier.padding(start = 60.dp)
+                )
+            }
+            if (noteImages.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                CardImagesDisplay(
+                    imagePaths = noteImages,
+                    modifier = Modifier.padding(start = 60.dp),
+                    maxHeight = 80
+                )
+            }
+        }
+
+        // Note editor
+        AnimatedVisibility(visible = showNoteEditor) {
+            HistoryNoteEditor(
+                reviewLog = log,
+                onSave = { notes, images ->
+                    viewModel.updateReviewLogNotes(log, notes, images)
+                    showNoteEditor = false
+                },
+                toolbarState = toolbarState
+            )
+        }
+    }
+}
+
+/**
+ * Inline note editor for a review log entry. Supports markdown notes and image attachments.
+ */
+@Composable
+private fun HistoryNoteEditor(
+    reviewLog: ReviewLog,
+    onSave: (String, List<String>) -> Unit,
+    toolbarState: MarkdownToolbarState? = null
+) {
+    val context = LocalContext.current
+    var notesValue by remember(reviewLog.id) {
+        mutableStateOf(TextFieldValue(reviewLog.notes))
+    }
+    var noteImages by remember(reviewLog.id) {
+        mutableStateOf(
+            reviewLog.imagePaths.split(",").filter { it.isNotBlank() }
         )
+    }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            val savedPath = saveImageToInternalStorage(context, it, "review_images")
+            if (savedPath != null) {
+                noteImages = noteImages + savedPath
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+    ) {
+        HorizontalDivider()
+        Spacer(modifier = Modifier.height(8.dp))
+
+        MarkdownDescriptionField(
+            value = notesValue,
+            onValueChange = { notesValue = it },
+            label = "Notes",
+            minLines = 2,
+            maxLines = 5,
+            toolbarState = toolbarState
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (noteImages.isNotEmpty()) {
+            CardImagesEdit(
+                imagePaths = noteImages,
+                onRemoveImage = { path ->
+                    noteImages = noteImages - path
+                },
+                maxHeight = 100
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            OutlinedButton(
+                onClick = { imagePickerLauncher.launch("image/*") }
+            ) {
+                Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Add Image")
+            }
+
+            Button(
+                onClick = { onSave(notesValue.text, noteImages) }
+            ) {
+                Text("Save")
+            }
+        }
     }
 }

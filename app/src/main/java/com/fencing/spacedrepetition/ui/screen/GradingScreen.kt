@@ -1,5 +1,9 @@
 package com.fencing.spacedrepetition.ui.screen
 
+import android.net.Uri
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,14 +17,22 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.SessionCard
 import com.fencing.spacedrepetition.ui.components.CardImagesDisplay
+import com.fencing.spacedrepetition.ui.components.CardImagesEdit
+import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
+import com.fencing.spacedrepetition.ui.components.MarkdownKeyboardToolbar
 import com.fencing.spacedrepetition.ui.components.MarkdownText
+import com.fencing.spacedrepetition.ui.components.MarkdownToolbarState
+import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeUiState
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
+import com.fencing.spacedrepetition.util.saveImageToInternalStorage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,166 +45,192 @@ fun GradingScreen(
     val sessionCards by viewModel.sessionCards.collectAsState()
 
     var showConfirmDialog by remember { mutableStateOf(false) }
+    val markdownToolbarState = rememberMarkdownToolbarState()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Grade Your Performance") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer
-                )
-            )
-        }
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            when (uiState) {
-                is PracticeUiState.Submitting -> {
-                    CircularProgressIndicator(
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                }
+    BackHandler(enabled = uiState !is PracticeUiState.Completed) {
+        onNavigateBack()
+    }
 
-                is PracticeUiState.Error -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Error,
-                            contentDescription = null,
-                            modifier = Modifier.size(64.dp),
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = (uiState as PracticeUiState.Error).message,
-                            style = MaterialTheme.typography.bodyLarge,
-                            textAlign = TextAlign.Center,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
-
-                else -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(16.dp)
-                    ) {
-                        // Instructions
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer
-                            )
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Info,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    text = "Rate each card based on how well you recalled it during practice. Skip cards that couldn't be trained.",
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Cards list
-                        LazyColumn(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            itemsIndexed(sessionCards) { index, sessionCard ->
-                                GradingCardItem(
-                                    sessionCard = sessionCard,
-                                    cardNumber = index + 1,
-                                    onGradeSelected = { grade ->
-                                        viewModel.updateGrade(index, grade)
-                                    }
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Submit button
-                        Button(
-                            onClick = { showConfirmDialog = true },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp),
-                            enabled = sessionCards.all { it.grade != null }
-                        ) {
-                            Icon(Icons.Default.Check, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Submit Grades",
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                        }
-
-                        // Show warning if not all cards graded
-                        if (sessionCards.any { it.grade == null }) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Please grade all cards before submitting",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
-                }
-            }
+    // When completed, invoke callback immediately
+    LaunchedEffect(uiState) {
+        if (uiState is PracticeUiState.Completed) {
+            onComplete()
         }
     }
 
-    // Confirmation dialog
-    if (showConfirmDialog) {
-        AlertDialog(
-            onDismissRequest = { showConfirmDialog = false },
-            icon = { Icon(Icons.Default.CheckCircle, contentDescription = null) },
-            title = { Text("Submit Grades?") },
-            text = {
-                Text("Are you sure you want to submit these grades? This will update your card schedules.")
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showConfirmDialog = false
-                        viewModel.submitGrades(onComplete)
+    if (uiState !is PracticeUiState.Completed) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Grade Your Performance") },
+                    navigationIcon = {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    )
+                )
+            }
+        ) { paddingValues ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .imePadding()
+            ) {
+                when (uiState) {
+                    is PracticeUiState.Submitting -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
                     }
-                ) {
-                    Text("Submit")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showConfirmDialog = false }) {
-                    Text("Cancel")
+
+                    is PracticeUiState.Error -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Error,
+                                contentDescription = null,
+                                modifier = Modifier.size(64.dp),
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = (uiState as PracticeUiState.Error).message,
+                                style = MaterialTheme.typography.bodyLarge,
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+
+                    else -> {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .padding(16.dp)
+                        ) {
+                            // Instructions
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                        text = "Rate each card based on how well you recalled it during practice. Skip cards that couldn't be trained.",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // Cards list
+                            LazyColumn(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                itemsIndexed(sessionCards) { index, sessionCard ->
+                                    GradingCardItem(
+                                        sessionCard = sessionCard,
+                                        cardNumber = index + 1,
+                                        onGradeSelected = { grade ->
+                                            viewModel.updateGrade(index, grade)
+                                        },
+                                        onNotesChanged = { notes, images ->
+                                            viewModel.updateNotes(index, notes, images)
+                                        },
+                                        toolbarState = markdownToolbarState
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // Submit button
+                            Button(
+                                onClick = { showConfirmDialog = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp),
+                                enabled = sessionCards.all { it.grade != null }
+                            ) {
+                                Icon(Icons.Default.Check, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Submit Grades",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+
+                            // Show warning if not all cards graded
+                            if (sessionCards.any { it.grade == null }) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Please grade all cards before submitting",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+
+                        // Markdown toolbar pinned above the keyboard
+                        MarkdownKeyboardToolbar(markdownToolbarState)
+                    }
                 }
             }
-        )
+        }
+
+        // Confirmation dialog
+        if (showConfirmDialog) {
+            AlertDialog(
+                onDismissRequest = { showConfirmDialog = false },
+                icon = { Icon(Icons.Default.CheckCircle, contentDescription = null) },
+                title = { Text("Submit Grades?") },
+                text = {
+                    Text("Are you sure you want to submit these grades? This will update your card schedules.")
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showConfirmDialog = false
+                            viewModel.submitGrades()
+                        }
+                    ) {
+                        Text("Submit")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showConfirmDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -200,9 +238,31 @@ fun GradingScreen(
 fun GradingCardItem(
     sessionCard: SessionCard,
     cardNumber: Int,
-    onGradeSelected: (Grade) -> Unit
+    onGradeSelected: (Grade) -> Unit,
+    onNotesChanged: (String, List<String>) -> Unit,
+    toolbarState: MarkdownToolbarState? = null
 ) {
+    val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
+    var notesExpanded by remember { mutableStateOf(false) }
+    var notesValue by remember(sessionCard.card.id) {
+        mutableStateOf(TextFieldValue(sessionCard.notes))
+    }
+    var noteImages by remember(sessionCard.card.id) {
+        mutableStateOf(sessionCard.noteImagePaths)
+    }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            val savedPath = saveImageToInternalStorage(context, it, "review_images")
+            if (savedPath != null) {
+                noteImages = noteImages + savedPath
+                onNotesChanged(notesValue.text, noteImages)
+            }
+        }
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -300,6 +360,84 @@ fun GradingCardItem(
                         onClick = { onGradeSelected(grade) },
                         modifier = Modifier.weight(1f)
                     )
+                }
+            }
+
+            // Notes section
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider()
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Notes",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                IconButton(onClick = { notesExpanded = !notesExpanded }) {
+                    Icon(
+                        imageVector = if (notesExpanded) Icons.Default.ExpandLess
+                            else if (sessionCard.notes.isNotBlank() || sessionCard.noteImagePaths.isNotEmpty()) Icons.Default.EditNote
+                            else Icons.Default.NoteAdd,
+                        contentDescription = if (notesExpanded) "Collapse notes" else "Add notes"
+                    )
+                }
+            }
+
+            // Show note preview when collapsed
+            if (!notesExpanded && (sessionCard.notes.isNotBlank() || sessionCard.noteImagePaths.isNotEmpty())) {
+                if (sessionCard.notes.isNotBlank()) {
+                    MarkdownText(
+                        text = sessionCard.notes,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                }
+                if (sessionCard.noteImagePaths.isNotEmpty()) {
+                    CardImagesDisplay(
+                        imagePaths = sessionCard.noteImagePaths,
+                        modifier = Modifier.fillMaxWidth(),
+                        maxHeight = 80
+                    )
+                }
+            }
+
+            // Expanded notes editor
+            if (notesExpanded) {
+                MarkdownDescriptionField(
+                    value = notesValue,
+                    onValueChange = {
+                        notesValue = it
+                        onNotesChanged(it.text, noteImages)
+                    },
+                    label = "Notes",
+                    minLines = 2,
+                    maxLines = 5,
+                    toolbarState = toolbarState
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (noteImages.isNotEmpty()) {
+                    CardImagesEdit(
+                        imagePaths = noteImages,
+                        onRemoveImage = { path ->
+                            noteImages = noteImages - path
+                            onNotesChanged(notesValue.text, noteImages)
+                        },
+                        maxHeight = 100
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                OutlinedButton(
+                    onClick = { imagePickerLauncher.launch("image/*") }
+                ) {
+                    Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Add Image")
                 }
             }
         }

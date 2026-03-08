@@ -4,11 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.Grade
+import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.model.SessionCard
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
@@ -22,11 +24,17 @@ class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
     private val _currentCardIndex = MutableStateFlow(0)
     val currentCardIndex: StateFlow<Int> = _currentCardIndex.asStateFlow()
 
+    /** Review logs created during this session, available after grading for adding notes. */
+    private val _sessionReviewLogs = MutableStateFlow<List<ReviewLog>>(emptyList())
+    val sessionReviewLogs: StateFlow<List<ReviewLog>> = _sessionReviewLogs.asStateFlow()
+
     private var sessionId: Long? = null
     private var selectedGroupId: Long? = null
+    private var sessionStartTime: Long = 0L
 
     fun startNewSession(numberOfCards: Int = 3, groupId: Long? = null) {
         selectedGroupId = groupId
+        sessionStartTime = System.currentTimeMillis()
         viewModelScope.launch {
             _uiState.value = PracticeUiState.Loading
 
@@ -102,6 +110,14 @@ class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
         }
     }
 
+    fun updateNotes(cardIndex: Int, notes: String, imagePaths: List<String>) {
+        val cards = _sessionCards.value.toMutableList()
+        if (cardIndex in cards.indices) {
+            cards[cardIndex] = cards[cardIndex].copy(notes = notes, noteImagePaths = imagePaths)
+            _sessionCards.value = cards
+        }
+    }
+
     fun updateCardText(cardIndex: Int, question: String, answer: String) {
         viewModelScope.launch {
             val cards = _sessionCards.value.toMutableList()
@@ -153,7 +169,7 @@ class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
         }
     }
 
-    fun submitGrades(onComplete: () -> Unit) {
+    fun submitGrades() {
         viewModelScope.launch {
             _uiState.value = PracticeUiState.Submitting
 
@@ -187,19 +203,58 @@ class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
                     repository.completeSession(id, cards.mapNotNull { it.grade })
                 }
 
+                // Fetch the review logs created for this session so the user can add notes
+                val sid = sessionId
+                if (sid != null) {
+                    val logs = repository.getReviewLogsBySession(sid).first()
+
+                    // Apply any notes/images that were entered during grading
+                    val updatedLogs = logs.map { log ->
+                        val sessionCard = cards.find { it.card.id == log.cardId }
+                        if (sessionCard != null && (sessionCard.notes.isNotBlank() || sessionCard.noteImagePaths.isNotEmpty())) {
+                            val updated = log.copy(
+                                notes = sessionCard.notes,
+                                imagePaths = sessionCard.noteImagePaths.joinToString(",")
+                            )
+                            repository.updateReviewLog(updated)
+                            updated
+                        } else {
+                            log
+                        }
+                    }
+                    _sessionReviewLogs.value = updatedLogs
+                }
+
                 _uiState.value = PracticeUiState.Completed
-                onComplete()
             } catch (e: Exception) {
                 _uiState.value = PracticeUiState.Error(e.message ?: "Failed to submit grades")
             }
         }
     }
 
+    fun updateReviewLogNotes(reviewLogId: Long, notes: String, imagePaths: List<String>) {
+        viewModelScope.launch {
+            val logs = _sessionReviewLogs.value.toMutableList()
+            val index = logs.indexOfFirst { it.id == reviewLogId }
+            if (index >= 0) {
+                val updated = logs[index].copy(
+                    notes = notes,
+                    imagePaths = imagePaths.joinToString(",")
+                )
+                repository.updateReviewLog(updated)
+                logs[index] = updated
+                _sessionReviewLogs.value = logs
+            }
+        }
+    }
+
     fun resetSession() {
         _sessionCards.value = emptyList()
+        _sessionReviewLogs.value = emptyList()
         _currentCardIndex.value = 0
         sessionId = null
         selectedGroupId = null
+        sessionStartTime = 0L
         _uiState.value = PracticeUiState.Loading
     }
 }

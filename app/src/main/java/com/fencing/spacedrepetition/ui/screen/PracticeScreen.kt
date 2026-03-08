@@ -20,7 +20,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -30,18 +29,12 @@ import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.launch
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.SessionCard
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import com.fencing.spacedrepetition.ui.components.CardImagesDisplay
 import com.fencing.spacedrepetition.ui.components.CardImagesEdit
 import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
+import com.fencing.spacedrepetition.ui.components.MarkdownKeyboardToolbar
 import com.fencing.spacedrepetition.ui.components.MarkdownText
-import com.fencing.spacedrepetition.ui.components.MarkdownToolbar
-import com.fencing.spacedrepetition.ui.components.applyInlineFormat
-import com.fencing.spacedrepetition.ui.components.applyLinePrefix
+import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
 import androidx.compose.ui.text.input.TextFieldValue
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeUiState
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
@@ -565,7 +558,7 @@ fun EditCardDialog(
     var question by remember(card.id) { mutableStateOf(card.question) }
     var answerFieldValue by remember(card.id) { mutableStateOf(TextFieldValue(card.answer)) }
     var imagePaths by remember(card.id) { mutableStateOf(card.imagePaths.toMutableList()) }
-    var isDescriptionFocused by remember { mutableStateOf(false) }
+    val markdownToolbarState = rememberMarkdownToolbarState()
 
     val context = LocalContext.current
 
@@ -618,7 +611,7 @@ fun EditCardDialog(
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 3,
                     maxLines = 6,
-                    onFocusChanged = { isDescriptionFocused = it }
+                    toolbarState = markdownToolbarState
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -687,30 +680,7 @@ fun EditCardDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                val isImeVisible = WindowInsets.isImeVisible
-                val configuration = LocalConfiguration.current
-                val hasPhysicalKeyboard = configuration.keyboard == android.content.res.Configuration.KEYBOARD_QWERTY ||
-                        configuration.keyboard == android.content.res.Configuration.KEYBOARD_12KEY
-                AnimatedVisibility(
-                    visible = isDescriptionFocused && (isImeVisible || hasPhysicalKeyboard),
-                    enter = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(),
-                    exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut()
-                ) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        HorizontalDivider()
-                        MarkdownToolbar(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 4.dp, vertical = 2.dp),
-                            onBold      = { answerFieldValue = applyInlineFormat(answerFieldValue, "**",  "**",   "bold") },
-                            onItalic    = { answerFieldValue = applyInlineFormat(answerFieldValue, "*",   "*",    "italic") },
-                            onUnderline = { answerFieldValue = applyInlineFormat(answerFieldValue, "<u>", "</u>", "underline") },
-                            onCode      = { answerFieldValue = applyInlineFormat(answerFieldValue, "`",   "`",    "code") },
-                            onHeader    = { answerFieldValue = applyLinePrefix(answerFieldValue, "# ") },
-                            onBullet    = { answerFieldValue = applyLinePrefix(answerFieldValue, "- ") }
-                        )
-                    }
-                }
+                MarkdownKeyboardToolbar(markdownToolbarState)
 
                 Spacer(modifier = Modifier.height(16.dp))
 

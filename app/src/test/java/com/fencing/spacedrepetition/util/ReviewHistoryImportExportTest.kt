@@ -19,7 +19,9 @@ class ReviewHistoryImportExportTest {
         stateAfter: String = "LEARNING",
         scheduledDays: Int = 1,
         elapsedDays: Int = 0,
-        groupName: String? = null
+        groupName: String? = null,
+        notes: String = "",
+        imagePaths: String = ""
     ) = ReviewLog(
         id = 0,
         cardId = cardId,
@@ -31,7 +33,9 @@ class ReviewHistoryImportExportTest {
         stateAfter = stateAfter,
         scheduledDays = scheduledDays,
         elapsedDays = elapsedDays,
-        groupName = groupName
+        groupName = groupName,
+        notes = notes,
+        imagePaths = imagePaths
     )
 
     private fun makeCard(id: Long, question: String, answer: String = "Answer") = Card(
@@ -635,5 +639,101 @@ class ReviewHistoryImportExportTest {
             mapOf(cardQuestion to cardId)
         )
         assertEquals("card_edit", entities[0].groupName)
+    }
+
+    // ==================== notes field TESTS ====================
+
+    @Test
+    fun `parseReviewHistory - reads notes column when present`() {
+        val lines = listOf(
+            "#REVIEW_HISTORY_START",
+            "Card One\t1000\t3\tFSRS\tNEW\tLEARNING\t1\t0\t\tGood session today\t",
+            "#REVIEW_HISTORY_END"
+        )
+        val result = CardImportExport.parseReviewHistory(lines)
+        assertEquals(1, result.size)
+        assertEquals("Good session today", result[0].notes)
+        assertTrue(result[0].imageData.isEmpty())
+    }
+
+    @Test
+    fun `parseReviewHistory - notes with newlines are unescaped`() {
+        val lines = listOf(
+            "#REVIEW_HISTORY_START",
+            "Card One\t1000\t3\tFSRS\tNEW\tLEARNING\t1\t0\t\tLine one<br>Line two\t",
+            "#REVIEW_HISTORY_END"
+        )
+        val result = CardImportExport.parseReviewHistory(lines)
+        assertEquals(1, result.size)
+        assertEquals("Line one\nLine two", result[0].notes)
+    }
+
+    @Test
+    fun `parseReviewHistory - notes default to empty string when absent`() {
+        val lines = listOf(
+            "#REVIEW_HISTORY_START",
+            "Card One\t1000\t3\tFSRS\tNEW\tLEARNING\t1\t0",
+            "#REVIEW_HISTORY_END"
+        )
+        val result = CardImportExport.parseReviewHistory(lines)
+        assertEquals(1, result.size)
+        assertEquals("", result[0].notes)
+    }
+
+    @Test
+    fun `round-trip - notes text is preserved through export and parse`() {
+        val cardId = 30L
+        val cardQuestion = "Notes test card"
+        val log = makeReviewLog(
+            cardId, grade = 3, reviewTime = 8000L,
+            notes = "**Bold** practice note\n- Item 1\n- Item 2"
+        )
+
+        val card = makeCard(cardId, cardQuestion)
+        val output = ByteArrayOutputStream()
+        CardImportExport.exportCardsWithGroupStates(
+            listOf(CardWithGroupStates(card, emptyList(), emptyMap())),
+            output,
+            reviewLogs = listOf(log),
+            cardQuestions = mapOf(cardId to cardQuestion)
+        )
+
+        val input = ByteArrayInputStream(output.toByteArray())
+        CardImportExport.parseCards(input)
+
+        assertEquals(1, CardImportExport.lastParsedReviewHistory.size)
+        assertEquals("**Bold** practice note\n- Item 1\n- Item 2",
+            CardImportExport.lastParsedReviewHistory[0].notes)
+
+        val entities = CardImportExport.parsedReviewLogsToEntities(
+            CardImportExport.lastParsedReviewHistory,
+            mapOf(cardQuestion to cardId)
+        )
+        assertEquals("**Bold** practice note\n- Item 1\n- Item 2", entities[0].notes)
+    }
+
+    @Test
+    fun `round-trip - empty notes are preserved`() {
+        val cardId = 31L
+        val cardQuestion = "No notes card"
+        val log = makeReviewLog(cardId, grade = 4, reviewTime = 9000L, notes = "")
+
+        val card = makeCard(cardId, cardQuestion)
+        val output = ByteArrayOutputStream()
+        CardImportExport.exportCardsWithGroupStates(
+            listOf(CardWithGroupStates(card, emptyList(), emptyMap())),
+            output,
+            reviewLogs = listOf(log),
+            cardQuestions = mapOf(cardId to cardQuestion)
+        )
+
+        val input = ByteArrayInputStream(output.toByteArray())
+        CardImportExport.parseCards(input)
+
+        val entities = CardImportExport.parsedReviewLogsToEntities(
+            CardImportExport.lastParsedReviewHistory,
+            mapOf(cardQuestion to cardId)
+        )
+        assertEquals("", entities[0].notes)
     }
 }

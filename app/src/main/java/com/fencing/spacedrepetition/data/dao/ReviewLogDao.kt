@@ -30,6 +30,9 @@ interface ReviewLogDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertReviewLogs(reviewLogs: List<ReviewLog>)
 
+    @Update
+    suspend fun updateReviewLog(reviewLog: ReviewLog)
+
     @Delete
     suspend fun deleteReviewLog(reviewLog: ReviewLog)
 
