@@ -1,6 +1,7 @@
 package com.fencing.spacedrepetition.ui.screen
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -45,6 +46,10 @@ fun GradingScreen(
 
     var showConfirmDialog by remember { mutableStateOf(false) }
     val markdownToolbarState = rememberMarkdownToolbarState()
+
+    BackHandler(enabled = uiState !is PracticeUiState.Completed) {
+        onNavigateBack()
+    }
 
     // When completed, invoke callback immediately
     LaunchedEffect(uiState) {
