@@ -225,7 +225,7 @@ class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
                     _sessionReviewLogs.value = updatedLogs
                 }
 
-                _uiState.value = PracticeUiState.AddingNotes(sessionStartTime)
+                _uiState.value = PracticeUiState.Completed
             } catch (e: Exception) {
                 _uiState.value = PracticeUiState.Error(e.message ?: "Failed to submit grades")
             }
@@ -264,8 +264,6 @@ sealed class PracticeUiState {
     object Practicing : PracticeUiState()
     object ReadyToGrade : PracticeUiState()
     object Submitting : PracticeUiState()
-    /** Grades submitted; user can optionally add notes/images to review logs. */
-    data class AddingNotes(val practiceStartTime: Long) : PracticeUiState()
     object Completed : PracticeUiState()
     object NoCards : PracticeUiState()
     data class Error(val message: String) : PracticeUiState()
