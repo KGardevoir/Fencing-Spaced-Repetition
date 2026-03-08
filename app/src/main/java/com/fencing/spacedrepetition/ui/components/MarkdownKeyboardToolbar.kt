@@ -18,8 +18,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.foundation.layout.WindowInsets
-import androidx.compose.ui.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
@@ -103,6 +104,7 @@ fun rememberMarkdownToolbarState(): MarkdownToolbarState {
  * }
  * ```
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MarkdownKeyboardToolbar(
     state: MarkdownToolbarState,
