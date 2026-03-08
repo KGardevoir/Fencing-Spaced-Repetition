@@ -3,11 +3,6 @@ package com.fencing.spacedrepetition.ui.screen
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -30,10 +25,10 @@ import com.fencing.spacedrepetition.data.model.SessionCard
 import com.fencing.spacedrepetition.ui.components.CardImagesDisplay
 import com.fencing.spacedrepetition.ui.components.CardImagesEdit
 import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
+import com.fencing.spacedrepetition.ui.components.MarkdownKeyboardToolbar
 import com.fencing.spacedrepetition.ui.components.MarkdownText
-import com.fencing.spacedrepetition.ui.components.MarkdownToolbar
-import com.fencing.spacedrepetition.ui.components.applyInlineFormat
-import com.fencing.spacedrepetition.ui.components.applyLinePrefix
+import com.fencing.spacedrepetition.ui.components.MarkdownToolbarState
+import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeUiState
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 import com.fencing.spacedrepetition.util.saveImageToInternalStorage
@@ -49,6 +44,7 @@ fun GradingScreen(
     val sessionCards by viewModel.sessionCards.collectAsState()
 
     var showConfirmDialog by remember { mutableStateOf(false) }
+    val markdownToolbarState = rememberMarkdownToolbarState()
 
     // When completed, invoke callback immediately
     LaunchedEffect(uiState) {
@@ -73,16 +69,20 @@ fun GradingScreen(
                 )
             }
         ) { paddingValues ->
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
+                    .imePadding()
             ) {
                 when (uiState) {
                     is PracticeUiState.Submitting -> {
-                        CircularProgressIndicator(
-                            modifier = Modifier.align(Alignment.Center)
-                        )
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
                     }
 
                     is PracticeUiState.Error -> {
@@ -112,7 +112,8 @@ fun GradingScreen(
                     else -> {
                         Column(
                             modifier = Modifier
-                                .fillMaxSize()
+                                .weight(1f)
+                                .fillMaxWidth()
                                 .padding(16.dp)
                         ) {
                             // Instructions
@@ -155,7 +156,8 @@ fun GradingScreen(
                                         },
                                         onNotesChanged = { notes, images ->
                                             viewModel.updateNotes(index, notes, images)
-                                        }
+                                        },
+                                        toolbarState = markdownToolbarState
                                     )
                                 }
                             }
@@ -190,6 +192,9 @@ fun GradingScreen(
                                 )
                             }
                         }
+
+                        // Markdown toolbar pinned above the keyboard
+                        MarkdownKeyboardToolbar(markdownToolbarState)
                     }
                 }
             }
@@ -229,7 +234,8 @@ fun GradingCardItem(
     sessionCard: SessionCard,
     cardNumber: Int,
     onGradeSelected: (Grade) -> Unit,
-    onNotesChanged: (String, List<String>) -> Unit
+    onNotesChanged: (String, List<String>) -> Unit,
+    toolbarState: MarkdownToolbarState? = null
 ) {
     val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
@@ -240,7 +246,6 @@ fun GradingCardItem(
     var noteImages by remember(sessionCard.card.id) {
         mutableStateOf(sessionCard.noteImagePaths)
     }
-    var notesFocused by remember { mutableStateOf(false) }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -405,30 +410,8 @@ fun GradingCardItem(
                     label = "Notes",
                     minLines = 2,
                     maxLines = 5,
-                    onFocusChanged = { notesFocused = it }
+                    toolbarState = toolbarState
                 )
-
-                // Markdown formatting toolbar (slides in when focused)
-                AnimatedVisibility(
-                    visible = notesFocused,
-                    enter = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(),
-                    exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut()
-                ) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        HorizontalDivider()
-                        MarkdownToolbar(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 4.dp, vertical = 2.dp),
-                            onBold      = { notesValue = applyInlineFormat(notesValue, "**",  "**",   "bold"); onNotesChanged(notesValue.text, noteImages) },
-                            onItalic    = { notesValue = applyInlineFormat(notesValue, "*",   "*",    "italic"); onNotesChanged(notesValue.text, noteImages) },
-                            onUnderline = { notesValue = applyInlineFormat(notesValue, "<u>", "</u>", "underline"); onNotesChanged(notesValue.text, noteImages) },
-                            onCode      = { notesValue = applyInlineFormat(notesValue, "`",   "`",    "code"); onNotesChanged(notesValue.text, noteImages) },
-                            onHeader    = { notesValue = applyLinePrefix(notesValue, "# "); onNotesChanged(notesValue.text, noteImages) },
-                            onBullet    = { notesValue = applyLinePrefix(notesValue, "- "); onNotesChanged(notesValue.text, noteImages) }
-                        )
-                    }
-                }
 
                 Spacer(modifier = Modifier.height(8.dp))
 

@@ -26,7 +26,10 @@ import com.fencing.spacedrepetition.data.repository.GROUP_NAME_CARD_EDIT
 import com.fencing.spacedrepetition.ui.components.CardImagesDisplay
 import com.fencing.spacedrepetition.ui.components.CardImagesEdit
 import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
+import com.fencing.spacedrepetition.ui.components.MarkdownKeyboardToolbar
 import com.fencing.spacedrepetition.ui.components.MarkdownText
+import com.fencing.spacedrepetition.ui.components.MarkdownToolbarState
+import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryItem
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.ReviewLogWithCard
@@ -41,6 +44,7 @@ fun HistoryScreen(
     onNavigateBack: () -> Unit
 ) {
     val historyItems by viewModel.historyItems.collectAsState()
+    val markdownToolbarState = rememberMarkdownToolbarState()
 
     Scaffold(
         topBar = {
@@ -57,61 +61,71 @@ fun HistoryScreen(
             )
         }
     ) { paddingValues ->
-        if (historyItems.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .imePadding()
+        ) {
+            if (historyItems.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        Icons.Default.History,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                    )
-                    Text(
-                        text = "No practice history yet",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "Complete a practice session to see it here",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                    )
-                }
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(vertical = 16.dp)
-            ) {
-                items(historyItems, key = { item ->
-                    when (item) {
-                        is HistoryItem.Session -> "session-${item.session.id}"
-                        is HistoryItem.QuickGrade -> "quickgrade-${item.log.reviewLog.id}"
-                    }
-                }) { item ->
-                    when (item) {
-                        is HistoryItem.Session -> SessionHistoryCard(
-                            session = item.session,
-                            viewModel = viewModel
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.History,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                         )
-                        is HistoryItem.QuickGrade -> QuickGradeCard(
-                            logWithCard = item.log,
-                            viewModel = viewModel
+                        Text(
+                            text = "No practice history yet",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "Complete a practice session to see it here",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
                     }
                 }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(vertical = 16.dp)
+                ) {
+                    items(historyItems, key = { item ->
+                        when (item) {
+                            is HistoryItem.Session -> "session-${item.session.id}"
+                            is HistoryItem.QuickGrade -> "quickgrade-${item.log.reviewLog.id}"
+                        }
+                    }) { item ->
+                        when (item) {
+                            is HistoryItem.Session -> SessionHistoryCard(
+                                session = item.session,
+                                viewModel = viewModel,
+                                toolbarState = markdownToolbarState
+                            )
+                            is HistoryItem.QuickGrade -> QuickGradeCard(
+                                logWithCard = item.log,
+                                viewModel = viewModel,
+                                toolbarState = markdownToolbarState
+                            )
+                        }
+                    }
+                }
+
+                // Markdown toolbar pinned above the keyboard
+                MarkdownKeyboardToolbar(markdownToolbarState)
             }
         }
     }
@@ -120,7 +134,8 @@ fun HistoryScreen(
 @Composable
 fun SessionHistoryCard(
     session: PracticeSession,
-    viewModel: HistoryViewModel
+    viewModel: HistoryViewModel,
+    toolbarState: MarkdownToolbarState? = null
 ) {
     var expanded by remember { mutableStateOf(false) }
     val reviewLogs by viewModel.getReviewLogsForSession(session.id).collectAsState(initial = emptyList())
@@ -208,7 +223,8 @@ fun SessionHistoryCard(
                         reviewLogs.forEach { logWithCard ->
                             ReviewLogRow(
                                 logWithCard = logWithCard,
-                                viewModel = viewModel
+                                viewModel = viewModel,
+                                toolbarState = toolbarState
                             )
                         }
                     }
@@ -222,7 +238,8 @@ fun SessionHistoryCard(
 @Composable
 private fun QuickGradeCard(
     logWithCard: ReviewLogWithCard,
-    viewModel: HistoryViewModel
+    viewModel: HistoryViewModel,
+    toolbarState: MarkdownToolbarState? = null
 ) {
     val log = logWithCard.reviewLog
     val grade = Grade.fromValue(log.grade)
@@ -334,7 +351,8 @@ private fun QuickGradeCard(
                     onSave = { notes, images ->
                         viewModel.updateReviewLogNotes(log, notes, images)
                         showNoteEditor = false
-                    }
+                    },
+                    toolbarState = toolbarState
                 )
             }
         }
@@ -366,7 +384,8 @@ private fun GradeChipIfNonZero(
 @Composable
 private fun ReviewLogRow(
     logWithCard: ReviewLogWithCard,
-    viewModel: HistoryViewModel
+    viewModel: HistoryViewModel,
+    toolbarState: MarkdownToolbarState? = null
 ) {
     val log = logWithCard.reviewLog
     val grade = Grade.fromValue(log.grade)
@@ -480,7 +499,8 @@ private fun ReviewLogRow(
                 onSave = { notes, images ->
                     viewModel.updateReviewLogNotes(log, notes, images)
                     showNoteEditor = false
-                }
+                },
+                toolbarState = toolbarState
             )
         }
     }
@@ -492,7 +512,8 @@ private fun ReviewLogRow(
 @Composable
 private fun HistoryNoteEditor(
     reviewLog: ReviewLog,
-    onSave: (String, List<String>) -> Unit
+    onSave: (String, List<String>) -> Unit,
+    toolbarState: MarkdownToolbarState? = null
 ) {
     val context = LocalContext.current
     var notesValue by remember(reviewLog.id) {
@@ -528,7 +549,8 @@ private fun HistoryNoteEditor(
             onValueChange = { notesValue = it },
             label = "Notes",
             minLines = 2,
-            maxLines = 5
+            maxLines = 5,
+            toolbarState = toolbarState
         )
 
         Spacer(modifier = Modifier.height(8.dp))

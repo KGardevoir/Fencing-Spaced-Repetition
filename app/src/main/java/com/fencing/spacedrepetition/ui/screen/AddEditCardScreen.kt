@@ -4,11 +4,6 @@ import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -23,7 +18,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
@@ -37,9 +31,8 @@ import androidx.activity.compose.BackHandler
 import kotlinx.coroutines.launch
 import com.fencing.spacedrepetition.ui.components.CardImagesEdit
 import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
-import com.fencing.spacedrepetition.ui.components.MarkdownToolbar
-import com.fencing.spacedrepetition.ui.components.applyInlineFormat
-import com.fencing.spacedrepetition.ui.components.applyLinePrefix
+import com.fencing.spacedrepetition.ui.components.MarkdownKeyboardToolbar
+import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import java.io.File
@@ -83,7 +76,7 @@ fun AddEditCardScreen(
     var showCreateGroupDialog by remember { mutableStateOf(false) }
     var isDirty by remember { mutableStateOf(false) }
     var showUnsavedChangesDialog by remember { mutableStateOf(false) }
-    var isDescriptionFocused by remember { mutableStateOf(false) }
+    val markdownToolbarState = rememberMarkdownToolbarState()
 
     // Image picker launcher
     val imagePickerLauncher = rememberLauncherForActivityResult(
@@ -213,7 +206,7 @@ fun AddEditCardScreen(
                 value = answerFieldValue,
                 onValueChange = { answerFieldValue = it; isDirty = true },
                 modifier = Modifier.fillMaxWidth(),
-                onFocusChanged = { isDescriptionFocused = it }
+                toolbarState = markdownToolbarState
             )
 
             // Images section
@@ -978,32 +971,8 @@ fun AddEditCardScreen(
                 )
             }
         } // end scrollable Column
-        // Markdown toolbar pinned above the keyboard — show when software keyboard is visible
-        // or when a physical keyboard is connected
-        val isImeVisible = WindowInsets.isImeVisible
-        val configuration = LocalConfiguration.current
-        val hasPhysicalKeyboard = configuration.keyboard == android.content.res.Configuration.KEYBOARD_QWERTY ||
-                configuration.keyboard == android.content.res.Configuration.KEYBOARD_12KEY
-        AnimatedVisibility(
-            visible = isDescriptionFocused && (isImeVisible || hasPhysicalKeyboard),
-            enter = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(),
-            exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut()
-        ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                HorizontalDivider()
-                MarkdownToolbar(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp, vertical = 2.dp),
-                    onBold      = { answerFieldValue = applyInlineFormat(answerFieldValue, "**",  "**",   "bold") },
-                    onItalic    = { answerFieldValue = applyInlineFormat(answerFieldValue, "*",   "*",    "italic") },
-                    onUnderline = { answerFieldValue = applyInlineFormat(answerFieldValue, "<u>", "</u>", "underline") },
-                    onCode      = { answerFieldValue = applyInlineFormat(answerFieldValue, "`",   "`",    "code") },
-                    onHeader    = { answerFieldValue = applyLinePrefix(answerFieldValue, "# ") },
-                    onBullet    = { answerFieldValue = applyLinePrefix(answerFieldValue, "- ") }
-                )
-            }
-        }
+        // Markdown toolbar pinned above the keyboard
+        MarkdownKeyboardToolbar(markdownToolbarState)
     } // end outer Column
     }
 
