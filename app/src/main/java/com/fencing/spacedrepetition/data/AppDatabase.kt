@@ -9,18 +9,20 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.fencing.spacedrepetition.data.dao.CardDao
 import com.fencing.spacedrepetition.data.dao.GroupDao
+import com.fencing.spacedrepetition.data.dao.OpponentDao
 import com.fencing.spacedrepetition.data.dao.PracticeSessionDao
 import com.fencing.spacedrepetition.data.dao.ReviewLogDao
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupCrossRef
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
 
 @Database(
-    entities = [Card::class, PracticeSession::class, ReviewLog::class, Group::class, CardGroupCrossRef::class, CardGroupLearningState::class],
-    version = 9,
+    entities = [Card::class, PracticeSession::class, ReviewLog::class, Group::class, CardGroupCrossRef::class, CardGroupLearningState::class, Opponent::class],
+    version = 10,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -29,6 +31,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun practiceSessionDao(): PracticeSessionDao
     abstract fun reviewLogDao(): ReviewLogDao
     abstract fun groupDao(): GroupDao
+    abstract fun opponentDao(): OpponentDao
 
     companion object {
         @Volatile
@@ -169,6 +172,29 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Create opponents table
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `opponents` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `skillMultiplier` REAL NOT NULL DEFAULT 1.0,
+                        `notes` TEXT NOT NULL DEFAULT '',
+                        `created` INTEGER NOT NULL DEFAULT 0,
+                        `modified` INTEGER NOT NULL DEFAULT 0
+                    )
+                """)
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_opponents_name` ON `opponents`(`name`)")
+
+                // Add opponent reference + applied stability multiplier to review_logs.
+                // opponentId is a soft reference (no FK) so deleting an opponent
+                // does not cascade into historical logs.
+                db.execSQL("ALTER TABLE `review_logs` ADD COLUMN `opponentId` INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE `review_logs` ADD COLUMN `stabilityMultiplier` REAL NOT NULL DEFAULT 1.0")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -176,7 +202,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "fencing_spaced_repetition_database"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                 INSTANCE = instance

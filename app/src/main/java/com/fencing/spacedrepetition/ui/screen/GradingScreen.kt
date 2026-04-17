@@ -22,6 +22,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Grade
+import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.SessionCard
 import com.fencing.spacedrepetition.ui.components.CardImagesDisplay
 import com.fencing.spacedrepetition.ui.components.CardImagesEdit
@@ -29,6 +30,7 @@ import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
 import com.fencing.spacedrepetition.ui.components.MarkdownKeyboardToolbar
 import com.fencing.spacedrepetition.ui.components.MarkdownText
 import com.fencing.spacedrepetition.ui.components.MarkdownToolbarState
+import com.fencing.spacedrepetition.ui.components.OpponentPicker
 import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeUiState
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
@@ -43,6 +45,7 @@ fun GradingScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val sessionCards by viewModel.sessionCards.collectAsState()
+    val opponents by viewModel.opponents.collectAsState()
 
     var showConfirmDialog by remember { mutableStateOf(false) }
     val markdownToolbarState = rememberMarkdownToolbarState()
@@ -156,11 +159,18 @@ fun GradingScreen(
                                     GradingCardItem(
                                         sessionCard = sessionCard,
                                         cardNumber = index + 1,
+                                        opponents = opponents,
                                         onGradeSelected = { grade ->
                                             viewModel.updateGrade(index, grade)
                                         },
                                         onNotesChanged = { notes, images ->
                                             viewModel.updateNotes(index, notes, images)
+                                        },
+                                        onOpponentSelected = { opponentId ->
+                                            viewModel.updateOpponent(index, opponentId)
+                                        },
+                                        onCreateOpponent = { name, mult ->
+                                            viewModel.createOpponent(name, mult)
                                         },
                                         toolbarState = markdownToolbarState
                                     )
@@ -238,8 +248,11 @@ fun GradingScreen(
 fun GradingCardItem(
     sessionCard: SessionCard,
     cardNumber: Int,
+    opponents: List<Opponent> = emptyList(),
     onGradeSelected: (Grade) -> Unit,
     onNotesChanged: (String, List<String>) -> Unit,
+    onOpponentSelected: (Long?) -> Unit = {},
+    onCreateOpponent: suspend (String, Double) -> Long = { _, _ -> -1L },
     toolbarState: MarkdownToolbarState? = null
 ) {
     val context = LocalContext.current
@@ -362,6 +375,15 @@ fun GradingCardItem(
                     )
                 }
             }
+
+            // Opponent picker (scales FSRS stability gain by skill level)
+            Spacer(modifier = Modifier.height(12.dp))
+            OpponentPicker(
+                selectedOpponentId = sessionCard.opponentId,
+                opponents = opponents,
+                onOpponentSelected = onOpponentSelected,
+                onCreate = onCreateOpponent
+            )
 
             // Notes section
             Spacer(modifier = Modifier.height(8.dp))

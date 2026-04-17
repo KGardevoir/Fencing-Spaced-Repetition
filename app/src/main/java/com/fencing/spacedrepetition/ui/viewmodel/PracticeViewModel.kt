@@ -4,16 +4,32 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.Grade
+import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.model.SessionCard
 import com.fencing.spacedrepetition.data.repository.CardRepository
+import com.fencing.spacedrepetition.data.repository.OpponentRepository
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
+class PracticeViewModel(
+    private val repository: CardRepository,
+    private val opponentRepository: OpponentRepository
+) : ViewModel() {
+
+    /** Available opponents for selection during grading. */
+    val opponents: StateFlow<List<Opponent>> = opponentRepository.getAllOpponents()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Create a new opponent from the grading screen; returns the new id (or -1 on conflict). */
+    suspend fun createOpponent(name: String, skillMultiplier: Double): Long {
+        return opponentRepository.insertOpponent(Opponent(name = name, skillMultiplier = skillMultiplier))
+    }
 
     private val _uiState = MutableStateFlow<PracticeUiState>(PracticeUiState.Loading)
     val uiState: StateFlow<PracticeUiState> = _uiState.asStateFlow()
@@ -118,6 +134,22 @@ class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
         }
     }
 
+    /** Set the opponent for a card during grading (null clears). */
+    fun updateOpponent(cardIndex: Int, opponentId: Long?) {
+        val cards = _sessionCards.value.toMutableList()
+        if (cardIndex in cards.indices) {
+            cards[cardIndex] = cards[cardIndex].copy(opponentId = opponentId)
+            _sessionCards.value = cards
+        }
+    }
+
+    /** Apply an opponent to every card that doesn't yet have one selected. */
+    fun applyDefaultOpponent(opponentId: Long?) {
+        _sessionCards.value = _sessionCards.value.map { card ->
+            if (card.opponentId == null) card.copy(opponentId = opponentId) else card
+        }
+    }
+
     fun updateCardText(cardIndex: Int, question: String, answer: String) {
         viewModelScope.launch {
             val cards = _sessionCards.value.toMutableList()
@@ -183,15 +215,15 @@ class PracticeViewModel(private val repository: CardRepository) : ViewModel() {
                 }
 
                 val cardsWithGrades = cards.mapNotNull { sessionCard ->
-                    sessionCard.grade?.let { grade -> Pair(sessionCard.card, grade) }
+                    sessionCard.grade?.let { grade -> Triple(sessionCard.card, grade, sessionCard.opponentId) }
                 }
 
                 // Only call review methods if there are cards to review
                 if (cardsWithGrades.isNotEmpty()) {
                     // If practicing within a group, use group-aware review method
                     if (selectedGroupId != null) {
-                        cardsWithGrades.forEach { (card, grade) ->
-                            repository.reviewCardWithGroup(card, grade, selectedGroupId!!, sessionId)
+                        cardsWithGrades.forEach { (card, grade, opponentId) ->
+                            repository.reviewCardWithGroup(card, grade, selectedGroupId!!, sessionId, opponentId)
                         }
                     } else {
                         repository.reviewMultipleCards(cardsWithGrades, sessionId)

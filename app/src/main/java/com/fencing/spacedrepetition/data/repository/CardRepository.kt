@@ -4,6 +4,7 @@ import com.fencing.spacedrepetition.algorithm.FSRSAlgorithm
 import com.fencing.spacedrepetition.algorithm.SM2Algorithm
 import com.fencing.spacedrepetition.data.dao.CardDao
 import com.fencing.spacedrepetition.data.dao.GroupDao
+import com.fencing.spacedrepetition.data.dao.OpponentDao
 import com.fencing.spacedrepetition.data.dao.PracticeSessionDao
 import com.fencing.spacedrepetition.data.dao.ReviewLogDao
 import com.fencing.spacedrepetition.data.model.*
@@ -19,6 +20,7 @@ class CardRepository(
     private val sessionDao: PracticeSessionDao,
     private val reviewLogDao: ReviewLogDao,
     private val groupDao: GroupDao,
+    private val opponentDao: OpponentDao,
     private val preferences: ThemePreferences
 ) {
     private val fsrsAlgorithm = FSRSAlgorithm()
@@ -170,11 +172,18 @@ class CardRepository(
      * Records a review log entry for a grade applied from the Add/Edit card screen.
      * Does not update card state (the caller is responsible for that via updateCard).
      */
-    suspend fun logGradeFromEdit(cardBefore: Card, cardAfter: Card, grade: Grade, groupId: Long? = null) {
+    suspend fun logGradeFromEdit(
+        cardBefore: Card,
+        cardAfter: Card,
+        grade: Grade,
+        groupId: Long? = null,
+        opponentId: Long? = null
+    ) {
         val now = System.currentTimeMillis()
         val elapsedDays = if (cardBefore.lastReview == 0L) 0 else
             ((now - cardBefore.lastReview) / (1000 * 60 * 60 * 24)).toInt()
         val groupName = groupId?.let { groupDao.getGroupById(it)?.name }
+        val stabilityMultiplier = resolveStabilityMultiplier(opponentId)
         reviewLogDao.insertReviewLog(ReviewLog(
             cardId = cardBefore.id,
             sessionId = null,
@@ -185,8 +194,19 @@ class CardRepository(
             stateAfter = serializeCardState(cardAfter),
             scheduledDays = cardAfter.fsrsScheduledDays,
             elapsedDays = elapsedDays,
-            groupName = groupName ?: GROUP_NAME_CARD_EDIT
+            groupName = groupName ?: GROUP_NAME_CARD_EDIT,
+            opponentId = opponentId,
+            stabilityMultiplier = stabilityMultiplier
         ))
+    }
+
+    /**
+     * Looks up the stability multiplier for an opponent, defaulting to 1.0 (neutral)
+     * when the opponent is null or can no longer be found.
+     */
+    private suspend fun resolveStabilityMultiplier(opponentId: Long?): Double {
+        if (opponentId == null) return 1.0
+        return opponentDao.getOpponentById(opponentId)?.skillMultiplier ?: 1.0
     }
 
     // Group-aware card operations
@@ -493,12 +513,19 @@ class CardRepository(
     }
 
     // Review operations
-    suspend fun reviewCard(card: Card, grade: Grade, sessionId: Long? = null, groupId: Long? = null): Card {
+    suspend fun reviewCard(
+        card: Card,
+        grade: Grade,
+        sessionId: Long? = null,
+        groupId: Long? = null,
+        opponentId: Long? = null
+    ): Card {
         val now = System.currentTimeMillis()
         val elapsedDays = if (card.lastReview == 0L) 0 else
             ((now - card.lastReview) / (1000 * 60 * 60 * 24)).toInt()
 
         val groupName = groupId?.let { groupDao.getGroupById(it)?.name }
+        val stabilityMultiplier = resolveStabilityMultiplier(opponentId)
 
         if (grade == Grade.SKIP) {
             val stateBefore = serializeCardState(card)
@@ -512,13 +539,15 @@ class CardRepository(
                 stateAfter = stateBefore,
                 scheduledDays = card.fsrsScheduledDays,
                 elapsedDays = elapsedDays,
-                groupName = groupName
+                groupName = groupName,
+                opponentId = opponentId,
+                stabilityMultiplier = stabilityMultiplier
             ))
             return card
         }
 
         val updatedCard = when (card.algorithm) {
-            AlgorithmType.FSRS -> reviewWithFSRS(card, grade, now, elapsedDays, groupId)
+            AlgorithmType.FSRS -> reviewWithFSRS(card, grade, now, elapsedDays, groupId, stabilityMultiplier)
             AlgorithmType.SM2 -> reviewWithSM2(card, grade, now, groupId)
         }
 
@@ -533,7 +562,9 @@ class CardRepository(
             stateAfter = serializeCardState(updatedCard),
             scheduledDays = updatedCard.fsrsScheduledDays,
             elapsedDays = elapsedDays,
-            groupName = groupName
+            groupName = groupName,
+            opponentId = opponentId,
+            stabilityMultiplier = stabilityMultiplier
         )
 
         reviewLogDao.insertReviewLog(reviewLog)
@@ -542,12 +573,18 @@ class CardRepository(
         return updatedCard
     }
 
-    suspend fun reviewCardWithGroup(card: Card, grade: Grade, groupId: Long, sessionId: Long? = null): Card {
-        val group = groupDao.getGroupById(groupId) ?: return reviewCard(card, grade, sessionId, groupId)
+    suspend fun reviewCardWithGroup(
+        card: Card,
+        grade: Grade,
+        groupId: Long,
+        sessionId: Long? = null,
+        opponentId: Long? = null
+    ): Card {
+        val group = groupDao.getGroupById(groupId) ?: return reviewCard(card, grade, sessionId, groupId, opponentId)
 
         if (!group.independentLearning) {
             // Use global learning state but apply group settings
-            return reviewCard(card, grade, sessionId, groupId)
+            return reviewCard(card, grade, sessionId, groupId, opponentId)
         }
 
         // Use group-specific learning state
@@ -563,6 +600,8 @@ class CardRepository(
         val elapsedDays = if (learningState.lastReview == 0L) 0 else
             ((now - learningState.lastReview) / (1000 * 60 * 60 * 24)).toInt()
 
+        val stabilityMultiplier = resolveStabilityMultiplier(opponentId)
+
         if (grade == Grade.SKIP) {
             val stateBefore = serializeLearningState(learningState, card.algorithm)
             reviewLogDao.insertReviewLog(ReviewLog(
@@ -575,13 +614,15 @@ class CardRepository(
                 stateAfter = stateBefore,
                 scheduledDays = learningState.fsrsScheduledDays,
                 elapsedDays = elapsedDays,
-                groupName = group.name
+                groupName = group.name,
+                opponentId = opponentId,
+                stabilityMultiplier = stabilityMultiplier
             ))
             return card
         }
 
         val updatedState = when (card.algorithm) {
-            AlgorithmType.FSRS -> reviewLearningStateWithFSRS(learningState, grade, now, elapsedDays, groupId)
+            AlgorithmType.FSRS -> reviewLearningStateWithFSRS(learningState, grade, now, elapsedDays, groupId, stabilityMultiplier)
             AlgorithmType.SM2 -> reviewLearningStateWithSM2(learningState, grade, now, groupId)
         }
 
@@ -596,7 +637,9 @@ class CardRepository(
             stateAfter = serializeLearningState(updatedState, card.algorithm),
             scheduledDays = updatedState.fsrsScheduledDays,
             elapsedDays = elapsedDays,
-            groupName = group.name
+            groupName = group.name,
+            opponentId = opponentId,
+            stabilityMultiplier = stabilityMultiplier
         )
 
         reviewLogDao.insertReviewLog(reviewLog)
@@ -620,29 +663,31 @@ class CardRepository(
     }
 
     /** Compute the result of grading [card] without persisting anything to the database. */
-    suspend fun computeReview(card: Card, grade: Grade, groupId: Long? = null): Card {
+    suspend fun computeReview(card: Card, grade: Grade, groupId: Long? = null, opponentId: Long? = null): Card {
         val now = System.currentTimeMillis()
         val elapsedDays = if (card.lastReview == 0L) 0 else
             ((now - card.lastReview) / (1000 * 60 * 60 * 24)).toInt()
+        val stabilityMultiplier = resolveStabilityMultiplier(opponentId)
         return when (card.algorithm) {
-            AlgorithmType.FSRS -> reviewWithFSRS(card, grade, now, elapsedDays, groupId)
+            AlgorithmType.FSRS -> reviewWithFSRS(card, grade, now, elapsedDays, groupId, stabilityMultiplier)
             AlgorithmType.SM2 -> reviewWithSM2(card, grade, now, groupId)
         }
     }
 
     /** Compute the result of grading [card] in a specific group without persisting. */
-    suspend fun computeReviewWithGroup(card: Card, grade: Grade, groupId: Long): Card {
-        val group = groupDao.getGroupById(groupId) ?: return computeReview(card, grade, groupId)
+    suspend fun computeReviewWithGroup(card: Card, grade: Grade, groupId: Long, opponentId: Long? = null): Card {
+        val group = groupDao.getGroupById(groupId) ?: return computeReview(card, grade, groupId, opponentId)
         if (!group.independentLearning) {
-            return computeReview(card, grade, groupId)
+            return computeReview(card, grade, groupId, opponentId)
         }
         val now = System.currentTimeMillis()
         val learningState = groupDao.getLearningState(card.id, groupId)
             ?: CardGroupLearningState(card.id, groupId)
         val elapsedDays = if (learningState.lastReview == 0L) 0 else
             ((now - learningState.lastReview) / (1000 * 60 * 60 * 24)).toInt()
+        val stabilityMultiplier = resolveStabilityMultiplier(opponentId)
         val updatedState = when (card.algorithm) {
-            AlgorithmType.FSRS -> reviewLearningStateWithFSRS(learningState, grade, now, elapsedDays, groupId)
+            AlgorithmType.FSRS -> reviewLearningStateWithFSRS(learningState, grade, now, elapsedDays, groupId, stabilityMultiplier)
             AlgorithmType.SM2 -> reviewLearningStateWithSM2(learningState, grade, now, groupId)
         }
         return card.copy(
@@ -661,14 +706,23 @@ class CardRepository(
         )
     }
 
-    suspend fun reviewMultipleCards(cardsWithGrades: List<Pair<Card, Grade>>, sessionId: Long? = null) {
+    /**
+     * Batch-review a list of cards, each with its own optional opponent. Callers that
+     * don't track opponents can pass the two-tuple overload below.
+     */
+    suspend fun reviewMultipleCards(
+        cardsWithGrades: List<Triple<Card, Grade, Long?>>,
+        sessionId: Long? = null
+    ) {
         val now = System.currentTimeMillis()
         val reviewLogs = mutableListOf<ReviewLog>()
         val updatedCards = mutableListOf<Card>()
 
-        cardsWithGrades.forEach { (card, grade) ->
+        cardsWithGrades.forEach { (card, grade, opponentId) ->
             val elapsedDays = if (card.lastReview == 0L) 0 else
                 ((now - card.lastReview) / (1000 * 60 * 60 * 24)).toInt()
+
+            val stabilityMultiplier = resolveStabilityMultiplier(opponentId)
 
             if (grade == Grade.SKIP) {
                 val stateBefore = serializeCardState(card)
@@ -681,13 +735,15 @@ class CardRepository(
                     stateBefore = stateBefore,
                     stateAfter = stateBefore,
                     scheduledDays = card.fsrsScheduledDays,
-                    elapsedDays = elapsedDays
+                    elapsedDays = elapsedDays,
+                    opponentId = opponentId,
+                    stabilityMultiplier = stabilityMultiplier
                 ))
                 return@forEach
             }
 
             val updatedCard = when (card.algorithm) {
-                AlgorithmType.FSRS -> reviewWithFSRS(card, grade, now, elapsedDays)
+                AlgorithmType.FSRS -> reviewWithFSRS(card, grade, now, elapsedDays, null, stabilityMultiplier)
                 AlgorithmType.SM2 -> reviewWithSM2(card, grade, now)
             }
 
@@ -701,7 +757,9 @@ class CardRepository(
                     stateBefore = serializeCardState(card),
                     stateAfter = serializeCardState(updatedCard),
                     scheduledDays = updatedCard.fsrsScheduledDays,
-                    elapsedDays = elapsedDays
+                    elapsedDays = elapsedDays,
+                    opponentId = opponentId,
+                    stabilityMultiplier = stabilityMultiplier
                 )
             )
 
@@ -712,7 +770,15 @@ class CardRepository(
         cardDao.updateCards(updatedCards)
     }
 
-    private suspend fun reviewWithFSRS(card: Card, grade: Grade, now: Long, elapsedDays: Int, groupId: Long? = null): Card {
+
+    private suspend fun reviewWithFSRS(
+        card: Card,
+        grade: Grade,
+        now: Long,
+        elapsedDays: Int,
+        groupId: Long? = null,
+        stabilityMultiplier: Double = 1.0
+    ): Card {
         // Resolve maximum interval, desired retention, and fuzzing (group override or global)
         val maxInterval = resolveMaximumInterval(groupId)
         fsrsAlgorithm.setMaximumInterval(maxInterval)
@@ -740,7 +806,7 @@ class CardRepository(
             Grade.EASY -> FSRSAlgorithm.Rating.EASY
         }
 
-        val schedulingInfo = fsrsAlgorithm.schedule(fsrsCard, rating, now)
+        val schedulingInfo = fsrsAlgorithm.schedule(fsrsCard, rating, now, stabilityMultiplier)
         val newCard = schedulingInfo.card
         val adjustedDays = adjustForPracticeFrequency(newCard.scheduledDays, groupId)
 
@@ -882,7 +948,8 @@ class CardRepository(
         grade: Grade,
         now: Long,
         elapsedDays: Int,
-        groupId: Long? = null
+        groupId: Long? = null,
+        stabilityMultiplier: Double = 1.0
     ): CardGroupLearningState {
         // Resolve maximum interval, desired retention, and fuzzing (group override or global)
         val maxInterval = resolveMaximumInterval(groupId)
@@ -911,7 +978,7 @@ class CardRepository(
             Grade.EASY -> FSRSAlgorithm.Rating.EASY
         }
 
-        val schedulingInfo = fsrsAlgorithm.schedule(fsrsCard, rating, now)
+        val schedulingInfo = fsrsAlgorithm.schedule(fsrsCard, rating, now, stabilityMultiplier)
         val newCard = schedulingInfo.card
         val adjustedDays = adjustForPracticeFrequency(newCard.scheduledDays, groupId)
 

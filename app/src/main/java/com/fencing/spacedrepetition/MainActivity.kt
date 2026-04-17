@@ -14,11 +14,13 @@ import com.fencing.spacedrepetition.data.AppDatabase
 import com.fencing.spacedrepetition.data.preferences.ThemePreferences
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
+import com.fencing.spacedrepetition.data.repository.OpponentRepository
 import com.fencing.spacedrepetition.ui.navigation.AppNavigation
 import com.fencing.spacedrepetition.ui.theme.FencingSpacedRepetitionTheme
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
 
@@ -37,11 +39,16 @@ class MainActivity : ComponentActivity() {
             cardDao = database.cardDao()
         )
 
+        val opponentRepository = OpponentRepository(
+            opponentDao = database.opponentDao()
+        )
+
         val repository = CardRepository(
             cardDao = database.cardDao(),
             sessionDao = database.practiceSessionDao(),
             reviewLogDao = database.reviewLogDao(),
             groupDao = database.groupDao(),
+            opponentDao = database.opponentDao(),
             preferences = themePreferences
         )
 
@@ -62,13 +69,16 @@ class MainActivity : ComponentActivity() {
                         factory = CardViewModelFactory(application, repository, groupRepository)
                     )
                     val practiceViewModel: PracticeViewModel = viewModel(
-                        factory = PracticeViewModelFactory(repository)
+                        factory = PracticeViewModelFactory(repository, opponentRepository)
                     )
                     val groupViewModel: GroupViewModel = viewModel(
                         factory = GroupViewModelFactory(application, groupRepository, repository)
                     )
                     val historyViewModel: HistoryViewModel = viewModel(
-                        factory = HistoryViewModelFactory(repository)
+                        factory = HistoryViewModelFactory(repository, opponentRepository)
+                    )
+                    val opponentViewModel: OpponentViewModel = viewModel(
+                        factory = OpponentViewModelFactory(opponentRepository)
                     )
 
                     AppNavigation(
@@ -76,7 +86,8 @@ class MainActivity : ComponentActivity() {
                         practiceViewModel = practiceViewModel,
                         groupViewModel = groupViewModel,
                         settingsViewModel = settingsViewModel,
-                        historyViewModel = historyViewModel
+                        historyViewModel = historyViewModel,
+                        opponentViewModel = opponentViewModel
                     )
                 }
             }
@@ -100,12 +111,13 @@ class CardViewModelFactory(
 }
 
 class PracticeViewModelFactory(
-    private val repository: CardRepository
+    private val repository: CardRepository,
+    private val opponentRepository: OpponentRepository
 ) : androidx.lifecycle.ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(PracticeViewModel::class.java)) {
-            return PracticeViewModel(repository) as T
+            return PracticeViewModel(repository, opponentRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
@@ -138,12 +150,25 @@ class SettingsViewModelFactory(
 }
 
 class HistoryViewModelFactory(
-    private val repository: CardRepository
+    private val repository: CardRepository,
+    private val opponentRepository: OpponentRepository
 ) : androidx.lifecycle.ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(HistoryViewModel::class.java)) {
-            return HistoryViewModel(repository) as T
+            return HistoryViewModel(repository, opponentRepository) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
+    }
+}
+
+class OpponentViewModelFactory(
+    private val opponentRepository: OpponentRepository
+) : androidx.lifecycle.ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(OpponentViewModel::class.java)) {
+            return OpponentViewModel(opponentRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

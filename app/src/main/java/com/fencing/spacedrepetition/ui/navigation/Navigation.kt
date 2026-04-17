@@ -14,6 +14,7 @@ import com.fencing.spacedrepetition.ui.screen.*
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
 
@@ -29,6 +30,7 @@ sealed class Screen(val route: String) {
     object GroupAdd : Screen("group_add")
     object Settings : Screen("settings")
     object History : Screen("history")
+    object Opponents : Screen("opponents")
 }
 
 @Composable
@@ -38,6 +40,7 @@ fun AppNavigation(
     groupViewModel: GroupViewModel,
     settingsViewModel: SettingsViewModel,
     historyViewModel: HistoryViewModel,
+    opponentViewModel: OpponentViewModel,
     navController: NavHostController = rememberNavController()
 ) {
     // Store card to edit
@@ -71,6 +74,18 @@ fun AppNavigation(
                 },
                 onNavigateToHistory = {
                     navController.navigate(Screen.History.route)
+                },
+                onNavigateToOpponents = {
+                    navController.navigate(Screen.Opponents.route)
+                }
+            )
+        }
+
+        composable(Screen.Opponents.route) {
+            OpponentsScreen(
+                viewModel = opponentViewModel,
+                onNavigateBack = {
+                    navController.popBackStack()
                 }
             )
         }

@@ -30,7 +30,8 @@ fun HomeScreen(
     onNavigateToCards: () -> Unit,
     onNavigateToGroups: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToHistory: () -> Unit
+    onNavigateToHistory: () -> Unit,
+    onNavigateToOpponents: () -> Unit
 ) {
     val dueCardCount by cardViewModel.dueCardCount.collectAsState()
     val totalCards by cardViewModel.cardCount.collectAsState()
@@ -75,6 +76,9 @@ fun HomeScreen(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 ),
                 actions = {
+                    IconButton(onClick = onNavigateToOpponents) {
+                        Icon(Icons.Default.Person, "Manage Opponents")
+                    }
                     IconButton(onClick = onNavigateToGroups) {
                         Icon(Icons.Default.Folder, "Manage Groups")
                     }

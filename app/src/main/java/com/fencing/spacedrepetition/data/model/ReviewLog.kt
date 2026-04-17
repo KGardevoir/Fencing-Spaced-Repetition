@@ -31,5 +31,14 @@ data class ReviewLog(
 
     // User notes (markdown) and attached images for this review
     val notes: String = "",
-    val imagePaths: String = "" // Comma-separated file paths
+    val imagePaths: String = "", // Comma-separated file paths
+
+    // Opponent this review was performed against (null = solo / unspecified).
+    // Soft reference: not a FK, so deleting an opponent leaves historical logs intact.
+    val opponentId: Long? = null,
+
+    // Stability-gain multiplier applied by the opponent's skill level (1.0 = neutral).
+    // Recorded on the log so past reviews stay faithful even if the opponent's
+    // skill multiplier is later edited.
+    val stabilityMultiplier: Double = 1.0
 )
