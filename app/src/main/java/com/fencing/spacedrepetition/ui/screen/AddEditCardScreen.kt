@@ -28,7 +28,11 @@ import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.Grade
 import androidx.activity.compose.BackHandler
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.ui.components.CardImagesEdit
 import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
 import com.fencing.spacedrepetition.ui.components.MarkdownKeyboardToolbar
@@ -57,9 +61,13 @@ fun AddEditCardScreen(
 
     // Group selection state
     val allGroups by groupViewModel.allGroups.collectAsState()
-    val cardGroups = cardToEdit?.let { card ->
-        viewModel.getGroupsForCard(card.id).collectAsState(initial = emptyList()).value
-    } ?: emptyList()
+    // Stabilize the flow so collectAsState doesn't restart (and briefly emit emptyList()) on
+    // every recomposition, which would reset selectedGroupIds via remember(cardGroups, …).
+    val cardGroupsFlow = remember(cardToEdit?.id) {
+        cardToEdit?.let { card -> viewModel.getGroupsForCard(card.id) }
+            ?: flowOf(emptyList<Group>())
+    }
+    val cardGroups by cardGroupsFlow.collectAsState(initial = emptyList())
 
     var selectedGroupIds by remember(cardGroups, initialGroupId) {
         val initialIds = cardGroups.map { it.id }.toMutableSet()
@@ -999,41 +1007,43 @@ fun AddEditCardScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
-                    allGroups.forEach { group ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    selectedGroupIds = if (group.id in selectedGroupIds) {
-                                        selectedGroupIds - group.id
-                                    } else {
-                                        selectedGroupIds + group.id
+                    LazyColumn(modifier = Modifier.weight(1f, fill = false).fillMaxWidth()) {
+                        items(allGroups, key = { it.id }) { group ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selectedGroupIds = if (group.id in selectedGroupIds) {
+                                            selectedGroupIds - group.id
+                                        } else {
+                                            selectedGroupIds + group.id
+                                        }
+                                        isDirty = true
                                     }
-                                    isDirty = true
-                                }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = group.id in selectedGroupIds,
-                                onCheckedChange = { checked ->
-                                    selectedGroupIds = if (checked) {
-                                        selectedGroupIds + group.id
-                                    } else {
-                                        selectedGroupIds - group.id
+                                    .padding(vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = group.id in selectedGroupIds,
+                                    onCheckedChange = { checked ->
+                                        selectedGroupIds = if (checked) {
+                                            selectedGroupIds + group.id
+                                        } else {
+                                            selectedGroupIds - group.id
+                                        }
+                                        isDirty = true
                                     }
-                                    isDirty = true
-                                }
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column {
-                                Text(group.name, style = MaterialTheme.typography.bodyLarge)
-                                if (group.description.isNotEmpty()) {
-                                    Text(
-                                        group.description,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(group.name, style = MaterialTheme.typography.bodyLarge)
+                                    if (group.description.isNotEmpty()) {
+                                        Text(
+                                            group.description,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
                             }
                         }
