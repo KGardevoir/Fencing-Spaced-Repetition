@@ -27,7 +27,9 @@ data class SessionCard(
     val card: Card,
     val grade: Grade? = null,
     val notes: String = "",
-    val noteImagePaths: List<String> = emptyList()
+    val noteImagePaths: List<String> = emptyList(),
+    /** Opponent selected during grading (null = solo / unspecified). */
+    val opponentId: Long? = null
 )
 
 enum class Grade(val value: Int, val label: String) {

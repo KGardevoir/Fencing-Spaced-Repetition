@@ -100,8 +100,17 @@ class FSRSAlgorithm(
 
     /**
      * Schedule a card review based on rating.
+     *
+     * @param stabilityMultiplier Multiplicative scale applied only to the *stability gain*
+     *   for non-AGAIN grades. 1.0 is neutral; > 1.0 earns more stability (e.g. a strong
+     *   opponent), < 1.0 earns less. Initial seeding (NEW) and lapses (AGAIN) are unaffected.
      */
-    fun schedule(card: FSRSCard, rating: Rating, now: Long = System.currentTimeMillis()): SchedulingInfo {
+    fun schedule(
+        card: FSRSCard,
+        rating: Rating,
+        now: Long = System.currentTimeMillis(),
+        stabilityMultiplier: Double = 1.0
+    ): SchedulingInfo {
         val elapsedDays = if (card.lastReview == 0L) {
             0
         } else {
@@ -110,8 +119,8 @@ class FSRSAlgorithm(
 
         val newCard = when (card.state) {
             CardState.NEW -> scheduleNew(card, rating)
-            CardState.LEARNING, CardState.RELEARNING -> scheduleLearning(card, rating)
-            CardState.REVIEW -> scheduleReview(card, rating, elapsedDays)
+            CardState.LEARNING, CardState.RELEARNING -> scheduleLearning(card, rating, stabilityMultiplier)
+            CardState.REVIEW -> scheduleReview(card, rating, elapsedDays, stabilityMultiplier)
         }
 
         val reviewLog = ReviewLog(
@@ -170,11 +179,13 @@ class FSRSAlgorithm(
         }
     }
 
-    private fun scheduleLearning(card: FSRSCard, rating: Rating): FSRSCard {
+    private fun scheduleLearning(card: FSRSCard, rating: Rating, stabilityMultiplier: Double): FSRSCard {
+        // Only scale the gain for successful recalls; AGAIN keeps neutral scaling.
+        val mult = if (rating == Rating.AGAIN) 1.0 else stabilityMultiplier
         return when (rating) {
             Rating.AGAIN -> {
                 val newDifficulty = nextDifficulty(card.difficulty, Rating.AGAIN)
-                val newStab = shortTermStability(card.stability, rating)
+                val newStab = shortTermStability(card.stability, rating, mult)
                 card.copy(
                     difficulty = newDifficulty,
                     stability = newStab,
@@ -185,7 +196,7 @@ class FSRSAlgorithm(
             }
             Rating.HARD -> {
                 val newDifficulty = nextDifficulty(card.difficulty, Rating.HARD)
-                val newStab = shortTermStability(card.stability, rating)
+                val newStab = shortTermStability(card.stability, rating, mult)
                 card.copy(
                     difficulty = newDifficulty,
                     stability = newStab,
@@ -196,7 +207,7 @@ class FSRSAlgorithm(
             }
             Rating.GOOD -> {
                 val newDifficulty = nextDifficulty(card.difficulty, Rating.GOOD)
-                val newStab = shortTermStability(card.stability, rating)
+                val newStab = shortTermStability(card.stability, rating, mult)
                 card.copy(
                     difficulty = newDifficulty,
                     stability = newStab,
@@ -207,7 +218,7 @@ class FSRSAlgorithm(
             }
             Rating.EASY -> {
                 val newDifficulty = nextDifficulty(card.difficulty, Rating.EASY)
-                val newStab = shortTermStability(card.stability, rating)
+                val newStab = shortTermStability(card.stability, rating, mult)
                 card.copy(
                     difficulty = newDifficulty,
                     stability = newStab,
@@ -219,12 +230,13 @@ class FSRSAlgorithm(
         }
     }
 
-    private fun scheduleReview(card: FSRSCard, rating: Rating, elapsedDays: Int): FSRSCard {
+    private fun scheduleReview(card: FSRSCard, rating: Rating, elapsedDays: Int, stabilityMultiplier: Double): FSRSCard {
         val retrievability = forgettingCurve(elapsedDays, card.stability)
 
         return when (rating) {
             Rating.AGAIN -> {
                 val newDifficulty = nextDifficulty(card.difficulty, Rating.AGAIN)
+                // Lapses are unaffected by opponent skill.
                 val newStab = nextForgetStability(card.difficulty, card.stability, retrievability)
                 card.copy(
                     difficulty = newDifficulty,
@@ -237,7 +249,7 @@ class FSRSAlgorithm(
             }
             Rating.HARD -> {
                 val newDifficulty = nextDifficulty(card.difficulty, Rating.HARD)
-                val newStab = nextRecallStability(card.difficulty, card.stability, retrievability, rating)
+                val newStab = nextRecallStability(card.difficulty, card.stability, retrievability, rating, stabilityMultiplier)
                 card.copy(
                     difficulty = newDifficulty,
                     stability = newStab,
@@ -248,7 +260,7 @@ class FSRSAlgorithm(
             }
             Rating.GOOD -> {
                 val newDifficulty = nextDifficulty(card.difficulty, Rating.GOOD)
-                val newStab = nextRecallStability(card.difficulty, card.stability, retrievability, rating)
+                val newStab = nextRecallStability(card.difficulty, card.stability, retrievability, rating, stabilityMultiplier)
                 card.copy(
                     difficulty = newDifficulty,
                     stability = newStab,
@@ -259,7 +271,7 @@ class FSRSAlgorithm(
             }
             Rating.EASY -> {
                 val newDifficulty = nextDifficulty(card.difficulty, Rating.EASY)
-                val newStab = nextRecallStability(card.difficulty, card.stability, retrievability, rating)
+                val newStab = nextRecallStability(card.difficulty, card.stability, retrievability, rating, stabilityMultiplier)
                 card.copy(
                     difficulty = newDifficulty,
                     stability = newStab,
@@ -325,19 +337,20 @@ class FSRSAlgorithm(
         difficulty: Double,
         stability: Double,
         retrievability: Double,
-        rating: Rating
+        rating: Rating,
+        stabilityMultiplier: Double = 1.0
     ): Double {
         val hardPenalty = if (rating == Rating.HARD) w[15] else 1.0
         val easyBonus  = if (rating == Rating.EASY) w[16] else 1.0
 
-        return stability * (
-            1 + exp(w[8]) *
+        val gainFactor = exp(w[8]) *
             (11 - difficulty) *
             stability.pow(-w[9]) *
             (exp((1 - retrievability) * w[10]) - 1) *
             hardPenalty *
             easyBonus
-        )
+        // The opponent-skill multiplier scales only the gain, not the base stability.
+        return stability * (1 + gainFactor * stabilityMultiplier)
     }
 
     /**
@@ -348,10 +361,12 @@ class FSRSAlgorithm(
      * The S^(−w[19]) term causes the stability increment to slow down as stability grows,
      * converging to Δ ≈ 1 day, so same-day reviews are most valuable for weak memories.
      */
-    private fun shortTermStability(stability: Double, rating: Rating): Double {
+    private fun shortTermStability(stability: Double, rating: Rating, stabilityMultiplier: Double = 1.0): Double {
         val g = rating.ordinal + 1 // 1-indexed: AGAIN=1, HARD=2, GOOD=3, EASY=4
         val s = stability.coerceAtLeast(0.001) // guard against zero-stability edge case
-        return s * exp(w[17] * (g - 3 + w[18])) * s.pow(-w[19])
+        val newStab = s * exp(w[17] * (g - 3 + w[18])) * s.pow(-w[19])
+        // Scale only the delta so the multiplier affects the *gain*, not the base.
+        return s + (newStab - s) * stabilityMultiplier
     }
 
     private fun nextForgetStability(difficulty: Double, stability: Double, retrievability: Double): Double {

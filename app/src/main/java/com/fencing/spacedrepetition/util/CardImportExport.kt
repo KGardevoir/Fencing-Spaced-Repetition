@@ -4,6 +4,7 @@ import android.content.Context
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import java.io.BufferedInputStream
 import java.io.File
@@ -79,9 +80,12 @@ object CardImportExport {
     private const val HEADER_MARKER_V2 = "#FSR_EXPORT_V2"
     private const val HEADER_MARKER_V3 = "#FSR_EXPORT_V3"
     private const val GROUP_SETTINGS_PREFIX = "#GROUP_SETTINGS:"
+    private const val OPPONENT_PREFIX = "#OPPONENT:"
     private const val REVIEW_HISTORY_START = "#REVIEW_HISTORY_START"
     private const val REVIEW_HISTORY_END = "#REVIEW_HISTORY_END"
-    private const val REVIEW_HISTORY_HEADERS = "#CardQuestion\tReviewTime\tGrade\tAlgorithm\tStateBefore\tStateAfter\tScheduledDays\tElapsedDays\tGroupName\tNotes\tImagePaths"
+    // Review-history columns. v3.1 added OpponentName + StabilityMultiplier at the end.
+    // Older parsers tolerate the extra columns (they look up by index and stop early).
+    private const val REVIEW_HISTORY_HEADERS = "#CardQuestion\tReviewTime\tGrade\tAlgorithm\tStateBefore\tStateAfter\tScheduledDays\tElapsedDays\tGroupName\tNotes\tImagePaths\tOpponentName\tStabilityMultiplier"
 
     // Column indices for V1 export format
     private const val COL_V1_QUESTION = 0
@@ -171,10 +175,22 @@ object CardImportExport {
     var lastParsedReviewHistory: List<ParsedReviewLog> = emptyList()
         private set
 
+    /** Parsed opponents from an import file (populated after calling parseCards) */
+    var lastParsedOpponents: List<ParsedOpponent> = emptyList()
+        private set
+
+    /** Opponent record parsed from an export's `#OPPONENT:` lines. */
+    data class ParsedOpponent(
+        val name: String,
+        val skillMultiplier: Double,
+        val notes: String
+    )
+
     fun parseCards(inputStream: InputStream): Pair<List<ParsedCard>, List<String>> {
         val cards = mutableListOf<ParsedCard>()
         val errors = mutableListOf<String>()
         val groupSettings = mutableMapOf<String, Map<String, String>>()
+        val opponents = mutableListOf<ParsedOpponent>()
 
         try {
             val lines = inputStream.bufferedReader(Charsets.UTF_8).readLines()
@@ -218,6 +234,11 @@ object CardImportExport {
                     }
                     return@forEachIndexed
                 }
+                // Capture opponent lines
+                if (trimmedLine.startsWith(OPPONENT_PREFIX)) {
+                    parseOpponentLine(trimmedLine)?.let { opponents.add(it) }
+                    return@forEachIndexed
+                }
                 if (trimmedLine.startsWith("#")) {
                     return@forEachIndexed // Skip other comments
                 }
@@ -244,6 +265,7 @@ object CardImportExport {
         }
 
         lastParsedGroupSettings = groupSettings
+        lastParsedOpponents = opponents
         return Pair(cards, errors)
     }
 
@@ -506,7 +528,9 @@ object CardImportExport {
         outputStream: OutputStream,
         groupSettings: List<Group> = emptyList(),
         reviewLogs: List<ReviewLog> = emptyList(),
-        cardQuestions: Map<Long, String> = emptyMap()
+        cardQuestions: Map<Long, String> = emptyMap(),
+        opponents: List<Opponent> = emptyList(),
+        opponentNamesById: Map<Long, String> = emptyMap()
     ): ExportResult {
         return try {
             var rowCount = 0
@@ -519,6 +543,12 @@ object CardImportExport {
             // Write group settings metadata
             groupSettings.filter { it.hasCustomSettings() }.forEach { group ->
                 writer.write(buildGroupSettingsLine(group))
+                writer.newLine()
+            }
+
+            // Write opponents metadata so review logs can reference them by name on import.
+            opponents.forEach { opponent ->
+                writer.write(buildOpponentLine(opponent))
                 writer.newLine()
             }
 
@@ -548,7 +578,8 @@ object CardImportExport {
                 writer.newLine()
                 reviewLogs.forEach { log ->
                     val question = cardQuestions[log.cardId] ?: return@forEach
-                    writer.write(buildReviewLogLine(log, question))
+                    val opponentName = log.opponentId?.let { opponentNamesById[it] }
+                    writer.write(buildReviewLogLine(log, question, opponentName))
                     writer.newLine()
                 }
                 writer.write(REVIEW_HISTORY_END)
@@ -800,6 +831,46 @@ object CardImportExport {
     }
 
     /**
+     * Builds an opponent metadata line for export.
+     * Format: #OPPONENT:<escaped name>\tskillMultiplier=X.XX\tnotes=<escaped notes>
+     */
+    private fun buildOpponentLine(opponent: Opponent): String {
+        return buildString {
+            append(OPPONENT_PREFIX)
+            append(escapeNewlines(opponent.name))
+            append("\tskillMultiplier=").append(opponent.skillMultiplier)
+            if (opponent.notes.isNotBlank()) {
+                append("\tnotes=").append(escapeNewlines(opponent.notes))
+            }
+        }
+    }
+
+    /**
+     * Parses an opponent metadata line. Returns null if not a well-formed opponent line.
+     */
+    fun parseOpponentLine(line: String): ParsedOpponent? {
+        if (!line.startsWith(OPPONENT_PREFIX)) return null
+        val rest = line.removePrefix(OPPONENT_PREFIX)
+        val parts = rest.split("\t")
+        if (parts.isEmpty()) return null
+        val name = unescapeNewlines(parts[0]).trim()
+        if (name.isEmpty()) return null
+        var multiplier = 1.0
+        var notes = ""
+        parts.drop(1).forEach { part ->
+            val eqIndex = part.indexOf('=')
+            if (eqIndex <= 0) return@forEach
+            val key = part.substring(0, eqIndex)
+            val value = part.substring(eqIndex + 1)
+            when (key) {
+                "skillMultiplier" -> value.toDoubleOrNull()?.let { multiplier = it }
+                "notes" -> notes = unescapeNewlines(value)
+            }
+        }
+        return ParsedOpponent(name = name, skillMultiplier = multiplier, notes = notes)
+    }
+
+    /**
      * Applies parsed settings map to a Group entity.
      */
     fun applyGroupSettings(group: Group, settings: Map<String, String>): Group {
@@ -914,7 +985,8 @@ object CardImportExport {
     fun appendReviewHistory(
         reviewLogs: List<ReviewLog>,
         cardQuestions: Map<Long, String>,
-        outputStream: OutputStream
+        outputStream: OutputStream,
+        opponentNamesById: Map<Long, String> = emptyMap()
     ) {
         outputStream.bufferedWriter(Charsets.UTF_8).let { writer ->
             writer.write(REVIEW_HISTORY_START)
@@ -923,7 +995,8 @@ object CardImportExport {
             writer.newLine()
             reviewLogs.forEach { log ->
                 val question = cardQuestions[log.cardId] ?: return@forEach
-                writer.write(buildReviewLogLine(log, question))
+                val opponentName = log.opponentId?.let { opponentNamesById[it] }
+                writer.write(buildReviewLogLine(log, question, opponentName))
                 writer.newLine()
             }
             writer.write(REVIEW_HISTORY_END)
@@ -932,7 +1005,7 @@ object CardImportExport {
         }
     }
 
-    private fun buildReviewLogLine(log: ReviewLog, question: String): String {
+    private fun buildReviewLogLine(log: ReviewLog, question: String, opponentName: String?): String {
         return buildString {
             append(escapeNewlines(question))
             append(DELIMITER)
@@ -959,6 +1032,10 @@ object CardImportExport {
                 .filter { it.isNotBlank() }
                 .mapNotNull { encodeImageToBase64(it) }
             append(encodedImages.joinToString("|"))
+            append(DELIMITER)
+            append(opponentName?.let { escapeNewlines(it) } ?: "")
+            append(DELIMITER)
+            append(log.stabilityMultiplier)
         }
     }
 
@@ -977,7 +1054,9 @@ object CardImportExport {
         val elapsedDays: Int,
         val groupName: String? = null,
         val notes: String = "",
-        val imageData: List<String> = emptyList() // base64-encoded images
+        val imageData: List<String> = emptyList(), // base64-encoded images
+        val opponentName: String? = null,
+        val stabilityMultiplier: Double = 1.0
     )
 
     /**
@@ -1007,6 +1086,10 @@ object CardImportExport {
                 } else {
                     emptyList()
                 }
+                val opponentName = parts.getOrNull(11)
+                    ?.let { unescapeNewlines(it) }
+                    ?.takeIf { it.isNotBlank() }
+                val stabilityMultiplier = parts.getOrNull(12)?.toDoubleOrNull() ?: 1.0
                 ParsedReviewLog(
                     cardQuestion = unescapeNewlines(parts[0]),
                     reviewTime = parts[1].toLong(),
@@ -1018,7 +1101,9 @@ object CardImportExport {
                     elapsedDays = parts[7].toInt(),
                     groupName = parts.getOrNull(8)?.let { it.ifEmpty { null } },
                     notes = parts.getOrNull(9)?.let { unescapeNewlines(it) } ?: "",
-                    imageData = imageData
+                    imageData = imageData,
+                    opponentName = opponentName,
+                    stabilityMultiplier = stabilityMultiplier
                 )
             } catch (e: Exception) {
                 null
@@ -1034,7 +1119,8 @@ object CardImportExport {
     fun parsedReviewLogsToEntities(
         context: Context,
         parsed: List<ParsedReviewLog>,
-        questionToCardId: Map<String, Long>
+        questionToCardId: Map<String, Long>,
+        opponentNameToId: Map<String, Long> = emptyMap()
     ): List<ReviewLog> {
         return parsed.mapNotNull { p ->
             val cardId = questionToCardId[p.cardQuestion] ?: return@mapNotNull null
@@ -1054,7 +1140,9 @@ object CardImportExport {
                 elapsedDays = p.elapsedDays,
                 groupName = p.groupName,
                 notes = p.notes,
-                imagePaths = decodedImagePaths.joinToString(",")
+                imagePaths = decodedImagePaths.joinToString(","),
+                opponentId = p.opponentName?.let { opponentNameToId[it] },
+                stabilityMultiplier = p.stabilityMultiplier
             )
         }
     }
@@ -1066,7 +1154,8 @@ object CardImportExport {
      */
     fun parsedReviewLogsToEntities(
         parsed: List<ParsedReviewLog>,
-        questionToCardId: Map<String, Long>
+        questionToCardId: Map<String, Long>,
+        opponentNameToId: Map<String, Long> = emptyMap()
     ): List<ReviewLog> {
         return parsed.mapNotNull { p ->
             val cardId = questionToCardId[p.cardQuestion] ?: return@mapNotNull null
@@ -1081,7 +1170,9 @@ object CardImportExport {
                 scheduledDays = p.scheduledDays,
                 elapsedDays = p.elapsedDays,
                 groupName = p.groupName,
-                notes = p.notes
+                notes = p.notes,
+                opponentId = p.opponentName?.let { opponentNameToId[it] },
+                stabilityMultiplier = p.stabilityMultiplier
             )
         }
     }

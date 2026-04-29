@@ -5,9 +5,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -20,6 +22,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Grade
+import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.repository.GROUP_NAME_CARD_EDIT
@@ -29,9 +32,11 @@ import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
 import com.fencing.spacedrepetition.ui.components.MarkdownKeyboardToolbar
 import com.fencing.spacedrepetition.ui.components.MarkdownText
 import com.fencing.spacedrepetition.ui.components.MarkdownToolbarState
+import com.fencing.spacedrepetition.ui.components.OpponentPicker
 import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryItem
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.OPPONENT_FILTER_NONE
 import com.fencing.spacedrepetition.ui.viewmodel.ReviewLogWithCard
 import com.fencing.spacedrepetition.util.saveImageToInternalStorage
 import java.text.SimpleDateFormat
@@ -44,6 +49,8 @@ fun HistoryScreen(
     onNavigateBack: () -> Unit
 ) {
     val historyItems by viewModel.historyItems.collectAsState()
+    val opponents by viewModel.opponents.collectAsState()
+    val opponentFilter by viewModel.opponentFilter.collectAsState()
     val markdownToolbarState = rememberMarkdownToolbarState()
 
     Scaffold(
@@ -67,6 +74,15 @@ fun HistoryScreen(
                 .padding(paddingValues)
                 .imePadding()
         ) {
+            // Opponent filter row (hidden until opponents exist)
+            if (opponents.isNotEmpty()) {
+                OpponentFilterRow(
+                    opponents = opponents,
+                    selected = opponentFilter,
+                    onSelect = viewModel::setOpponentFilter
+                )
+            }
+
             if (historyItems.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -83,12 +99,18 @@ fun HistoryScreen(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                         )
                         Text(
-                            text = "No practice history yet",
+                            text = if (opponentFilter != null)
+                                "No history matches this filter"
+                            else
+                                "No practice history yet",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = "Complete a practice session to see it here",
+                            text = if (opponentFilter != null)
+                                "Try a different opponent filter"
+                            else
+                                "Complete a practice session to see it here",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
@@ -113,11 +135,13 @@ fun HistoryScreen(
                             is HistoryItem.Session -> SessionHistoryCard(
                                 session = item.session,
                                 viewModel = viewModel,
+                                opponents = opponents,
                                 toolbarState = markdownToolbarState
                             )
                             is HistoryItem.QuickGrade -> QuickGradeCard(
                                 logWithCard = item.log,
                                 viewModel = viewModel,
+                                opponents = opponents,
                                 toolbarState = markdownToolbarState
                             )
                         }
@@ -131,10 +155,46 @@ fun HistoryScreen(
     }
 }
 
+/** Horizontal row of filter chips: All · Solo · each opponent. */
+@Composable
+private fun OpponentFilterRow(
+    opponents: List<Opponent>,
+    selected: Long?,
+    onSelect: (Long?) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        FilterChip(
+            selected = selected == null,
+            onClick = { onSelect(null) },
+            label = { Text("All") }
+        )
+        FilterChip(
+            selected = selected == OPPONENT_FILTER_NONE,
+            onClick = { onSelect(OPPONENT_FILTER_NONE) },
+            label = { Text("Solo") }
+        )
+        opponents.forEach { opponent ->
+            FilterChip(
+                selected = selected == opponent.id,
+                onClick = { onSelect(opponent.id) },
+                label = { Text(opponent.name) }
+            )
+        }
+    }
+}
+
 @Composable
 fun SessionHistoryCard(
     session: PracticeSession,
     viewModel: HistoryViewModel,
+    opponents: List<Opponent>,
     toolbarState: MarkdownToolbarState? = null
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -148,6 +208,13 @@ fun SessionHistoryCard(
         reviewLogs.groupBy { it.reviewLog.grade }.mapValues { it.value.size }
     }
     val cardCount = session.cardIds.split(",").filter { it.isNotBlank() }.size
+
+    // Unique opponent names that appear in this session's logs, for a summary chip.
+    val sessionOpponents = remember(reviewLogs, opponents) {
+        reviewLogs.mapNotNull { it.reviewLog.opponentId }
+            .distinct()
+            .mapNotNull { id -> opponents.find { it.id == id }?.name }
+    }
 
     Card(
         modifier = Modifier
@@ -205,6 +272,29 @@ fun SessionHistoryCard(
                 }
             }
 
+            // Opponent summary chip
+            if (sessionOpponents.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Person,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = sessionOpponents.joinToString(", "),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
             // Expanded detail
             AnimatedVisibility(visible = expanded) {
                 Column(
@@ -224,6 +314,7 @@ fun SessionHistoryCard(
                             ReviewLogRow(
                                 logWithCard = logWithCard,
                                 viewModel = viewModel,
+                                opponents = opponents,
                                 toolbarState = toolbarState
                             )
                         }
@@ -239,6 +330,7 @@ fun SessionHistoryCard(
 private fun QuickGradeCard(
     logWithCard: ReviewLogWithCard,
     viewModel: HistoryViewModel,
+    opponents: List<Opponent>,
     toolbarState: MarkdownToolbarState? = null
 ) {
     val log = logWithCard.reviewLog
@@ -273,6 +365,8 @@ private fun QuickGradeCard(
         log.imagePaths.split(",").filter { it.isNotBlank() }
     }
 
+    val opponentLabel = opponentLabel(log.opponentId, opponents)
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -305,6 +399,7 @@ private fun QuickGradeCard(
                         text = buildString {
                             append("Quick Grade")
                             if (groupLabel != null) append(" · $groupLabel")
+                            if (opponentLabel != null) append(" · vs ").append(opponentLabel)
                             append(" · ")
                             append(dateFormatter.format(Date(log.reviewTime)))
                         },
@@ -348,9 +443,16 @@ private fun QuickGradeCard(
             AnimatedVisibility(visible = showNoteEditor) {
                 HistoryNoteEditor(
                     reviewLog = log,
+                    opponents = opponents,
                     onSave = { notes, images ->
                         viewModel.updateReviewLogNotes(log, notes, images)
                         showNoteEditor = false
+                    },
+                    onOpponentChange = { opponentId ->
+                        viewModel.updateReviewLogOpponent(log, opponentId)
+                    },
+                    onCreateOpponent = { name, mult ->
+                        viewModel.createOpponent(name, mult)
                     },
                     toolbarState = toolbarState
                 )
@@ -381,10 +483,18 @@ private fun GradeChipIfNonZero(
     }
 }
 
+/** Resolve a display string for an opponentId — null when there's nothing to show. */
+private fun opponentLabel(opponentId: Long?, opponents: List<Opponent>): String? {
+    if (opponentId == null) return null
+    val match = opponents.find { it.id == opponentId }
+    return match?.name ?: "[deleted]"
+}
+
 @Composable
 private fun ReviewLogRow(
     logWithCard: ReviewLogWithCard,
     viewModel: HistoryViewModel,
+    opponents: List<Opponent>,
     toolbarState: MarkdownToolbarState? = null
 ) {
     val log = logWithCard.reviewLog
@@ -418,6 +528,8 @@ private fun ReviewLogRow(
         log.imagePaths.split(",").filter { it.isNotBlank() }
     }
 
+    val opponentLabel = opponentLabel(log.opponentId, opponents)
+
     Column {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -445,9 +557,16 @@ private fun ReviewLogRow(
                     overflow = TextOverflow.Ellipsis
                 )
                 val groupLabel = log.groupName?.takeIf { it != GROUP_NAME_CARD_EDIT }
-                if (groupLabel != null) {
+                val metaText = buildString {
+                    if (groupLabel != null) append(groupLabel)
+                    if (opponentLabel != null) {
+                        if (isNotEmpty()) append(" · ")
+                        append("vs ").append(opponentLabel)
+                    }
+                }
+                if (metaText.isNotEmpty()) {
                     Text(
-                        text = groupLabel,
+                        text = metaText,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -496,9 +615,16 @@ private fun ReviewLogRow(
         AnimatedVisibility(visible = showNoteEditor) {
             HistoryNoteEditor(
                 reviewLog = log,
+                opponents = opponents,
                 onSave = { notes, images ->
                     viewModel.updateReviewLogNotes(log, notes, images)
                     showNoteEditor = false
+                },
+                onOpponentChange = { opponentId ->
+                    viewModel.updateReviewLogOpponent(log, opponentId)
+                },
+                onCreateOpponent = { name, mult ->
+                    viewModel.createOpponent(name, mult)
                 },
                 toolbarState = toolbarState
             )
@@ -507,12 +633,16 @@ private fun ReviewLogRow(
 }
 
 /**
- * Inline note editor for a review log entry. Supports markdown notes and image attachments.
+ * Inline note editor for a review log entry. Supports markdown notes, image attachments,
+ * and reassigning the opponent (metadata-only — does not recompute scheduling).
  */
 @Composable
 private fun HistoryNoteEditor(
     reviewLog: ReviewLog,
+    opponents: List<Opponent>,
     onSave: (String, List<String>) -> Unit,
+    onOpponentChange: (Long?) -> Unit,
+    onCreateOpponent: suspend (String, Double) -> Long,
     toolbarState: MarkdownToolbarState? = null
 ) {
     val context = LocalContext.current
@@ -542,6 +672,15 @@ private fun HistoryNoteEditor(
             .padding(top = 8.dp)
     ) {
         HorizontalDivider()
+        Spacer(modifier = Modifier.height(8.dp))
+
+        OpponentPicker(
+            selectedOpponentId = reviewLog.opponentId,
+            opponents = opponents,
+            onOpponentSelected = onOpponentChange,
+            onCreate = onCreateOpponent
+        )
+
         Spacer(modifier = Modifier.height(8.dp))
 
         MarkdownDescriptionField(
