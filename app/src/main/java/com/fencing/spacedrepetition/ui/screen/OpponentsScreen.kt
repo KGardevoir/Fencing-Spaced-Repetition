@@ -1,9 +1,11 @@
 package com.fencing.spacedrepetition.ui.screen
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -249,10 +251,10 @@ fun OpponentEditorDialog(
                 OutlinedTextField(
                     value = multiplierText,
                     onValueChange = { multiplierText = it },
-                    label = { Text("Skill multiplier (e.g. 1.25)") },
+                    label = { Text("Skill multiplier") },
                     supportingText = {
                         Text(
-                            "1.0 = neutral · > 1.0 = harder opponent (bigger stability gain) · < 1.0 = easier",
+                            "1.0 = neutral. >1.0 harder, <1.0 easier.",
                             style = MaterialTheme.typography.labelSmall
                         )
                     },
@@ -261,8 +263,13 @@ fun OpponentEditorDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // Quick preset chips
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                // Quick preset chips — horizontally scrollable so they never wrap.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     listOf(0.75, 1.0, 1.25, 1.5).forEach { preset ->
                         AssistChip(
                             onClick = { multiplierText = "%.2f".format(preset) },
