@@ -51,7 +51,11 @@ fun HistoryScreen(
     val historyItems by viewModel.historyItems.collectAsState()
     val opponents by viewModel.opponents.collectAsState()
     val opponentFilter by viewModel.opponentFilter.collectAsState()
+    val searchQuery by viewModel.searchQuery.collectAsState()
+    val selectedGroup by viewModel.selectedGroup.collectAsState()
+    val availableGroups by viewModel.availableGroups.collectAsState()
     val markdownToolbarState = rememberMarkdownToolbarState()
+    val hasActiveFilters = searchQuery.isNotBlank() || selectedGroup != null || opponentFilter != null
 
     Scaffold(
         topBar = {
@@ -74,6 +78,14 @@ fun HistoryScreen(
                 .padding(paddingValues)
                 .imePadding()
         ) {
+            SearchAndFilterBar(
+                searchQuery = searchQuery,
+                onSearchQueryChange = { viewModel.searchQuery.value = it },
+                selectedGroup = selectedGroup,
+                onGroupSelected = { viewModel.selectedGroup.value = it },
+                availableGroups = availableGroups
+            )
+
             // Opponent filter row (hidden until opponents exist)
             if (opponents.isNotEmpty()) {
                 OpponentFilterRow(
@@ -98,22 +110,31 @@ fun HistoryScreen(
                             modifier = Modifier.size(64.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                         )
-                        Text(
-                            text = if (opponentFilter != null)
-                                "No history matches this filter"
-                            else
-                                "No practice history yet",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = if (opponentFilter != null)
-                                "Try a different opponent filter"
-                            else
-                                "Complete a practice session to see it here",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
+                        if (hasActiveFilters) {
+                            Text(
+                                text = "No results match your search",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            TextButton(onClick = {
+                                viewModel.searchQuery.value = ""
+                                viewModel.selectedGroup.value = null
+                                viewModel.setOpponentFilter(null)
+                            }) {
+                                Text("Clear filters")
+                            }
+                        } else {
+                            Text(
+                                text = "No practice history yet",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "Complete a practice session to see it here",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
                     }
                 }
             } else {
@@ -150,6 +171,82 @@ fun HistoryScreen(
 
                 // Markdown toolbar pinned above the keyboard
                 MarkdownKeyboardToolbar(markdownToolbarState)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SearchAndFilterBar(
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    selectedGroup: String?,
+    onGroupSelected: (String?) -> Unit,
+    availableGroups: List<String>
+) {
+    var groupDropdownExpanded by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = onSearchQueryChange,
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("Search cards...") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { onSearchQueryChange("") }) {
+                        Icon(Icons.Default.Clear, contentDescription = "Clear search")
+                    }
+                }
+            },
+            singleLine = true
+        )
+
+        if (availableGroups.isNotEmpty()) {
+            ExposedDropdownMenuBox(
+                expanded = groupDropdownExpanded,
+                onExpandedChange = { groupDropdownExpanded = it }
+            ) {
+                OutlinedTextField(
+                    value = selectedGroup ?: "All groups",
+                    onValueChange = {},
+                    readOnly = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                    label = { Text("Group") },
+                    trailingIcon = {
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = groupDropdownExpanded)
+                    }
+                )
+                ExposedDropdownMenu(
+                    expanded = groupDropdownExpanded,
+                    onDismissRequest = { groupDropdownExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("All groups") },
+                        onClick = {
+                            onGroupSelected(null)
+                            groupDropdownExpanded = false
+                        }
+                    )
+                    availableGroups.forEach { group ->
+                        DropdownMenuItem(
+                            text = { Text(group) },
+                            onClick = {
+                                onGroupSelected(group)
+                                groupDropdownExpanded = false
+                            }
+                        )
+                    }
+                }
             }
         }
     }
