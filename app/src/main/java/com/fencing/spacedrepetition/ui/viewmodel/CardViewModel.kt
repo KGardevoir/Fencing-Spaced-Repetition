@@ -13,6 +13,7 @@ import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
+import com.fencing.spacedrepetition.data.repository.OpponentRepository
 import com.fencing.spacedrepetition.util.CardImportExport
 import com.fencing.spacedrepetition.util.CardWithGroupNames
 import com.fencing.spacedrepetition.util.ExportResult
@@ -37,7 +38,8 @@ enum class SortDirection {
 class CardViewModel(
     application: Application,
     private val repository: CardRepository,
-    private val groupRepository: GroupRepository
+    private val groupRepository: GroupRepository,
+    private val opponentRepository: OpponentRepository
 ) : AndroidViewModel(application) {
 
     val allCards: StateFlow<List<Card>> = repository.getAllCards()
@@ -424,11 +426,19 @@ class CardViewModel(
                     cardsWithStates.associate { it.card.id to it.card.question }
                 } else emptyMap()
 
+                // Bundle opponents whenever history is included so review logs can
+                // round-trip their opponent assignments by name.
+                val opponents = if (includeHistory) withContext(Dispatchers.IO) {
+                    opponentRepository.getAllOpponentsSync()
+                } else emptyList()
+                val opponentNamesById = opponents.associate { it.id to it.name }
+
                 val result = withContext(Dispatchers.IO) {
                     contentResolver.openOutputStream(uri)?.use { fileStream ->
                         val outputStream = CardImportExport.createCompressedOutputStream(fileStream)
                         val exportResult = CardImportExport.exportCardsWithGroupStates(
-                            cardsWithStates, outputStream, allGroups, reviewLogs, cardQuestions
+                            cardsWithStates, outputStream, allGroups, reviewLogs, cardQuestions,
+                            opponents, opponentNamesById
                         )
                         outputStream.close()
                         exportResult
@@ -484,11 +494,21 @@ class CardViewModel(
                     filteredCardsWithStates.associate { it.card.id to it.card.question }
                 } else emptyMap()
 
+                // Only export opponents that are actually referenced by the included logs,
+                // to avoid leaking unrelated opponents from the user's roster.
+                val referencedOpponentIds = reviewLogs.mapNotNull { it.opponentId }.toSet()
+                val opponents = if (referencedOpponentIds.isNotEmpty()) withContext(Dispatchers.IO) {
+                    opponentRepository.getAllOpponentsSync()
+                        .filter { it.id in referencedOpponentIds }
+                } else emptyList()
+                val opponentNamesById = opponents.associate { it.id to it.name }
+
                 val result = withContext(Dispatchers.IO) {
                     contentResolver.openOutputStream(uri)?.use { fileStream ->
                         val outputStream = CardImportExport.createCompressedOutputStream(fileStream)
                         val exportResult = CardImportExport.exportCardsWithGroupStates(
-                            filteredCardsWithStates, outputStream, selectedGroups, reviewLogs, cardQuestions
+                            filteredCardsWithStates, outputStream, selectedGroups, reviewLogs, cardQuestions,
+                            opponents, opponentNamesById
                         )
                         outputStream.close()
                         exportResult
@@ -594,6 +614,16 @@ class CardViewModel(
                     }
                 }
 
+                // Restore opponents (creates missing ones; existing names keep local values)
+                val parsedOpponents = CardImportExport.lastParsedOpponents
+                val opponentNameToId = if (parsedOpponents.isNotEmpty()) {
+                    withContext(Dispatchers.IO) {
+                        opponentRepository.ensureOpponentsExist(
+                            parsedOpponents.map { Triple(it.name, it.skillMultiplier, it.notes) }
+                        )
+                    }
+                } else emptyMap()
+
                 // Import review history if present in the file
                 val parsedReviewHistory = CardImportExport.lastParsedReviewHistory
                 if (parsedReviewHistory.isNotEmpty()) {
@@ -601,7 +631,7 @@ class CardViewModel(
                         val questionToCardId = repository.getAllCardsSync()
                             .associate { it.question to it.id }
                         val reviewLogs = CardImportExport.parsedReviewLogsToEntities(
-                            getApplication(), parsedReviewHistory, questionToCardId
+                            getApplication(), parsedReviewHistory, questionToCardId, opponentNameToId
                         )
                         if (reviewLogs.isNotEmpty()) {
                             repository.importReviewLogs(reviewLogs)
