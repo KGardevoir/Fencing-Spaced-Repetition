@@ -197,7 +197,7 @@ fun OpponentDifficultyDialog(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    listOf(0.75, 1.0, 1.25, 1.5).forEach { preset ->
+                    listOf(0.5, 0.75, 1.0, 1.25, 1.5).forEach { preset ->
                         AssistChip(
                             onClick = { multiplierText = "%.2f".format(preset) },
                             label = { Text("×${"%.2f".format(preset)}") }
