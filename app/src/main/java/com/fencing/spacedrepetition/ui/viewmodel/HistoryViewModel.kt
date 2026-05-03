@@ -6,6 +6,7 @@ import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.repository.CardRepository
+import com.fencing.spacedrepetition.data.repository.GROUP_NAME_CARD_EDIT
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -47,50 +48,74 @@ class HistoryViewModel(
         _opponentFilter.value = opponentId
     }
 
-    /** Sessions and quick-grade logs merged in descending chronological order. */
-    private val allHistoryItems: Flow<List<HistoryItem>> =
+    val searchQuery = MutableStateFlow("")
+    val selectedGroup = MutableStateFlow<String?>(null)
+
+    private val allLogsWithCards: Flow<List<ReviewLogWithCard>> =
+        repository.getAllReviewLogs().transform { logs ->
+            emit(logs.map { log ->
+                val card = repository.getCardById(log.cardId)
+                ReviewLogWithCard(log, card?.question ?: "Deleted Card")
+            })
+        }
+
+    val availableGroups: StateFlow<List<String>> = allLogsWithCards
+        .map { logs ->
+            logs.mapNotNull { lwc ->
+                lwc.reviewLog.groupName?.takeIf { it.isNotBlank() && it != GROUP_NAME_CARD_EDIT }
+            }.distinct().sorted()
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Sessions and quick-grade logs merged in descending chronological order, with all active filters applied. */
+    val historyItems: StateFlow<List<HistoryItem>> =
         combine(
-            repository.getCompletedSessions(),
-            repository.getReviewLogsWithoutSession().transform { logs ->
-                emit(logs.map { log ->
-                    val card = repository.getCardById(log.cardId)
-                    ReviewLogWithCard(log, card?.question ?: "Deleted Card")
-                })
-            }
-        ) { sessions, quickGrades ->
+            combine(
+                repository.getCompletedSessions(),
+                allLogsWithCards
+            ) { sessions, logs -> sessions to logs },
+            combine(searchQuery, selectedGroup, _opponentFilter) { q, g, o -> Triple(q, g, o) }
+        ) { (sessions, allLogs), (query, group, opponentFilter) ->
+            val logsBySession = allLogs
+                .filter { it.reviewLog.sessionId != null }
+                .groupBy { it.reviewLog.sessionId!! }
+            val quickGradeLogs = allLogs.filter { it.reviewLog.sessionId == null }
+
             val items = mutableListOf<HistoryItem>()
-            sessions.mapTo(items) { HistoryItem.Session(it) }
-            quickGrades.mapTo(items) { HistoryItem.QuickGrade(it) }
+
+            sessions.forEach { session ->
+                val sessionLogs = logsBySession[session.id] ?: emptyList()
+                val matchesGroup = group == null || sessionLogs.any { it.reviewLog.groupName == group }
+                val matchesText = query.isBlank() || sessionLogs.any {
+                    it.cardQuestion.contains(query, ignoreCase = true)
+                }
+                val matchesOpponent = opponentFilter == null || sessionLogs.any {
+                    matchesOpponentFilter(it.reviewLog.opponentId, opponentFilter)
+                }
+                if (matchesGroup && matchesText && matchesOpponent) {
+                    items.add(HistoryItem.Session(session))
+                }
+            }
+
+            quickGradeLogs.forEach { lwc ->
+                val matchesGroup = group == null || lwc.reviewLog.groupName == group
+                val matchesText = query.isBlank() || lwc.cardQuestion.contains(query, ignoreCase = true)
+                val matchesOpponent = opponentFilter == null ||
+                    matchesOpponentFilter(lwc.reviewLog.opponentId, opponentFilter)
+                if (matchesGroup && matchesText && matchesOpponent) {
+                    items.add(HistoryItem.QuickGrade(lwc))
+                }
+            }
+
             items.sortedByDescending { item ->
                 when (item) {
                     is HistoryItem.Session -> item.session.startTime
                     is HistoryItem.QuickGrade -> item.log.reviewLog.reviewTime
                 }
             }
-        }
-
-    /** Full list unfiltered (filtering is applied by historyItems for display). */
-    val historyItems: StateFlow<List<HistoryItem>> =
-        combine(allHistoryItems, _opponentFilter) { items, filter ->
-            if (filter == null) {
-                items
-            } else {
-                items.mapNotNull { item ->
-                    when (item) {
-                        is HistoryItem.Session -> {
-                            val logs = repository.getReviewLogsBySession(item.session.id).first()
-                            val matches = logs.any { log -> matchesFilter(log.opponentId, filter) }
-                            if (matches) item else null
-                        }
-                        is HistoryItem.QuickGrade -> {
-                            if (matchesFilter(item.log.reviewLog.opponentId, filter)) item else null
-                        }
-                    }
-                }
-            }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private fun matchesFilter(logOpponentId: Long?, filter: Long): Boolean =
+    private fun matchesOpponentFilter(logOpponentId: Long?, filter: Long): Boolean =
         if (filter == OPPONENT_FILTER_NONE) logOpponentId == null else logOpponentId == filter
 
     fun getReviewLogsForSession(sessionId: Long): Flow<List<ReviewLogWithCard>> =
