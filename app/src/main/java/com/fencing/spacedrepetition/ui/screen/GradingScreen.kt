@@ -172,6 +172,9 @@ fun GradingScreen(
                                         onCreateOpponent = { name, mult ->
                                             viewModel.createOpponent(name, mult)
                                         },
+                                        onOpponentDifficultyChanged = { opponentId, newMult ->
+                                            viewModel.updateOpponentDifficulty(opponentId, newMult)
+                                        },
                                         toolbarState = markdownToolbarState
                                     )
                                 }
@@ -253,6 +256,7 @@ fun GradingCardItem(
     onNotesChanged: (String, List<String>) -> Unit,
     onOpponentSelected: (Long?) -> Unit = {},
     onCreateOpponent: suspend (String, Double) -> Long = { _, _ -> -1L },
+    onOpponentDifficultyChanged: ((Long, Double) -> Unit)? = null,
     toolbarState: MarkdownToolbarState? = null
 ) {
     val context = LocalContext.current
@@ -382,7 +386,8 @@ fun GradingCardItem(
                 selectedOpponentId = sessionCard.opponentId,
                 opponents = opponents,
                 onOpponentSelected = onOpponentSelected,
-                onCreate = onCreateOpponent
+                onCreate = onCreateOpponent,
+                onUpdateDifficulty = onOpponentDifficultyChanged
             )
 
             // Notes section

@@ -7,6 +7,7 @@ import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.model.SessionCard
+import com.fencing.spacedrepetition.data.preferences.ThemePreferences
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,7 +20,8 @@ import kotlinx.coroutines.launch
 
 class PracticeViewModel(
     private val repository: CardRepository,
-    private val opponentRepository: OpponentRepository
+    private val opponentRepository: OpponentRepository,
+    private val preferences: ThemePreferences
 ) : ViewModel() {
 
     /** Available opponents for selection during grading. */
@@ -83,8 +85,9 @@ class PracticeViewModel(
                 // Create session
                 sessionId = repository.createPracticeSession(cardsForSession.map { it.id })
 
-                // Initialize session cards
-                _sessionCards.value = cardsForSession.map { SessionCard(it, null) }
+                // Pre-apply the last-used opponent to all cards
+                val defaultOpponentId = preferences.lastUsedOpponentId.first()
+                _sessionCards.value = cardsForSession.map { SessionCard(it, null, opponentId = defaultOpponentId) }
                 _currentCardIndex.value = 0
                 _uiState.value = PracticeUiState.Practicing
             } catch (e: Exception) {
@@ -134,12 +137,22 @@ class PracticeViewModel(
         }
     }
 
-    /** Set the opponent for a card during grading (null clears). */
+    /** Set the opponent for a card during grading (null clears) and persist as the new default. */
     fun updateOpponent(cardIndex: Int, opponentId: Long?) {
         val cards = _sessionCards.value.toMutableList()
         if (cardIndex in cards.indices) {
             cards[cardIndex] = cards[cardIndex].copy(opponentId = opponentId)
             _sessionCards.value = cards
+        }
+        viewModelScope.launch { preferences.setLastUsedOpponentId(opponentId) }
+    }
+
+    /** Update an opponent's skill multiplier. The change is persisted to the database
+     *  and will be snapshotted into ReviewLog.stabilityMultiplier at submission. */
+    fun updateOpponentDifficulty(opponentId: Long, newMultiplier: Double) {
+        viewModelScope.launch {
+            val opponent = opponentRepository.getOpponentById(opponentId) ?: return@launch
+            opponentRepository.updateOpponent(opponent.copy(skillMultiplier = newMultiplier))
         }
     }
 

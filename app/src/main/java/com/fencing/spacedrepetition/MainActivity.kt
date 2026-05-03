@@ -69,7 +69,7 @@ class MainActivity : ComponentActivity() {
                         factory = CardViewModelFactory(application, repository, groupRepository, opponentRepository)
                     )
                     val practiceViewModel: PracticeViewModel = viewModel(
-                        factory = PracticeViewModelFactory(repository, opponentRepository)
+                        factory = PracticeViewModelFactory(repository, opponentRepository, themePreferences)
                     )
                     val groupViewModel: GroupViewModel = viewModel(
                         factory = GroupViewModelFactory(application, groupRepository, repository)
@@ -113,12 +113,13 @@ class CardViewModelFactory(
 
 class PracticeViewModelFactory(
     private val repository: CardRepository,
-    private val opponentRepository: OpponentRepository
+    private val opponentRepository: OpponentRepository,
+    private val themePreferences: ThemePreferences
 ) : androidx.lifecycle.ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(PracticeViewModel::class.java)) {
-            return PracticeViewModel(repository, opponentRepository) as T
+            return PracticeViewModel(repository, opponentRepository, themePreferences) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
