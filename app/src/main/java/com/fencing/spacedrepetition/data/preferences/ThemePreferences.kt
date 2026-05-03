@@ -33,7 +33,6 @@ class ThemePreferences(private val context: Context) {
     private val FSRS_RETENTION_KEY = intPreferencesKey("fsrs_retention")
     private val SM2_INTERVAL_MODIFIER_KEY = intPreferencesKey("sm2_interval_modifier")
     private val FSRS_ENABLE_FUZZING_KEY = booleanPreferencesKey("fsrs_enable_fuzzing")
-    private val LAST_USED_OPPONENT_ID_KEY = longPreferencesKey("last_used_opponent_id")
 
     companion object {
         const val DEFAULT_CARDS_PER_SESSION = 3
@@ -137,9 +136,6 @@ class ThemePreferences(private val context: Context) {
             preferences[FSRS_ENABLE_FUZZING_KEY] ?: DEFAULT_FSRS_ENABLE_FUZZING
         }
 
-    val lastUsedOpponentId: Flow<Long?> = context.dataStore.data
-        .map { preferences -> preferences[LAST_USED_OPPONENT_ID_KEY] }
-
     suspend fun setThemeMode(mode: ThemeMode) {
         context.dataStore.edit { preferences ->
             preferences[THEME_KEY] = mode.name
@@ -219,13 +215,6 @@ class ThemePreferences(private val context: Context) {
     suspend fun setFsrsEnableFuzzing(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[FSRS_ENABLE_FUZZING_KEY] = enabled
-        }
-    }
-
-    suspend fun setLastUsedOpponentId(id: Long?) {
-        context.dataStore.edit { preferences ->
-            if (id != null) preferences[LAST_USED_OPPONENT_ID_KEY] = id
-            else preferences.remove(LAST_USED_OPPONENT_ID_KEY)
         }
     }
 }
