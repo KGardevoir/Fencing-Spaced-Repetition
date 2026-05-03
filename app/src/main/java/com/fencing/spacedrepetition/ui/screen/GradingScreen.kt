@@ -5,9 +5,11 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -35,6 +37,7 @@ import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeUiState
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 import com.fencing.spacedrepetition.util.saveImageToInternalStorage
+import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -160,6 +163,32 @@ fun GradingScreen(
                                 onUpdateDifficulty = { id, mult -> viewModel.updateOpponentDifficulty(id, mult) },
                                 label = "Opponent (all cards)"
                             )
+
+                            // Difficulty presets — visible whenever a session opponent is selected
+                            val sessionOpponent = opponents.find { it.id == sessionOpponentId }
+                            if (sessionOpponent != null) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Difficulty:",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    listOf(0.5, 0.75, 1.0, 1.25, 1.5).forEach { preset ->
+                                        FilterChip(
+                                            selected = abs(sessionOpponent.skillMultiplier - preset) < 0.005,
+                                            onClick = { viewModel.updateOpponentDifficulty(sessionOpponent.id, preset) },
+                                            label = { Text("×${"%.2f".format(preset)}") }
+                                        )
+                                    }
+                                }
+                            }
 
                             Spacer(modifier = Modifier.height(16.dp))
 
