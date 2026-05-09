@@ -722,8 +722,10 @@ class FSRSAlgorithmTest {
 
     @Test
     fun `stabilityMultiplier - scales gain in LEARNING state for non-AGAIN ratings`() {
+        // Use stability=0.5: shortTermStability for GOOD at low s produces newStab > s,
+        // so a multiplier > 1 amplifies the gain (not the loss).
         val learningCard = FSRSAlgorithm.FSRSCard(
-            stability = 3.0, difficulty = 5.0,
+            stability = 0.5, difficulty = 5.0,
             state = FSRSAlgorithm.CardState.LEARNING,
             reps = 1, lastReview = testTimestamp
         )
