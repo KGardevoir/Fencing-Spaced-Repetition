@@ -40,6 +40,10 @@ class PracticeViewModel(
     private val _currentCardIndex = MutableStateFlow(0)
     val currentCardIndex: StateFlow<Int> = _currentCardIndex.asStateFlow()
 
+    /** The opponent selected for this session; all cards default to this. */
+    private val _sessionOpponentId = MutableStateFlow<Long?>(null)
+    val sessionOpponentId: StateFlow<Long?> = _sessionOpponentId.asStateFlow()
+
     /** Review logs created during this session, available after grading for adding notes. */
     private val _sessionReviewLogs = MutableStateFlow<List<ReviewLog>>(emptyList())
     val sessionReviewLogs: StateFlow<List<ReviewLog>> = _sessionReviewLogs.asStateFlow()
@@ -83,7 +87,8 @@ class PracticeViewModel(
                 // Create session
                 sessionId = repository.createPracticeSession(cardsForSession.map { it.id })
 
-                // Initialize session cards
+                // Initialize session cards; no default opponent until user picks one
+                _sessionOpponentId.value = null
                 _sessionCards.value = cardsForSession.map { SessionCard(it, null) }
                 _currentCardIndex.value = 0
                 _uiState.value = PracticeUiState.Practicing
@@ -134,12 +139,27 @@ class PracticeViewModel(
         }
     }
 
-    /** Set the opponent for a card during grading (null clears). */
+    /** Set the session-level opponent and apply it to every card in the session. */
+    fun setSessionOpponent(opponentId: Long?) {
+        _sessionOpponentId.value = opponentId
+        _sessionCards.value = _sessionCards.value.map { it.copy(opponentId = opponentId) }
+    }
+
+    /** Override the opponent for a single card without changing the session default. */
     fun updateOpponent(cardIndex: Int, opponentId: Long?) {
         val cards = _sessionCards.value.toMutableList()
         if (cardIndex in cards.indices) {
             cards[cardIndex] = cards[cardIndex].copy(opponentId = opponentId)
             _sessionCards.value = cards
+        }
+    }
+
+    /** Update an opponent's skill multiplier. The change is persisted to the database
+     *  and will be snapshotted into ReviewLog.stabilityMultiplier at submission. */
+    fun updateOpponentDifficulty(opponentId: Long, newMultiplier: Double) {
+        viewModelScope.launch {
+            val opponent = opponentRepository.getOpponentById(opponentId) ?: return@launch
+            opponentRepository.updateOpponent(opponent.copy(skillMultiplier = newMultiplier))
         }
     }
 
@@ -284,6 +304,7 @@ class PracticeViewModel(
         _sessionCards.value = emptyList()
         _sessionReviewLogs.value = emptyList()
         _currentCardIndex.value = 0
+        _sessionOpponentId.value = null
         sessionId = null
         selectedGroupId = null
         sessionStartTime = 0L

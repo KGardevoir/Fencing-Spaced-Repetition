@@ -46,6 +46,7 @@ fun GradingScreen(
     val uiState by viewModel.uiState.collectAsState()
     val sessionCards by viewModel.sessionCards.collectAsState()
     val opponents by viewModel.opponents.collectAsState()
+    val sessionOpponentId by viewModel.sessionOpponentId.collectAsState()
 
     var showConfirmDialog by remember { mutableStateOf(false) }
     val markdownToolbarState = rememberMarkdownToolbarState()
@@ -148,6 +149,18 @@ fun GradingScreen(
                                 }
                             }
 
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Session-level opponent — applies to all cards at once
+                            OpponentPicker(
+                                selectedOpponentId = sessionOpponentId,
+                                opponents = opponents,
+                                onOpponentSelected = { viewModel.setSessionOpponent(it) },
+                                onCreate = { name, mult -> viewModel.createOpponent(name, mult) },
+                                onUpdateDifficulty = { id, mult -> viewModel.updateOpponentDifficulty(id, mult) },
+                                label = "Opponent (all cards)"
+                            )
+
                             Spacer(modifier = Modifier.height(16.dp))
 
                             // Cards list
@@ -171,6 +184,9 @@ fun GradingScreen(
                                         },
                                         onCreateOpponent = { name, mult ->
                                             viewModel.createOpponent(name, mult)
+                                        },
+                                        onOpponentDifficultyChanged = { opponentId, newMult ->
+                                            viewModel.updateOpponentDifficulty(opponentId, newMult)
                                         },
                                         toolbarState = markdownToolbarState
                                     )
@@ -253,6 +269,7 @@ fun GradingCardItem(
     onNotesChanged: (String, List<String>) -> Unit,
     onOpponentSelected: (Long?) -> Unit = {},
     onCreateOpponent: suspend (String, Double) -> Long = { _, _ -> -1L },
+    onOpponentDifficultyChanged: ((Long, Double) -> Unit)? = null,
     toolbarState: MarkdownToolbarState? = null
 ) {
     val context = LocalContext.current
@@ -382,7 +399,8 @@ fun GradingCardItem(
                 selectedOpponentId = sessionCard.opponentId,
                 opponents = opponents,
                 onOpponentSelected = onOpponentSelected,
-                onCreate = onCreateOpponent
+                onCreate = onCreateOpponent,
+                onUpdateDifficulty = onOpponentDifficultyChanged
             )
 
             // Notes section
