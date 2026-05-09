@@ -638,6 +638,138 @@ class FSRSAlgorithmTest {
         assertEquals(highResult.card.scheduledDays, lowResult.card.scheduledDays)
     }
 
+    // ========== stabilityMultiplier (Opponent Skill) Tests ==========
+
+    @Test
+    fun `stabilityMultiplier - greater than 1 increases stability gain in REVIEW`() {
+        val reviewCard = FSRSAlgorithm.FSRSCard(
+            stability = 10.0, difficulty = 5.0,
+            state = FSRSAlgorithm.CardState.REVIEW,
+            scheduledDays = 10, reps = 5, lastReview = testTimestamp
+        )
+        val reviewTime = testTimestamp + (10L * 24 * 60 * 60 * 1000)
+
+        val neutral = algorithm.schedule(reviewCard, FSRSAlgorithm.Rating.GOOD, reviewTime, stabilityMultiplier = 1.0)
+        val boosted = algorithm.schedule(reviewCard, FSRSAlgorithm.Rating.GOOD, reviewTime, stabilityMultiplier = 2.0)
+
+        assertTrue(
+            "Boosted stability ${boosted.card.stability} should exceed neutral ${neutral.card.stability}",
+            boosted.card.stability > neutral.card.stability
+        )
+        assertTrue(boosted.card.scheduledDays >= neutral.card.scheduledDays)
+    }
+
+    @Test
+    fun `stabilityMultiplier - less than 1 decreases stability gain in REVIEW`() {
+        val reviewCard = FSRSAlgorithm.FSRSCard(
+            stability = 10.0, difficulty = 5.0,
+            state = FSRSAlgorithm.CardState.REVIEW,
+            scheduledDays = 10, reps = 5, lastReview = testTimestamp
+        )
+        val reviewTime = testTimestamp + (10L * 24 * 60 * 60 * 1000)
+
+        val neutral = algorithm.schedule(reviewCard, FSRSAlgorithm.Rating.GOOD, reviewTime, stabilityMultiplier = 1.0)
+        val reduced = algorithm.schedule(reviewCard, FSRSAlgorithm.Rating.GOOD, reviewTime, stabilityMultiplier = 0.5)
+
+        assertTrue(
+            "Reduced stability ${reduced.card.stability} should be less than neutral ${neutral.card.stability}",
+            reduced.card.stability < neutral.card.stability
+        )
+    }
+
+    @Test
+    fun `stabilityMultiplier - 1_0 matches default behavior`() {
+        val reviewCard = FSRSAlgorithm.FSRSCard(
+            stability = 10.0, difficulty = 5.0,
+            state = FSRSAlgorithm.CardState.REVIEW,
+            scheduledDays = 10, reps = 5, lastReview = testTimestamp
+        )
+        val reviewTime = testTimestamp + (10L * 24 * 60 * 60 * 1000)
+
+        val defaultResult = algorithm.schedule(reviewCard, FSRSAlgorithm.Rating.GOOD, reviewTime)
+        val explicitResult = algorithm.schedule(reviewCard, FSRSAlgorithm.Rating.GOOD, reviewTime, stabilityMultiplier = 1.0)
+
+        assertDoubleEquals(defaultResult.card.stability, explicitResult.card.stability)
+        assertEquals(defaultResult.card.scheduledDays, explicitResult.card.scheduledDays)
+    }
+
+    @Test
+    fun `stabilityMultiplier - ignored for AGAIN in REVIEW so lapses are unaffected`() {
+        val reviewCard = FSRSAlgorithm.FSRSCard(
+            stability = 10.0, difficulty = 5.0,
+            state = FSRSAlgorithm.CardState.REVIEW,
+            scheduledDays = 10, reps = 5, lastReview = testTimestamp
+        )
+        val reviewTime = testTimestamp + (10L * 24 * 60 * 60 * 1000)
+
+        val neutral = algorithm.schedule(reviewCard, FSRSAlgorithm.Rating.AGAIN, reviewTime, stabilityMultiplier = 1.0)
+        val boosted = algorithm.schedule(reviewCard, FSRSAlgorithm.Rating.AGAIN, reviewTime, stabilityMultiplier = 3.0)
+
+        assertDoubleEquals(neutral.card.stability, boosted.card.stability)
+        assertEquals(neutral.card.lapses, boosted.card.lapses)
+        assertEquals(neutral.card.scheduledDays, boosted.card.scheduledDays)
+    }
+
+    @Test
+    fun `stabilityMultiplier - ignored for NEW card seeding`() {
+        val newCard = FSRSAlgorithm.FSRSCard()
+
+        val neutral = algorithm.schedule(newCard, FSRSAlgorithm.Rating.GOOD, testTimestamp, stabilityMultiplier = 1.0)
+        val boosted = algorithm.schedule(newCard, FSRSAlgorithm.Rating.GOOD, testTimestamp, stabilityMultiplier = 3.0)
+
+        assertDoubleEquals(neutral.card.stability, boosted.card.stability)
+    }
+
+    @Test
+    fun `stabilityMultiplier - scales gain in LEARNING state for non-AGAIN ratings`() {
+        val learningCard = FSRSAlgorithm.FSRSCard(
+            stability = 3.0, difficulty = 5.0,
+            state = FSRSAlgorithm.CardState.LEARNING,
+            reps = 1, lastReview = testTimestamp
+        )
+        val reviewTime = testTimestamp + (24 * 60 * 60 * 1000)
+
+        val neutral = algorithm.schedule(learningCard, FSRSAlgorithm.Rating.GOOD, reviewTime, stabilityMultiplier = 1.0)
+        val boosted = algorithm.schedule(learningCard, FSRSAlgorithm.Rating.GOOD, reviewTime, stabilityMultiplier = 2.0)
+
+        assertTrue(
+            "Boosted stability ${boosted.card.stability} should exceed neutral ${neutral.card.stability}",
+            boosted.card.stability > neutral.card.stability
+        )
+    }
+
+    @Test
+    fun `stabilityMultiplier - rating ordering is preserved with a strong opponent multiplier`() {
+        val reviewCard = FSRSAlgorithm.FSRSCard(
+            stability = 10.0, difficulty = 5.0,
+            state = FSRSAlgorithm.CardState.REVIEW,
+            scheduledDays = 10, reps = 5, lastReview = testTimestamp
+        )
+        val reviewTime = testTimestamp + (10L * 24 * 60 * 60 * 1000)
+
+        val hardBoosted = algorithm.schedule(reviewCard, FSRSAlgorithm.Rating.HARD, reviewTime, stabilityMultiplier = 2.0)
+        val goodBoosted = algorithm.schedule(reviewCard, FSRSAlgorithm.Rating.GOOD, reviewTime, stabilityMultiplier = 2.0)
+        val easyBoosted = algorithm.schedule(reviewCard, FSRSAlgorithm.Rating.EASY, reviewTime, stabilityMultiplier = 2.0)
+
+        assertTrue(goodBoosted.card.stability > hardBoosted.card.stability)
+        assertTrue(easyBoosted.card.stability > goodBoosted.card.stability)
+    }
+
+    @Test
+    fun `stabilityMultiplier - AGAIN in LEARNING is unaffected`() {
+        val learningCard = FSRSAlgorithm.FSRSCard(
+            stability = 2.0, difficulty = 5.0,
+            state = FSRSAlgorithm.CardState.LEARNING,
+            reps = 1, lastReview = testTimestamp
+        )
+        val reviewTime = testTimestamp + (24 * 60 * 60 * 1000)
+
+        val neutral = algorithm.schedule(learningCard, FSRSAlgorithm.Rating.AGAIN, reviewTime, stabilityMultiplier = 1.0)
+        val boosted = algorithm.schedule(learningCard, FSRSAlgorithm.Rating.AGAIN, reviewTime, stabilityMultiplier = 3.0)
+
+        assertDoubleEquals(neutral.card.stability, boosted.card.stability)
+    }
+
     // ========== Realistic Scenario Tests ==========
 
     @Test
