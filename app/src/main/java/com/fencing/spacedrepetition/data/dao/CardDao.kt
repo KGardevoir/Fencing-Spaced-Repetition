@@ -10,7 +10,7 @@ interface CardDao {
     @Query("SELECT * FROM cards ORDER BY nextReview ASC")
     fun getAllCards(): Flow<List<Card>>
 
-    @Query("SELECT * FROM cards ORDER BY nextReview ASC")
+    @Query("SELECT * FROM cards WHERE isDisabled = 0 ORDER BY nextReview ASC")
     suspend fun getAllCardsSync(): List<Card>
 
     @Query("SELECT * FROM cards WHERE id = :cardId")
@@ -19,13 +19,13 @@ interface CardDao {
     @Query("SELECT * FROM cards WHERE id = :cardId")
     fun getCardByIdFlow(cardId: Long): Flow<Card?>
 
-    @Query("SELECT * FROM cards WHERE nextReview <= :now ORDER BY nextReview ASC LIMIT :limit")
+    @Query("SELECT * FROM cards WHERE nextReview <= :now AND isDisabled = 0 ORDER BY nextReview ASC LIMIT :limit")
     suspend fun getDueCards(now: Long = System.currentTimeMillis(), limit: Int = 100): List<Card>
 
-    @Query("SELECT * FROM cards WHERE nextReview <= :now ORDER BY nextReview ASC LIMIT :limit")
+    @Query("SELECT * FROM cards WHERE nextReview <= :now AND isDisabled = 0 ORDER BY nextReview ASC LIMIT :limit")
     fun getDueCardsFlow(now: Long = System.currentTimeMillis(), limit: Int = 100): Flow<List<Card>>
 
-    @Query("SELECT COUNT(*) FROM cards WHERE nextReview <= :now")
+    @Query("SELECT COUNT(*) FROM cards WHERE nextReview <= :now AND isDisabled = 0")
     fun getDueCardCount(now: Long = System.currentTimeMillis()): Flow<Int>
 
     @Query("SELECT * FROM cards WHERE category = :category ORDER BY nextReview ASC")
@@ -85,7 +85,7 @@ interface CardDao {
         INNER JOIN card_group_cross_ref cgc ON c.id = cgc.cardId
         INNER JOIN groups g ON cgc.groupId = g.id
         LEFT JOIN card_group_learning_state cgls ON cgls.cardId = c.id AND cgls.groupId = :groupId
-        WHERE cgc.groupId = :groupId
+        WHERE cgc.groupId = :groupId AND c.isDisabled = 0
         ORDER BY CASE
             WHEN g.independentLearning = 1 THEN COALESCE(cgls.nextReview, c.nextReview)
             ELSE c.nextReview
@@ -99,6 +99,7 @@ interface CardDao {
         INNER JOIN groups g ON cgc.groupId = g.id
         LEFT JOIN card_group_learning_state cgls ON cgls.cardId = c.id AND cgls.groupId = :groupId
         WHERE cgc.groupId = :groupId
+          AND c.isDisabled = 0
           AND CASE
             WHEN g.independentLearning = 1 THEN COALESCE(cgls.nextReview, c.nextReview)
             ELSE c.nextReview
@@ -117,6 +118,7 @@ interface CardDao {
         INNER JOIN groups g ON cgc.groupId = g.id
         LEFT JOIN card_group_learning_state cgls ON cgls.cardId = c.id AND cgls.groupId = :groupId
         WHERE cgc.groupId = :groupId
+          AND c.isDisabled = 0
           AND CASE
             WHEN g.independentLearning = 1 THEN COALESCE(cgls.nextReview, c.nextReview)
             ELSE c.nextReview

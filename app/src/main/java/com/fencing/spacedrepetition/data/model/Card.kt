@@ -36,7 +36,8 @@ data class Card(
     val lastReview: Long = 0L,
     val nextReview: Long = 0L,
     val created: Long = System.currentTimeMillis(),
-    val modified: Long = System.currentTimeMillis()
+    val modified: Long = System.currentTimeMillis(),
+    val isDisabled: Boolean = false
 )
 
 enum class AlgorithmType {

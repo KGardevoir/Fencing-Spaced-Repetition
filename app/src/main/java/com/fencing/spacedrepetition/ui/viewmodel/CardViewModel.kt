@@ -64,6 +64,9 @@ class CardViewModel(
     private val _selectedGroupFilters = MutableStateFlow<Set<Long>>(emptySet())
     val selectedGroupFilters: StateFlow<Set<Long>> = _selectedGroupFilters.asStateFlow()
 
+    private val _showDisabledFilter = MutableStateFlow(false)
+    val showDisabledFilter: StateFlow<Boolean> = _showDisabledFilter.asStateFlow()
+
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
@@ -84,50 +87,51 @@ class CardViewModel(
         }
     }
 
-    val filteredCards: StateFlow<List<Card>> = combine(
-        allCardsWithGroups,
-        _selectedGroupFilters,
-        searchQuery,
-        _cardSortOption,
-        _sortDirection
-    ) { cardsWithGroups, groupIds, query, sortOption, direction ->
-        var filtered = if (groupIds.isEmpty()) {
-            cardsWithGroups.map { it.card }
-        } else {
-            cardsWithGroups
-                .filter { cardWithGroups -> cardWithGroups.groups.any { it.id in groupIds } }
-                .map { it.card }
-        }
-
-        // Apply search filter
-        if (query.isNotBlank()) {
-            val searchLower = query.lowercase()
-            filtered = filtered.filter { card ->
-                card.question.lowercase().contains(searchLower) ||
-                card.answer.lowercase().contains(searchLower)
+    val filteredCards: StateFlow<List<Card>> = _showDisabledFilter.flatMapLatest { showDisabled ->
+        combine(
+            allCardsWithGroups,
+            _selectedGroupFilters,
+            searchQuery,
+            _cardSortOption,
+            _sortDirection
+        ) { cardsWithGroups, groupIds, query, sortOption, direction ->
+            var filtered = when {
+                showDisabled -> cardsWithGroups.filter { it.card.isDisabled }.map { it.card }
+                groupIds.isEmpty() -> cardsWithGroups.filter { !it.card.isDisabled }.map { it.card }
+                else -> cardsWithGroups
+                    .filter { !it.card.isDisabled && it.groups.any { g -> g.id in groupIds } }
+                    .map { it.card }
             }
-        }
 
-        // Apply sort with direction
-        val sorted = when (sortOption) {
-            CardSortOption.DUE_DATE -> filtered.sortedBy { it.nextReview }
-            CardSortOption.NAME -> filtered.sortedBy { it.question.lowercase() }
-            CardSortOption.REVIEWS -> filtered.sortedBy {
-                when (it.algorithm) {
-                    AlgorithmType.FSRS -> it.fsrsReps
-                    AlgorithmType.SM2 -> it.sm2Repetitions
+            // Apply search filter
+            if (query.isNotBlank()) {
+                val searchLower = query.lowercase()
+                filtered = filtered.filter { card ->
+                    card.question.lowercase().contains(searchLower) ||
+                    card.answer.lowercase().contains(searchLower)
                 }
             }
-            CardSortOption.DIFFICULTY -> filtered.sortedBy {
-                when (it.algorithm) {
-                    AlgorithmType.FSRS -> it.fsrsDifficulty
-                    AlgorithmType.SM2 -> 2.5 - it.sm2EaseFactor
+
+            // Apply sort with direction
+            val sorted = when (sortOption) {
+                CardSortOption.DUE_DATE -> filtered.sortedBy { it.nextReview }
+                CardSortOption.NAME -> filtered.sortedBy { it.question.lowercase() }
+                CardSortOption.REVIEWS -> filtered.sortedBy {
+                    when (it.algorithm) {
+                        AlgorithmType.FSRS -> it.fsrsReps
+                        AlgorithmType.SM2 -> it.sm2Repetitions
+                    }
+                }
+                CardSortOption.DIFFICULTY -> filtered.sortedBy {
+                    when (it.algorithm) {
+                        AlgorithmType.FSRS -> it.fsrsDifficulty
+                        AlgorithmType.SM2 -> 2.5 - it.sm2EaseFactor
+                    }
                 }
             }
-        }
 
-        // Apply direction
-        if (direction == SortDirection.DESCENDING) sorted.reversed() else sorted
+            if (direction == SortDirection.DESCENDING) sorted.reversed() else sorted
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun selectGroupFilter(group: Group?) {
@@ -135,6 +139,7 @@ class CardViewModel(
     }
 
     fun toggleGroupFilter(groupId: Long) {
+        _showDisabledFilter.value = false
         _selectedGroupFilters.value = if (groupId in _selectedGroupFilters.value) {
             _selectedGroupFilters.value - groupId
         } else {
@@ -144,6 +149,34 @@ class CardViewModel(
 
     fun clearGroupFilters() {
         _selectedGroupFilters.value = emptySet()
+        _showDisabledFilter.value = false
+    }
+
+    fun toggleDisabledFilter() {
+        _showDisabledFilter.value = !_showDisabledFilter.value
+        if (_showDisabledFilter.value) {
+            _selectedGroupFilters.value = emptySet()
+        }
+    }
+
+    fun toggleCardDisabled(cardId: Long) {
+        viewModelScope.launch {
+            val card = repository.getCardById(cardId) ?: return@launch
+            repository.updateCard(card.copy(isDisabled = !card.isDisabled, modified = System.currentTimeMillis()))
+        }
+    }
+
+    fun setSelectedCardsDisabled(disabled: Boolean, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            val idsToUpdate = _selectedCardIds.value.toList()
+            idsToUpdate.forEach { cardId ->
+                val card = repository.getCardById(cardId) ?: return@forEach
+                repository.updateCard(card.copy(isDisabled = disabled, modified = System.currentTimeMillis()))
+            }
+            _selectedCardIds.value = emptySet()
+            _isSelectionMode.value = false
+            onComplete()
+        }
     }
 
     fun updateSearchQuery(query: String) {
