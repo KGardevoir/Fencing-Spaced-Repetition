@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -873,7 +874,7 @@ fun CsvGroupSelectionDialog(
     onCreateGroup: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var groupName by remember { mutableStateOf(suggestedGroupName) }
+    var groupName by rememberSaveable { mutableStateOf(suggestedGroupName) }
     var selectedGroupId by remember { mutableStateOf<Long?>(null) }
     var useExistingGroup by remember { mutableStateOf(false) }
 

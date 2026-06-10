@@ -16,6 +16,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -54,10 +55,12 @@ fun AddEditCardScreen(
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
-    var question by remember { mutableStateOf(cardToEdit?.question ?: "") }
-    var answerFieldValue by remember { mutableStateOf(TextFieldValue(cardToEdit?.answer ?: "")) }
-    var selectedAlgorithm by remember { mutableStateOf(cardToEdit?.algorithm ?: AlgorithmType.FSRS) }
-    var imagePaths by remember { mutableStateOf<List<String>>(cardToEdit?.imagePaths?.toMutableList() ?: mutableListOf()) }
+    var question by rememberSaveable { mutableStateOf(cardToEdit?.question ?: "") }
+    var answerFieldValue by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(cardToEdit?.answer ?: ""))
+    }
+    var selectedAlgorithm by rememberSaveable { mutableStateOf(cardToEdit?.algorithm ?: AlgorithmType.FSRS) }
+    var imagePaths by rememberSaveable { mutableStateOf<List<String>>(cardToEdit?.imagePaths?.toMutableList() ?: mutableListOf()) }
 
     // Group selection state
     val allGroups by groupViewModel.allGroups.collectAsState()
@@ -78,12 +81,12 @@ fun AddEditCardScreen(
         mutableStateOf(initialIds.toSet())
     }
 
-    var showGroupSelectionSheet by remember { mutableStateOf(false) }
-    var showAdvancedSettings by remember { mutableStateOf(false) }
-    var showResetDialog by remember { mutableStateOf(false) }
-    var showCreateGroupDialog by remember { mutableStateOf(false) }
-    var isDirty by remember { mutableStateOf(false) }
-    var showUnsavedChangesDialog by remember { mutableStateOf(false) }
+    var showGroupSelectionSheet by rememberSaveable { mutableStateOf(false) }
+    var showAdvancedSettings by rememberSaveable { mutableStateOf(false) }
+    var showResetDialog by rememberSaveable { mutableStateOf(false) }
+    var showCreateGroupDialog by rememberSaveable { mutableStateOf(false) }
+    var isDirty by rememberSaveable { mutableStateOf(false) }
+    var showUnsavedChangesDialog by rememberSaveable { mutableStateOf(false) }
     val markdownToolbarState = rememberMarkdownToolbarState()
 
     // Image picker launcher
@@ -124,24 +127,24 @@ fun AddEditCardScreen(
     }
 
     // Learning state fields (only for editing)
-    var fsrsStability by remember { mutableStateOf(cardToEdit?.fsrsStability?.toString() ?: "0.0") }
-    var fsrsDifficulty by remember { mutableStateOf(cardToEdit?.fsrsDifficulty?.toString() ?: "0.0") }
-    var fsrsReps by remember { mutableStateOf(cardToEdit?.fsrsReps?.toString() ?: "0") }
-    var fsrsLapses by remember { mutableStateOf(cardToEdit?.fsrsLapses?.toString() ?: "0") }
-    var fsrsState by remember { mutableStateOf(cardToEdit?.fsrsState ?: "NEW") }
-    var sm2EaseFactor by remember { mutableStateOf(cardToEdit?.sm2EaseFactor?.toString() ?: "2.5") }
-    var sm2Interval by remember { mutableStateOf(cardToEdit?.sm2Interval?.toString() ?: "0") }
-    var sm2Repetitions by remember { mutableStateOf(cardToEdit?.sm2Repetitions?.toString() ?: "0") }
+    var fsrsStability by rememberSaveable { mutableStateOf(cardToEdit?.fsrsStability?.toString() ?: "0.0") }
+    var fsrsDifficulty by rememberSaveable { mutableStateOf(cardToEdit?.fsrsDifficulty?.toString() ?: "0.0") }
+    var fsrsReps by rememberSaveable { mutableStateOf(cardToEdit?.fsrsReps?.toString() ?: "0") }
+    var fsrsLapses by rememberSaveable { mutableStateOf(cardToEdit?.fsrsLapses?.toString() ?: "0") }
+    var fsrsState by rememberSaveable { mutableStateOf(cardToEdit?.fsrsState ?: "NEW") }
+    var sm2EaseFactor by rememberSaveable { mutableStateOf(cardToEdit?.sm2EaseFactor?.toString() ?: "2.5") }
+    var sm2Interval by rememberSaveable { mutableStateOf(cardToEdit?.sm2Interval?.toString() ?: "0") }
+    var sm2Repetitions by rememberSaveable { mutableStateOf(cardToEdit?.sm2Repetitions?.toString() ?: "0") }
 
     // Additional state for review timing (updated by quick grading)
-    var lastReview by remember { mutableStateOf(cardToEdit?.lastReview ?: 0L) }
-    var nextReview by remember { mutableStateOf(cardToEdit?.nextReview ?: 0L) }
-    var fsrsElapsedDays by remember { mutableStateOf(cardToEdit?.fsrsElapsedDays?.toString() ?: "0") }
-    var fsrsScheduledDays by remember { mutableStateOf(cardToEdit?.fsrsScheduledDays?.toString() ?: "0") }
+    var lastReview by rememberSaveable { mutableStateOf(cardToEdit?.lastReview ?: 0L) }
+    var nextReview by rememberSaveable { mutableStateOf(cardToEdit?.nextReview ?: 0L) }
+    var fsrsElapsedDays by rememberSaveable { mutableStateOf(cardToEdit?.fsrsElapsedDays?.toString() ?: "0") }
+    var fsrsScheduledDays by rememberSaveable { mutableStateOf(cardToEdit?.fsrsScheduledDays?.toString() ?: "0") }
 
     // Track the last grade applied via the grade buttons (null = none yet); used to log history on save
-    var appliedGrade by remember { mutableStateOf<Grade?>(null) }
-    var appliedGradeGroupId by remember { mutableStateOf<Long?>(null) }
+    var appliedGrade by rememberSaveable { mutableStateOf<Grade?>(null) }
+    var appliedGradeGroupId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     // Track per-group next review dates for instant UI updates after grading
     var groupNextReviews by remember(learningStates) {
@@ -1224,7 +1227,7 @@ fun AddEditCardScreen(
 
     // Create new group dialog
     if (showCreateGroupDialog) {
-        var newGroupName by remember { mutableStateOf("") }
+        var newGroupName by rememberSaveable { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showCreateGroupDialog = false },
             icon = { Icon(Icons.Default.CreateNewFolder, contentDescription = null) },

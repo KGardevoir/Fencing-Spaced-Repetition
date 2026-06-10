@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -172,7 +173,7 @@ fun OpponentDifficultyDialog(
     onDismiss: () -> Unit,
     onSave: (Double) -> Unit
 ) {
-    var multiplierText by remember(opponent.id) {
+    var multiplierText by rememberSaveable(opponent.id) {
         mutableStateOf("%.2f".format(opponent.skillMultiplier))
     }
     val multiplier = multiplierText.toDoubleOrNull()?.coerceIn(0.1, 3.0)

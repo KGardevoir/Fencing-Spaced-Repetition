@@ -9,6 +9,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -35,8 +36,8 @@ fun GroupEditScreen(
 ) {
     val isNewGroup = group.id == 0L
 
-    var name by remember { mutableStateOf(group.name) }
-    var description by remember { mutableStateOf(group.description) }
+    var name by rememberSaveable { mutableStateOf(group.name) }
+    var description by rememberSaveable { mutableStateOf(group.description) }
     var independentLearning by remember { mutableStateOf(group.independentLearning) }
 
     // Per-group settings overrides (null = use global)
