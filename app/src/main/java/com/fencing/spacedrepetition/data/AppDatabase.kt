@@ -203,7 +203,10 @@ abstract class AppDatabase : RoomDatabase() {
                     "fencing_spaced_repetition_database"
                 )
                     .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
-                    .fallbackToDestructiveMigration(dropAllTables = true)
+                    // Intentionally no fallbackToDestructiveMigration(): a migration that
+                    // doesn't match Room's expected schema should crash loudly (data stays
+                    // on disk, recoverable) rather than silently drop and recreate every
+                    // table, which wipes all cards/groups/history/opponents.
                     .build()
                 INSTANCE = instance
                 instance
