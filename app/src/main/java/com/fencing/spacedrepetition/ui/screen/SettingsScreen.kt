@@ -1,6 +1,10 @@
 package com.fencing.spacedrepetition.ui.screen
 
 import android.app.Activity
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -9,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -16,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fencing.spacedrepetition.billing.BillingManager
 import com.fencing.spacedrepetition.BuildConfig
@@ -25,6 +31,9 @@ import com.fencing.spacedrepetition.ui.components.FsrsRetentionPreview
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.DonationViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,6 +57,10 @@ fun SettingsScreen(
     val fsrsRetention by settingsViewModel.fsrsRetention.collectAsState()
     val sm2IntervalModifier by settingsViewModel.sm2IntervalModifier.collectAsState()
     val fsrsEnableFuzzing by settingsViewModel.fsrsEnableFuzzing.collectAsState()
+    val autoBackupEnabled by settingsViewModel.autoBackupEnabled.collectAsState()
+    val autoBackupUri by settingsViewModel.autoBackupUri.collectAsState()
+    val autoBackupIntervalDays by settingsViewModel.autoBackupIntervalDays.collectAsState()
+    val lastBackupTime by settingsViewModel.lastBackupTime.collectAsState()
 
     // Donation state
     val context = LocalContext.current
@@ -84,6 +97,25 @@ fun SettingsScreen(
 
     val sm2ModifierPresets = SettingsConstants.SM2_MODIFIER_PRESETS
     val currentSm2ModifierIndex = SettingsConstants.findPresetIndex(sm2ModifierPresets, sm2IntervalModifier)
+
+    val backupIntervalPresets = SettingsConstants.BACKUP_INTERVAL_PRESETS
+    val currentBackupIntervalIndex = SettingsConstants.findPresetIndex(backupIntervalPresets, autoBackupIntervalDays)
+
+    val backupFolderName = autoBackupUri?.let { uriString ->
+        DocumentFile.fromTreeUri(context, Uri.parse(uriString))?.name
+    }
+
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+            settingsViewModel.setAutoBackupUri(uri.toString())
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -509,6 +541,124 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Backup section
+            Text(
+                "Automatic Backup",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { settingsViewModel.setAutoBackupEnabled(!autoBackupEnabled) }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Back Up Automatically",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Text(
+                        text = "Periodically save a compressed copy of your cards, groups, and history to a folder you choose.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = autoBackupEnabled,
+                    onCheckedChange = { settingsViewModel.setAutoBackupEnabled(it) }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedButton(
+                onClick = { folderPickerLauncher.launch(null) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    Icons.Default.Folder,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(if (backupFolderName != null) "Change Backup Folder" else "Choose Backup Folder")
+            }
+            if (backupFolderName != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Folder: $backupFolderName",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Backup frequency
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Backup Frequency",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Text(
+                        text = backupIntervalPresets[currentBackupIntervalIndex].second,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Slider(
+                    value = currentBackupIntervalIndex.toFloat(),
+                    onValueChange = { newIndex ->
+                        val presetValue = backupIntervalPresets[newIndex.roundToInt()].first
+                        settingsViewModel.setAutoBackupIntervalDays(presetValue)
+                    },
+                    valueRange = 0f..(backupIntervalPresets.size - 1).toFloat(),
+                    steps = backupIntervalPresets.size - 2,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = if (lastBackupTime > 0) {
+                    "Last backup: " + SimpleDateFormat("MMM d, yyyy 'at' h:mm a", Locale.getDefault())
+                        .format(Date(lastBackupTime))
+                } else {
+                    "No backup has been made yet"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedButton(
+                onClick = { settingsViewModel.runBackupNow() },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = backupFolderName != null
+            ) {
+                Text("Back Up Now")
             }
 
             Spacer(modifier = Modifier.height(16.dp))
