@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -433,6 +434,7 @@ fun CardListScreen(
                         Text(
                             text = when {
                                 searchQuery.isNotEmpty() -> "No cards match your search"
+                                showDisabledFilter && selectedGroupFilters.isNotEmpty() -> "No disabled cards in selected groups"
                                 showDisabledFilter -> "No disabled cards"
                                 selectedGroupFilters.isNotEmpty() -> "No cards in selected groups"
                                 else -> "No cards yet"
@@ -1180,6 +1182,9 @@ fun CardListItem(
 
                         Spacer(modifier = Modifier.height(4.dp))
                         Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {

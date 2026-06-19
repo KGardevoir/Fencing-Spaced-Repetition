@@ -95,13 +95,10 @@ class CardViewModel(
             _cardSortOption,
             _sortDirection
         ) { cardsWithGroups, groupIds, query, sortOption, direction ->
-            var filtered = when {
-                showDisabled -> cardsWithGroups.filter { it.card.isDisabled }.map { it.card }
-                groupIds.isEmpty() -> cardsWithGroups.filter { !it.card.isDisabled }.map { it.card }
-                else -> cardsWithGroups
-                    .filter { !it.card.isDisabled && it.groups.any { g -> g.id in groupIds } }
-                    .map { it.card }
-            }
+            var filtered = cardsWithGroups
+                .filter { it.card.isDisabled == showDisabled }
+                .filter { groupIds.isEmpty() || it.groups.any { g -> g.id in groupIds } }
+                .map { it.card }
 
             // Apply search filter
             if (query.isNotBlank()) {
@@ -139,7 +136,6 @@ class CardViewModel(
     }
 
     fun toggleGroupFilter(groupId: Long) {
-        _showDisabledFilter.value = false
         _selectedGroupFilters.value = if (groupId in _selectedGroupFilters.value) {
             _selectedGroupFilters.value - groupId
         } else {
@@ -154,9 +150,6 @@ class CardViewModel(
 
     fun toggleDisabledFilter() {
         _showDisabledFilter.value = !_showDisabledFilter.value
-        if (_showDisabledFilter.value) {
-            _selectedGroupFilters.value = emptySet()
-        }
     }
 
     fun toggleCardDisabled(cardId: Long) {
