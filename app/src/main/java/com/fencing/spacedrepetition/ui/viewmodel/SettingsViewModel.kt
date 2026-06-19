@@ -1,9 +1,11 @@
 package com.fencing.spacedrepetition.ui.viewmodel
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.data.preferences.ThemeMode
 import com.fencing.spacedrepetition.data.preferences.ThemePreferences
+import com.fencing.spacedrepetition.worker.BackupScheduler
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -11,8 +13,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class SettingsViewModel(
+    application: Application,
     private val themePreferences: ThemePreferences
-) : ViewModel() {
+) : AndroidViewModel(application) {
 
     val themeMode: StateFlow<ThemeMode> = themePreferences.themeMode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemeMode.SYSTEM)
@@ -49,6 +52,18 @@ class SettingsViewModel(
 
     val fsrsEnableFuzzing: StateFlow<Boolean> = themePreferences.fsrsEnableFuzzing
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_FSRS_ENABLE_FUZZING)
+
+    val autoBackupEnabled: StateFlow<Boolean> = themePreferences.autoBackupEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_AUTO_BACKUP_ENABLED)
+
+    val autoBackupUri: StateFlow<String?> = themePreferences.autoBackupUri
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val autoBackupIntervalDays: StateFlow<Int> = themePreferences.autoBackupIntervalDays
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_AUTO_BACKUP_INTERVAL_DAYS)
+
+    val lastBackupTime: StateFlow<Long> = themePreferences.lastBackupTime
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
 
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch {
@@ -133,5 +148,43 @@ class SettingsViewModel(
         viewModelScope.launch {
             themePreferences.setFsrsEnableFuzzing(enabled)
         }
+    }
+
+    fun setAutoBackupEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            themePreferences.setAutoBackupEnabled(enabled)
+            val context = getApplication<Application>()
+            if (enabled && themePreferences.autoBackupUri.first() != null) {
+                BackupScheduler.schedule(context, themePreferences.autoBackupIntervalDays.first())
+            } else {
+                BackupScheduler.cancel(context)
+            }
+        }
+    }
+
+    fun setAutoBackupUri(uri: String?) {
+        viewModelScope.launch {
+            themePreferences.setAutoBackupUri(uri)
+            val context = getApplication<Application>()
+            if (uri != null && themePreferences.autoBackupEnabled.first()) {
+                BackupScheduler.schedule(context, themePreferences.autoBackupIntervalDays.first())
+            } else {
+                BackupScheduler.cancel(context)
+            }
+        }
+    }
+
+    fun setAutoBackupIntervalDays(days: Int) {
+        viewModelScope.launch {
+            themePreferences.setAutoBackupIntervalDays(days)
+            val context = getApplication<Application>()
+            if (themePreferences.autoBackupEnabled.first() && themePreferences.autoBackupUri.first() != null) {
+                BackupScheduler.schedule(context, days)
+            }
+        }
+    }
+
+    fun runBackupNow() {
+        BackupScheduler.runNow(getApplication())
     }
 }

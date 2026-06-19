@@ -15,6 +15,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -743,10 +744,10 @@ private fun HistoryNoteEditor(
     toolbarState: MarkdownToolbarState? = null
 ) {
     val context = LocalContext.current
-    var notesValue by remember(reviewLog.id) {
+    var notesValue by rememberSaveable(reviewLog.id, stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(reviewLog.notes))
     }
-    var noteImages by remember(reviewLog.id) {
+    var noteImages by rememberSaveable(reviewLog.id) {
         mutableStateOf(
             reviewLog.imagePaths.split(",").filter { it.isNotBlank() }
         )

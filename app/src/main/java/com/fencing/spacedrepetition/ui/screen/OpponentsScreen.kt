@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -226,11 +227,11 @@ fun OpponentEditorDialog(
     onSave: (String, Double, String) -> Unit,
     errorMessage: String? = null
 ) {
-    var name by remember(initial?.id) { mutableStateOf(initial?.name ?: "") }
-    var multiplierText by remember(initial?.id) {
+    var name by rememberSaveable(initial?.id) { mutableStateOf(initial?.name ?: "") }
+    var multiplierText by rememberSaveable(initial?.id) {
         mutableStateOf("%.2f".format(initial?.skillMultiplier ?: 1.0))
     }
-    var notes by remember(initial?.id) { mutableStateOf(initial?.notes ?: "") }
+    var notes by rememberSaveable(initial?.id) { mutableStateOf(initial?.notes ?: "") }
 
     val multiplier = multiplierText.toDoubleOrNull()?.coerceIn(0.1, 3.0)
     val canSave = name.isNotBlank() && multiplier != null

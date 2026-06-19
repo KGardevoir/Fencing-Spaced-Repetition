@@ -9,6 +9,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fencing.spacedrepetition.data.AppDatabase
 import com.fencing.spacedrepetition.data.preferences.ThemePreferences
@@ -23,6 +24,9 @@ import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
+import com.fencing.spacedrepetition.worker.BackupScheduler
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,10 +56,18 @@ class MainActivity : ComponentActivity() {
             preferences = themePreferences
         )
 
+        // Ensure the auto-backup schedule matches the persisted setting on every launch,
+        // since WorkManager's periodic work registration can be lost (e.g. data cleared).
+        lifecycleScope.launch {
+            if (themePreferences.autoBackupEnabled.first() && themePreferences.autoBackupUri.first() != null) {
+                BackupScheduler.schedule(applicationContext, themePreferences.autoBackupIntervalDays.first())
+            }
+        }
+
         setContent {
             // Create settings ViewModel
             val settingsViewModel: SettingsViewModel = viewModel(
-                factory = SettingsViewModelFactory(themePreferences)
+                factory = SettingsViewModelFactory(application, themePreferences)
             )
             val themeMode by settingsViewModel.themeMode.collectAsState()
 
@@ -139,12 +151,13 @@ class GroupViewModelFactory(
 }
 
 class SettingsViewModelFactory(
+    private val application: android.app.Application,
     private val themePreferences: ThemePreferences
 ) : androidx.lifecycle.ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(SettingsViewModel::class.java)) {
-            return SettingsViewModel(themePreferences) as T
+            return SettingsViewModel(application, themePreferences) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

@@ -33,6 +33,10 @@ class ThemePreferences(private val context: Context) {
     private val FSRS_RETENTION_KEY = intPreferencesKey("fsrs_retention")
     private val SM2_INTERVAL_MODIFIER_KEY = intPreferencesKey("sm2_interval_modifier")
     private val FSRS_ENABLE_FUZZING_KEY = booleanPreferencesKey("fsrs_enable_fuzzing")
+    private val AUTO_BACKUP_ENABLED_KEY = booleanPreferencesKey("auto_backup_enabled")
+    private val AUTO_BACKUP_URI_KEY = stringPreferencesKey("auto_backup_uri")
+    private val AUTO_BACKUP_INTERVAL_DAYS_KEY = intPreferencesKey("auto_backup_interval_days")
+    private val LAST_BACKUP_TIME_KEY = longPreferencesKey("last_backup_time")
 
     companion object {
         const val DEFAULT_CARDS_PER_SESSION = 3
@@ -60,6 +64,10 @@ class ThemePreferences(private val context: Context) {
 
         // FSRS interval fuzzing (adds ≤5 % random variance to prevent review pile-ups)
         const val DEFAULT_FSRS_ENABLE_FUZZING = false
+
+        // Automatic database backup
+        const val DEFAULT_AUTO_BACKUP_ENABLED = false
+        const val DEFAULT_AUTO_BACKUP_INTERVAL_DAYS = 1
     }
 
     val themeMode: Flow<ThemeMode> = context.dataStore.data
@@ -134,6 +142,26 @@ class ThemePreferences(private val context: Context) {
     val fsrsEnableFuzzing: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
             preferences[FSRS_ENABLE_FUZZING_KEY] ?: DEFAULT_FSRS_ENABLE_FUZZING
+        }
+
+    val autoBackupEnabled: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[AUTO_BACKUP_ENABLED_KEY] ?: DEFAULT_AUTO_BACKUP_ENABLED
+        }
+
+    val autoBackupUri: Flow<String?> = context.dataStore.data
+        .map { preferences ->
+            preferences[AUTO_BACKUP_URI_KEY]
+        }
+
+    val autoBackupIntervalDays: Flow<Int> = context.dataStore.data
+        .map { preferences ->
+            preferences[AUTO_BACKUP_INTERVAL_DAYS_KEY] ?: DEFAULT_AUTO_BACKUP_INTERVAL_DAYS
+        }
+
+    val lastBackupTime: Flow<Long> = context.dataStore.data
+        .map { preferences ->
+            preferences[LAST_BACKUP_TIME_KEY] ?: 0L
         }
 
     suspend fun setThemeMode(mode: ThemeMode) {
@@ -215,6 +243,34 @@ class ThemePreferences(private val context: Context) {
     suspend fun setFsrsEnableFuzzing(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[FSRS_ENABLE_FUZZING_KEY] = enabled
+        }
+    }
+
+    suspend fun setAutoBackupEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[AUTO_BACKUP_ENABLED_KEY] = enabled
+        }
+    }
+
+    suspend fun setAutoBackupUri(uri: String?) {
+        context.dataStore.edit { preferences ->
+            if (uri != null) {
+                preferences[AUTO_BACKUP_URI_KEY] = uri
+            } else {
+                preferences.remove(AUTO_BACKUP_URI_KEY)
+            }
+        }
+    }
+
+    suspend fun setAutoBackupIntervalDays(days: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[AUTO_BACKUP_INTERVAL_DAYS_KEY] = days
+        }
+    }
+
+    suspend fun setLastBackupTime(timeMillis: Long) {
+        context.dataStore.edit { preferences ->
+            preferences[LAST_BACKUP_TIME_KEY] = timeMillis
         }
     }
 }

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -555,9 +556,11 @@ fun EditCardDialog(
     onDismiss: () -> Unit,
     onSave: (question: String, answer: String, imagePaths: List<String>) -> Unit
 ) {
-    var question by remember(card.id) { mutableStateOf(card.question) }
-    var answerFieldValue by remember(card.id) { mutableStateOf(TextFieldValue(card.answer)) }
-    var imagePaths by remember(card.id) { mutableStateOf(card.imagePaths.toMutableList()) }
+    var question by rememberSaveable(card.id) { mutableStateOf(card.question) }
+    var answerFieldValue by rememberSaveable(card.id, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(card.answer))
+    }
+    var imagePaths by rememberSaveable(card.id) { mutableStateOf(card.imagePaths.toMutableList()) }
     val markdownToolbarState = rememberMarkdownToolbarState()
 
     val context = LocalContext.current

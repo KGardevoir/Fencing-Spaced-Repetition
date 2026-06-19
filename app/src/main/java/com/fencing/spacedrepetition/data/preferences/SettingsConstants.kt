@@ -62,6 +62,13 @@ object SettingsConstants {
         200 to "200%"
     )
 
+    /** Preset values for automatic backup frequency (days to label). */
+    val BACKUP_INTERVAL_PRESETS = listOf(
+        1 to "Daily",
+        3 to "Every 3 days",
+        7 to "Weekly"
+    )
+
     /** Find the closest preset index for a given value. */
     fun findPresetIndex(presets: List<Pair<Int, String>>, value: Int): Int =
         presets.indexOfFirst { it.first >= value }.let { if (it == -1) presets.size - 1 else it }
