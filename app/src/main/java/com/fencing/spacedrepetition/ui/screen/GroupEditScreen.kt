@@ -1,5 +1,6 @@
 package com.fencing.spacedrepetition.ui.screen
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -7,6 +8,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -73,34 +75,46 @@ fun GroupEditScreen(
     val fsrsRetentionPresets = SettingsConstants.FSRS_RETENTION_PRESETS
     val sm2ModifierPresets = SettingsConstants.SM2_MODIFIER_PRESETS
 
+    fun buildUpdatedGroup() = group.copy(
+        name = name.trim(),
+        description = description.trim(),
+        independentLearning = independentLearning,
+        cardsPerSession = if (overrideCardsPerSession) cardsPerSession else null,
+        autoShowAnswer = if (overrideAutoShowAnswer) autoShowAnswer else null,
+        randomizeDueCards = if (overrideRandomizeDueCards) randomizeDueCards else null,
+        randomizeBucketHours = if (overrideRandomizeBucketHours) randomizeBucketHours else null,
+        practiceDays = if (overridePracticeDays) practiceDays.sorted().joinToString(",") else null,
+        maximumInterval = if (overrideMaximumInterval) maximumInterval else null,
+        fsrsRetention = if (overrideFsrsRetention) fsrsRetention else null,
+        sm2IntervalModifier = if (overrideSm2IntervalModifier) sm2IntervalModifier else null,
+        fsrsEnableFuzzing = if (overrideFsrsEnableFuzzing) fsrsEnableFuzzing else null
+    )
+
+    val isDirty = buildUpdatedGroup() != group
+    var showUnsavedChangesDialog by rememberSaveable { mutableStateOf(false) }
+
+    BackHandler(enabled = isDirty) {
+        showUnsavedChangesDialog = true
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(if (isNewGroup) "Add Group" else "Edit Group") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(onClick = {
+                        if (isDirty) {
+                            showUnsavedChangesDialog = true
+                        } else {
+                            onNavigateBack()
+                        }
+                    }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
                     TextButton(
-                        onClick = {
-                            val updatedGroup = group.copy(
-                                name = name.trim(),
-                                description = description.trim(),
-                                independentLearning = independentLearning,
-                                cardsPerSession = if (overrideCardsPerSession) cardsPerSession else null,
-                                autoShowAnswer = if (overrideAutoShowAnswer) autoShowAnswer else null,
-                                randomizeDueCards = if (overrideRandomizeDueCards) randomizeDueCards else null,
-                                randomizeBucketHours = if (overrideRandomizeBucketHours) randomizeBucketHours else null,
-                                practiceDays = if (overridePracticeDays) practiceDays.sorted().joinToString(",") else null,
-                                maximumInterval = if (overrideMaximumInterval) maximumInterval else null,
-                                fsrsRetention = if (overrideFsrsRetention) fsrsRetention else null,
-                                sm2IntervalModifier = if (overrideSm2IntervalModifier) sm2IntervalModifier else null,
-                                fsrsEnableFuzzing = if (overrideFsrsEnableFuzzing) fsrsEnableFuzzing else null
-                            )
-                            onSave(updatedGroup)
-                        },
+                        onClick = { onSave(buildUpdatedGroup()) },
                         enabled = name.isNotBlank()
                     ) {
                         Text(if (isNewGroup) "Add" else "Save")
@@ -448,6 +462,34 @@ fun GroupEditScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+
+    // Unsaved changes warning dialog
+    if (showUnsavedChangesDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnsavedChangesDialog = false },
+            icon = { Icon(Icons.Default.Warning, contentDescription = null) },
+            title = { Text("Unsaved Changes") },
+            text = { Text("You have unsaved changes. Leaving now will discard them.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showUnsavedChangesDialog = false
+                        onNavigateBack()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Discard Changes")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnsavedChangesDialog = false }) {
+                    Text("Keep Editing")
+                }
+            }
+        )
     }
 }
 
