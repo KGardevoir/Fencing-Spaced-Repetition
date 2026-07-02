@@ -73,6 +73,10 @@ android {
             val keystoreFile = file(System.getenv("KEYSTORE_FILE") ?: "release-keystore.jks")
             if (keystoreFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
+            } else if (System.getenv("DEBUG_KEYSTORE_FILE") != null) {
+                // Nightly CI builds sign releases with the shared debug keystore
+                // so they install over CI debug builds without a real release key.
+                signingConfig = signingConfigs.getByName("sharedDebug")
             }
         }
     }

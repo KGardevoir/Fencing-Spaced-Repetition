@@ -70,33 +70,26 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Decode keystore
+      - name: Decode debug keystore
         env:
           DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
-          STORE_PASS: ${{ secrets.DEBUG_KEYSTORE_PASSWORD || 'android' }}
-          KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS || 'androiddebugkey' }}
-          KEY_PASS: ${{ secrets.DEBUG_KEY_PASSWORD || 'android' }}
         run: |
-          echo "$DEBUG_KEYSTORE_BASE64" | base64 --decode > ${{ runner.temp }}/release-keystore.jks
-          # Fail fast if the keystore or key credentials are wrong, instead of
-          # 9 minutes into the Gradle build.
-          keytool -exportcert -keystore ${{ runner.temp }}/release-keystore.jks \
-            -storepass "$STORE_PASS" -alias "$KEY_ALIAS" -keypass "$KEY_PASS" > /dev/null
+          echo "$DEBUG_KEYSTORE_BASE64" | base64 --decode > ${{ runner.temp }}/debug-keystore.jks
 
       - name: Build release APK
         env:
-          KEYSTORE_FILE: ${{ runner.temp }}/release-keystore.jks
-          KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD || 'android' }}
-          KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS || 'androiddebugkey' }}
-          KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD || 'android' }}
+          DEBUG_KEYSTORE_FILE: ${{ runner.temp }}/debug-keystore.jks
+          DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
+          DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
+          DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
         run: ./gradlew assembleRelease
 
       - name: Build release AAB
         env:
-          KEYSTORE_FILE: ${{ runner.temp }}/release-keystore.jks
-          KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD || 'android' }}
-          KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS || 'androiddebugkey' }}
-          KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD || 'android' }}
+          DEBUG_KEYSTORE_FILE: ${{ runner.temp }}/debug-keystore.jks
+          DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
+          DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
+          DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
         run: ./gradlew bundleRelease
 
       - name: Compute artifact names and rename files
