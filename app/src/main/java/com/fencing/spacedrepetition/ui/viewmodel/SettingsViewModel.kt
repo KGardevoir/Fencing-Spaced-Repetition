@@ -65,6 +65,9 @@ class SettingsViewModel(
     val lastBackupTime: StateFlow<Long> = themePreferences.lastBackupTime
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
 
+    val maxBackupsKept: StateFlow<Int> = themePreferences.maxBackupsKept
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_MAX_BACKUPS_KEPT)
+
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch {
             themePreferences.setThemeMode(mode)
@@ -186,5 +189,11 @@ class SettingsViewModel(
 
     fun runBackupNow() {
         BackupScheduler.runNow(getApplication())
+    }
+
+    fun setMaxBackupsKept(count: Int) {
+        viewModelScope.launch {
+            themePreferences.setMaxBackupsKept(count)
+        }
     }
 }

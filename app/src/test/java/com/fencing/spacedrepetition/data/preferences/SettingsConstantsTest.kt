@@ -156,4 +156,34 @@ class SettingsConstantsTest {
             assertTrue("Label '$label' should end with '%'", label.endsWith("%"))
         }
     }
+
+    // ==================== Max backups kept preset TESTS ====================
+
+    @Test
+    fun `max backups kept presets are sorted ascending`() {
+        val values = SettingsConstants.MAX_BACKUPS_KEPT_PRESETS.map { it.first }
+        assertEquals(values, values.sorted())
+    }
+
+    @Test
+    fun `max backups kept presets contain default value 7`() {
+        val values = SettingsConstants.MAX_BACKUPS_KEPT_PRESETS.map { it.first }
+        assertTrue("Default 7 must appear in max backups kept presets", 7 in values)
+    }
+
+    @Test
+    fun `findPresetIndex - exact match works with max backups kept presets`() {
+        val presets = SettingsConstants.MAX_BACKUPS_KEPT_PRESETS
+        assertEquals(0, SettingsConstants.findPresetIndex(presets, 3))   // first
+        assertEquals(2, SettingsConstants.findPresetIndex(presets, 7))   // default
+        assertEquals(6, SettingsConstants.findPresetIndex(presets, 30))  // last
+    }
+
+    @Test
+    fun `findPresetIndex - value above max returns last index for max backups kept presets`() {
+        val presets = SettingsConstants.MAX_BACKUPS_KEPT_PRESETS
+        val lastIndex = presets.size - 1
+        assertEquals(lastIndex, SettingsConstants.findPresetIndex(presets, 50))
+        assertEquals(lastIndex, SettingsConstants.findPresetIndex(presets, 1000))
+    }
 }

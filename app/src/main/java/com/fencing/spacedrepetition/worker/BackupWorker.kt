@@ -28,7 +28,6 @@ class BackupWorker(
 
     companion object {
         private const val BACKUP_FILE_PREFIX = "fencing_backup_"
-        private const val MAX_KEPT_BACKUPS = 7
         private val FILENAME_FORMAT = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
     }
 
@@ -95,7 +94,7 @@ class BackupWorker(
         return when (exportResult) {
             is ExportResult.Success -> {
                 preferences.setLastBackupTime(System.currentTimeMillis())
-                pruneOldBackups(backupDir)
+                pruneOldBackups(backupDir, preferences.maxBackupsKept.first())
                 Result.success()
             }
             is ExportResult.Error -> {
@@ -105,11 +104,11 @@ class BackupWorker(
         }
     }
 
-    private fun pruneOldBackups(backupDir: DocumentFile) {
+    private fun pruneOldBackups(backupDir: DocumentFile, maxKeptBackups: Int) {
         val backups = backupDir.listFiles()
             .filter { it.name?.startsWith(BACKUP_FILE_PREFIX) == true }
             .sortedByDescending { it.name }
 
-        backups.drop(MAX_KEPT_BACKUPS).forEach { it.delete() }
+        backups.drop(maxKeptBackups).forEach { it.delete() }
     }
 }

@@ -61,6 +61,7 @@ fun SettingsScreen(
     val autoBackupUri by settingsViewModel.autoBackupUri.collectAsState()
     val autoBackupIntervalDays by settingsViewModel.autoBackupIntervalDays.collectAsState()
     val lastBackupTime by settingsViewModel.lastBackupTime.collectAsState()
+    val maxBackupsKept by settingsViewModel.maxBackupsKept.collectAsState()
 
     // Donation state
     val context = LocalContext.current
@@ -100,6 +101,9 @@ fun SettingsScreen(
 
     val backupIntervalPresets = SettingsConstants.BACKUP_INTERVAL_PRESETS
     val currentBackupIntervalIndex = SettingsConstants.findPresetIndex(backupIntervalPresets, autoBackupIntervalDays)
+
+    val maxBackupsKeptPresets = SettingsConstants.MAX_BACKUPS_KEPT_PRESETS
+    val currentMaxBackupsKeptIndex = SettingsConstants.findPresetIndex(maxBackupsKeptPresets, maxBackupsKept)
 
     val backupFolderName = autoBackupUri?.let { uriString ->
         DocumentFile.fromTreeUri(context, Uri.parse(uriString))?.name
@@ -635,6 +639,46 @@ fun SettingsScreen(
                     valueRange = 0f..(backupIntervalPresets.size - 1).toFloat(),
                     steps = backupIntervalPresets.size - 2,
                     modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Max backups kept
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Backups to Keep",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Text(
+                        text = maxBackupsKeptPresets[currentMaxBackupsKeptIndex].second,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Slider(
+                    value = currentMaxBackupsKeptIndex.toFloat(),
+                    onValueChange = { newIndex ->
+                        val presetValue = maxBackupsKeptPresets[newIndex.roundToInt()].first
+                        settingsViewModel.setMaxBackupsKept(presetValue)
+                    },
+                    valueRange = 0f..(maxBackupsKeptPresets.size - 1).toFloat(),
+                    steps = maxBackupsKeptPresets.size - 2,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = "Older backups beyond this count are automatically deleted.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 

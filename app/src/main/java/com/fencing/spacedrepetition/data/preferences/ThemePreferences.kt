@@ -37,6 +37,7 @@ class ThemePreferences(private val context: Context) {
     private val AUTO_BACKUP_URI_KEY = stringPreferencesKey("auto_backup_uri")
     private val AUTO_BACKUP_INTERVAL_DAYS_KEY = intPreferencesKey("auto_backup_interval_days")
     private val LAST_BACKUP_TIME_KEY = longPreferencesKey("last_backup_time")
+    private val MAX_BACKUPS_KEPT_KEY = intPreferencesKey("max_backups_kept")
 
     companion object {
         const val DEFAULT_CARDS_PER_SESSION = 3
@@ -68,6 +69,11 @@ class ThemePreferences(private val context: Context) {
         // Automatic database backup
         const val DEFAULT_AUTO_BACKUP_ENABLED = false
         const val DEFAULT_AUTO_BACKUP_INTERVAL_DAYS = 1
+
+        // Number of backup files to retain before older ones are pruned
+        const val DEFAULT_MAX_BACKUPS_KEPT = 7
+        const val MIN_MAX_BACKUPS_KEPT = 1
+        const val MAX_MAX_BACKUPS_KEPT = 30
     }
 
     val themeMode: Flow<ThemeMode> = context.dataStore.data
@@ -162,6 +168,11 @@ class ThemePreferences(private val context: Context) {
     val lastBackupTime: Flow<Long> = context.dataStore.data
         .map { preferences ->
             preferences[LAST_BACKUP_TIME_KEY] ?: 0L
+        }
+
+    val maxBackupsKept: Flow<Int> = context.dataStore.data
+        .map { preferences ->
+            preferences[MAX_BACKUPS_KEPT_KEY] ?: DEFAULT_MAX_BACKUPS_KEPT
         }
 
     suspend fun setThemeMode(mode: ThemeMode) {
@@ -271,6 +282,13 @@ class ThemePreferences(private val context: Context) {
     suspend fun setLastBackupTime(timeMillis: Long) {
         context.dataStore.edit { preferences ->
             preferences[LAST_BACKUP_TIME_KEY] = timeMillis
+        }
+    }
+
+    suspend fun setMaxBackupsKept(count: Int) {
+        val validCount = count.coerceIn(MIN_MAX_BACKUPS_KEPT, MAX_MAX_BACKUPS_KEPT)
+        context.dataStore.edit { preferences ->
+            preferences[MAX_BACKUPS_KEPT_KEY] = validCount
         }
     }
 }
