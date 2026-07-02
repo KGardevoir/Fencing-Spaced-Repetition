@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -54,6 +55,7 @@ fun CardListScreen(
     val allCardsWithGroups by viewModel.allCardsWithGroups.collectAsState()
     val groups by groupViewModel.allGroups.collectAsState()
     val selectedGroupFilters by viewModel.selectedGroupFilters.collectAsState()
+    val showDisabledFilter by viewModel.showDisabledFilter.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val cardCount by viewModel.cardCount.collectAsState()
     val importExportState by viewModel.importExportState.collectAsState()
@@ -172,6 +174,18 @@ fun CardListScreen(
                             enabled = selectedCardIds.isNotEmpty()
                         ) {
                             Icon(Icons.Default.Refresh, "Reset state")
+                        }
+                        IconButton(
+                            onClick = { viewModel.setSelectedCardsDisabled(true) },
+                            enabled = selectedCardIds.isNotEmpty()
+                        ) {
+                            Icon(Icons.Default.Block, "Disable selected")
+                        }
+                        IconButton(
+                            onClick = { viewModel.setSelectedCardsDisabled(false) },
+                            enabled = selectedCardIds.isNotEmpty()
+                        ) {
+                            Icon(Icons.Default.PlayArrow, "Enable selected")
                         }
                         IconButton(
                             onClick = { showBulkDeleteDialog = true },
@@ -363,28 +377,40 @@ fun CardListScreen(
                 shape = RoundedCornerShape(12.dp)
             )
 
-            // Group filter
-            if (groups.isNotEmpty()) {
-                LazyRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    item {
-                        FilterChip(
-                            selected = selectedGroupFilters.isEmpty(),
-                            onClick = { viewModel.clearGroupFilters() },
-                            label = { Text("All") }
-                        )
-                    }
-                    items(groups) { group ->
-                        FilterChip(
-                            selected = group.id in selectedGroupFilters,
-                            onClick = { viewModel.toggleGroupFilter(group.id) },
-                            label = { Text(group.name) }
-                        )
-                    }
+            // Group + disabled filter chips
+            LazyRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                item {
+                    FilterChip(
+                        selected = selectedGroupFilters.isEmpty() && !showDisabledFilter,
+                        onClick = { viewModel.clearGroupFilters() },
+                        label = { Text("All") }
+                    )
+                }
+                items(groups) { group ->
+                    FilterChip(
+                        selected = group.id in selectedGroupFilters,
+                        onClick = { viewModel.toggleGroupFilter(group.id) },
+                        label = { Text(group.name) }
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = showDisabledFilter,
+                        onClick = { viewModel.toggleDisabledFilter() },
+                        label = { Text("Disabled") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Block,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    )
                 }
             }
 
@@ -408,6 +434,8 @@ fun CardListScreen(
                         Text(
                             text = when {
                                 searchQuery.isNotEmpty() -> "No cards match your search"
+                                showDisabledFilter && selectedGroupFilters.isNotEmpty() -> "No disabled cards in selected groups"
+                                showDisabledFilter -> "No disabled cards"
                                 selectedGroupFilters.isNotEmpty() -> "No cards in selected groups"
                                 else -> "No cards yet"
                             },
@@ -418,6 +446,8 @@ fun CardListScreen(
                         Text(
                             text = if (searchQuery.isNotEmpty()) {
                                 "Try a different search term"
+                            } else if (showDisabledFilter) {
+                                "Disabled cards are hidden from practice sessions"
                             } else {
                                 "Tap + to add a card or use menu to import"
                             },
@@ -451,6 +481,7 @@ fun CardListScreen(
                             sortOption = cardSortOption,
                             onEdit = { onNavigateToEditCard(card) },
                             onDelete = { showDeleteDialog = card },
+                            onToggleDisabled = { viewModel.toggleCardDisabled(card.id) },
                             onToggleSelection = { viewModel.toggleCardSelection(card.id) },
                             onLongPress = {
                                 if (!isSelectionMode) {
@@ -1042,6 +1073,7 @@ fun CardListItem(
     sortOption: CardSortOption = CardSortOption.DUE_DATE,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onToggleDisabled: () -> Unit = {},
     onToggleSelection: () -> Unit = {},
     onLongPress: () -> Unit = {}
 ) {
@@ -1063,10 +1095,11 @@ fun CardListItem(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected)
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-            else
-                MaterialTheme.colorScheme.surface
+            containerColor = when {
+                isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                card.isDisabled -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                else -> MaterialTheme.colorScheme.surface
+            }
         )
     ) {
         Column(
@@ -1149,6 +1182,9 @@ fun CardListItem(
 
                         Spacer(modifier = Modifier.height(4.dp))
                         Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -1181,6 +1217,27 @@ fun CardListItem(
                                 },
                                 modifier = Modifier.height(24.dp)
                             )
+                            if (card.isDisabled) {
+                                AssistChip(
+                                    onClick = { },
+                                    label = {
+                                        Text(
+                                            "Disabled",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.Block,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(12.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    },
+                                    modifier = Modifier.height(24.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -1299,6 +1356,16 @@ fun CardListItem(
                     )
 
                     Row {
+                        IconButton(onClick = onToggleDisabled) {
+                            Icon(
+                                imageVector = if (card.isDisabled) Icons.Default.PlayArrow else Icons.Default.Block,
+                                contentDescription = if (card.isDisabled) "Enable card" else "Disable card",
+                                tint = if (card.isDisabled)
+                                    MaterialTheme.colorScheme.primary
+                                else
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         IconButton(onClick = onEdit) {
                             Icon(
                                 Icons.Default.Edit,
