@@ -73,23 +73,30 @@ jobs:
       - name: Decode keystore
         env:
           DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+          STORE_PASS: ${{ secrets.DEBUG_KEYSTORE_PASSWORD || 'android' }}
+          KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS || 'androiddebugkey' }}
+          KEY_PASS: ${{ secrets.DEBUG_KEY_PASSWORD || 'android' }}
         run: |
           echo "$DEBUG_KEYSTORE_BASE64" | base64 --decode > ${{ runner.temp }}/release-keystore.jks
+          # Fail fast if the keystore or key credentials are wrong, instead of
+          # 9 minutes into the Gradle build.
+          keytool -exportcert -keystore ${{ runner.temp }}/release-keystore.jks \
+            -storepass "$STORE_PASS" -alias "$KEY_ALIAS" -keypass "$KEY_PASS" > /dev/null
 
       - name: Build release APK
         env:
           KEYSTORE_FILE: ${{ runner.temp }}/release-keystore.jks
-          KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
+          KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD || 'android' }}
+          KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS || 'androiddebugkey' }}
+          KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD || 'android' }}
         run: ./gradlew assembleRelease
 
       - name: Build release AAB
         env:
           KEYSTORE_FILE: ${{ runner.temp }}/release-keystore.jks
-          KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
+          KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD || 'android' }}
+          KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS || 'androiddebugkey' }}
+          KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD || 'android' }}
         run: ./gradlew bundleRelease
 
       - name: Compute artifact names and rename files
