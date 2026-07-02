@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -236,8 +237,48 @@ fun OpponentEditorDialog(
     val multiplier = multiplierText.toDoubleOrNull()?.coerceIn(0.1, 3.0)
     val canSave = name.isNotBlank() && multiplier != null
 
+    val isDirty = name != (initial?.name ?: "") ||
+        multiplierText != "%.2f".format(initial?.skillMultiplier ?: 1.0) ||
+        notes != (initial?.notes ?: "")
+    var showUnsavedChangesDialog by rememberSaveable { mutableStateOf(false) }
+
+    fun requestDismiss() {
+        if (isDirty) {
+            showUnsavedChangesDialog = true
+        } else {
+            onDismiss()
+        }
+    }
+
+    if (showUnsavedChangesDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnsavedChangesDialog = false },
+            icon = { Icon(Icons.Default.Warning, contentDescription = null) },
+            title = { Text("Unsaved Changes") },
+            text = { Text("You have unsaved changes. Leaving now will discard them.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showUnsavedChangesDialog = false
+                        onDismiss()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Discard Changes")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnsavedChangesDialog = false }) {
+                    Text("Keep Editing")
+                }
+            }
+        )
+    }
+
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { requestDismiss() },
         title = { Text(if (initial == null) "Add Opponent" else "Edit Opponent") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -304,7 +345,7 @@ fun OpponentEditorDialog(
             ) { Text("Save") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = { requestDismiss() }) { Text("Cancel") }
         }
     )
 }
