@@ -69,6 +69,17 @@ object SettingsConstants {
         7 to "Weekly"
     )
 
+    /** Preset values for the number of backup files to keep before pruning older ones. */
+    val MAX_BACKUPS_KEPT_PRESETS = listOf(
+        3 to "3",
+        5 to "5",
+        7 to "7",
+        10 to "10",
+        15 to "15",
+        20 to "20",
+        30 to "30"
+    )
+
     /** Find the closest preset index for a given value. */
     fun findPresetIndex(presets: List<Pair<Int, String>>, value: Int): Int =
         presets.indexOfFirst { it.first >= value }.let { if (it == -1) presets.size - 1 else it }
