@@ -20,6 +20,7 @@ import com.fencing.spacedrepetition.BuildConfig
 import com.fencing.spacedrepetition.BuildInfo
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.ui.App
+import com.fencing.spacedrepetition.ui.BinaryExportFile
 import com.fencing.spacedrepetition.ui.FileTransfer
 import com.fencing.spacedrepetition.ui.screen.getFilenameFromUri
 import com.fencing.spacedrepetition.ui.ExportFile
@@ -164,6 +165,12 @@ private fun rememberAndroidFileTransfer(
         }
     }
 
+    val photoExport = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri: Uri? ->
+        uri?.let { cardViewModel.exportAllPhotos(binaryExportFile(context, it)) }
+    }
+
     val groupImport = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
@@ -237,6 +244,9 @@ private fun rememberAndroidFileTransfer(
                 csvExport.launch(CardImportExport.generateSelectedGroupsCsvFilename())
             }
 
+            override fun exportAllPhotos() =
+                photoExport.launch(CardImportExport.generateAllPhotosFilename())
+
             override fun importIntoGroup(group: Group) {
                 groupForImport = group
                 groupImport.launch(ARCHIVE_TYPES)
@@ -289,6 +299,28 @@ private val CSV_TYPES = arrayOf(
     "text/csv", "text/comma-separated-values", "text/plain",
     "application/octet-stream", "*/*"
 )
+
+/**
+ * A chosen document, written whole.
+ *
+ * No streaming, unlike [exportFile]: what goes through here is a zip, whose
+ * central directory is only known once every entry has been written, so the
+ * archive is built in memory either way. See [BinaryExportFile].
+ */
+private fun binaryExportFile(context: Context, uri: Uri): BinaryExportFile =
+    object : BinaryExportFile {
+
+        override suspend fun write(bytes: ByteArray): String? = withContext(Dispatchers.IO) {
+            try {
+                val stream = context.contentResolver.openOutputStream(uri)
+                    ?: return@withContext "could not open the file for writing"
+                stream.use { it.write(bytes) }
+                null
+            } catch (e: Exception) {
+                e.message ?: "the file could not be written"
+            }
+        }
+    }
 
 /**
  * A chosen document, read as text.

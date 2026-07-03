@@ -84,15 +84,16 @@ fun CardListScreen(
     onResetImportExportState: () -> Unit,
     onCsvImportInto: (List<ParsedCard>, List<String>, Long) -> Unit,
     onCsvImportIntoNewGroup: (List<ParsedCard>, List<String>, String) -> Unit,
-    // The six file operations. Each one asks the caller to put a file picker
-    // in front of the user; where the bytes come from or go is the platform's
-    // business, so the screen never sees a Uri.
+    // The seven file operations. Each one asks the caller to put a file
+    // picker in front of the user; where the bytes come from or go is the
+    // platform's business, so the screen never sees a Uri.
     onImportArchive: () -> Unit,
     onExportAllArchive: (includeHistory: Boolean) -> Unit,
     onExportGroupsArchive: (groupIds: List<Long>, includeHistory: Boolean) -> Unit,
     onImportCsv: () -> Unit,
     onExportAllCsv: () -> Unit,
     onExportGroupsCsv: (groupIds: List<Long>) -> Unit,
+    onExportAllPhotos: () -> Unit,
     onNavigateToAddCard: (Long?) -> Unit,
     onNavigateToEditCard: (Card) -> Unit,
     onNavigateBack: () -> Unit
@@ -263,6 +264,16 @@ fun CardListScreen(
                                         Icon(Icons.Default.FolderOpen, contentDescription = null)
                                     },
                                     enabled = groups.isNotEmpty()
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Export All Photos") },
+                                    onClick = {
+                                        showMenu = false
+                                        onExportAllPhotos()
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.PhotoLibrary, contentDescription = null)
+                                    }
                                 )
                                 HorizontalDivider()
                                 DropdownMenuItem(
@@ -542,6 +553,19 @@ fun CardListScreen(
                 icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                 title = { Text("Export Complete") },
                 text = { Text("Successfully exported ${state.exportedCount} cards.") },
+                confirmButton = {
+                    Button(onClick = onResetImportExportState) {
+                        Text("OK")
+                    }
+                }
+            )
+        }
+        is ImportExportState.PhotoExportSuccess -> {
+            AlertDialog(
+                onDismissRequest = onResetImportExportState,
+                icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                title = { Text("Export Complete") },
+                text = { Text("Successfully exported ${state.exportedCount} photos.") },
                 confirmButton = {
                     Button(onClick = onResetImportExportState) {
                         Text("OK")

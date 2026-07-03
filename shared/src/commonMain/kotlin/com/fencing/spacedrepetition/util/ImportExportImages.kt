@@ -79,3 +79,74 @@ fun exportImageKeys(cards: List<Card>, reviewLogs: List<ReviewLog> = emptyList()
     }
     return keys
 }
+
+/**
+ * The photos of these rows, named for a zip a person will open.
+ *
+ * Stored keys are content hashes, so an archive of them under their own names
+ * would be a folder of sixty-four hex digits -- technically the export the
+ * user asked for and of no use to anyone. Each photo is named for the card it
+ * belongs to instead, under `cards/` or `reviews/` depending on whether it was
+ * attached to the card or to a note taken while practising it.
+ *
+ * A photo attached in both places, or to two cards -- which the store allows,
+ * because identical bytes are one file -- goes in once, under the first name
+ * found for it. Emitting it twice would inflate both the archive and the count
+ * the user is shown, and neither copy would be more correct than the other.
+ *
+ * [images] is a reader rather than the store because a browser's store has to
+ * be awaited and this is not a suspending function; the caller loads the keys
+ * up front, as an archive export does. A photo that will not read is left out
+ * rather than failing the export -- the same rule the deck export follows.
+ */
+fun photoArchiveEntries(
+    cards: List<Card>,
+    reviewLogs: List<ReviewLog>,
+    images: ImageReader
+): List<ZipEntry> {
+    val entries = mutableListOf<ZipEntry>()
+    val taken = mutableSetOf<String>()
+    val seenKeys = mutableSetOf<String>()
+    val questions = cards.associate { it.id to it.question }
+
+    fun add(key: String, folder: String, cardName: String) {
+        if (!seenKeys.add(key)) return
+        val bytes = images.read(key) ?: return
+        entries.add(ZipEntry(uniqueName(folder, cardName, key, taken), bytes))
+    }
+
+    cards.forEach { card ->
+        card.imagePaths.forEach { key -> add(key, "cards", card.question) }
+    }
+    reviewLogs.forEach { log ->
+        val name = questions[log.cardId] ?: "review"
+        log.imagePaths.split(",").forEach { key ->
+            if (key.isNotBlank()) add(key, "reviews", name)
+        }
+    }
+    return entries
+}
+
+/**
+ * `cards/Parry_four.jpg`, and `cards/Parry_four_2.jpg` for the next one.
+ *
+ * Cards routinely carry several photos and two cards may be named the same,
+ * so a name has to be claimed rather than assumed. The extension comes off the
+ * key, which is where the store recorded what kind of image it holds.
+ */
+private fun uniqueName(
+    folder: String,
+    cardName: String,
+    key: String,
+    taken: MutableSet<String>
+): String {
+    val extension = key.substringAfterLast('.', "jpg")
+    val base = CardImportExport.sanitizeForFilename(cardName).ifBlank { "card" }
+    var name = "$folder/$base.$extension"
+    var next = 2
+    while (!taken.add(name)) {
+        name = "$folder/${base}_$next.$extension"
+        next++
+    }
+    return name
+}

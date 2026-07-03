@@ -61,6 +61,9 @@ private class BrowserFileTransfer(
         csvDownload(CardImportExport.generateSelectedGroupsCsvFilename())
     )
 
+    override fun exportAllPhotos() =
+        cards.exportAllPhotos(photoDownload(CardImportExport.generateAllPhotosFilename()))
+
     override fun importIntoGroup(group: Group) =
         choose(ARCHIVE) { groups.importCardsToGroup(group.id, it) }
 
@@ -144,6 +147,22 @@ private class BrowserExportFile(
         return if (failure == null) result else ExportResult.Error("Failed to save file: $failure")
     }
 }
+
+/**
+ * A zip of photos, downloaded once it has been packed.
+ *
+ * [BinaryExportFile] rather than [ExportFile] because a zip is bytes, and
+ * bytes are the one thing the text path cannot carry: it builds a String, and
+ * a String is not where a JPEG survives.
+ */
+private class BrowserPhotoExportFile(private val filename: String) : BinaryExportFile {
+
+    override suspend fun write(bytes: ByteArray): String? =
+        downloadBytes(filename, bytes, "application/zip")
+}
+
+private fun photoDownload(filename: String): BinaryExportFile =
+    BrowserPhotoExportFile(filename)
 
 /** internal, not private: a backup is one of these too -- see DownloadBackups. */
 internal fun archiveDownload(filename: String): ExportFile =

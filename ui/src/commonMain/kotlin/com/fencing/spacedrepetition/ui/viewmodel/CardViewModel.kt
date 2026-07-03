@@ -18,6 +18,7 @@ import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
+import com.fencing.spacedrepetition.ui.BinaryExportFile
 import com.fencing.spacedrepetition.ui.ExportFile
 import com.fencing.spacedrepetition.ui.ImportFile
 import com.fencing.spacedrepetition.util.CardImportExport
@@ -25,6 +26,9 @@ import com.fencing.spacedrepetition.util.CardWithGroupNames
 import com.fencing.spacedrepetition.util.CardWithGroupStates
 import com.fencing.spacedrepetition.util.ImageStore
 import com.fencing.spacedrepetition.util.ParsedCard
+import com.fencing.spacedrepetition.util.exportImageKeys
+import com.fencing.spacedrepetition.util.photoArchiveEntries
+import com.fencing.spacedrepetition.util.zipArchive
 import com.fencing.spacedrepetition.util.Time
 import com.fencing.spacedrepetition.util.parsedCardToCard
 import com.fencing.spacedrepetition.util.parsedReviewLogsToEntities
@@ -681,6 +685,59 @@ class CardViewModel(
                 opponentNamesById = opponents.associate { it.id to it.name }
             )
         }.asImportExportState()
+    }
+
+    // ========== Photo export ==========
+
+    /**
+     * Writes every card and review photo to [file] as one zip archive.
+     *
+     * Photos already travel inside a deck export, inlined as base64, but only
+     * in a file this app is the only reader of. This is the same pictures as
+     * pictures -- the export to reach for when the photos are what is wanted,
+     * rather than the deck they are attached to.
+     *
+     * Read through the same reader an archive export uses, so a browser's
+     * store is awaited once, up front, rather than inside the packing.
+     */
+    fun exportAllPhotos(file: BinaryExportFile) {
+        viewModelScope.launch {
+            _importExportState.value = ImportExportState.Loading
+            try {
+                val cards = repository.getAllCardsSync()
+                val reviewLogs = repository.getAllReviewLogsSync()
+
+                if (exportImageKeys(cards, reviewLogs).isEmpty()) {
+                    _importExportState.value = ImportExportState.Error("No photos to export")
+                    return@launch
+                }
+
+                val entries = photoArchiveEntries(
+                    cards,
+                    reviewLogs,
+                    imageStore.exportReader(cards, reviewLogs)
+                )
+
+                // Keys with nothing behind them: an import that dropped an
+                // image, or storage a browser evicted. The cards still show a
+                // broken-image icon for these, so it is not a silent state.
+                if (entries.isEmpty()) {
+                    _importExportState.value =
+                        ImportExportState.Error("No photos could be read for export")
+                    return@launch
+                }
+
+                val failure = file.write(zipArchive(entries))
+                _importExportState.value = if (failure == null) {
+                    ImportExportState.PhotoExportSuccess(entries.size)
+                } else {
+                    ImportExportState.Error("Failed to save file: $failure")
+                }
+            } catch (e: Exception) {
+                _importExportState.value =
+                    ImportExportState.Error("Photo export failed: ${e.message}")
+            }
+        }
     }
 
     // ========== CSV import and export ==========

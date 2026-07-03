@@ -25,7 +25,9 @@ import com.fencing.spacedrepetition.util.FileImageStore
 import com.fencing.spacedrepetition.util.ImageStore
 import com.fencing.spacedrepetition.ui.image.ImageCache
 import com.fencing.spacedrepetition.ui.image.LocalImageCache
+import com.fencing.spacedrepetition.ui.image.LocalImageExporter
 import com.fencing.spacedrepetition.ui.image.LocalImagePicker
+import com.fencing.spacedrepetition.ui.image.rememberAndroidImageExporter
 import com.fencing.spacedrepetition.ui.image.rememberAndroidImagePicker
 import com.fencing.spacedrepetition.ui.navigation.AppNavigation
 import com.fencing.spacedrepetition.ui.theme.FencingSpacedRepetitionTheme
@@ -89,7 +91,8 @@ class MainActivity : ComponentActivity() {
 
             CompositionLocalProvider(
                 LocalImageCache provides imageCache,
-                LocalImagePicker provides rememberAndroidImagePicker(imageStore)
+                LocalImagePicker provides rememberAndroidImagePicker(imageStore),
+                LocalImageExporter provides rememberAndroidImageExporter(imageStore)
             ) {
             FencingSpacedRepetitionTheme(themeMode = themeMode) {
                 Surface(

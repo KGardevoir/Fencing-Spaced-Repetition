@@ -34,6 +34,16 @@ interface FileTransfer {
     fun exportAllCardsCsv()
     fun exportGroupsCsv(groupIds: List<Long>)
 
+    /**
+     * Saves every card and review photo as one archive.
+     *
+     * Photos already leave inside an export -- the V3 format inlines them as
+     * base64 -- but only in a file that nothing except this app reads. This is
+     * the same pictures in a form a photo viewer opens, which is what someone
+     * asking to get their photos out means.
+     */
+    fun exportAllPhotos()
+
     fun importIntoGroup(group: Group)
     fun exportGroup(group: Group)
     fun importCsvIntoGroup(group: Group)
@@ -81,4 +91,22 @@ interface ImportFile {
  */
 interface ExportFile {
     suspend fun write(content: (Appendable) -> ExportResult): ExportResult
+}
+
+/**
+ * A file of bytes the user asked the app to write.
+ *
+ * [ExportFile]'s counterpart for the things that are not text. It takes the
+ * finished bytes rather than something that produces them, because neither
+ * thing it writes can be streamed anyway: a photo is already in memory once
+ * it is read out of the store, and a zip's central directory is only known
+ * after every entry has been written, so the archive is assembled whole
+ * either way.
+ *
+ * Returns null when the file was written, or the reason it was not -- rather
+ * than an [ExportResult], because how many photos went in is the caller's
+ * count and not something writing a file can report.
+ */
+interface BinaryExportFile {
+    suspend fun write(bytes: ByteArray): String?
 }

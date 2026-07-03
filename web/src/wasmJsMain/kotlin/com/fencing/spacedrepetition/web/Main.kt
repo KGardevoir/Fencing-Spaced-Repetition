@@ -22,6 +22,7 @@ import com.fencing.spacedrepetition.ui.DownloadBackups
 import com.fencing.spacedrepetition.ui.browserFileTransfer
 import com.fencing.spacedrepetition.ui.image.ImageCache
 import com.fencing.spacedrepetition.ui.image.LocalImageCache
+import com.fencing.spacedrepetition.ui.image.LocalImageExporter
 import com.fencing.spacedrepetition.ui.image.LocalImagePicker
 import com.fencing.spacedrepetition.ui.theme.FencingSpacedRepetitionTheme
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
@@ -59,11 +60,12 @@ fun main() {
     val opponentRepository = OpponentRepository(database.opponentDao())
 
     val imageCache = ImageCache(OpfsImageStore)
-    // One scope for the page's two file dialogs -- picking an image, and
-    // picking a deck to import. Neither belongs to a composition: a chooser
-    // outlives whatever screen opened it.
+    // One scope for the page's file dialogs and downloads -- picking an image,
+    // picking a deck to import, saving a photo. None belongs to a composition:
+    // a chooser outlives whatever screen opened it, and so does a download.
     val scope = CoroutineScope(Dispatchers.Main)
     val imagePicker = browserImagePicker(scope, OpfsImageStore)
+    val imageExporter = browserImageExporter(scope, OpfsImageStore)
 
     ComposeViewport(viewportContainerId = "app") {
         val cardViewModel = remember {
@@ -88,7 +90,8 @@ fun main() {
 
         CompositionLocalProvider(
             LocalImageCache provides imageCache,
-            LocalImagePicker provides imagePicker
+            LocalImagePicker provides imagePicker,
+            LocalImageExporter provides imageExporter
         ) {
             FencingSpacedRepetitionTheme(themeMode = themeMode) {
                 App(
