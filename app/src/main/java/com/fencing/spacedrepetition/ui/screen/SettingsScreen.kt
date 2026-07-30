@@ -56,6 +56,7 @@ fun SettingsScreen(
     val maximumInterval by settingsViewModel.maximumInterval.collectAsState()
     val practiceDays by settingsViewModel.practiceDays.collectAsState()
     val fsrsRetention by settingsViewModel.fsrsRetention.collectAsState()
+    val practiceScheduleEstimate by cardViewModel.practiceScheduleEstimate.collectAsState()
     val sm2IntervalModifier by settingsViewModel.sm2IntervalModifier.collectAsState()
     val fsrsEnableFuzzing by settingsViewModel.fsrsEnableFuzzing.collectAsState()
     val autoBackupEnabled by settingsViewModel.autoBackupEnabled.collectAsState()
@@ -457,7 +458,11 @@ fun SettingsScreen(
                 }
                 RetentionSelector(
                     retentionPercent = fsrsRetention,
-                    onRetentionChange = { settingsViewModel.setFsrsRetention(it) }
+                    onRetentionChange = { settingsViewModel.setFsrsRetention(it) },
+                    cardsInRotation = totalCards,
+                    scheduleDaysPerWeek = practiceDays.size,
+                    scheduleSetsPerPractice = cardsPerSession,
+                    historyEstimate = practiceScheduleEstimate
                 )
                 Text(
                     text = "Target probability of remembering a card when it comes due (FSRS only).",

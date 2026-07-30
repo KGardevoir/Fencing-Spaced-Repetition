@@ -88,39 +88,9 @@ class SettingsConstantsTest {
     // ==================== Retention preset TESTS ====================
 
     @Test
-    fun `fsrs named retention presets are sorted ascending`() {
-        val values = SettingsConstants.FSRS_RETENTION_NAMED_PRESETS.map { it.first }
-        assertEquals(values, values.sorted())
-    }
-
-    @Test
     fun `sm2 modifier presets are sorted ascending`() {
         val values = SettingsConstants.SM2_MODIFIER_PRESETS.map { it.first }
         assertEquals(values, values.sorted())
-    }
-
-    @Test
-    fun `fsrs named retention presets contain default value 90`() {
-        val values = SettingsConstants.FSRS_RETENTION_NAMED_PRESETS.map { it.first }
-        assertTrue("Default 90 % must appear in FSRS named presets", 90 in values)
-    }
-
-    @Test
-    fun `fsrs named retention presets are within datastore bounds`() {
-        SettingsConstants.FSRS_RETENTION_NAMED_PRESETS.forEach { (value, label) ->
-            assertTrue(
-                "Preset '$label' ($value %) must be within " +
-                    "${ThemePreferences.MIN_FSRS_RETENTION}–${ThemePreferences.MAX_FSRS_RETENTION} %",
-                value in ThemePreferences.MIN_FSRS_RETENTION..ThemePreferences.MAX_FSRS_RETENTION
-            )
-        }
-    }
-
-    @Test
-    fun `fsrs named retention presets have unique values and labels`() {
-        val presets = SettingsConstants.FSRS_RETENTION_NAMED_PRESETS
-        assertEquals(presets.size, presets.map { it.first }.toSet().size)
-        assertEquals(presets.size, presets.map { it.second }.toSet().size)
     }
 
     @Test

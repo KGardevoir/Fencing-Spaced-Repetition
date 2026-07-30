@@ -142,6 +142,9 @@ class CardRepository(
 
     fun getCardCount(): Flow<Int> = cardDao.getCardCount()
 
+    fun getPracticeHistoryStats(startTime: Long): Flow<PracticeHistoryStats> =
+        reviewLogDao.getPracticeHistoryStats(startTime)
+
     fun getAllCategories(): Flow<List<String>> = cardDao.getAllCategories()
 
     // History operations

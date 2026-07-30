@@ -1,6 +1,7 @@
 package com.fencing.spacedrepetition.data.dao
 
 import androidx.room.*
+import com.fencing.spacedrepetition.data.model.PracticeHistoryStats
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import kotlinx.coroutines.flow.Flow
 
@@ -47,4 +48,15 @@ interface ReviewLogDao {
 
     @Query("SELECT COUNT(*) FROM review_logs WHERE reviewTime >= :startTime")
     fun getReviewCountSince(startTime: Long): Flow<Int>
+
+    @Query(
+        """
+        SELECT COUNT(*) AS totalReviews,
+               COUNT(DISTINCT date(reviewTime / 1000, 'unixepoch', 'localtime')) AS practiceDays,
+               COALESCE(MIN(reviewTime), 0) AS firstReviewTime
+        FROM review_logs
+        WHERE reviewTime >= :startTime
+        """
+    )
+    fun getPracticeHistoryStats(startTime: Long): Flow<PracticeHistoryStats>
 }

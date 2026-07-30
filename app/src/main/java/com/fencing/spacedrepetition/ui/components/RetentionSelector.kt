@@ -1,23 +1,32 @@
 package com.fencing.spacedrepetition.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.fencing.spacedrepetition.data.preferences.SettingsConstants
+import com.fencing.spacedrepetition.algorithm.RetentionPlanner
+import com.fencing.spacedrepetition.algorithm.ScheduleEstimate
 import com.fencing.spacedrepetition.data.preferences.ThemePreferences
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -57,66 +66,175 @@ object RetentionTradeOff {
 }
 
 /**
- * Picker for the FSRS desired-retention setting: named presets as chips, a fine-grained
- * slider behind "Custom", and a live summary of the workload/recall trade-off.
+ * Picker for the FSRS desired-retention setting. A schedule planner suggests a value that
+ * fits the user's real practice cadence (days per week × sets per practice, pre-filled from
+ * recent review history when available), and a fine-grained slider allows manual control.
  *
  * @param retentionPercent Currently selected desired retention (integer %, e.g. 90).
  * @param onRetentionChange Called with the new integer percent when the selection changes.
+ * @param cardsInRotation Number of cards the schedule has to sustain (0 hides the suggestion).
+ * @param scheduleDaysPerWeek Fallback days/week when no history estimate exists (from settings).
+ * @param scheduleSetsPerPractice Fallback sets/practice when no history estimate exists.
+ * @param historyEstimate Practice cadence sampled from review history, or null if too sparse.
  * @param enabled Whether the picker accepts input (used by group override sections).
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun RetentionSelector(
     retentionPercent: Int,
     onRetentionChange: (Int) -> Unit,
+    cardsInRotation: Int,
+    scheduleDaysPerWeek: Int,
+    scheduleSetsPerPractice: Int,
+    historyEstimate: ScheduleEstimate?,
     modifier: Modifier = Modifier,
     enabled: Boolean = true
 ) {
-    val presets = SettingsConstants.FSRS_RETENTION_NAMED_PRESETS
-    val matchesPreset = presets.any { it.first == retentionPercent }
-    var customSelected by remember { mutableStateOf(!matchesPreset) }
-    val showSlider = customSelected || !matchesPreset
+    var daysPerWeek by remember(historyEstimate) {
+        mutableIntStateOf(
+            historyEstimate?.daysPerWeek?.roundToInt()?.coerceIn(1, 7)
+                ?: scheduleDaysPerWeek.coerceIn(1, 7)
+        )
+    }
+    var setsPerPractice by remember(historyEstimate) {
+        mutableIntStateOf(
+            historyEstimate?.setsPerPractice?.roundToInt()?.coerceAtLeast(1)
+                ?: scheduleSetsPerPractice.coerceAtLeast(1)
+        )
+    }
+
+    val suggestion = if (cardsInRotation > 0) {
+        RetentionPlanner.suggestedRetention(
+            daysPerWeek.toDouble(), setsPerPractice.toDouble(), cardsInRotation
+        )
+    } else null
 
     Column(modifier = modifier.fillMaxWidth()) {
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        Surface(
+            shape = MaterialTheme.shapes.small,
+            tonalElevation = 1.dp,
+            modifier = Modifier.fillMaxWidth()
         ) {
-            presets.forEach { (percent, label) ->
-                FilterChip(
-                    selected = !showSlider && retentionPercent == percent,
-                    onClick = {
-                        customSelected = false
-                        onRetentionChange(percent)
-                    },
-                    label = { Text("$label $percent%") },
-                    enabled = enabled
+            Column(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "Plan from your practice schedule",
+                    style = MaterialTheme.typography.labelMedium
                 )
+                Text(
+                    text = if (historyEstimate != null) {
+                        "Pre-filled from your last ${RetentionPlanner.HISTORY_WINDOW_DAYS / 7} weeks of practice."
+                    } else {
+                        "Pre-filled from your app settings — practice more to base this on your history."
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                StepperRow(
+                    label = "Practice days per week",
+                    value = daysPerWeek,
+                    range = 1..7,
+                    enabled = enabled,
+                    onValueChange = { daysPerWeek = it }
+                )
+                StepperRow(
+                    label = "Sets per practice",
+                    value = setsPerPractice,
+                    range = 1..99,
+                    enabled = enabled,
+                    onValueChange = { setsPerPractice = it }
+                )
+
+                if (suggestion != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Suggested: $suggestion%",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        TextButton(
+                            onClick = { onRetentionChange(suggestion) },
+                            enabled = enabled && suggestion != retentionPercent
+                        ) {
+                            Text(if (suggestion == retentionPercent) "Applied" else "Apply")
+                        }
+                    }
+                    Text(
+                        text = "Fits $cardsInRotation cards into about " +
+                            "${daysPerWeek * setsPerPractice} sets per week.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Text(
+                        text = "Add cards to get a suggestion for your schedule.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
-            FilterChip(
-                selected = showSlider,
-                onClick = { customSelected = true },
-                label = { Text("Custom") },
-                enabled = enabled
-            )
         }
 
-        AnimatedVisibility(visible = showSlider) {
-            Slider(
-                value = retentionPercent.toFloat(),
-                onValueChange = { onRetentionChange(it.roundToInt()) },
-                valueRange = ThemePreferences.MIN_FSRS_RETENTION.toFloat()..
-                    ThemePreferences.MAX_FSRS_RETENTION.toFloat(),
-                steps = ThemePreferences.MAX_FSRS_RETENTION - ThemePreferences.MIN_FSRS_RETENTION - 1,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = enabled
-            )
-        }
+        Slider(
+            value = retentionPercent.toFloat(),
+            onValueChange = { onRetentionChange(it.roundToInt()) },
+            valueRange = ThemePreferences.MIN_FSRS_RETENTION.toFloat()..
+                ThemePreferences.MAX_FSRS_RETENTION.toFloat(),
+            steps = ThemePreferences.MAX_FSRS_RETENTION - ThemePreferences.MIN_FSRS_RETENTION - 1,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = enabled
+        )
 
         Text(
             text = RetentionTradeOff.summary(retentionPercent),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.primary
         )
+    }
+}
+
+@Composable
+private fun StepperRow(
+    label: String,
+    value: Int,
+    range: IntRange,
+    enabled: Boolean,
+    onValueChange: (Int) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(
+                onClick = { onValueChange(value - 1) },
+                enabled = enabled && value > range.first
+            ) {
+                Icon(Icons.Default.Remove, contentDescription = "Decrease $label")
+            }
+            Text(
+                text = "$value",
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.width(32.dp)
+            )
+            IconButton(
+                onClick = { onValueChange(value + 1) },
+                enabled = enabled && value < range.last
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Increase $label")
+            }
+        }
     }
 }

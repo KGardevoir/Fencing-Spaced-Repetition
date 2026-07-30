@@ -15,6 +15,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.fencing.spacedrepetition.algorithm.ScheduleEstimate
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.preferences.SettingsConstants
 import com.fencing.spacedrepetition.ui.components.FsrsRetentionPreview
@@ -34,6 +35,8 @@ fun GroupEditScreen(
     globalFsrsRetention: Int,
     globalSm2IntervalModifier: Int,
     globalFsrsEnableFuzzing: Boolean,
+    groupCardCount: Int,
+    practiceScheduleEstimate: ScheduleEstimate?,
     onSave: (Group) -> Unit,
     onNavigateBack: () -> Unit
 ) {
@@ -388,6 +391,10 @@ fun GroupEditScreen(
                 RetentionSelector(
                     retentionPercent = fsrsRetention,
                     onRetentionChange = { fsrsRetention = it },
+                    cardsInRotation = groupCardCount,
+                    scheduleDaysPerWeek = practiceDays.size,
+                    scheduleSetsPerPractice = cardsPerSession,
+                    historyEstimate = practiceScheduleEstimate,
                     enabled = overrideFsrsRetention
                 )
                 Text(

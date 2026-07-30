@@ -35,17 +35,6 @@ object SettingsConstants {
     )
 
     /**
-     * Named presets for FSRS desired retention (integer percent → label).
-     * Values outside these presets are reachable via the "Custom" slider
-     * (bounded by [ThemePreferences.MIN_FSRS_RETENTION]..[ThemePreferences.MAX_FSRS_RETENTION]).
-     */
-    val FSRS_RETENTION_NAMED_PRESETS = listOf(
-        80 to "Relaxed",
-        90 to "Balanced",
-        95 to "Thorough"
-    )
-
-    /**
      * Preset values for SM-2 interval modifier (integer percent → label).
      * 100 % = default SM-2 behaviour; lower = more frequent reviews; higher = longer intervals.
      */

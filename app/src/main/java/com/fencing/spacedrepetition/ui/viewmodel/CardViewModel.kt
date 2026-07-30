@@ -5,6 +5,8 @@ import android.content.ContentResolver
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.fencing.spacedrepetition.algorithm.RetentionPlanner
+import com.fencing.spacedrepetition.algorithm.ScheduleEstimate
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
@@ -53,6 +55,17 @@ class CardViewModel(
 
     val cardCount: StateFlow<Int> = repository.getCardCount()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    // Practice cadence sampled from recent review history, for retention suggestions
+    val practiceScheduleEstimate: StateFlow<ScheduleEstimate?> = run {
+        val now = System.currentTimeMillis()
+        val windowStart = now - RetentionPlanner.HISTORY_WINDOW_DAYS * 24L * 60 * 60 * 1000
+        repository.getPracticeHistoryStats(windowStart)
+            .map { RetentionPlanner.estimateSchedule(it, now, windowStart) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    }
+
+    fun getCardCountForGroup(groupId: Long): Flow<Int> = repository.getCardCountByGroup(groupId)
 
     // Groups for filtering
     val allGroups: StateFlow<List<Group>> = groupRepository.getAllGroups()
