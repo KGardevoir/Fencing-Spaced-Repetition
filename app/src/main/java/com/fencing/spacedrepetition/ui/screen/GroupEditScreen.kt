@@ -383,11 +383,6 @@ fun GroupEditScreen(
                 overridden = overrideFsrsRetention,
                 onOverrideChange = { overrideFsrsRetention = it }
             ) {
-                Text(
-                    "$fsrsRetention%",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
                 RetentionSelector(
                     retentionPercent = fsrsRetention,
                     onRetentionChange = { fsrsRetention = it },

@@ -3,11 +3,14 @@ package com.fencing.spacedrepetition.ui.components
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -67,15 +70,17 @@ object RetentionTradeOff {
 
 /**
  * Picker for the FSRS desired-retention setting. A schedule planner suggests a value that
- * fits the user's real practice cadence (days per week × sets per practice, pre-filled from
- * recent review history when available), and a fine-grained slider allows manual control.
+ * fits the user's practice cadence (days per week × sets per practice); the "From history"
+ * button fills those inputs from recent review logs, and a fine-grained slider with an
+ * adjacent value readout allows manual control.
  *
  * @param retentionPercent Currently selected desired retention (integer %, e.g. 90).
  * @param onRetentionChange Called with the new integer percent when the selection changes.
  * @param cardsInRotation Number of cards the schedule has to sustain (0 hides the suggestion).
- * @param scheduleDaysPerWeek Fallback days/week when no history estimate exists (from settings).
- * @param scheduleSetsPerPractice Fallback sets/practice when no history estimate exists.
- * @param historyEstimate Practice cadence sampled from review history, or null if too sparse.
+ * @param scheduleDaysPerWeek Initial days/week for the planner (from settings).
+ * @param scheduleSetsPerPractice Initial sets/practice for the planner (from settings).
+ * @param historyEstimate Cadence sampled from review history, applied via the "From history"
+ *   button; null (too little history) disables the button.
  * @param enabled Whether the picker accepts input (used by group override sections).
  */
 @Composable
@@ -89,18 +94,8 @@ fun RetentionSelector(
     modifier: Modifier = Modifier,
     enabled: Boolean = true
 ) {
-    var daysPerWeek by remember(historyEstimate) {
-        mutableIntStateOf(
-            historyEstimate?.daysPerWeek?.roundToInt()?.coerceIn(1, 7)
-                ?: scheduleDaysPerWeek.coerceIn(1, 7)
-        )
-    }
-    var setsPerPractice by remember(historyEstimate) {
-        mutableIntStateOf(
-            historyEstimate?.setsPerPractice?.roundToInt()?.coerceAtLeast(1)
-                ?: scheduleSetsPerPractice.coerceAtLeast(1)
-        )
-    }
+    var daysPerWeek by remember { mutableIntStateOf(scheduleDaysPerWeek.coerceIn(1, 7)) }
+    var setsPerPractice by remember { mutableIntStateOf(scheduleSetsPerPractice.coerceAtLeast(1)) }
 
     val suggestion = if (cardsInRotation > 0) {
         RetentionPlanner.suggestedRetention(
@@ -118,19 +113,41 @@ fun RetentionSelector(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(
-                    text = "Plan from your practice schedule",
-                    style = MaterialTheme.typography.labelMedium
-                )
-                Text(
-                    text = if (historyEstimate != null) {
-                        "Pre-filled from your last ${RetentionPlanner.HISTORY_WINDOW_DAYS / 7} weeks of practice."
-                    } else {
-                        "Pre-filled from your app settings — practice more to base this on your history."
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Plan from your practice schedule",
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                    TextButton(
+                        onClick = {
+                            historyEstimate?.let {
+                                daysPerWeek = it.daysPerWeek.roundToInt().coerceIn(1, 7)
+                                setsPerPractice = it.setsPerPractice.roundToInt().coerceAtLeast(1)
+                            }
+                        },
+                        enabled = enabled && historyEstimate != null
+                    ) {
+                        Icon(
+                            Icons.Default.History,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("From history")
+                    }
+                }
+                if (historyEstimate == null) {
+                    Text(
+                        text = "Not enough practice in the last " +
+                            "${RetentionPlanner.HISTORY_WINDOW_DAYS / 7} weeks to sample your history yet.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
                 StepperRow(
                     label = "Practice days per week",
@@ -181,15 +198,29 @@ fun RetentionSelector(
             }
         }
 
-        Slider(
-            value = retentionPercent.toFloat(),
-            onValueChange = { onRetentionChange(it.roundToInt()) },
-            valueRange = ThemePreferences.MIN_FSRS_RETENTION.toFloat()..
-                ThemePreferences.MAX_FSRS_RETENTION.toFloat(),
-            steps = ThemePreferences.MAX_FSRS_RETENTION - ThemePreferences.MIN_FSRS_RETENTION - 1,
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            enabled = enabled
-        )
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Slider(
+                value = retentionPercent.toFloat(),
+                onValueChange = { onRetentionChange(it.roundToInt()) },
+                valueRange = ThemePreferences.MIN_FSRS_RETENTION.toFloat()..
+                    ThemePreferences.MAX_FSRS_RETENTION.toFloat(),
+                steps = ThemePreferences.MAX_FSRS_RETENTION - ThemePreferences.MIN_FSRS_RETENTION - 1,
+                modifier = Modifier.weight(1f),
+                enabled = enabled
+            )
+            Text(
+                text = "$retentionPercent%",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.End,
+                modifier = Modifier
+                    .width(48.dp)
+                    .padding(start = 8.dp)
+            )
+        }
 
         Text(
             text = RetentionTradeOff.summary(retentionPercent),

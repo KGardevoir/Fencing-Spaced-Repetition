@@ -441,21 +441,10 @@ fun SettingsScreen(
                     .fillMaxWidth()
                     .padding(vertical = 8.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "FSRS Desired Retention",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    Text(
-                        text = "$fsrsRetention%",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
+                Text(
+                    text = "FSRS Desired Retention",
+                    style = MaterialTheme.typography.bodyLarge
+                )
                 RetentionSelector(
                     retentionPercent = fsrsRetention,
                     onRetentionChange = { settingsViewModel.setFsrsRetention(it) },
