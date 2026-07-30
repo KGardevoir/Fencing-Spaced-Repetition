@@ -35,18 +35,14 @@ object SettingsConstants {
     )
 
     /**
-     * Preset values for FSRS desired retention (integer percent → label).
-     * Range 70 %–97 %; the FSRS team recommends 80 %–95 % for most learners.
+     * Named presets for FSRS desired retention (integer percent → label).
+     * Values outside these presets are reachable via the "Custom" slider
+     * (bounded by [ThemePreferences.MIN_FSRS_RETENTION]..[ThemePreferences.MAX_FSRS_RETENTION]).
      */
-    val FSRS_RETENTION_PRESETS = listOf(
-        70 to "70%",
-        75 to "75%",
-        80 to "80%",
-        85 to "85%",
-        90 to "90%",
-        92 to "92%",
-        95 to "95%",
-        97 to "97%"
+    val FSRS_RETENTION_NAMED_PRESETS = listOf(
+        80 to "Relaxed",
+        90 to "Balanced",
+        95 to "Thorough"
     )
 
     /**

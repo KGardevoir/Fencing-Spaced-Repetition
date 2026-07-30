@@ -28,6 +28,7 @@ import com.fencing.spacedrepetition.BuildConfig
 import com.fencing.spacedrepetition.data.preferences.SettingsConstants
 import com.fencing.spacedrepetition.data.preferences.ThemeMode
 import com.fencing.spacedrepetition.ui.components.FsrsRetentionPreview
+import com.fencing.spacedrepetition.ui.components.RetentionSelector
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.DonationViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
@@ -92,9 +93,6 @@ fun SettingsScreen(
 
     val intervalPresets = SettingsConstants.INTERVAL_PRESETS
     val currentPresetIndex = SettingsConstants.findPresetIndex(intervalPresets, maximumInterval)
-
-    val fsrsRetentionPresets = SettingsConstants.FSRS_RETENTION_PRESETS
-    val currentFsrsRetentionIndex = SettingsConstants.findPresetIndex(fsrsRetentionPresets, fsrsRetention)
 
     val sm2ModifierPresets = SettingsConstants.SM2_MODIFIER_PRESETS
     val currentSm2ModifierIndex = SettingsConstants.findPresetIndex(sm2ModifierPresets, sm2IntervalModifier)
@@ -452,24 +450,17 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodyLarge
                     )
                     Text(
-                        text = fsrsRetentionPresets[currentFsrsRetentionIndex].second,
+                        text = "$fsrsRetention%",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
-                Slider(
-                    value = currentFsrsRetentionIndex.toFloat(),
-                    onValueChange = { newIndex ->
-                        val presetValue = fsrsRetentionPresets[newIndex.roundToInt()].first
-                        settingsViewModel.setFsrsRetention(presetValue)
-                    },
-                    valueRange = 0f..(fsrsRetentionPresets.size - 1).toFloat(),
-                    steps = fsrsRetentionPresets.size - 2,
-                    modifier = Modifier.fillMaxWidth()
+                RetentionSelector(
+                    retentionPercent = fsrsRetention,
+                    onRetentionChange = { settingsViewModel.setFsrsRetention(it) }
                 )
                 Text(
-                    text = "Target probability of remembering a card when it comes due (FSRS only). " +
-                        "80\u201392\u00a0% suits most learners \u2014 higher values increase reviews, lower values extend intervals.",
+                    text = "Target probability of remembering a card when it comes due (FSRS only).",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

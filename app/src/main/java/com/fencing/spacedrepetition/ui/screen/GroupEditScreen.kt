@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.preferences.SettingsConstants
 import com.fencing.spacedrepetition.ui.components.FsrsRetentionPreview
+import com.fencing.spacedrepetition.ui.components.RetentionSelector
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -72,7 +73,6 @@ fun GroupEditScreen(
 
     val intervalPresets = SettingsConstants.INTERVAL_PRESETS
     val bucketPresets = SettingsConstants.BUCKET_PRESETS
-    val fsrsRetentionPresets = SettingsConstants.FSRS_RETENTION_PRESETS
     val sm2ModifierPresets = SettingsConstants.SM2_MODIFIER_PRESETS
 
     fun buildUpdatedGroup() = group.copy(
@@ -380,24 +380,18 @@ fun GroupEditScreen(
                 overridden = overrideFsrsRetention,
                 onOverrideChange = { overrideFsrsRetention = it }
             ) {
-                val currentRetentionIndex = SettingsConstants.findPresetIndex(fsrsRetentionPresets, fsrsRetention)
                 Text(
-                    fsrsRetentionPresets[currentRetentionIndex].second,
+                    "$fsrsRetention%",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
-                Slider(
-                    value = currentRetentionIndex.toFloat(),
-                    onValueChange = { newIndex ->
-                        fsrsRetention = fsrsRetentionPresets[newIndex.roundToInt()].first
-                    },
-                    valueRange = 0f..(fsrsRetentionPresets.size - 1).toFloat(),
-                    steps = fsrsRetentionPresets.size - 2,
-                    modifier = Modifier.fillMaxWidth(),
+                RetentionSelector(
+                    retentionPercent = fsrsRetention,
+                    onRetentionChange = { fsrsRetention = it },
                     enabled = overrideFsrsRetention
                 )
                 Text(
-                    "Target recall probability when a card comes due (FSRS). 80–92\u00a0% suits most learners.",
+                    "Target recall probability when a card comes due (FSRS).",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
