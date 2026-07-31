@@ -35,8 +35,12 @@ object RetentionPlanner {
     /** Representative stability of a settled card, in days, used to anchor the inversion. */
     private const val TYPICAL_STABILITY_DAYS = 30.0
 
-    /** How far back review history is sampled when estimating the user's schedule. */
-    const val HISTORY_WINDOW_DAYS = 56
+    /** Default number of days of review history sampled when estimating the user's schedule. */
+    const val DEFAULT_HISTORY_WINDOW_DAYS = 56
+
+    /** Valid range for the user-tunable history fit window, in days. */
+    const val MIN_HISTORY_WINDOW_DAYS = 7
+    const val MAX_HISTORY_WINDOW_DAYS = 365
 
     /** Minimum distinct practice days before a history estimate is considered meaningful. */
     private const val MIN_PRACTICE_DAYS_FOR_ESTIMATE = 3

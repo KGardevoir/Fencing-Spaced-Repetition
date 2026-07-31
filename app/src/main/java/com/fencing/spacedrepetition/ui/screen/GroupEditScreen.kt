@@ -37,6 +37,8 @@ fun GroupEditScreen(
     globalFsrsEnableFuzzing: Boolean,
     groupCardCount: Int,
     practiceScheduleEstimate: ScheduleEstimate?,
+    historyWindowDays: Int,
+    onHistoryWindowDaysChange: (Int) -> Unit,
     onSave: (Group) -> Unit,
     onNavigateBack: () -> Unit
 ) {
@@ -390,6 +392,8 @@ fun GroupEditScreen(
                     scheduleDaysPerWeek = practiceDays.size,
                     scheduleSetsPerPractice = cardsPerSession,
                     historyEstimate = practiceScheduleEstimate,
+                    historyWindowDays = historyWindowDays,
+                    onHistoryWindowDaysChange = onHistoryWindowDaysChange,
                     enabled = overrideFsrsRetention
                 )
                 Text(

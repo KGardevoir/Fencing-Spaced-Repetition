@@ -50,6 +50,15 @@ class RetentionPlannerTest {
         }
     }
 
+    @Test
+    fun `history fit window bounds are sane`() {
+        assertTrue(RetentionPlanner.MIN_HISTORY_WINDOW_DAYS < RetentionPlanner.MAX_HISTORY_WINDOW_DAYS)
+        assertTrue(
+            RetentionPlanner.DEFAULT_HISTORY_WINDOW_DAYS in
+                RetentionPlanner.MIN_HISTORY_WINDOW_DAYS..RetentionPlanner.MAX_HISTORY_WINDOW_DAYS
+        )
+    }
+
     // ==================== estimateSchedule TESTS ====================
 
     @Test

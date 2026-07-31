@@ -12,9 +12,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -22,10 +24,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.algorithm.RetentionPlanner
@@ -81,6 +85,8 @@ object RetentionTradeOff {
  * @param scheduleSetsPerPractice Initial sets/practice for the planner (from settings).
  * @param historyEstimate Cadence sampled from review history, applied via the "From history"
  *   button; null (too little history) disables the button.
+ * @param historyWindowDays How many days of review history the estimate is fitted over.
+ * @param onHistoryWindowDaysChange Called with a new valid fit window entered by the user.
  * @param enabled Whether the picker accepts input (used by group override sections).
  */
 @Composable
@@ -91,11 +97,17 @@ fun RetentionSelector(
     scheduleDaysPerWeek: Int,
     scheduleSetsPerPractice: Int,
     historyEstimate: ScheduleEstimate?,
+    historyWindowDays: Int,
+    onHistoryWindowDaysChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true
 ) {
     var daysPerWeek by remember { mutableIntStateOf(scheduleDaysPerWeek.coerceIn(1, 7)) }
     var setsPerPractice by remember { mutableIntStateOf(scheduleSetsPerPractice.coerceAtLeast(1)) }
+    var windowText by remember { mutableStateOf(historyWindowDays.toString()) }
+    val windowValid = windowText.toIntOrNull()
+        ?.let { it in RetentionPlanner.MIN_HISTORY_WINDOW_DAYS..RetentionPlanner.MAX_HISTORY_WINDOW_DAYS }
+        ?: false
 
     val suggestion = if (cardsInRotation > 0) {
         RetentionPlanner.suggestedRetention(
@@ -140,10 +152,46 @@ fun RetentionSelector(
                         Text("From history")
                     }
                 }
-                if (historyEstimate == null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
-                        text = "Not enough practice in the last " +
-                            "${RetentionPlanner.HISTORY_WINDOW_DAYS / 7} weeks to sample your history yet.",
+                        text = "Fit window",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    OutlinedTextField(
+                        value = windowText,
+                        onValueChange = { text ->
+                            windowText = text.filter { it.isDigit() }.take(3)
+                            windowText.toIntOrNull()
+                                ?.takeIf {
+                                    it in RetentionPlanner.MIN_HISTORY_WINDOW_DAYS..
+                                        RetentionPlanner.MAX_HISTORY_WINDOW_DAYS
+                                }
+                                ?.let(onHistoryWindowDaysChange)
+                        },
+                        label = { Text("days") },
+                        isError = !windowValid,
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        textStyle = MaterialTheme.typography.bodyMedium,
+                        enabled = enabled,
+                        modifier = Modifier.width(96.dp)
+                    )
+                }
+                if (!windowValid) {
+                    Text(
+                        text = "Enter ${RetentionPlanner.MIN_HISTORY_WINDOW_DAYS}–" +
+                            "${RetentionPlanner.MAX_HISTORY_WINDOW_DAYS} days.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                } else if (historyEstimate == null) {
+                    Text(
+                        text = "Not enough practice in the last $historyWindowDays days " +
+                            "to sample your history yet.",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

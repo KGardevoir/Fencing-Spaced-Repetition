@@ -57,6 +57,7 @@ fun SettingsScreen(
     val practiceDays by settingsViewModel.practiceDays.collectAsState()
     val fsrsRetention by settingsViewModel.fsrsRetention.collectAsState()
     val practiceScheduleEstimate by cardViewModel.practiceScheduleEstimate.collectAsState()
+    val historyWindowDays by cardViewModel.historyWindowDays.collectAsState()
     val sm2IntervalModifier by settingsViewModel.sm2IntervalModifier.collectAsState()
     val fsrsEnableFuzzing by settingsViewModel.fsrsEnableFuzzing.collectAsState()
     val autoBackupEnabled by settingsViewModel.autoBackupEnabled.collectAsState()
@@ -451,7 +452,9 @@ fun SettingsScreen(
                     cardsInRotation = totalCards,
                     scheduleDaysPerWeek = practiceDays.size,
                     scheduleSetsPerPractice = cardsPerSession,
-                    historyEstimate = practiceScheduleEstimate
+                    historyEstimate = practiceScheduleEstimate,
+                    historyWindowDays = historyWindowDays,
+                    onHistoryWindowDaysChange = { cardViewModel.setHistoryWindowDays(it) }
                 )
                 Text(
                     text = "Target probability of remembering a card when it comes due (FSRS only).",

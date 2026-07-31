@@ -202,6 +202,7 @@ fun AppNavigation(
             val globalSm2IntervalModifier by settingsViewModel.sm2IntervalModifier.collectAsState()
             val globalFsrsEnableFuzzing by settingsViewModel.fsrsEnableFuzzing.collectAsState()
             val practiceScheduleEstimate by cardViewModel.practiceScheduleEstimate.collectAsState()
+            val historyWindowDays by cardViewModel.historyWindowDays.collectAsState()
 
             GroupEditScreen(
                 group = Group(name = ""),
@@ -216,6 +217,8 @@ fun AppNavigation(
                 globalFsrsEnableFuzzing = globalFsrsEnableFuzzing,
                 groupCardCount = 0,
                 practiceScheduleEstimate = practiceScheduleEstimate,
+                historyWindowDays = historyWindowDays,
+                onHistoryWindowDaysChange = { cardViewModel.setHistoryWindowDays(it) },
                 onSave = { newGroup ->
                     groupViewModel.addGroupWithSettings(newGroup) {
                         navController.popBackStack()
@@ -240,6 +243,7 @@ fun AppNavigation(
                 val globalSm2IntervalModifier by settingsViewModel.sm2IntervalModifier.collectAsState()
                 val globalFsrsEnableFuzzing by settingsViewModel.fsrsEnableFuzzing.collectAsState()
                 val practiceScheduleEstimate by cardViewModel.practiceScheduleEstimate.collectAsState()
+                val historyWindowDays by cardViewModel.historyWindowDays.collectAsState()
                 val groupCardCount by remember(group.id) {
                     cardViewModel.getCardCountForGroup(group.id)
                 }.collectAsState(initial = 0)
@@ -257,6 +261,8 @@ fun AppNavigation(
                     globalFsrsEnableFuzzing = globalFsrsEnableFuzzing,
                     groupCardCount = groupCardCount,
                     practiceScheduleEstimate = practiceScheduleEstimate,
+                    historyWindowDays = historyWindowDays,
+                    onHistoryWindowDaysChange = { cardViewModel.setHistoryWindowDays(it) },
                     onSave = { updatedGroup ->
                         // Handle independent learning toggle specially (initializes learning states)
                         if (updatedGroup.independentLearning != group.independentLearning) {
