@@ -191,11 +191,24 @@ Donations help keep the app free, ad-free, and actively maintained!
 
 ## License
 
-This project is open source and available for educational purposes.
+Copyright (C) 2026 Enmar Abrams
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the [GNU General Public License](LICENSE) for more
+details.
+
+Source files carry [SPDX](https://spdx.dev/) identifiers
+(`GPL-3.0-or-later`) rather than full license headers.
 
 ## Credits
 
-- FSRS algorithm based on the open-source [FSRS project](https://github.com/open-spaced-repetition/fsrs4anki)
+- FSRS algorithm based on the open-source [FSRS project](https://github.com/open-spaced-repetition/fsrs4anki), used under the MIT License
 - SM-2 algorithm from [SuperMemo research](https://www.supermemo.com/en/archives1990-2015/english/ol/sm2)
 - Built with Jetpack Compose and Material Design 3
 - Designed for fencing and martial arts practice but adaptable to any sport or learning domain

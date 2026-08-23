@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Enmar Abrams
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package com.fencing.spacedrepetition.ui.theme
 
 import androidx.compose.material3.Typography
