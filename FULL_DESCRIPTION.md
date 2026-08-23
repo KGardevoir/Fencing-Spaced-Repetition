@@ -64,10 +64,10 @@ KEY FEATURES
 - Edit cards during practice
 - Completely offline and private
 - No ads, no tracking, no accounts
-- Optional donations to support development
+- Free software (GPL-3.0-or-later)
 
 SUPPORT DEVELOPMENT
 
-This app is completely free with all features unlocked. No ads, no subscriptions, no paywalls. If you find it helpful, you can support continued development with an optional donation from the Settings screen. Every contribution helps keep the app free and actively maintained.
+This app is completely free with all features unlocked. No ads, no subscriptions, no paywalls. It is free software released under the GPL-3.0-or-later license -- the full source is public and anyone can inspect, modify, or redistribute it. If you find it helpful, the Settings screen links to ways to support continued development.
 
 Built for fencing and martial arts but works for any sport or physical discipline.

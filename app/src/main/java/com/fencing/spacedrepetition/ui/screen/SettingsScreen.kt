@@ -3,7 +3,6 @@
 
 package com.fencing.spacedrepetition.ui.screen
 
-import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -25,15 +24,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.documentfile.provider.DocumentFile
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.fencing.spacedrepetition.billing.BillingManager
 import com.fencing.spacedrepetition.BuildConfig
+import com.fencing.spacedrepetition.SupportLinks
 import com.fencing.spacedrepetition.data.preferences.SettingsConstants
 import com.fencing.spacedrepetition.data.preferences.ThemeMode
 import com.fencing.spacedrepetition.ui.components.FsrsRetentionPreview
 import com.fencing.spacedrepetition.ui.components.RetentionSelector
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
-import com.fencing.spacedrepetition.ui.viewmodel.DonationViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -45,8 +42,7 @@ import kotlin.math.roundToInt
 fun SettingsScreen(
     settingsViewModel: SettingsViewModel,
     cardViewModel: CardViewModel,
-    onNavigateBack: () -> Unit,
-    donationViewModel: DonationViewModel = viewModel()
+    onNavigateBack: () -> Unit
 ) {
     val totalCards by cardViewModel.cardCount.collectAsState()
     var showDeleteAllDialog by remember { mutableStateOf(false) }
@@ -69,29 +65,7 @@ fun SettingsScreen(
     val lastBackupTime by settingsViewModel.lastBackupTime.collectAsState()
     val maxBackupsKept by settingsViewModel.maxBackupsKept.collectAsState()
 
-    // Donation state
     val context = LocalContext.current
-    val activity = context as? Activity
-    val billingState by donationViewModel.billingState.collectAsState()
-    val donationProducts by donationViewModel.donationProducts.collectAsState()
-    val purchaseResult by donationViewModel.purchaseResult.collectAsState()
-
-    // Show success/error messages
-    LaunchedEffect(purchaseResult) {
-        purchaseResult?.let { result ->
-            when (result) {
-                is BillingManager.PurchaseResult.Success -> {
-                    // Could show a snackbar here
-                }
-                is BillingManager.PurchaseResult.Cancelled -> {
-                    // User cancelled
-                }
-                is BillingManager.PurchaseResult.Error -> {
-                    // Could show error snackbar
-                }
-            }
-        }
-    }
 
     val bucketPresets = SettingsConstants.BUCKET_PRESETS
     val currentBucketIndex = SettingsConstants.findPresetIndex(bucketPresets, randomizeBucketHours)
@@ -709,153 +683,38 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "If you find this app helpful, consider supporting its development with a donation. Your support helps keep the app free and ad-free!",
+                text = "This app is free software and always will be. If you find it useful, you can support continued development below. Links open in your browser.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Show donation buttons based on billing state
-            when (billingState) {
-                is BillingManager.BillingState.Connected -> {
-                    if (donationProducts.isEmpty()) {
-                        Text(
-                            text = "Loading donation options...",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        donationProducts.forEach { product ->
-                            val oneTimePriceOffer = product.oneTimePurchaseOfferDetails
-                            val price = oneTimePriceOffer?.formattedPrice ?: "N/A"
-
-                            val displayName = when (product.productId) {
-                                BillingManager.DONATION_SMALL -> "Small Coffee"
-                                BillingManager.DONATION_MEDIUM -> "Big Coffee"
-                                BillingManager.DONATION_LARGE -> "Generous Support"
-                                else -> product.name
-                            }
-
-                            val description = when (product.productId) {
-                                BillingManager.DONATION_SMALL -> "Buy me a small coffee"
-                                BillingManager.DONATION_MEDIUM -> "Buy me a big coffee"
-                                BillingManager.DONATION_LARGE -> "Support development generously"
-                                else -> product.description
-                            }
-
-                            ElevatedButton(
-                                onClick = {
-                                    activity?.let {
-                                        donationViewModel.launchDonationFlow(it, product)
-                                    }
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                enabled = activity != null
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Favorite,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    horizontalAlignment = Alignment.Start
-                                ) {
-                                    Text(displayName)
-                                    Text(
-                                        description,
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                }
-                                Text(
-                                    price,
-                                    style = MaterialTheme.typography.titleMedium
-                                )
-                            }
-                        }
-                    }
-
-                    // Show purchase result
-                    purchaseResult?.let { result ->
-                        Spacer(modifier = Modifier.height(8.dp))
-                        when (result) {
-                            is BillingManager.PurchaseResult.Success -> {
-                                Card(
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                                    ),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Favorite,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            "Thank you for your support!",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                                        )
-                                    }
-                                }
-                                LaunchedEffect(Unit) {
-                                    kotlinx.coroutines.delay(3000)
-                                    donationViewModel.clearPurchaseResult()
-                                }
-                            }
-                            is BillingManager.PurchaseResult.Error -> {
-                                Card(
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.errorContainer
-                                    ),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(
-                                        "Error: ${result.message}",
-                                        modifier = Modifier.padding(12.dp),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                }
-                            }
-                            is BillingManager.PurchaseResult.Cancelled -> {
-                                // Don't show anything for cancelled
-                                LaunchedEffect(Unit) {
-                                    donationViewModel.clearPurchaseResult()
-                                }
-                            }
-                        }
-                    }
-                }
-                is BillingManager.BillingState.Connecting -> {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+            SupportLinks.links.forEach { link ->
+                ElevatedButton(
+                    onClick = {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link.url)))
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Favorite,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Connecting to payment service...",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-                is BillingManager.BillingState.Error -> {
-                    Text(
-                        text = "Payment service unavailable. Please try again later.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-                is BillingManager.BillingState.Disconnected -> {
-                    Text(
-                        text = "Connecting to payment service...",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Text(link.label)
+                        Text(
+                            link.description,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             }
 

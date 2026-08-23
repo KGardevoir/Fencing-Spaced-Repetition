@@ -51,14 +51,9 @@ An Android app for practicing martial arts and fencing techniques using delayed-
 - Practices per week for scheduling adjustment
 - Maximum review interval
 
-### Donation System
-- Support development with optional in-app donations via Google Play Billing
-- Small Coffee ($0.99), Big Coffee ($2.99), Generous Support ($4.99)
-- All features are free -- donations are entirely optional
-
 ### Privacy
 - Fully offline -- no network requests, no analytics, no telemetry
-- No permissions required (except billing for optional donations)
+- No permissions required
 - All data stored locally on device
 - See [PRIVACY_POLICY.md](PRIVACY_POLICY.md) for details
 
@@ -69,7 +64,6 @@ An Android app for practicing martial arts and fencing techniques using delayed-
 - **Architecture**: MVVM with Repository pattern
 - **Database**: Room (SQLite) with migrations
 - **Preferences**: DataStore
-- **Monetization**: Google Play Billing (optional donations)
 - **Image loading**: Coil
 - **Minimum API**: 24 (Android 7.0)
 
@@ -80,8 +74,6 @@ app/src/main/java/com/fencing/spacedrepetition/
 ├── algorithm/              # Spaced repetition algorithms
 │   ├── FSRSAlgorithm.kt   # FSRS-4.5 implementation
 │   └── SM2Algorithm.kt    # SM-2 implementation
-├── billing/                # Google Play Billing
-│   └── BillingManager.kt  # Donation handling
 ├── data/
 │   ├── model/             # Room entities and data classes
 │   ├── dao/               # Database access objects
@@ -140,7 +132,6 @@ When enabled, due cards are grouped into time buckets (configurable from 1 hour 
 ### For Google Play Store Deployment
 See [DEPLOYMENT.md](DEPLOYMENT.md) for complete deployment instructions, including:
 - Creating a keystore for signing (see [KEYSTORE_SETUP.md](KEYSTORE_SETUP.md))
-- Setting up in-app donation products
 - Creating store assets
 - Privacy policy requirements
 - Submission process
@@ -167,18 +158,19 @@ This app is privacy-first:
 - ✅ No analytics or telemetry
 - ✅ No account required
 - ✅ Works completely offline
-- ✅ Optional donations processed securely by Google Play
 
 See [PRIVACY_POLICY.md](PRIVACY_POLICY.md) for complete privacy details.
 
 ## Supporting Development
 
-The app is completely free with all features unlocked. If you find it helpful, you can support development through optional in-app donations:
-- Small Coffee ($0.99)
-- Big Coffee ($2.99)
-- Generous Support ($4.99)
+The app is free software with every feature unlocked -- no ads, no paywalls,
+no tracking. If you find it useful, the Settings screen links to
+[GitHub Sponsors](https://github.com/sponsors/KGardevoir).
 
-Donations help keep the app free, ad-free, and actively maintained!
+Support links open in your browser. The app deliberately contains no in-app
+purchase SDK: Google Play Billing is proprietary, and depending on it would
+make the app ineligible for [F-Droid](https://f-droid.org/), which only builds
+software whose dependencies are all free software.
 
 ## Future Enhancements
 
