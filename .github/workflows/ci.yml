@@ -41,7 +41,10 @@ jobs:
       - name: Inspect androidx sqlite/room3 classes (temporary)
         continue-on-error: true
         run: |
-          ./gradlew :app:dependencies --configuration debugRuntimeClasspath 2>/dev/null             | grep -iE "sqlite|room3" | sort -u || true
+          # :app:dependencies resolves metadata only -- it does not download the
+          # jars, so the previous run dumped sqlite (already in the restored
+          # cache) and nothing at all for room3. Force the real download first.
+          ./gradlew :app:kspDebugKotlin || true
           echo "===== class names ====="
           mkdir -p /tmp/inspect
           find ~/.gradle/caches/modules-2/files-2.1                \( -path "*androidx.sqlite*" -o -path "*androidx.room3*" \)                \( -name "*.jar" -o -name "*.aar" \) | while read -r f; do
@@ -51,7 +54,7 @@ jobs:
               unzip -qo /tmp/inspect/x/classes.jar -d /tmp/inspect/x/c 2>/dev/null || true
             fi
             found=$(find /tmp/inspect/x -name "*.class"               | sed 's|.*/x/c/||; s|.*/x/||; s|\.class$||; s|/|.|g'               | grep -E "^androidx\.(sqlite|room3)\." \
-              | grep -vE '\$|\.internal\.|Kt$' | sort -u)
+              | grep -vE '\$' | sort -u)
             if [ -n "$found" ]; then echo "--- $(basename "$f")"; echo "$found" | head -60; fi
           done
 
