@@ -119,8 +119,8 @@ data class CardGroupLearningState(
 data class CardWithGroups(
     @Embedded val card: Card,
     @Relation(
-        parentColumn = "id",
-        entityColumn = "id",
+        parentColumns = ["id"],
+        entityColumns = ["id"],
         associateBy = Junction(
             CardGroupCrossRef::class,
             parentColumn = "cardId",
@@ -133,8 +133,8 @@ data class CardWithGroups(
 data class GroupWithCards(
     @Embedded val group: Group,
     @Relation(
-        parentColumn = "id",
-        entityColumn = "id",
+        parentColumns = ["id"],
+        entityColumns = ["id"],
         associateBy = Junction(
             CardGroupCrossRef::class,
             parentColumn = "groupId",
