@@ -222,6 +222,9 @@ tasks.register("dumpWasmJsCompileClasspath") {
         .compilations.getByName("main")
         .compileDependencyFiles
     doLast {
-        classpath.forEach { logger.lifecycle("WASMCP: ${it.name}") }
+        // println, not logger.lifecycle: the CI step runs Gradle with -q,
+        // which suppresses the lifecycle log level. The first attempt at this
+        // diagnostic used lifecycle and printed nothing at all.
+        classpath.forEach { println("WASMCP: ${it.name}") }
     }
 }
