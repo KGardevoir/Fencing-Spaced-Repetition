@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Delayed Choice Spaced Repetition — browser core</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      line-height: 1.5;
+      margin: 0 auto;
+      max-width: 44rem;
+      padding: 2rem 1rem 4rem;
+    }
+    h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
+    h2 { font-size: 1.05rem; margin-top: 2rem; }
+    p { margin: 0.5rem 0; }
+    .lede { font-size: 1.05rem; }
+    .footnote, .sub { opacity: 0.7; font-size: 0.9rem; }
+    table { border-collapse: collapse; width: 100%; margin-top: 0.75rem; }
+    th, td {
+      border-bottom: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+      padding: 0.4rem 0.5rem;
+      text-align: left;
+      font-variant-numeric: tabular-nums;
+    }
+    th { font-weight: 600; }
+    #output:empty::after {
+      content: "Loading WebAssembly…";
+      opacity: 0.7;
+    }
+  </style>
+</head>
+<body>
+  <h1>Delayed Choice Spaced Repetition</h1>
+  <p class="sub">Browser build — shared scheduling core</p>
+  <div id="output"></div>
+  <script type="module" src="fencing-web.js"></script>
+</body>
+</html>
