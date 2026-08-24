@@ -38,28 +38,20 @@ jobs:
       # class names inside androidx.sqlite / room3 cannot be checked locally.
       # This prints them once so the driver import can be confirmed rather
       # than guessed. Remove once Room 3 builds.
-      - name: Inspect androidx sqlite/room3 classes (temporary)
-        continue-on-error: true
-        run: |
-          # :app:dependencies resolves metadata only -- it does not download the
-          # jars, so the previous run dumped sqlite (already in the restored
-          # cache) and nothing at all for room3. Force the real download first.
-          ./gradlew :app:kspDebugKotlin || true
-          echo "===== class names ====="
-          mkdir -p /tmp/inspect
-          find ~/.gradle/caches/modules-2/files-2.1                \( -path "*androidx.sqlite*" -o -path "*androidx.room3*" \)                \( -name "*.jar" -o -name "*.aar" \) | while read -r f; do
-            rm -rf /tmp/inspect/x && mkdir -p /tmp/inspect/x
-            unzip -qo "$f" -d /tmp/inspect/x 2>/dev/null || continue
-            if [ -f /tmp/inspect/x/classes.jar ]; then
-              unzip -qo /tmp/inspect/x/classes.jar -d /tmp/inspect/x/c 2>/dev/null || true
-            fi
-            found=$(find /tmp/inspect/x -name "*.class"               | sed 's|.*/x/c/||; s|.*/x/||; s|\.class$||; s|/|.|g'               | grep -E "^androidx\.room3\.[A-Za-z]" \
-              | grep -vE '\$|bundle\.|compiler\.|jarjarred|Kt$' | sort -u)
-            if [ -n "$found" ]; then echo "--- $(basename "$f")"; echo "$found"; fi
-          done
-
+      # On failure, repeat just the compiler/KSP errors at the very end of the
+      # log. Gradle buries them hundreds of lines up behind npm chatter and
+      # task output, which makes a failure needlessly expensive to read.
       - name: Run unit tests
-        run: ./gradlew :shared:allTests :app:testDebugUnitTest
+        run: |
+          set -o pipefail
+          if ! ./gradlew :shared:allTests :app:testDebugUnitTest 2>&1 | tee /tmp/build.log; then
+            echo ""
+            echo "================= compiler / KSP errors ================="
+            grep -E "^e: |^Tried the following|^<init> ->" /tmp/build.log | head -60 \
+              || echo "(no 'e:' lines -- failure was not a compile error)"
+            echo "========================================================="
+            exit 1
+          fi
 
       - name: Upload test results
         uses: actions/upload-artifact@v7

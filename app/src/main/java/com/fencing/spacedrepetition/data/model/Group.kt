@@ -123,8 +123,8 @@ data class CardWithGroups(
         entityColumns = ["id"],
         associateBy = Junction(
             CardGroupCrossRef::class,
-            parentColumn = "cardId",
-            entityColumn = "groupId"
+            parentColumns = ["cardId"],
+            entityColumns = ["groupId"]
         )
     )
     val groups: List<Group>
@@ -137,8 +137,8 @@ data class GroupWithCards(
         entityColumns = ["id"],
         associateBy = Junction(
             CardGroupCrossRef::class,
-            parentColumn = "groupId",
-            entityColumn = "cardId"
+            parentColumns = ["groupId"],
+            entityColumns = ["cardId"]
         )
     )
     val cards: List<Card>
