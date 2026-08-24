@@ -5,9 +5,7 @@ package com.fencing.spacedrepetition.data
 
 import androidx.room3.Database
 import androidx.room3.RoomDatabase
-import androidx.room3.RoomDatabaseConstructor
 import androidx.room3.ColumnTypeConverters
-import androidx.room3.ConstructedBy
 import androidx.room3.migration.Migration
 import androidx.sqlite.*
 import com.fencing.spacedrepetition.data.dao.CardDao
@@ -30,7 +28,6 @@ import com.fencing.spacedrepetition.util.Time
     exportSchema = true
 )
 @ColumnTypeConverters(Converters::class)
-@ConstructedBy(AppDatabaseConstructor::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun cardDao(): CardDao
     abstract fun practiceSessionDao(): PracticeSessionDao
@@ -38,28 +35,14 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun groupDao(): GroupDao
     abstract fun opponentDao(): OpponentDao
 
-    // Empty, but not pointless: the Android builder is an extension on this
-    // companion, declared in androidMain. That is what lets every existing
-    // call site keep reading AppDatabase.getDatabase(context) while the
-    // builder itself -- Context, AndroidSQLiteDriver -- stays out of common
-    // code.
+    // Empty, but not pointless: getDatabase is an extension on this companion
+    // (AppDatabase.android.kt), which is what lets every call site keep
+    // reading AppDatabase.getDatabase(context) unchanged.
     companion object
 }
 
 /** The on-disk name of the database. Every platform's builder uses it. */
 const val DATABASE_NAME = "fencing_spaced_repetition_database"
-
-/**
- * Room finds the generated implementation reflectively on the JVM, but it
- * cannot do that on every target, so a multiplatform database names its
- * constructor explicitly. The compiler writes the actual object per target;
- * there is no hand-written actual anywhere, which is what the suppression
- * says.
- */
-@Suppress("NO_ACTUAL_FOR_EXPECT", "EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING")
-expect object AppDatabaseConstructor : RoomDatabaseConstructor<AppDatabase> {
-    override fun initialize(): AppDatabase
-}
 
 private val MIGRATION_1_2 = object : Migration(1, 2) {
     override suspend fun migrate(connection: SQLiteConnection) {

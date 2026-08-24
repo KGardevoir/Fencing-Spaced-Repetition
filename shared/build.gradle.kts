@@ -6,7 +6,6 @@ plugins {
     id("org.jetbrains.kotlin.multiplatform")
     id("com.android.library")
     id("com.google.devtools.ksp")
-    id("androidx.room3")
 }
 
 val roomVersion = "3.0.1"
@@ -156,27 +155,34 @@ android {
 // not used. Room's codegen is per-platform, and the bare one is the path that
 // threw the ClassCastException.
 //
-// wasmJs is excluded, and so is the entire Room-annotated data layer, which
-// sits in jvmCommonMain rather than commonMain. The reason is a genuine
-// unknown rather than a design preference, so it is recorded rather than
-// smoothed over.
+// Only the Android target generates a database, so only kspAndroid is wired
+// up. Two reasons, and both matter.
 //
-// Compiling any Room-annotated source for wasmJs fails in
-// :shared:compileKotlinWasmJs with every androidx.room3 and androidx.sqlite
-// reference unresolved -- @Dao, @Query, @Entity, SQLiteConnection, all of it.
-// What has been ruled out: the artifacts do publish wasmJs targets (Room
-// 3.0.0 and androidx.sqlite 2.7.0, both 1 July 2026); the source set graph is
-// correct (printed -- wasmJsMain dependsOn commonMain); and the compiler logs
-// no klib or ABI-incompatibility warning, which is what a klib built by a
-// newer Kotlin than this project's 2.2.10 would produce.
+// The database is Android-only for now. Compiling any Room-annotated source
+// for wasmJs fails in :shared:compileKotlinWasmJs with every androidx.room3
+// and androidx.sqlite reference unresolved. Ruled out: the artifacts do
+// publish wasmJs targets (Room 3.0.0 and androidx.sqlite 2.7.0, both 1 July
+// 2026); the source set graph is right (printed -- wasmJsMain dependsOn
+// commonMain); and no klib or ABI-incompatibility warning is logged, which is
+// what a klib built by a newer Kotlin than this project's 2.2.10 would
+// produce. The cause is genuinely not known yet, and step 6 has to solve it
+// properly, because that is also when sqlite-web and WebWorkerSQLiteDriver
+// arrive. The entities, DAOs, converters and repositories still live in
+// jvmCommonMain and are shared by android and jvm.
 //
-// So the browser keeps the scheduling core, which is proven to run there, and
-// does not yet get the data layer. This is step 6's problem, and step 6 has to
-// solve it properly rather than around it, because that is also when
-// sqlite-web and WebWorkerSQLiteDriver arrive. Nothing about the arrangement
-// below is meant to outlive that.
-val kspTargetNames = kotlin.targets.map { it.name }
-    .filter { it != "metadata" && it != "wasmJs" }
+// And one generator means one writer of the exported schema. room.schemaLocation
+// is a single directory for the whole module, and when jvm generated a database
+// too, the two ran in parallel into it and produced a half-written file:
+//
+//     e: [ksp] JsonDecodingException: Unexpected JSON token at offset 13236
+//        ... at path: $.database.entities[4]
+//
+// which passed on one run and failed on the next. Room's own Gradle plugin is
+// the documented answer to that and would allow several generators again, but
+// its extension did not resolve under this build's plugin set, so the race is
+// removed by construction instead: the jvm target compiles the DAOs and
+// entities and never generates an implementation of them.
+val kspTargetNames = listOf("android")
 val kspConfigurationNames = kspTargetNames.map { target ->
     "ksp" + target.replaceFirstChar { it.uppercase() }
 }
@@ -208,18 +214,12 @@ dependencies {
 // committed rather than generated-and-discarded: without it a migration can
 // only be checked by running the app.
 //
-// Set through Room's own Gradle plugin rather than the room.schemaLocation
-// KSP argument, because that argument is a single directory shared by every
-// compilation that generates a database, and they run in parallel. Two of
-// them writing the same file produced a half-written schema and a KSP failure
-// that looked like a flake:
-//
-//     e: [ksp] JsonDecodingException: Unexpected JSON token at offset 13236
-//        ... at path: $.database.entities[4]
-//
-// The plugin keeps the targets' schemas apart, which is what it exists for.
-room {
-    schemaDirectory("$projectDir/schemas")
+// room.schemaLocation names one directory for the whole module, so it is only
+// safe while exactly one compilation generates a database. That is now true by
+// construction -- see the KSP block above -- and it is what the concurrent
+// half-written schema failure was about.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 // Kept for step 6, when Room has to reach the browser. It prints the wasmJs
