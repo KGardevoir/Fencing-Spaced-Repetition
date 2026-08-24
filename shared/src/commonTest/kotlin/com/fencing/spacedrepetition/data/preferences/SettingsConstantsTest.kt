@@ -3,8 +3,10 @@
 
 package com.fencing.spacedrepetition.data.preferences
 
-import org.junit.Assert.*
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+
 
 /**
  * Tests for SettingsConstants utility functions and data.
@@ -99,7 +101,7 @@ class SettingsConstantsTest {
     @Test
     fun `sm2 modifier presets contain default value 100`() {
         val values = SettingsConstants.SM2_MODIFIER_PRESETS.map { it.first }
-        assertTrue("Default 100 % must appear in SM-2 modifier presets", 100 in values)
+        assertTrue(100 in values, "Default 100 % must appear in SM-2 modifier presets")
     }
 
     @Test
@@ -121,7 +123,7 @@ class SettingsConstantsTest {
     @Test
     fun `sm2 modifier preset labels end with percent sign`() {
         SettingsConstants.SM2_MODIFIER_PRESETS.forEach { (_, label) ->
-            assertTrue("Label '$label' should end with '%'", label.endsWith("%"))
+            assertTrue(label.endsWith("%"), "Label '$label' should end with '%'")
         }
     }
 
@@ -136,7 +138,7 @@ class SettingsConstantsTest {
     @Test
     fun `max backups kept presets contain default value 7`() {
         val values = SettingsConstants.MAX_BACKUPS_KEPT_PRESETS.map { it.first }
-        assertTrue("Default 7 must appear in max backups kept presets", 7 in values)
+        assertTrue(7 in values, "Default 7 must appear in max backups kept presets")
     }
 
     @Test

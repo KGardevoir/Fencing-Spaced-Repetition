@@ -3,9 +3,10 @@
 
 package com.fencing.spacedrepetition.algorithm
 
-import org.junit.Assert.*
-import org.junit.Before
-import org.junit.Test
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.math.abs
 
 /**
@@ -20,17 +21,14 @@ class FSRSAlgorithmTest {
     private lateinit var algorithm: FSRSAlgorithm
     private val testTimestamp = 1704067200000L // 2024-01-01 00:00:00
 
-    @Before
+    @BeforeTest
     fun setup() {
         algorithm = FSRSAlgorithm()
     }
 
     // Helper function to compare doubles with tolerance
     private fun assertDoubleEquals(expected: Double, actual: Double, delta: Double = 0.001) {
-        assertTrue(
-            "Expected $expected but got $actual (difference: ${abs(expected - actual)})",
-            abs(expected - actual) < delta
-        )
+        assertTrue(abs(expected - actual) < delta, "Expected $expected but got $actual (difference: ${abs(expected - actual)})")
     }
 
     // ========== New Card Tests ==========
@@ -547,10 +545,7 @@ class FSRSAlgorithmTest {
         val highResult = highRetentionAlgo.schedule(reviewCard, FSRSAlgorithm.Rating.GOOD, reviewTime)
         val lowResult = lowRetentionAlgo.schedule(reviewCard, FSRSAlgorithm.Rating.GOOD, reviewTime)
 
-        assertTrue(
-            "Higher retention should produce shorter interval: high=${highResult.card.scheduledDays} low=${lowResult.card.scheduledDays}",
-            highResult.card.scheduledDays < lowResult.card.scheduledDays
-        )
+        assertTrue(highResult.card.scheduledDays < lowResult.card.scheduledDays, "Higher retention should produce shorter interval: high=${highResult.card.scheduledDays} low=${lowResult.card.scheduledDays}")
     }
 
     @Test
@@ -655,10 +650,7 @@ class FSRSAlgorithmTest {
         val neutral = algorithm.schedule(reviewCard, FSRSAlgorithm.Rating.GOOD, reviewTime, stabilityMultiplier = 1.0)
         val boosted = algorithm.schedule(reviewCard, FSRSAlgorithm.Rating.GOOD, reviewTime, stabilityMultiplier = 2.0)
 
-        assertTrue(
-            "Boosted stability ${boosted.card.stability} should exceed neutral ${neutral.card.stability}",
-            boosted.card.stability > neutral.card.stability
-        )
+        assertTrue(boosted.card.stability > neutral.card.stability, "Boosted stability ${boosted.card.stability} should exceed neutral ${neutral.card.stability}")
         assertTrue(boosted.card.scheduledDays >= neutral.card.scheduledDays)
     }
 
@@ -674,10 +666,7 @@ class FSRSAlgorithmTest {
         val neutral = algorithm.schedule(reviewCard, FSRSAlgorithm.Rating.GOOD, reviewTime, stabilityMultiplier = 1.0)
         val reduced = algorithm.schedule(reviewCard, FSRSAlgorithm.Rating.GOOD, reviewTime, stabilityMultiplier = 0.5)
 
-        assertTrue(
-            "Reduced stability ${reduced.card.stability} should be less than neutral ${neutral.card.stability}",
-            reduced.card.stability < neutral.card.stability
-        )
+        assertTrue(reduced.card.stability < neutral.card.stability, "Reduced stability ${reduced.card.stability} should be less than neutral ${neutral.card.stability}")
     }
 
     @Test
@@ -737,10 +726,7 @@ class FSRSAlgorithmTest {
         val neutral = algorithm.schedule(learningCard, FSRSAlgorithm.Rating.GOOD, reviewTime, stabilityMultiplier = 1.0)
         val boosted = algorithm.schedule(learningCard, FSRSAlgorithm.Rating.GOOD, reviewTime, stabilityMultiplier = 2.0)
 
-        assertTrue(
-            "Boosted stability ${boosted.card.stability} should exceed neutral ${neutral.card.stability}",
-            boosted.card.stability > neutral.card.stability
-        )
+        assertTrue(boosted.card.stability > neutral.card.stability, "Boosted stability ${boosted.card.stability} should exceed neutral ${neutral.card.stability}")
     }
 
     @Test
@@ -851,8 +837,8 @@ class FSRSAlgorithmTest {
         repeat(50) {
             val result = fuzzingAlgo.schedule(reviewCard, FSRSAlgorithm.Rating.GOOD, reviewTime)
             assertTrue(
-                "Fuzzed interval ${result.card.scheduledDays} should be within [${ rawInterval - maxDelta }, ${ rawInterval + maxDelta }]",
-                result.card.scheduledDays in (rawInterval - maxDelta)..(rawInterval + maxDelta)
+                result.card.scheduledDays in (rawInterval - maxDelta)..(rawInterval + maxDelta),
+                "Fuzzed interval ${result.card.scheduledDays} should be within [${ rawInterval - maxDelta }, ${ rawInterval + maxDelta }]"
             )
         }
     }
@@ -880,10 +866,7 @@ class FSRSAlgorithmTest {
         val lowRelativeGain = lowResult.card.stability / lowStabilityCard.stability
         val highRelativeGain = highResult.card.stability / highStabilityCard.stability
 
-        assertTrue(
-            "Low-stability card should have a higher relative stability gain than high-stability card",
-            lowRelativeGain > highRelativeGain
-        )
+        assertTrue(lowRelativeGain > highRelativeGain, "Low-stability card should have a higher relative stability gain than high-stability card")
     }
 
     @Test

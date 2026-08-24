@@ -96,6 +96,9 @@ android {
 }
 
 dependencies {
+    // Platform-independent core: scheduling algorithms, settings constants, clock
+    implementation(project(":shared"))
+
     // Core Android
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")

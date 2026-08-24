@@ -14,4 +14,5 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "FencingSpacedRepetition"
+include(":shared")
 include(":app")

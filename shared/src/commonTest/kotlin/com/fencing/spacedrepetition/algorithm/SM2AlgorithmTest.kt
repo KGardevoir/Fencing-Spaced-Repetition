@@ -3,9 +3,12 @@
 
 package com.fencing.spacedrepetition.algorithm
 
-import org.junit.Assert.*
-import org.junit.Before
-import org.junit.Test
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlin.math.abs
 
 class SM2AlgorithmTest {
@@ -14,17 +17,14 @@ class SM2AlgorithmTest {
     private val testTimestamp = 1704067200000L // 2024-01-01 00:00:00
     private val oneDayMs = 24 * 60 * 60 * 1000L
 
-    @Before
+    @BeforeTest
     fun setup() {
         algorithm = SM2Algorithm()
     }
 
     // Helper function to compare doubles with tolerance
     private fun assertDoubleEquals(expected: Double, actual: Double, delta: Double = 0.001) {
-        assertTrue(
-            "Expected $expected but got $actual (difference: ${abs(expected - actual)})",
-            abs(expected - actual) < delta
-        )
+        assertTrue(abs(expected - actual) < delta, "Expected $expected but got $actual (difference: ${abs(expected - actual)})")
     }
 
     // ========== Initial Card State Tests ==========
@@ -471,7 +471,7 @@ class SM2AlgorithmTest {
     @Test
     fun testSchedule_InvalidQuality_Negative_ThrowsException() {
         val card = SM2Algorithm.SM2Card()
-        assertThrows(IllegalArgumentException::class.java) {
+        assertFailsWith<IllegalArgumentException> {
             algorithm.schedule(card, -1, testTimestamp)
         }
     }
@@ -479,7 +479,7 @@ class SM2AlgorithmTest {
     @Test
     fun testSchedule_InvalidQuality_TooHigh_ThrowsException() {
         val card = SM2Algorithm.SM2Card()
-        assertThrows(IllegalArgumentException::class.java) {
+        assertFailsWith<IllegalArgumentException> {
             algorithm.schedule(card, 6, testTimestamp)
         }
     }
@@ -631,10 +631,7 @@ class SM2AlgorithmTest {
         val highResult = highModifierAlgo.schedule(card, SM2Algorithm.Quality.EASY, reviewTime)
         val lowResult = lowModifierAlgo.schedule(card, SM2Algorithm.Quality.EASY, reviewTime)
 
-        assertTrue(
-            "Lower modifier should produce shorter interval: low=${lowResult.card.interval} high=${highResult.card.interval}",
-            lowResult.card.interval < highResult.card.interval
-        )
+        assertTrue(lowResult.card.interval < highResult.card.interval, "Lower modifier should produce shorter interval: low=${lowResult.card.interval} high=${highResult.card.interval}")
     }
 
     @Test
