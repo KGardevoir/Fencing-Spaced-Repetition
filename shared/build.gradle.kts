@@ -84,6 +84,24 @@ kotlin {
                 // coroutines-android artifact cannot end up on a different
                 // version from the core it is meant to pair with.
                 api("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
+
+                // EXPERIMENT, and the whole point of this commit. Room is
+                // declared here, in commonMain, while every Room-annotated
+                // source stays in jvmCommonMain. Nothing compiled for wasmJs
+                // references it, so the build should not care -- but the
+                // wasmJs compile classpath now has to resolve a wasm variant
+                // of these two, and that is the question:
+                //
+                //   resolution fails      -> no wasm variant is being selected
+                //   dump lists the klibs  -> they resolve, and the compiler is
+                //                            the one refusing them
+                //   dump omits them       -> they resolve for metadata only
+                //
+                // Each answer points somewhere different, and none of them can
+                // be reached by reading the source. Reverted either way once
+                // read; this is not an arrangement to keep.
+                api("androidx.room3:room3-runtime:$roomVersion")
+                api("androidx.sqlite:sqlite:$sqliteVersion")
             }
         }
         // The Android and JVM targets share an implementation for everything
@@ -94,19 +112,6 @@ kotlin {
         // drifts.
         val jvmCommonMain by creating {
             dependsOn(commonMain)
-            dependencies {
-                // Room lives here rather than in commonMain because it does
-                // not currently resolve for wasmJs -- see the note above the
-                // KSP block. api rather than implementation: Room's types
-                // appear in the entities' own declarations, so anything
-                // consuming :shared has to see them.
-                api("androidx.room3:room3-runtime:$roomVersion")
-
-                // SQLiteConnection and execSQL, which the migrations call
-                // directly. Room brings it transitively; the migrations name
-                // it, so it is declared.
-                api("androidx.sqlite:sqlite:$sqliteVersion")
-            }
         }
         val jvmMain by getting {
             dependsOn(jvmCommonMain)
