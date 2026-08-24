@@ -1,5 +1,9 @@
 plugins {
     id("com.android.application")
+    // Applied explicitly because gradle.properties sets android.builtInKotlin=false.
+    // AGP 9 would otherwise supply the Kotlin plugin itself, and that is off for
+    // the reason spelled out in gradle.properties.
+    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
