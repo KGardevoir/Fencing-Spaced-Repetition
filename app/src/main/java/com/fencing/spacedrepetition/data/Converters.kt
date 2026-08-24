@@ -3,16 +3,16 @@
 
 package com.fencing.spacedrepetition.data
 
-import androidx.room3.TypeConverter
+import androidx.room3.ColumnTypeConverter
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 
 class Converters {
-    @TypeConverter
+    @ColumnTypeConverter
     fun fromAlgorithmType(value: AlgorithmType): String {
         return value.name
     }
 
-    @TypeConverter
+    @ColumnTypeConverter
     fun toAlgorithmType(value: String): AlgorithmType {
         return try {
             AlgorithmType.valueOf(value)
@@ -21,12 +21,12 @@ class Converters {
         }
     }
 
-    @TypeConverter
+    @ColumnTypeConverter
     fun fromImagePathsList(value: List<String>): String {
         return value.joinToString(separator = "||")
     }
 
-    @TypeConverter
+    @ColumnTypeConverter
     fun toImagePathsList(value: String): List<String> {
         return if (value.isEmpty()) {
             emptyList()

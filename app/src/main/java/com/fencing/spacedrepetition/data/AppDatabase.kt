@@ -7,8 +7,8 @@ import android.content.Context
 import androidx.room3.Database
 import androidx.room3.Room
 import androidx.room3.RoomDatabase
-import androidx.room3.TypeConverters
-import androidx.room3.Migration
+import androidx.room3.ColumnTypeConverters
+import androidx.room3.migration.Migration
 import androidx.sqlite.driver.AndroidSQLiteDriver
 import androidx.sqlite.*
 import com.fencing.spacedrepetition.data.dao.CardDao
@@ -30,7 +30,7 @@ import com.fencing.spacedrepetition.util.Time
     version = 11,
     exportSchema = true
 )
-@TypeConverters(Converters::class)
+@ColumnTypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun cardDao(): CardDao
     abstract fun practiceSessionDao(): PracticeSessionDao
