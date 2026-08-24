@@ -47,7 +47,7 @@ jobs:
           if ! ./gradlew :shared:allTests :app:testDebugUnitTest 2>&1 | tee /tmp/build.log; then
             echo ""
             echo "================= compiler / KSP errors ================="
-            grep -E "^e: |^Tried the following|^<init> ->" /tmp/build.log | head -60 \
+            grep -A2 -E "^e: |^Tried the following|^<init> ->" /tmp/build.log | head -80 \
               || echo "(no 'e:' lines -- failure was not a compile error)"
             echo "========================================================="
             exit 1
