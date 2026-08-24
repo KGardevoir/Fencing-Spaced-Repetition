@@ -43,7 +43,7 @@ abstract class AppDatabase : RoomDatabase() {
         private var INSTANCE: AppDatabase? = null
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
-            override suspend fun onMigrate(connection: SQLiteConnection) {
+            override suspend fun migrate(connection: SQLiteConnection) {
                 // Create groups table
                 connection.execSQL("""
                     CREATE TABLE IF NOT EXISTS `groups` (
@@ -89,7 +89,7 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         private val MIGRATION_2_3 = object : Migration(2, 3) {
-            override suspend fun onMigrate(connection: SQLiteConnection) {
+            override suspend fun migrate(connection: SQLiteConnection) {
                 // Add independentLearning column to groups table
                 connection.execSQL("""
                     ALTER TABLE `groups` ADD COLUMN `independentLearning` INTEGER NOT NULL DEFAULT 0
@@ -126,7 +126,7 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         private val MIGRATION_3_4 = object : Migration(3, 4) {
-            override suspend fun onMigrate(connection: SQLiteConnection) {
+            override suspend fun migrate(connection: SQLiteConnection) {
                 // Add imagePaths column to cards table
                 connection.execSQL("""
                     ALTER TABLE `cards` ADD COLUMN `imagePaths` TEXT NOT NULL DEFAULT ''
@@ -135,7 +135,7 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         private val MIGRATION_4_5 = object : Migration(4, 5) {
-            override suspend fun onMigrate(connection: SQLiteConnection) {
+            override suspend fun migrate(connection: SQLiteConnection) {
                 // Add per-group settings columns (nullable = use global default)
                 connection.execSQL("ALTER TABLE `groups` ADD COLUMN `cardsPerSession` INTEGER DEFAULT NULL")
                 connection.execSQL("ALTER TABLE `groups` ADD COLUMN `autoShowAnswer` INTEGER DEFAULT NULL")
@@ -147,7 +147,7 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         private val MIGRATION_5_6 = object : Migration(5, 6) {
-            override suspend fun onMigrate(connection: SQLiteConnection) {
+            override suspend fun migrate(connection: SQLiteConnection) {
                 // Add per-group retention override columns (nullable = use global default)
                 connection.execSQL("ALTER TABLE `groups` ADD COLUMN `fsrsRetention` INTEGER DEFAULT NULL")
                 connection.execSQL("ALTER TABLE `groups` ADD COLUMN `sm2IntervalModifier` INTEGER DEFAULT NULL")
@@ -155,14 +155,14 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         private val MIGRATION_6_7 = object : Migration(6, 7) {
-            override suspend fun onMigrate(connection: SQLiteConnection) {
+            override suspend fun migrate(connection: SQLiteConnection) {
                 // Add per-group FSRS fuzzing override (nullable = use global default)
                 connection.execSQL("ALTER TABLE `groups` ADD COLUMN `fsrsEnableFuzzing` INTEGER DEFAULT NULL")
             }
         }
 
         private val MIGRATION_7_8 = object : Migration(7, 8) {
-            override suspend fun onMigrate(connection: SQLiteConnection) {
+            override suspend fun migrate(connection: SQLiteConnection) {
                 // Add groupName column to review_logs
                 // null = all-cards practice, group name = within-group practice, "card_edit" = from Add/Edit screen
                 connection.execSQL("ALTER TABLE `review_logs` ADD COLUMN `groupName` TEXT DEFAULT NULL")
@@ -170,7 +170,7 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         private val MIGRATION_8_9 = object : Migration(8, 9) {
-            override suspend fun onMigrate(connection: SQLiteConnection) {
+            override suspend fun migrate(connection: SQLiteConnection) {
                 // Add notes and imagePaths columns to review_logs for history annotations
                 connection.execSQL("ALTER TABLE `review_logs` ADD COLUMN `notes` TEXT NOT NULL DEFAULT ''")
                 connection.execSQL("ALTER TABLE `review_logs` ADD COLUMN `imagePaths` TEXT NOT NULL DEFAULT ''")
@@ -178,7 +178,7 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         private val MIGRATION_9_10 = object : Migration(9, 10) {
-            override suspend fun onMigrate(connection: SQLiteConnection) {
+            override suspend fun migrate(connection: SQLiteConnection) {
                 // Create opponents table
                 connection.execSQL("""
                     CREATE TABLE IF NOT EXISTS `opponents` (
@@ -201,7 +201,7 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         private val MIGRATION_10_11 = object : Migration(10, 11) {
-            override suspend fun onMigrate(connection: SQLiteConnection) {
+            override suspend fun migrate(connection: SQLiteConnection) {
                 connection.execSQL("ALTER TABLE `cards` ADD COLUMN `isDisabled` INTEGER NOT NULL DEFAULT 0")
             }
         }
