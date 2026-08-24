@@ -44,10 +44,9 @@ val coroutinesVersion = "1.10.2"
 //     in a second or two, without an emulator and without a browser.
 //
 //   wasmJs -- the browser core. It runs commonTest in a real browser engine,
-//     so we know FSRS and SM-2 schedule identically there. It compiles the
-//     whole common data layer -- entities, DAOs, converters, repositories --
-//     but not the @Database, which is jvm-and-android until the browser has a
-//     driver to open one with. See the KSP block at the bottom.
+//     so we know FSRS and SM-2 schedule identically there. It does not yet
+//     compile the data layer; see the note above the KSP block at the bottom
+//     for what is blocking that and what has been ruled out.
 kotlin {
     jvmToolchain(17)
 
@@ -80,25 +79,10 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
-                // Room's annotations and runtime, for the entities and the
-                // converters. Room 3 is the first release with a wasmJs
-                // target, which is the whole reason the data layer can be
-                // here at all.
-                //
-                // api rather than implementation: these types appear in the
-                // entities' own declarations, so anything consuming :shared
-                // has to see them.
-                api("androidx.room3:room3-runtime:$roomVersion")
-
-                // SQLiteConnection and execSQL, which the migrations call
-                // directly. Room brings this transitively, but the migrations
-                // name it, so it is declared.
-                api("androidx.sqlite:sqlite:$sqliteVersion")
-
-                // The DAOs return Flow. Pinned rather than left to Room's
-                // transitive choice so that :app's coroutines-android
-                // artifact cannot end up on a different version from the
-                // core it is meant to pair with.
+                // Flow, for SchedulingPreferences and the DAOs. Pinned rather
+                // than left to a transitive choice so that :app's
+                // coroutines-android artifact cannot end up on a different
+                // version from the core it is meant to pair with.
                 api("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
             }
         }
@@ -110,6 +94,19 @@ kotlin {
         // drifts.
         val jvmCommonMain by creating {
             dependsOn(commonMain)
+            dependencies {
+                // Room lives here rather than in commonMain because it does
+                // not currently resolve for wasmJs -- see the note above the
+                // KSP block. api rather than implementation: Room's types
+                // appear in the entities' own declarations, so anything
+                // consuming :shared has to see them.
+                api("androidx.room3:room3-runtime:$roomVersion")
+
+                // SQLiteConnection and execSQL, which the migrations call
+                // directly. Room brings it transitively; the migrations name
+                // it, so it is declared.
+                api("androidx.sqlite:sqlite:$sqliteVersion")
+            }
         }
         val jvmMain by getting {
             dependsOn(jvmCommonMain)
@@ -158,20 +155,25 @@ android {
 // not used. Room's codegen is per-platform, and the bare one is the path that
 // threw the ClassCastException.
 //
-// wasmJs is excluded, and the reason is worth recording. Room's codegen for
-// that target produces an AppDatabase_Impl whose own imports do not resolve --
-// every androidx.room3 and androidx.sqlite reference inside the generated file
-// is unresolved -- while the hand-written commonMain sources sitting in the
-// same compilation, importing the same packages, compile clean. The source set
-// graph is not the cause; it was printed and wasmJsMain does depend on
-// commonMain.
+// wasmJs is excluded, and so is the entire Room-annotated data layer, which
+// sits in jvmCommonMain rather than commonMain. The reason is a genuine
+// unknown rather than a design preference, so it is recorded rather than
+// smoothed over.
 //
-// Rather than keep guessing at it, the browser simply does not get a database
-// yet. It has no driver and no OPFS wiring either, so a generated
-// implementation it cannot instantiate buys nothing today. Entities, DAOs,
-// converters and repositories are all still common and all still compile for
-// wasmJs; only the @Database declaration is jvm-and-android for now, and it
-// comes back to common with sqlite-web and WebWorkerSQLiteDriver.
+// Compiling any Room-annotated source for wasmJs fails in
+// :shared:compileKotlinWasmJs with every androidx.room3 and androidx.sqlite
+// reference unresolved -- @Dao, @Query, @Entity, SQLiteConnection, all of it.
+// What has been ruled out: the artifacts do publish wasmJs targets (Room
+// 3.0.0 and androidx.sqlite 2.7.0, both 1 July 2026); the source set graph is
+// correct (printed -- wasmJsMain dependsOn commonMain); and the compiler logs
+// no klib or ABI-incompatibility warning, which is what a klib built by a
+// newer Kotlin than this project's 2.2.10 would produce.
+//
+// So the browser keeps the scheduling core, which is proven to run there, and
+// does not yet get the data layer. This is step 6's problem, and step 6 has to
+// solve it properly rather than around it, because that is also when
+// sqlite-web and WebWorkerSQLiteDriver arrive. Nothing about the arrangement
+// below is meant to outlive that.
 val kspTargetNames = kotlin.targets.map { it.name }
     .filter { it != "metadata" && it != "wasmJs" }
 val kspConfigurationNames = kspTargetNames.map { target ->

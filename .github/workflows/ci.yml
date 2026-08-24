@@ -37,12 +37,6 @@ jobs:
       # On failure, repeat just the compiler/KSP errors at the very end of the
       # log. Gradle buries them hundreds of lines up behind npm chatter and
       # task output, which makes a failure needlessly expensive to read.
-      # TEMPORARY, paired with the dumpWasmJsCompileClasspath task in
-      # shared/build.gradle.kts. Removed once the wasm classpath is understood.
-      - name: Dump the wasmJs compile classpath
-        continue-on-error: true
-        run: ./gradlew :shared:dumpWasmJsCompileClasspath -q 2>&1 | grep -E "WASMCP:|klib|Skipping|incompatible" | head -80
-
       - name: Run unit tests
         run: |
           set -o pipefail
@@ -58,6 +52,18 @@ jobs:
             echo "========================================================="
             exit 1
           fi
+
+      # TEMPORARY, paired with the dumpWasmJsCompileClasspath task in
+      # shared/build.gradle.kts. Last step on purpose: the logs API reads from
+      # the end, and when this ran before the tests its output sat too far up
+      # the log to reach. Removed once the wasm classpath is understood.
+      - name: Dump the wasmJs compile classpath
+        if: always()
+        continue-on-error: true
+        run: |
+          ./gradlew :shared:dumpWasmJsCompileClasspath -q 2>&1 \
+            | grep -E "WASMCP:|klib|Skipping|incompatible" \
+            | awk 'NR <= 60'
 
       - name: Upload test results
         uses: actions/upload-artifact@v7
