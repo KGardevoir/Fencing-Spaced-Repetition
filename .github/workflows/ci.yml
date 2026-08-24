@@ -53,9 +53,9 @@ jobs:
             if [ -f /tmp/inspect/x/classes.jar ]; then
               unzip -qo /tmp/inspect/x/classes.jar -d /tmp/inspect/x/c 2>/dev/null || true
             fi
-            found=$(find /tmp/inspect/x -name "*.class"               | sed 's|.*/x/c/||; s|.*/x/||; s|\.class$||; s|/|.|g'               | grep -E "^androidx\.(sqlite|room3)\." \
-              | grep -vE '\$' | sort -u)
-            if [ -n "$found" ]; then echo "--- $(basename "$f")"; echo "$found" | head -60; fi
+            found=$(find /tmp/inspect/x -name "*.class"               | sed 's|.*/x/c/||; s|.*/x/||; s|\.class$||; s|/|.|g'               | grep -E "Migration|TypeConverter|^androidx\.room3\.[A-Z]" \
+              | grep -vE '\$|bundle\.|compiler\.|jarjarred' | sort -u)
+            if [ -n "$found" ]; then echo "--- $(basename "$f")"; echo "$found"; fi
           done
 
       - name: Run unit tests

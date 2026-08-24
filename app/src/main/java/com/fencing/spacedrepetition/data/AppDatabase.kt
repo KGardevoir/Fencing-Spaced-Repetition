@@ -8,7 +8,7 @@ import androidx.room3.Database
 import androidx.room3.Room
 import androidx.room3.RoomDatabase
 import androidx.room3.TypeConverters
-import androidx.room3.migration.Migration
+import androidx.room3.Migration
 import androidx.sqlite.driver.AndroidSQLiteDriver
 import androidx.sqlite.*
 import com.fencing.spacedrepetition.data.dao.CardDao
