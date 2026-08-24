@@ -34,6 +34,26 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      # TEMPORARY: this environment cannot reach Google's Maven, so the exact
+      # class names inside androidx.sqlite / room3 cannot be checked locally.
+      # This prints them once so the driver import can be confirmed rather
+      # than guessed. Remove once Room 3 builds.
+      - name: Inspect androidx sqlite/room3 classes (temporary)
+        continue-on-error: true
+        run: |
+          ./gradlew :app:dependencies --configuration debugRuntimeClasspath 2>/dev/null             | grep -iE "sqlite|room3" | sort -u || true
+          echo "===== class names ====="
+          mkdir -p /tmp/inspect
+          find ~/.gradle/caches/modules-2/files-2.1                \( -path "*androidx.sqlite*" -o -path "*androidx.room3*" \)                \( -name "*.jar" -o -name "*.aar" \) | while read -r f; do
+            rm -rf /tmp/inspect/x && mkdir -p /tmp/inspect/x
+            unzip -qo "$f" -d /tmp/inspect/x 2>/dev/null || continue
+            if [ -f /tmp/inspect/x/classes.jar ]; then
+              unzip -qo /tmp/inspect/x/classes.jar -d /tmp/inspect/x/c 2>/dev/null || true
+            fi
+            found=$(find /tmp/inspect/x -name "*.class"               | sed 's|.*/x/c/||; s|.*/x/||; s|\.class$||; s|/|.|g'               | grep -iE "Driver$|^androidx\.sqlite\.SQLite" | grep -v '\$' | sort -u)
+            if [ -n "$found" ]; then echo "--- $(basename "$f")"; echo "$found"; fi
+          done
+
       - name: Run unit tests
         run: ./gradlew :shared:allTests :app:testDebugUnitTest
 

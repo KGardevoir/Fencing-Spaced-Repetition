@@ -10,8 +10,7 @@ import androidx.room3.RoomDatabase
 import androidx.room3.TypeConverters
 import androidx.room3.migration.Migration
 import androidx.sqlite.driver.AndroidSQLiteDriver
-import androidx.sqlite.SQLiteConnection
-import androidx.sqlite.execSQL
+import androidx.sqlite.*
 import com.fencing.spacedrepetition.data.dao.CardDao
 import com.fencing.spacedrepetition.data.dao.GroupDao
 import com.fencing.spacedrepetition.data.dao.OpponentDao
@@ -210,10 +209,8 @@ abstract class AppDatabase : RoomDatabase() {
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder<AppDatabase>(
-                    context = context.applicationContext,
-                    name = context.applicationContext.getDatabasePath(
-                        "fencing_spaced_repetition_database"
-                    ).absolutePath
+                    context.applicationContext,
+                    "fencing_spaced_repetition_database"
                 )
                     .setDriver(AndroidSQLiteDriver())
                     .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
