@@ -15,7 +15,7 @@ kotlin {
     jvmToolchain(17)
 
     wasmJs {
-        moduleName = "fencing-web"
+        outputModuleName.set("fencing-web")
         browser {
             commonWebpackConfig {
                 outputFileName = "fencing-web.js"
