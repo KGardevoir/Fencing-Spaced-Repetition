@@ -85,23 +85,6 @@ kotlin {
                 // version from the core it is meant to pair with.
                 api("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
 
-                // EXPERIMENT, and the whole point of this commit. Room is
-                // declared here, in commonMain, while every Room-annotated
-                // source stays in jvmCommonMain. Nothing compiled for wasmJs
-                // references it, so the build should not care -- but the
-                // wasmJs compile classpath now has to resolve a wasm variant
-                // of these two, and that is the question:
-                //
-                //   resolution fails      -> no wasm variant is being selected
-                //   dump lists the klibs  -> they resolve, and the compiler is
-                //                            the one refusing them
-                //   dump omits them       -> they resolve for metadata only
-                //
-                // Each answer points somewhere different, and none of them can
-                // be reached by reading the source. Reverted either way once
-                // read; this is not an arrangement to keep.
-                api("androidx.room3:room3-runtime:$roomVersion")
-                api("androidx.sqlite:sqlite:$sqliteVersion")
             }
         }
         // The Android and JVM targets share an implementation for everything
@@ -112,6 +95,19 @@ kotlin {
         // drifts.
         val jvmCommonMain by creating {
             dependsOn(commonMain)
+            dependencies {
+                // Room lives here rather than in commonMain because the
+                // Kotlin 2.2.10 compiler cannot read its wasm klibs -- see the
+                // note above the KSP block. api rather than implementation:
+                // Room's types appear in the entities' own declarations, so
+                // anything consuming :shared has to see them.
+                api("androidx.room3:room3-runtime:$roomVersion")
+
+                // SQLiteConnection and execSQL, which the migrations call
+                // directly. Room brings it transitively; the migrations name
+                // it, so it is declared.
+                api("androidx.sqlite:sqlite:$sqliteVersion")
+            }
         }
         val jvmMain by getting {
             dependsOn(jvmCommonMain)
@@ -163,17 +159,24 @@ android {
 // Only the Android target generates a database, so only kspAndroid is wired
 // up. Two reasons, and both matter.
 //
-// The database is Android-only for now. Compiling any Room-annotated source
-// for wasmJs fails in :shared:compileKotlinWasmJs with every androidx.room3
-// and androidx.sqlite reference unresolved. Ruled out: the artifacts do
-// publish wasmJs targets (Room 3.0.0 and androidx.sqlite 2.7.0, both 1 July
-// 2026); the source set graph is right (printed -- wasmJsMain dependsOn
-// commonMain); and no klib or ABI-incompatibility warning is logged, which is
-// what a klib built by a newer Kotlin than this project's 2.2.10 would
-// produce. The cause is genuinely not known yet, and step 6 has to solve it
-// properly, because that is also when sqlite-web and WebWorkerSQLiteDriver
-// arrive. The entities, DAOs, converters and repositories still live in
-// jvmCommonMain and are shared by android and jvm.
+// The database is Android-only for now, and the reason is finally known
+// rather than suspected. Room's wasm klibs resolve and land on the wasmJs
+// compile classpath -- room3-common-wasm-js-3.0.1.klib,
+// room3-runtime-wasm-js-3.0.1.klib and sqlite-wasm-js-2.7.0.klib were all
+// printed by dumpWasmJsCompileClasspath. This project's Kotlin 2.2.10 simply
+// cannot read them. The frontend reports every androidx.room3 reference as
+// unresolved; the backend, loading the same klibs, dies with
+//
+//     java.lang.AssertionError: Built-in class kotlin.Any is not found
+//         at ...ir.backend.js.KlibKt.getIrModuleInfoForKlib
+//
+// which is what an unreadable klib looks like. No "skipping incompatible
+// klib" warning is emitted, which is why this was wrongly ruled out earlier.
+// klibs are readable forwards only, and Room 3.0.1 postdates Kotlin 2.2.10.
+//
+// The fix is a Kotlin upgrade, not a source layout change, so the layout below
+// is the right one until that happens. Entities, DAOs, converters and
+// repositories live in jvmCommonMain and are shared by android and jvm.
 //
 // And one generator means one writer of the exported schema. room.schemaLocation
 // is a single directory for the whole module, and when jvm generated a database
