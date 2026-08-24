@@ -20,6 +20,11 @@ import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
 import com.fencing.spacedrepetition.util.CardImportExport
+import com.fencing.spacedrepetition.util.createCompressedOutputStream
+import com.fencing.spacedrepetition.util.decodeImageFromBase64
+import com.fencing.spacedrepetition.util.parsedCardToCard
+import com.fencing.spacedrepetition.util.parsedReviewLogsToEntities
+import com.fencing.spacedrepetition.util.smartInputStream
 import com.fencing.spacedrepetition.util.exportCardsToCsv
 import com.fencing.spacedrepetition.util.exportCardsWithGroupStates
 import com.fencing.spacedrepetition.util.parseCards
