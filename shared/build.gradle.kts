@@ -33,6 +33,12 @@ val coroutinesVersion = "1.10.2"
 //     to KotlinJvmAndroidCompilation. No Room codegen for Android is possible
 //     that way, so the classic pairing it is, until KSP catches up.
 //
+//     This pairing is documented as depending on AGP APIs that AGP 9
+//     deprecated and AGP 10 will remove, so it is on borrowed time, but it
+//     needs no opt-in flag at 9.0: android.enableLegacyVariantApi, which the
+//     migration notes name, was itself removed in 9.0 and AGP rejects the
+//     build outright if it is set.
+//
 //   jvm -- the fast path for running commonTest. It is not consumed by any
 //     other module; it exists so `:shared:jvmTest` can check the shared code
 //     in a second or two, without an emulator and without a browser.
