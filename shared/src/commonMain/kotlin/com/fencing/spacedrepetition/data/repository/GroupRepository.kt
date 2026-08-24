@@ -5,6 +5,7 @@ package com.fencing.spacedrepetition.data.repository
 
 import com.fencing.spacedrepetition.data.dao.CardDao
 import com.fencing.spacedrepetition.data.dao.GroupDao
+import com.fencing.spacedrepetition.util.CardWithGroupStates
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupCrossRef
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
@@ -82,7 +83,7 @@ class GroupRepository(
         }
     }
 
-    suspend fun getCardsByGroupWithStates(groupId: Long): List<com.fencing.spacedrepetition.util.CardWithGroupStates> {
+    suspend fun getCardsByGroupWithStates(groupId: Long): List<CardWithGroupStates> {
         val cards = getCardsByGroupSync(groupId)
         val allGroups = getAllGroupsSync()
         val independentLearningGroupNames = allGroups.filter { it.independentLearning }.map { it.name to it.id }.toMap()
@@ -101,7 +102,7 @@ class GroupRepository(
                 }
             }
 
-            com.fencing.spacedrepetition.util.CardWithGroupStates(card, groupNames, groupSpecificStates)
+            CardWithGroupStates(card, groupNames, groupSpecificStates)
         }
     }
 

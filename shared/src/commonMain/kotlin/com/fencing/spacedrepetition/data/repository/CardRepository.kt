@@ -12,6 +12,8 @@ import com.fencing.spacedrepetition.data.dao.PracticeSessionDao
 import com.fencing.spacedrepetition.data.dao.ReviewLogDao
 import com.fencing.spacedrepetition.data.model.*
 import com.fencing.spacedrepetition.data.preferences.SchedulingPreferences
+import com.fencing.spacedrepetition.util.CardWithGroupStates
+import com.fencing.spacedrepetition.util.ParsedCard
 import com.fencing.spacedrepetition.util.Time
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -372,10 +374,16 @@ class CardRepository(
         return importedCount
     }
 
+    /**
+     * @param toCard turns a parsed record into a Card. Passed in rather than
+     *   called directly because the conversion decodes inline base64 images to
+     *   files, which is the one genuinely platform-specific step in an import
+     *   and the only reason this method used to need an Android Context.
+     */
     suspend fun importCardsWithGroupStates(
-        context: android.content.Context,
-        parsedCards: List<com.fencing.spacedrepetition.util.ParsedCard>,
-        existingGroups: Map<String, Long>
+        parsedCards: List<ParsedCard>,
+        existingGroups: Map<String, Long>,
+        toCard: (ParsedCard) -> Card
     ): Int {
         // Group parsed cards by concept (same card, different state contexts)
         val cardsByQuestion = parsedCards.groupBy { it.concept }
@@ -386,7 +394,7 @@ class CardRepository(
             val globalState = states.find { it.isGlobalState } ?: states.first()
 
             // Create or update the card (decode base64 images)
-            val card = com.fencing.spacedrepetition.util.CardImportExport.parsedCardToCard(context, globalState)
+            val card = toCard(globalState)
             val existingCard = cardDao.findCardByQuestion(question)
             val cardId: Long
 
@@ -421,7 +429,7 @@ class CardRepository(
             states.filter { it.isGroupSpecificState }.forEach { groupState ->
                 val groupName = groupState.stateContext!!
                 existingGroups[groupName]?.let { groupId ->
-                    val learningState = com.fencing.spacedrepetition.data.model.CardGroupLearningState(
+                    val learningState = CardGroupLearningState(
                         cardId = cardId,
                         groupId = groupId,
                         fsrsStability = groupState.fsrsStability ?: 0.0,
@@ -453,7 +461,7 @@ class CardRepository(
         }
     }
 
-    suspend fun getAllCardsWithGroupStates(): List<com.fencing.spacedrepetition.util.CardWithGroupStates> {
+    suspend fun getAllCardsWithGroupStates(): List<CardWithGroupStates> {
         val cardsWithGroups = cardDao.getAllCardsWithGroups().first()
         return cardsWithGroups.map { cardWithGroups ->
             val card = cardWithGroups.card
@@ -470,7 +478,7 @@ class CardRepository(
                 }
             }
 
-            com.fencing.spacedrepetition.util.CardWithGroupStates(card, groupNames, groupSpecificStates)
+            CardWithGroupStates(card, groupNames, groupSpecificStates)
         }
     }
 

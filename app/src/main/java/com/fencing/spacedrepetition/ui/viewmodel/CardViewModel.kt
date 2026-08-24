@@ -655,7 +655,9 @@ class CardViewModel(
                     when {
                         hasGroupSpecificStates -> {
                             // V2/V3 format with group-specific states
-                            repository.importCardsWithGroupStates(getApplication(), parsedCards, groupNameMap)
+                            repository.importCardsWithGroupStates(parsedCards, groupNameMap) {
+                                CardImportExport.parsedCardToCard(getApplication(), it)
+                            }
                         }
                         hasFullState -> {
                             // V1 full import with state and groups (decode base64 images)
