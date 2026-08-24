@@ -526,13 +526,13 @@ object CardImportExport {
 
             cardsWithStates.forEach { (card, groupNames, groupSpecificStates) ->
                 // Write global state row
-                writer.write(buildCardStateLine(card, groupNames, "GLOBAL"))
+                writer.write(buildCardStateLine(card, groupNames, "GLOBAL", images))
                 writer.newLine()
                 rowCount++
 
                 // Write group-specific state rows
                 groupSpecificStates.forEach { (groupName, learningState) ->
-                    writer.write(buildGroupStateLine(card, groupName, learningState))
+                    writer.write(buildGroupStateLine(card, groupName, learningState, images))
                     writer.newLine()
                     rowCount++
                 }
@@ -547,7 +547,7 @@ object CardImportExport {
                 reviewLogs.forEach { log ->
                     val question = cardQuestions[log.cardId] ?: return@forEach
                     val opponentName = log.opponentId?.let { opponentNamesById[it] }
-                    writer.write(buildReviewLogLine(log, question, opponentName))
+                    writer.write(buildReviewLogLine(log, question, opponentName, images))
                     writer.newLine()
                 }
                 writer.write(REVIEW_HISTORY_END)
@@ -561,7 +561,12 @@ object CardImportExport {
         }
     }
 
-    private fun buildCardStateLine(card: Card, groupNames: List<String>, stateContext: String): String {
+    private fun buildCardStateLine(
+        card: Card,
+        groupNames: List<String>,
+        stateContext: String,
+        images: ImageReader
+    ): String {
         return buildString {
             append(escapeNewlines(card.question))
             append(DELIMITER)
@@ -606,7 +611,8 @@ object CardImportExport {
     private fun buildGroupStateLine(
         card: Card,
         groupName: String,
-        learningState: com.fencing.spacedrepetition.data.model.CardGroupLearningState
+        learningState: com.fencing.spacedrepetition.data.model.CardGroupLearningState,
+        images: ImageReader
     ): String {
         return buildString {
             append(escapeNewlines(card.question))
@@ -976,7 +982,7 @@ object CardImportExport {
             reviewLogs.forEach { log ->
                 val question = cardQuestions[log.cardId] ?: return@forEach
                 val opponentName = log.opponentId?.let { opponentNamesById[it] }
-                writer.write(buildReviewLogLine(log, question, opponentName))
+                writer.write(buildReviewLogLine(log, question, opponentName, images))
                 writer.newLine()
             }
             writer.write(REVIEW_HISTORY_END)
@@ -985,7 +991,12 @@ object CardImportExport {
         }
     }
 
-    private fun buildReviewLogLine(log: ReviewLog, question: String, opponentName: String?): String {
+    private fun buildReviewLogLine(
+        log: ReviewLog,
+        question: String,
+        opponentName: String?,
+        images: ImageReader
+    ): String {
         return buildString {
             append(escapeNewlines(question))
             append(DELIMITER)
