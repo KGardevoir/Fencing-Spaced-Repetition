@@ -35,21 +35,6 @@ object SettingsConstants {
     )
 
     /**
-     * Preset values for FSRS desired retention (integer percent → label).
-     * Range 70 %–97 %; the FSRS team recommends 80 %–95 % for most learners.
-     */
-    val FSRS_RETENTION_PRESETS = listOf(
-        70 to "70%",
-        75 to "75%",
-        80 to "80%",
-        85 to "85%",
-        90 to "90%",
-        92 to "92%",
-        95 to "95%",
-        97 to "97%"
-    )
-
-    /**
      * Preset values for SM-2 interval modifier (integer percent → label).
      * 100 % = default SM-2 behaviour; lower = more frequent reviews; higher = longer intervals.
      */

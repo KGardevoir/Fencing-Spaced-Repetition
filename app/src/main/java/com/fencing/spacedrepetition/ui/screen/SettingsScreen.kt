@@ -28,6 +28,7 @@ import com.fencing.spacedrepetition.BuildConfig
 import com.fencing.spacedrepetition.data.preferences.SettingsConstants
 import com.fencing.spacedrepetition.data.preferences.ThemeMode
 import com.fencing.spacedrepetition.ui.components.FsrsRetentionPreview
+import com.fencing.spacedrepetition.ui.components.RetentionSelector
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.DonationViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
@@ -55,6 +56,8 @@ fun SettingsScreen(
     val maximumInterval by settingsViewModel.maximumInterval.collectAsState()
     val practiceDays by settingsViewModel.practiceDays.collectAsState()
     val fsrsRetention by settingsViewModel.fsrsRetention.collectAsState()
+    val practiceScheduleEstimate by cardViewModel.practiceScheduleEstimate.collectAsState()
+    val historyWindowDays by cardViewModel.historyWindowDays.collectAsState()
     val sm2IntervalModifier by settingsViewModel.sm2IntervalModifier.collectAsState()
     val fsrsEnableFuzzing by settingsViewModel.fsrsEnableFuzzing.collectAsState()
     val autoBackupEnabled by settingsViewModel.autoBackupEnabled.collectAsState()
@@ -92,9 +95,6 @@ fun SettingsScreen(
 
     val intervalPresets = SettingsConstants.INTERVAL_PRESETS
     val currentPresetIndex = SettingsConstants.findPresetIndex(intervalPresets, maximumInterval)
-
-    val fsrsRetentionPresets = SettingsConstants.FSRS_RETENTION_PRESETS
-    val currentFsrsRetentionIndex = SettingsConstants.findPresetIndex(fsrsRetentionPresets, fsrsRetention)
 
     val sm2ModifierPresets = SettingsConstants.SM2_MODIFIER_PRESETS
     val currentSm2ModifierIndex = SettingsConstants.findPresetIndex(sm2ModifierPresets, sm2IntervalModifier)
@@ -442,34 +442,22 @@ fun SettingsScreen(
                     .fillMaxWidth()
                     .padding(vertical = 8.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "FSRS Desired Retention",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    Text(
-                        text = fsrsRetentionPresets[currentFsrsRetentionIndex].second,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                Slider(
-                    value = currentFsrsRetentionIndex.toFloat(),
-                    onValueChange = { newIndex ->
-                        val presetValue = fsrsRetentionPresets[newIndex.roundToInt()].first
-                        settingsViewModel.setFsrsRetention(presetValue)
-                    },
-                    valueRange = 0f..(fsrsRetentionPresets.size - 1).toFloat(),
-                    steps = fsrsRetentionPresets.size - 2,
-                    modifier = Modifier.fillMaxWidth()
+                Text(
+                    text = "FSRS Desired Retention",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                RetentionSelector(
+                    retentionPercent = fsrsRetention,
+                    onRetentionChange = { settingsViewModel.setFsrsRetention(it) },
+                    cardsInRotation = totalCards,
+                    scheduleDaysPerWeek = practiceDays.size,
+                    scheduleSetsPerPractice = cardsPerSession,
+                    historyEstimate = practiceScheduleEstimate,
+                    historyWindowDays = historyWindowDays,
+                    onHistoryWindowDaysChange = { cardViewModel.setHistoryWindowDays(it) }
                 )
                 Text(
-                    text = "Target probability of remembering a card when it comes due (FSRS only). " +
-                        "80\u201392\u00a0% suits most learners \u2014 higher values increase reviews, lower values extend intervals.",
+                    text = "Target probability of remembering a card when it comes due (FSRS only).",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -5,6 +5,8 @@ import android.content.ContentResolver
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.fencing.spacedrepetition.algorithm.RetentionPlanner
+import com.fencing.spacedrepetition.algorithm.ScheduleEstimate
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
@@ -19,6 +21,7 @@ import com.fencing.spacedrepetition.util.CardWithGroupNames
 import com.fencing.spacedrepetition.util.ExportResult
 import com.fencing.spacedrepetition.util.ParsedCard
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -53,6 +56,30 @@ class CardViewModel(
 
     val cardCount: StateFlow<Int> = repository.getCardCount()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    // How many days of review history the schedule estimate is fitted over
+    private val _historyWindowDays = MutableStateFlow(RetentionPlanner.DEFAULT_HISTORY_WINDOW_DAYS)
+    val historyWindowDays: StateFlow<Int> = _historyWindowDays.asStateFlow()
+
+    fun setHistoryWindowDays(days: Int) {
+        _historyWindowDays.value = days.coerceIn(
+            RetentionPlanner.MIN_HISTORY_WINDOW_DAYS,
+            RetentionPlanner.MAX_HISTORY_WINDOW_DAYS
+        )
+    }
+
+    // Practice cadence sampled from recent review history, for retention suggestions
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val practiceScheduleEstimate: StateFlow<ScheduleEstimate?> = _historyWindowDays
+        .flatMapLatest { windowDays ->
+            val now = System.currentTimeMillis()
+            val windowStart = now - windowDays * 24L * 60 * 60 * 1000
+            repository.getPracticeHistoryStats(windowStart)
+                .map { RetentionPlanner.estimateSchedule(it, now, windowStart) }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    fun getCardCountForGroup(groupId: Long): Flow<Int> = repository.getCardCountByGroup(groupId)
 
     // Groups for filtering
     val allGroups: StateFlow<List<Group>> = groupRepository.getAllGroups()
