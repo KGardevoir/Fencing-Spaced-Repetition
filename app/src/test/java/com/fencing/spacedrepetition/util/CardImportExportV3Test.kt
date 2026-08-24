@@ -39,7 +39,7 @@ class CardImportExportV3Test {
         try {
             tempFile.writeBytes(createTestImageBytes())
 
-            val encoded = CardImportExport.encodeImageToBase64(tempFile.absolutePath)
+            val encoded = CardImportExport.encodeImageToBase64(tempFile.absolutePath, FileImageReader)
             assertNotNull(encoded)
             assertTrue(encoded!!.isNotEmpty())
 
@@ -53,7 +53,7 @@ class CardImportExportV3Test {
 
     @Test
     fun `test base64 image encoding - nonexistent file`() {
-        val encoded = CardImportExport.encodeImageToBase64("/nonexistent/file.png")
+        val encoded = CardImportExport.encodeImageToBase64("/nonexistent/file.png", FileImageReader)
         assertNull(encoded)
     }
 

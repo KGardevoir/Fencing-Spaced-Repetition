@@ -493,6 +493,7 @@ object CardImportExport {
     fun exportCardsWithGroupStates(
         cardsWithStates: List<CardWithGroupStates>,
         out: Appendable,
+        images: ImageReader,
         groupSettings: List<Group> = emptyList(),
         reviewLogs: List<ReviewLog> = emptyList(),
         cardQuestions: Map<Long, String> = emptyMap(),
@@ -567,7 +568,7 @@ object CardImportExport {
             append(escapeNewlines(card.answer))
             append(DELIMITER)
             // Encode images to base64
-            val encodedImages = card.imagePaths.mapNotNull { encodeImageToBase64(it) }
+            val encodedImages = card.imagePaths.mapNotNull { encodeImageToBase64(it, images) }
             append(encodedImages.joinToString(IMAGE_SEPARATOR))
             append(DELIMITER)
             append(card.algorithm.name)
@@ -613,7 +614,7 @@ object CardImportExport {
             append(escapeNewlines(card.answer))
             append(DELIMITER)
             // Encode images to base64
-            val encodedImages = card.imagePaths.mapNotNull { encodeImageToBase64(it) }
+            val encodedImages = card.imagePaths.mapNotNull { encodeImageToBase64(it, images) }
             append(encodedImages.joinToString(IMAGE_SEPARATOR))
             append(DELIMITER)
             append(card.algorithm.name)
@@ -881,16 +882,10 @@ object CardImportExport {
      * Encodes image file to base64 string
      */
     @OptIn(ExperimentalEncodingApi::class)
-    fun encodeImageToBase64(imagePath: String): String? {
+    fun encodeImageToBase64(imagePath: String, images: ImageReader): String? {
         return try {
-            val file = File(imagePath)
-            if (!file.exists() || !file.canRead()) {
-                return null
-            }
-            val bytes = file.readBytes()
-            Base64.encode(bytes)
+            images.read(imagePath)?.let { Base64.encode(it) }
         } catch (e: Exception) {
-            e.printStackTrace()
             null
         }
     }
@@ -970,6 +965,7 @@ object CardImportExport {
         reviewLogs: List<ReviewLog>,
         cardQuestions: Map<Long, String>,
         out: Appendable,
+        images: ImageReader,
         opponentNamesById: Map<Long, String> = emptyMap()
     ) {
         out.let { writer ->
@@ -1014,7 +1010,7 @@ object CardImportExport {
             // Encode review-log images as base64, pipe-separated
             val encodedImages = log.imagePaths.split(",")
                 .filter { it.isNotBlank() }
-                .mapNotNull { encodeImageToBase64(it) }
+                .mapNotNull { encodeImageToBase64(it, images) }
             append(encodedImages.joinToString("|"))
             append(DELIMITER)
             append(opponentName?.let { escapeNewlines(it) } ?: "")
@@ -1257,7 +1253,8 @@ object CardImportExport {
      */
     fun exportCardsToCsv(
         cardsWithGroups: List<CardWithGroupNames>,
-        out: Appendable
+        out: Appendable,
+        images: ImageReader
     ): ExportResult {
         return try {
             val anyCardHasImages = cardsWithGroups.any { (card, _) ->
@@ -1282,7 +1279,7 @@ object CardImportExport {
 
                     if (anyCardHasImages) {
                         // Encode all images and join with pipe separator
-                        val encodedImages = card.imagePaths.mapNotNull { encodeImageToBase64(it) }
+                        val encodedImages = card.imagePaths.mapNotNull { encodeImageToBase64(it, images) }
                         val imagesField = encodedImages.joinToString(CSV_IMAGE_SEPARATOR)
                         fields.add(escapeCsvField(imagesField))
                     }
@@ -1440,6 +1437,23 @@ object CardImportExport {
 // the core moves to common code -- a browser has no java.io.
 // ==========================================================================
 
+/**
+ * Reads images straight off the filesystem, which is what the export code did
+ * inline before the reader became a parameter. Absolute paths, no Context: it
+ * is the read half only, and export never writes an image.
+ */
+object FileImageReader : ImageReader {
+    override fun read(path: String): ByteArray? {
+        val file = File(path)
+        if (!file.exists() || !file.canRead()) return null
+        return try {
+            file.readBytes()
+        } catch (e: Exception) {
+            null
+        }
+    }
+}
+
 /** Reads the whole stream as UTF-8 lines and parses it. */
 fun CardImportExport.parseCards(inputStream: InputStream): Pair<List<ParsedCard>, List<String>> =
     parseCards(inputStream.bufferedReader(Charsets.UTF_8).readLines())
@@ -1462,10 +1476,11 @@ fun CardImportExport.exportCardsWithGroupStates(
     reviewLogs: List<ReviewLog> = emptyList(),
     cardQuestions: Map<Long, String> = emptyMap(),
     opponents: List<Opponent> = emptyList(),
-    opponentNamesById: Map<Long, String> = emptyMap()
+    opponentNamesById: Map<Long, String> = emptyMap(),
+    images: ImageReader = FileImageReader
 ): ExportResult = outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
     exportCardsWithGroupStates(
-        cardsWithStates, writer, groupSettings, reviewLogs,
+        cardsWithStates, writer, images, groupSettings, reviewLogs,
         cardQuestions, opponents, opponentNamesById
     )
 }
@@ -1477,7 +1492,8 @@ fun CardImportExport.exportCards(cards: List<Card>, outputStream: OutputStream):
 
 fun CardImportExport.exportCardsToCsv(
     cardsWithGroups: List<CardWithGroupNames>,
-    outputStream: OutputStream
+    outputStream: OutputStream,
+    images: ImageReader = FileImageReader
 ): ExportResult = outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
-    exportCardsToCsv(cardsWithGroups, writer)
+    exportCardsToCsv(cardsWithGroups, writer, images)
 }
