@@ -34,10 +34,6 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # TEMPORARY: this environment cannot reach Google's Maven, so the exact
-      # class names inside androidx.sqlite / room3 cannot be checked locally.
-      # This prints them once so the driver import can be confirmed rather
-      # than guessed. Remove once Room 3 builds.
       # On failure, repeat just the compiler/KSP errors at the very end of the
       # log. Gradle buries them hundreds of lines up behind npm chatter and
       # task output, which makes a failure needlessly expensive to read.
@@ -92,7 +88,16 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build web distribution
-        run: ./gradlew :web:wasmJsBrowserDistribution
+        run: |
+          set -o pipefail
+          if ! ./gradlew :web:wasmJsBrowserDistribution 2>&1 | tee /tmp/build.log; then
+            echo ""
+            echo "================= compiler / KSP errors ================="
+            grep -A2 -E "^e: |^Tried the following|^<init> ->" /tmp/build.log | head -80 \
+              || echo "(no 'e:' lines -- failure was not a compile error)"
+            echo "========================================================="
+            exit 1
+          fi
 
       - name: List bundle contents
         run: ls -lh web/build/dist/wasmJs/productionExecutable/
@@ -155,7 +160,16 @@ jobs:
           DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
           DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
           DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
-        run: ./gradlew assembleDebug
+        run: |
+          set -o pipefail
+          if ! ./gradlew assembleDebug 2>&1 | tee /tmp/build.log; then
+            echo ""
+            echo "================= compiler / KSP errors ================="
+            grep -A2 -E "^e: |^Tried the following|^<init> ->" /tmp/build.log | head -80 \
+              || echo "(no 'e:' lines -- failure was not a compile error)"
+            echo "========================================================="
+            exit 1
+          fi
 
       - name: Upload Room schema
         uses: actions/upload-artifact@v4
