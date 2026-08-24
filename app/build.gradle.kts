@@ -1,7 +1,6 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
-    id("com.google.devtools.ksp")
 }
 
 val gitCommit: String = try {
@@ -95,16 +94,11 @@ android {
     }
 }
 
-// Room writes a JSON description of the schema for each version here. It is
-// the only record of what the database is supposed to look like, so it is
-// committed rather than generated-and-discarded: without it a migration can
-// only be checked by running the app.
-ksp {
-    arg("room.schemaLocation", "$projectDir/schemas")
-}
-
 dependencies {
-    // Platform-independent core: scheduling algorithms, settings constants, clock
+    // Platform-independent core: scheduling algorithms, settings constants,
+    // clock, and the whole Room data layer -- entities, DAOs and the database
+    // itself. :shared exposes Room and coroutines through api(), so the
+    // coordinates that used to be listed here live there now.
     implementation(project(":shared"))
 
     // Core Android
@@ -123,20 +117,6 @@ dependencies {
     // Navigation
     implementation("androidx.navigation:navigation-compose:2.7.5")
 
-    // Room 3 -- note the room3 group and package; Room 3 ships alongside
-    // Room 2 rather than replacing it, so the coordinates and the imports
-    // both change. No room3-ktx: Room 3 is coroutine-first and the ktx
-    // extensions folded into the runtime.
-    val roomVersion = "3.0.1"
-    implementation("androidx.room3:room3-runtime:$roomVersion")
-    ksp("androidx.room3:room3-compiler:$roomVersion")
-
-    // Room 3 requires an explicit SQLiteDriver. sqlite provides the driver
-    // interfaces, sqlite-framework the Android implementation used here.
-    val sqliteVersion = "2.7.0"
-    implementation("androidx.sqlite:sqlite:$sqliteVersion")
-    implementation("androidx.sqlite:sqlite-framework:$sqliteVersion")
-
     // ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")
 
@@ -149,8 +129,11 @@ dependencies {
     // DocumentFile for writing backups to a user-selected SAF folder
     implementation("androidx.documentfile:documentfile:1.0.1")
 
-    // Coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    // Coroutines. The version tracks :shared's coroutines-core: the -android
+    // artifact is a companion to a specific core version, and letting Gradle
+    // resolve a newer core underneath an older -android is how Dispatchers.Main
+    // breaks at runtime rather than at build time.
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
     // Coil for image loading
     implementation("io.coil-kt:coil-compose:2.5.0")

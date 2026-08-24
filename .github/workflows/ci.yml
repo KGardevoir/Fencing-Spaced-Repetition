@@ -176,7 +176,7 @@ jobs:
         if: always()
         with:
           name: room-schemas
-          path: app/schemas/
+          path: shared/schemas/
           retention-days: 14
 
       - name: Rename debug APK
