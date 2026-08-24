@@ -6,6 +6,7 @@ plugins {
     id("org.jetbrains.kotlin.multiplatform")
     id("com.android.library")
     id("com.google.devtools.ksp")
+    id("androidx.room3")
 }
 
 val roomVersion = "3.0.1"
@@ -206,17 +207,32 @@ dependencies {
 // the only record of what the database is supposed to look like, so it is
 // committed rather than generated-and-discarded: without it a migration can
 // only be checked by running the app.
-ksp {
-    arg("room.schemaLocation", "$projectDir/schemas")
+//
+// Set through Room's own Gradle plugin rather than the room.schemaLocation
+// KSP argument, because that argument is a single directory shared by every
+// compilation that generates a database, and they run in parallel. Two of
+// them writing the same file produced a half-written schema and a KSP failure
+// that looked like a flake:
+//
+//     e: [ksp] JsonDecodingException: Unexpected JSON token at offset 13236
+//        ... at path: $.database.entities[4]
+//
+// The plugin keeps the targets' schemas apart, which is what it exists for.
+room {
+    schemaDirectory("$projectDir/schemas")
 }
 
-// TEMPORARY DIAGNOSTIC. androidx.room3 and androidx.sqlite resolve for android
-// and jvm but every reference to them is unresolved when compiling for wasmJs,
-// including from hand-written commonMain sources. Both artifacts do publish
-// wasmJs targets -- Room 3.0.0 and androidx.sqlite 2.7.0 added them -- so the
-// question is whether their klibs are missing from the wasm compile classpath
-// or present and being skipped, and those want completely different fixes.
-// This prints the classpath so the answer is read rather than guessed.
+// Kept for step 6, when Room has to reach the browser. It prints the wasmJs
+// compile classpath, which is currently:
+//
+//     kotlinx-coroutines-core-wasm-js, kotlin-stdlib-wasm-js, atomicfu-wasm-js
+//
+// and nothing else. That is the expected shape now that Room is declared in
+// jvmCommonMain, so it no longer answers the original question -- whether
+// Room's klib was absent or present-and-skipped when it was in commonMain --
+// because the configuration changed before this diagnostic produced any
+// readable output. Re-adding room3 to commonMain and running this task is the
+// first move of that investigation.
 tasks.register("dumpWasmJsCompileClasspath") {
     val classpath = kotlin.targets.getByName("wasmJs")
         .compilations.getByName("main")

@@ -6,4 +6,5 @@ plugins {
     id("org.jetbrains.kotlin.multiplatform") version "2.2.10" apply false
     id("org.jetbrains.kotlin.plugin.compose") version "2.2.10" apply false
     id("com.google.devtools.ksp") version "2.2.10-2.0.2" apply false
+    id("androidx.room3") version "3.0.1" apply false
 }
