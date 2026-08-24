@@ -74,7 +74,7 @@ fun CardImportExport.parsedCardToCard(context: Context, parsed: ParsedCard): Car
  */
 fun CardImportExport.parsedReviewLogsToEntities(
     context: Context,
-    parsed: List<ParsedReviewLog>,
+    parsed: List<CardImportExport.ParsedReviewLog>,
     questionToCardId: Map<String, Long>,
     opponentNameToId: Map<String, Long> = emptyMap()
 ): List<ReviewLog> {
