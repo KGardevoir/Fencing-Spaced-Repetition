@@ -39,6 +39,17 @@ dependencyResolutionManagement {
             metadataSources { artifact() }
             content { includeModule("com.yarnpkg", "yarn") }
         }
+        // wasm-opt, which the production distribution runs over the .wasm.
+        // Only the release build needs it, which is why it surfaced later
+        // than Node and yarn.
+        ivy("https://github.com/WebAssembly/binaryen/releases/download") {
+            name = "Binaryen distributions"
+            patternLayout {
+                artifact("version_[revision]/[artifact]-version_[revision]-[classifier].[ext]")
+            }
+            metadataSources { artifact() }
+            content { includeModule("com.github.webassembly", "binaryen") }
+        }
     }
 }
 
