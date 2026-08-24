@@ -207,3 +207,19 @@ dependencies {
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
+
+// TEMPORARY DIAGNOSTIC. androidx.room3 and androidx.sqlite resolve for android
+// and jvm but every reference to them is unresolved when compiling for wasmJs,
+// including from hand-written commonMain sources. Both artifacts do publish
+// wasmJs targets -- Room 3.0.0 and androidx.sqlite 2.7.0 added them -- so the
+// question is whether their klibs are missing from the wasm compile classpath
+// or present and being skipped, and those want completely different fixes.
+// This prints the classpath so the answer is read rather than guessed.
+tasks.register("dumpWasmJsCompileClasspath") {
+    val classpath = kotlin.targets.getByName("wasmJs")
+        .compilations.getByName("main")
+        .compileDependencyFiles
+    doLast {
+        classpath.forEach { logger.lifecycle("WASMCP: ${it.name}") }
+    }
+}

@@ -37,13 +37,19 @@ jobs:
       # On failure, repeat just the compiler/KSP errors at the very end of the
       # log. Gradle buries them hundreds of lines up behind npm chatter and
       # task output, which makes a failure needlessly expensive to read.
+      # TEMPORARY, paired with the dumpWasmJsCompileClasspath task in
+      # shared/build.gradle.kts. Removed once the wasm classpath is understood.
+      - name: Dump the wasmJs compile classpath
+        continue-on-error: true
+        run: ./gradlew :shared:dumpWasmJsCompileClasspath -q 2>&1 | grep -E "WASMCP:|klib|Skipping|incompatible" | head -80
+
       - name: Run unit tests
         run: |
           set -o pipefail
           if ! ./gradlew :shared:allTests :app:testDebugUnitTest 2>&1 | tee /tmp/build.log; then
             echo ""
             echo "================= compiler / KSP errors ================="
-            errors=$(grep -A2 -E "^e: |^Tried the following|^<init> ->|^KSPCFG:|^w: .Default Kotlin Hierarchy" /tmp/build.log || true)
+            errors=$(grep -A2 -E "^e: |^Tried the following|^<init> ->|^KSPCFG:|^w: .Default Kotlin Hierarchy|klib|Skipping|incompatible ABI|metadata version" /tmp/build.log || true)
             if [ -n "$errors" ]; then
               printf '%s\n' "$errors" | awk 'NR <= 140'
             else
@@ -97,7 +103,7 @@ jobs:
           if ! ./gradlew :web:wasmJsBrowserDistribution 2>&1 | tee /tmp/build.log; then
             echo ""
             echo "================= compiler / KSP errors ================="
-            errors=$(grep -A2 -E "^e: |^Tried the following|^<init> ->|^KSPCFG:|^w: .Default Kotlin Hierarchy" /tmp/build.log || true)
+            errors=$(grep -A2 -E "^e: |^Tried the following|^<init> ->|^KSPCFG:|^w: .Default Kotlin Hierarchy|klib|Skipping|incompatible ABI|metadata version" /tmp/build.log || true)
             if [ -n "$errors" ]; then
               printf '%s\n' "$errors" | awk 'NR <= 140'
             else
@@ -173,7 +179,7 @@ jobs:
           if ! ./gradlew assembleDebug 2>&1 | tee /tmp/build.log; then
             echo ""
             echo "================= compiler / KSP errors ================="
-            errors=$(grep -A2 -E "^e: |^Tried the following|^<init> ->|^KSPCFG:|^w: .Default Kotlin Hierarchy" /tmp/build.log || true)
+            errors=$(grep -A2 -E "^e: |^Tried the following|^<init> ->|^KSPCFG:|^w: .Default Kotlin Hierarchy|klib|Skipping|incompatible ABI|metadata version" /tmp/build.log || true)
             if [ -n "$errors" ]; then
               printf '%s\n' "$errors" | awk 'NR <= 140'
             else
