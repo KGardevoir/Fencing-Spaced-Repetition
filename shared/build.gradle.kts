@@ -48,6 +48,14 @@ val coroutinesVersion = "1.10.2"
 kotlin {
     jvmToolchain(17)
 
+    // Applied explicitly because jvmCommonMain below declares a dependsOn edge
+    // by hand, and Kotlin disables the default hierarchy template as soon as it
+    // sees one -- warning "Default Kotlin Hierarchy Template Not Applied
+    // Correctly" and leaving the target source sets with no edge to commonMain.
+    // That is what put androidx.room3 off the wasmJs compile classpath.
+    // Calling it explicitly keeps the template and the manual edge together.
+    applyDefaultHierarchyTemplate()
+
     androidTarget {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
@@ -153,6 +161,9 @@ val kspConfigurationNames = kspTargetNames.map { target ->
 val missingKspConfigurations = kspConfigurationNames.filterNot { it in configurations.names }
 
 logger.lifecycle("KSPCFG: targets = $kspTargetNames")
+kotlin.sourceSets.filter { it.name.endsWith("Main") }.sortedBy { it.name }.forEach { sourceSet ->
+    logger.lifecycle("KSPCFG: ${sourceSet.name} dependsOn ${sourceSet.dependsOn.map { it.name }.sorted()}")
+}
 logger.lifecycle("KSPCFG: ksp configurations = ${configurations.names.filter { it.startsWith("ksp") }}")
 
 if (missingKspConfigurations.isNotEmpty()) {

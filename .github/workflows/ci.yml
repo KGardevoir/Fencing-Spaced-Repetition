@@ -43,8 +43,12 @@ jobs:
           if ! ./gradlew :shared:allTests :app:testDebugUnitTest 2>&1 | tee /tmp/build.log; then
             echo ""
             echo "================= compiler / KSP errors ================="
-            grep -A2 -E "^e: |^Tried the following|^<init> ->|^KSPCFG:" /tmp/build.log | head -80 \
-              || echo "(no 'e:' lines -- failure was not a compile error)"
+            errors=$(grep -A2 -E "^e: |^Tried the following|^<init> ->|^KSPCFG:|^w: .Default Kotlin Hierarchy" /tmp/build.log || true)
+            if [ -n "$errors" ]; then
+              printf '%s\n' "$errors" | awk 'NR <= 140'
+            else
+              echo "(no compiler or KSP errors in the log -- failure was elsewhere)"
+            fi
             echo "========================================================="
             exit 1
           fi
@@ -93,8 +97,12 @@ jobs:
           if ! ./gradlew :web:wasmJsBrowserDistribution 2>&1 | tee /tmp/build.log; then
             echo ""
             echo "================= compiler / KSP errors ================="
-            grep -A2 -E "^e: |^Tried the following|^<init> ->|^KSPCFG:" /tmp/build.log | head -80 \
-              || echo "(no 'e:' lines -- failure was not a compile error)"
+            errors=$(grep -A2 -E "^e: |^Tried the following|^<init> ->|^KSPCFG:|^w: .Default Kotlin Hierarchy" /tmp/build.log || true)
+            if [ -n "$errors" ]; then
+              printf '%s\n' "$errors" | awk 'NR <= 140'
+            else
+              echo "(no compiler or KSP errors in the log -- failure was elsewhere)"
+            fi
             echo "========================================================="
             exit 1
           fi
@@ -165,8 +173,12 @@ jobs:
           if ! ./gradlew assembleDebug 2>&1 | tee /tmp/build.log; then
             echo ""
             echo "================= compiler / KSP errors ================="
-            grep -A2 -E "^e: |^Tried the following|^<init> ->|^KSPCFG:" /tmp/build.log | head -80 \
-              || echo "(no 'e:' lines -- failure was not a compile error)"
+            errors=$(grep -A2 -E "^e: |^Tried the following|^<init> ->|^KSPCFG:|^w: .Default Kotlin Hierarchy" /tmp/build.log || true)
+            if [ -n "$errors" ]; then
+              printf '%s\n' "$errors" | awk 'NR <= 140'
+            else
+              echo "(no compiler or KSP errors in the log -- failure was elsewhere)"
+            fi
             echo "========================================================="
             exit 1
           fi
