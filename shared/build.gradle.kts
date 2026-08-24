@@ -44,7 +44,10 @@ val coroutinesVersion = "1.10.2"
 //     in a second or two, without an emulator and without a browser.
 //
 //   wasmJs -- the browser core. It runs commonTest in a real browser engine,
-//     so we know FSRS and SM-2 schedule identically there.
+//     so we know FSRS and SM-2 schedule identically there. It compiles the
+//     whole common data layer -- entities, DAOs, converters, repositories --
+//     but not the @Database, which is jvm-and-android until the browser has a
+//     driver to open one with. See the KSP block at the bottom.
 kotlin {
     jvmToolchain(17)
 
@@ -154,7 +157,23 @@ android {
 // The bare `ksp` and `kspCommonMainMetadata` configurations are deliberately
 // not used. Room's codegen is per-platform, and the bare one is the path that
 // threw the ClassCastException.
-val kspTargetNames = kotlin.targets.map { it.name }.filter { it != "metadata" }
+//
+// wasmJs is excluded, and the reason is worth recording. Room's codegen for
+// that target produces an AppDatabase_Impl whose own imports do not resolve --
+// every androidx.room3 and androidx.sqlite reference inside the generated file
+// is unresolved -- while the hand-written commonMain sources sitting in the
+// same compilation, importing the same packages, compile clean. The source set
+// graph is not the cause; it was printed and wasmJsMain does depend on
+// commonMain.
+//
+// Rather than keep guessing at it, the browser simply does not get a database
+// yet. It has no driver and no OPFS wiring either, so a generated
+// implementation it cannot instantiate buys nothing today. Entities, DAOs,
+// converters and repositories are all still common and all still compile for
+// wasmJs; only the @Database declaration is jvm-and-android for now, and it
+// comes back to common with sqlite-web and WebWorkerSQLiteDriver.
+val kspTargetNames = kotlin.targets.map { it.name }
+    .filter { it != "metadata" && it != "wasmJs" }
 val kspConfigurationNames = kspTargetNames.map { target ->
     "ksp" + target.replaceFirstChar { it.uppercase() }
 }
