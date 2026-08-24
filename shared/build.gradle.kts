@@ -115,10 +115,22 @@ kotlin {
 // Room's compiler has to run once per target: the generated database
 // implementation is platform-specific, which is the whole reason :shared
 // needed an Android target before the data layer could move here.
+//
+// The configuration names are discovered rather than written out. The
+// documented form -- add("kspAndroid", ...) -- fails here with
+// "Configuration with name 'kspAndroid' not found", and there are two
+// possible reasons: the AGP KMP library plugin's target may not be called
+// "android", or KSP may not create a configuration for it at all. Those want
+// different fixes, so the names are printed under a KSPCFG marker that the
+// CI error summary picks up, and whatever exists is used.
+val kspConfigurationNames = configurations.names.filter { it.startsWith("ksp") }
+logger.lifecycle("KSPCFG: targets = ${kotlin.targets.map { it.name }}")
+logger.lifecycle("KSPCFG: ksp configurations = $kspConfigurationNames")
+
 dependencies {
-    add("kspAndroid", "androidx.room3:room3-compiler:$roomVersion")
-    add("kspJvm", "androidx.room3:room3-compiler:$roomVersion")
-    add("kspWasmJs", "androidx.room3:room3-compiler:$roomVersion")
+    kspConfigurationNames.forEach {
+        add(it, "androidx.room3:room3-compiler:$roomVersion")
+    }
 }
 
 // Room writes a JSON description of the schema for each version here. It is

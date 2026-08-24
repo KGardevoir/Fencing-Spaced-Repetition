@@ -43,7 +43,7 @@ jobs:
           if ! ./gradlew :shared:allTests :app:testDebugUnitTest 2>&1 | tee /tmp/build.log; then
             echo ""
             echo "================= compiler / KSP errors ================="
-            grep -A2 -E "^e: |^Tried the following|^<init> ->" /tmp/build.log | head -80 \
+            grep -A2 -E "^e: |^Tried the following|^<init> ->|^KSPCFG:" /tmp/build.log | head -80 \
               || echo "(no 'e:' lines -- failure was not a compile error)"
             echo "========================================================="
             exit 1
@@ -93,7 +93,7 @@ jobs:
           if ! ./gradlew :web:wasmJsBrowserDistribution 2>&1 | tee /tmp/build.log; then
             echo ""
             echo "================= compiler / KSP errors ================="
-            grep -A2 -E "^e: |^Tried the following|^<init> ->" /tmp/build.log | head -80 \
+            grep -A2 -E "^e: |^Tried the following|^<init> ->|^KSPCFG:" /tmp/build.log | head -80 \
               || echo "(no 'e:' lines -- failure was not a compile error)"
             echo "========================================================="
             exit 1
@@ -165,7 +165,7 @@ jobs:
           if ! ./gradlew assembleDebug 2>&1 | tee /tmp/build.log; then
             echo ""
             echo "================= compiler / KSP errors ================="
-            grep -A2 -E "^e: |^Tried the following|^<init> ->" /tmp/build.log | head -80 \
+            grep -A2 -E "^e: |^Tried the following|^<init> ->|^KSPCFG:" /tmp/build.log | head -80 \
               || echo "(no 'e:' lines -- failure was not a compile error)"
             echo "========================================================="
             exit 1
