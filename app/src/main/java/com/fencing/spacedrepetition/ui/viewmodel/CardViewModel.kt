@@ -76,7 +76,7 @@ class CardViewModel(
     @OptIn(ExperimentalCoroutinesApi::class)
     val practiceScheduleEstimate: StateFlow<ScheduleEstimate?> = _historyWindowDays
         .flatMapLatest { windowDays ->
-            val now = System.currentTimeMillis()
+            val now = Time.now()
             val windowStart = now - windowDays * 24L * 60 * 60 * 1000
             repository.getPracticeHistoryStats(windowStart)
                 .map { RetentionPlanner.estimateSchedule(it, now, windowStart) }
