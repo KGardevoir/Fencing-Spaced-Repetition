@@ -55,13 +55,25 @@ kotlin {
     }
 
     sourceSets {
+        val commonMain by getting {
+            dependencies {
+                // Room's annotations and runtime, for the entities and the
+                // converters. Room 3 is the first release with a wasmJs
+                // target, which is the whole reason the data layer can be
+                // here at all.
+                //
+                // api rather than implementation: these types appear in the
+                // entities' own declarations, so anything consuming :shared
+                // has to see them.
+                api("androidx.room3:room3-runtime:3.0.1")
+            }
+        }
         // The Android and JVM targets share an implementation for everything
         // that only needs the Java standard library -- the UTC offset lookup
         // today, and the JVM half of the data layer's file and gzip I/O later.
         // Without this set the two would hold byte-identical copies of every
         // actual declaration, which is the kind of duplication that silently
         // drifts.
-        val commonMain by getting
         val jvmCommonMain by creating {
             dependsOn(commonMain)
         }
