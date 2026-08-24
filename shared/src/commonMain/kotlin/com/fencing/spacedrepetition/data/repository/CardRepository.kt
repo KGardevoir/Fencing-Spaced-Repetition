@@ -11,7 +11,7 @@ import com.fencing.spacedrepetition.data.dao.OpponentDao
 import com.fencing.spacedrepetition.data.dao.PracticeSessionDao
 import com.fencing.spacedrepetition.data.dao.ReviewLogDao
 import com.fencing.spacedrepetition.data.model.*
-import com.fencing.spacedrepetition.data.preferences.ThemePreferences
+import com.fencing.spacedrepetition.data.preferences.SchedulingPreferences
 import com.fencing.spacedrepetition.util.Time
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -24,7 +24,7 @@ class CardRepository(
     private val reviewLogDao: ReviewLogDao,
     private val groupDao: GroupDao,
     private val opponentDao: OpponentDao,
-    private val preferences: ThemePreferences
+    private val preferences: SchedulingPreferences
 ) {
     private val fsrsAlgorithm = FSRSAlgorithm()
     private val sm2Algorithm = SM2Algorithm()

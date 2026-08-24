@@ -23,7 +23,7 @@ enum class ThemeMode {
     DARK
 }
 
-class ThemePreferences(private val context: Context) {
+class ThemePreferences(private val context: Context) : SchedulingPreferences {
     private val THEME_KEY = stringPreferencesKey("theme_mode")
     private val AUTO_SHOW_ANSWER_KEY = booleanPreferencesKey("auto_show_answer")
     private val CARDS_PER_SESSION_KEY = intPreferencesKey("cards_per_session")
@@ -104,12 +104,12 @@ class ThemePreferences(private val context: Context) {
             preferences[SELECTED_GROUP_ID_KEY]
         }
 
-    val randomizeDueCards: Flow<Boolean> = context.dataStore.data
+    override val randomizeDueCards: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
             preferences[RANDOMIZE_DUE_CARDS_KEY] ?: false
         }
 
-    val maximumInterval: Flow<Int> = context.dataStore.data
+    override val maximumInterval: Flow<Int> = context.dataStore.data
         .map { preferences ->
             preferences[MAXIMUM_INTERVAL_KEY] ?: DEFAULT_MAXIMUM_INTERVAL
         }
@@ -119,7 +119,7 @@ class ThemePreferences(private val context: Context) {
             preferences[PRACTICES_PER_WEEK_KEY] ?: DEFAULT_PRACTICES_PER_WEEK
         }
 
-    val practiceDays: Flow<Set<Int>> = context.dataStore.data
+    override val practiceDays: Flow<Set<Int>> = context.dataStore.data
         .map { preferences ->
             val stored = preferences[PRACTICE_DAYS_KEY]
             if (stored != null) {
@@ -133,22 +133,22 @@ class ThemePreferences(private val context: Context) {
             }
         }
 
-    val randomizeBucketHours: Flow<Int> = context.dataStore.data
+    override val randomizeBucketHours: Flow<Int> = context.dataStore.data
         .map { preferences ->
             preferences[RANDOMIZE_BUCKET_HOURS_KEY] ?: DEFAULT_RANDOMIZE_BUCKET_HOURS
         }
 
-    val fsrsRetention: Flow<Int> = context.dataStore.data
+    override val fsrsRetention: Flow<Int> = context.dataStore.data
         .map { preferences ->
             preferences[FSRS_RETENTION_KEY] ?: DEFAULT_FSRS_RETENTION
         }
 
-    val sm2IntervalModifier: Flow<Int> = context.dataStore.data
+    override val sm2IntervalModifier: Flow<Int> = context.dataStore.data
         .map { preferences ->
             preferences[SM2_INTERVAL_MODIFIER_KEY] ?: DEFAULT_SM2_INTERVAL_MODIFIER
         }
 
-    val fsrsEnableFuzzing: Flow<Boolean> = context.dataStore.data
+    override val fsrsEnableFuzzing: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
             preferences[FSRS_ENABLE_FUZZING_KEY] ?: DEFAULT_FSRS_ENABLE_FUZZING
         }

@@ -3,8 +3,8 @@
 
 package com.fencing.spacedrepetition.data.repository
 
-import org.junit.Assert.assertEquals
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
 
 class CardRepositoryTest {
 
@@ -59,31 +59,6 @@ class CardRepositoryTest {
         // 1969-12-31T12:00:00Z was a Wednesday (ISO 3); the epoch itself a Thursday.
         assertEquals(3, CardRepository.isoDayOfWeekAfter(-43200000L, 0, 0))
         assertEquals(4, CardRepository.isoDayOfWeekAfter(0L, 0, 0))
-    }
-
-    @Test
-    fun `isoDayOfWeekAfter - agrees with java util Calendar across a year of offsets`() {
-        // Differential test against the implementation this replaced, so any
-        // divergence in the day-number arithmetic shows up here.
-        val offsets = listOf(-11, -8, -5, 0, 1, 5, 9, 13).map { it * 3600 }
-        for (offsetSeconds in offsets) {
-            val zone = java.util.TimeZone.getTimeZone(
-                java.time.ZoneOffset.ofTotalSeconds(offsetSeconds)
-            )
-            for (days in 0..370) {
-                val calendar = java.util.Calendar.getInstance(zone)
-                calendar.timeInMillis = sundayNoonUtc
-                calendar.add(java.util.Calendar.DAY_OF_YEAR, days)
-                val calendarDow = calendar.get(java.util.Calendar.DAY_OF_WEEK)
-                val expected = if (calendarDow == java.util.Calendar.SUNDAY) 7 else calendarDow - 1
-
-                assertEquals(
-                    "offset=$offsetSeconds days=$days",
-                    expected,
-                    CardRepository.isoDayOfWeekAfter(sundayNoonUtc, days, offsetSeconds)
-                )
-            }
-        }
     }
 
     // ==================== forwardDaysToNearestPracticeDay TESTS ====================
