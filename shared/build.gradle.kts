@@ -85,29 +85,27 @@ kotlin {
                 // version from the core it is meant to pair with.
                 api("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
 
-            }
-        }
-        // The Android and JVM targets share an implementation for everything
-        // that only needs the Java standard library -- the UTC offset lookup
-        // today, and the JVM half of the data layer's file and gzip I/O later.
-        // Without this set the two would hold byte-identical copies of every
-        // actual declaration, which is the kind of duplication that silently
-        // drifts.
-        val jvmCommonMain by creating {
-            dependsOn(commonMain)
-            dependencies {
-                // Room lives here rather than in commonMain because the
-                // Kotlin 2.2.10 compiler cannot read its wasm klibs -- see the
-                // note above the KSP block. api rather than implementation:
-                // Room's types appear in the entities' own declarations, so
-                // anything consuming :shared has to see them.
+                // Room's annotations and runtime, for the entities, DAOs and
+                // converters that now live here. api rather than
+                // implementation: Room's types appear in the entities' own
+                // declarations, so anything consuming :shared has to see them.
                 api("androidx.room3:room3-runtime:$roomVersion")
 
                 // SQLiteConnection and execSQL, which the migrations call
                 // directly. Room brings it transitively; the migrations name
                 // it, so it is declared.
                 api("androidx.sqlite:sqlite:$sqliteVersion")
+
             }
+        }
+        // The Android and JVM targets share an implementation for everything
+        // that only needs the Java standard library. That is one file today --
+        // the UTC offset lookup -- and will be the JVM half of the data
+        // layer's file and gzip I/O next. Without this set the two would hold
+        // byte-identical copies of every actual declaration, which is the kind
+        // of duplication that silently drifts.
+        val jvmCommonMain by creating {
+            dependsOn(commonMain)
         }
         val jvmMain by getting {
             dependsOn(jvmCommonMain)
@@ -159,24 +157,18 @@ android {
 // Only the Android target generates a database, so only kspAndroid is wired
 // up. Two reasons, and both matter.
 //
-// The database is Android-only for now, and the reason is finally known
-// rather than suspected. Room's wasm klibs resolve and land on the wasmJs
-// compile classpath -- room3-common-wasm-js-3.0.1.klib,
-// room3-runtime-wasm-js-3.0.1.klib and sqlite-wasm-js-2.7.0.klib were all
-// printed by dumpWasmJsCompileClasspath. This project's Kotlin 2.2.10 simply
-// cannot read them. The frontend reports every androidx.room3 reference as
-// unresolved; the backend, loading the same klibs, dies with
+// The database is Android-only, and now that is the only part of the data
+// layer that is. Kotlin 2.4.10 reads Room's wasm klibs, so the entities,
+// converters, DAOs and repositories compile for the browser and live in
+// commonMain again.
 //
-//     java.lang.AssertionError: Built-in class kotlin.Any is not found
-//         at ...ir.backend.js.KlibKt.getIrModuleInfoForKlib
-//
-// which is what an unreadable klib looks like. No "skipping incompatible
-// klib" warning is emitted, which is why this was wrongly ruled out earlier.
-// klibs are readable forwards only, and Room 3.0.1 postdates Kotlin 2.2.10.
-//
-// The fix is a Kotlin upgrade, not a source layout change, so the layout below
-// is the right one until that happens. Entities, DAOs, converters and
-// repositories live in jvmCommonMain and are shared by android and jvm.
+// What is left for step 6 is the @Database itself. Putting it in commonMain
+// needs @ConstructedBy and a generated actual per target, which means
+// kspWasmJs and kspJvm alongside kspAndroid -- and that reintroduces the
+// several-generators-one-schema-directory race described below. It also wants
+// androidx.sqlite:sqlite-web and WebWorkerSQLiteDriver, without which a
+// browser database can be generated but not opened. Those belong together, in
+// one change, not bolted on here.
 //
 // And one generator means one writer of the exported schema. room.schemaLocation
 // is a single directory for the whole module, and when jvm generated a database
