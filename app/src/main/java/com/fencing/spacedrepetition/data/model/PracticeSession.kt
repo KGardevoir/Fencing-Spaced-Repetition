@@ -3,8 +3,8 @@
 
 package com.fencing.spacedrepetition.data.model
 
-import androidx.room.Entity
-import androidx.room.PrimaryKey
+import androidx.room3.Entity
+import androidx.room3.PrimaryKey
 import com.fencing.spacedrepetition.util.Time
 
 @Entity(tableName = "practice_sessions")

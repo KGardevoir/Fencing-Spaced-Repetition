@@ -95,6 +95,14 @@ android {
     }
 }
 
+// Room writes a JSON description of the schema for each version here. It is
+// the only record of what the database is supposed to look like, so it is
+// committed rather than generated-and-discarded: without it a migration can
+// only be checked by running the app.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     // Platform-independent core: scheduling algorithms, settings constants, clock
     implementation(project(":shared"))
@@ -115,11 +123,19 @@ dependencies {
     // Navigation
     implementation("androidx.navigation:navigation-compose:2.7.5")
 
-    // Room
-    val roomVersion = "2.7.1"
-    implementation("androidx.room:room-runtime:$roomVersion")
-    implementation("androidx.room:room-ktx:$roomVersion")
-    ksp("androidx.room:room-compiler:$roomVersion")
+    // Room 3 -- note the room3 group and package; Room 3 ships alongside
+    // Room 2 rather than replacing it, so the coordinates and the imports
+    // both change. No room3-ktx: Room 3 is coroutine-first and the ktx
+    // extensions folded into the runtime.
+    val roomVersion = "3.0.1"
+    implementation("androidx.room3:room3-runtime:$roomVersion")
+    ksp("androidx.room3:room3-compiler:$roomVersion")
+
+    // Room 3 requires an explicit SQLiteDriver. sqlite provides the driver
+    // interfaces, sqlite-framework the Android implementation used here.
+    val sqliteVersion = "2.7.0"
+    implementation("androidx.sqlite:sqlite:$sqliteVersion")
+    implementation("androidx.sqlite:sqlite-framework:$sqliteVersion")
 
     // ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")

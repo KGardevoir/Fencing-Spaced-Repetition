@@ -3,7 +3,7 @@
 
 package com.fencing.spacedrepetition.data
 
-import androidx.room.TypeConverter
+import androidx.room3.TypeConverter
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 
 class Converters {

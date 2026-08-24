@@ -3,7 +3,7 @@
 
 package com.fencing.spacedrepetition.data.dao
 
-import androidx.room.*
+import androidx.room3.*
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardWithGroups
 import com.fencing.spacedrepetition.util.Time

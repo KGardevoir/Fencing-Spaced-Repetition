@@ -3,7 +3,7 @@
 
 package com.fencing.spacedrepetition.data.dao
 
-import androidx.room.*
+import androidx.room3.*
 import com.fencing.spacedrepetition.data.model.PracticeHistoryStats
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import kotlinx.coroutines.flow.Flow
