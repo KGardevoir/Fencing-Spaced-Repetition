@@ -29,6 +29,17 @@ sealed class ExportResult {
 }
 
 object CardImportExport {
+    // The export bodies were written against a BufferedWriter and are left
+    // that way: these three give Appendable the same three calls, so moving
+    // from a stream to a sink changed the four signatures and nothing else.
+    // append is the only real operation; a plain Appendable has no buffer, so
+    // flush has nothing to do.
+    private fun Appendable.write(text: String) { append(text) }
+
+    private fun Appendable.newLine() { append('\n') }
+
+    private fun Appendable.flush() {}
+
     private const val DELIMITER = "\t"
     private const val NEWLINE_PLACEHOLDER = "<br>"
     private const val GROUP_SEPARATOR = "|"
@@ -143,14 +154,13 @@ object CardImportExport {
         val notes: String
     )
 
-    fun parseCards(inputStream: InputStream): Pair<List<ParsedCard>, List<String>> {
+    fun parseCards(lines: List<String>): Pair<List<ParsedCard>, List<String>> {
         val cards = mutableListOf<ParsedCard>()
         val errors = mutableListOf<String>()
         val groupSettings = mutableMapOf<String, Map<String, String>>()
         val opponents = mutableListOf<ParsedOpponent>()
 
         try {
-            val lines = inputStream.bufferedReader(Charsets.UTF_8).readLines()
             lastParsedReviewHistory = parseReviewHistory(lines)
             if (lines.isEmpty()) {
                 return Pair(emptyList(), emptyList())
@@ -420,10 +430,10 @@ object CardImportExport {
      */
     fun exportCardsWithGroups(
         cardsWithGroups: List<CardWithGroupNames>,
-        outputStream: OutputStream
+        out: Appendable
     ): ExportResult {
         return try {
-            outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
+            out.let { writer ->
                 // Write format marker (V1 for backward compatibility)
                 writer.write(HEADER_MARKER_V1)
                 writer.newLine()
@@ -482,7 +492,7 @@ object CardImportExport {
      */
     fun exportCardsWithGroupStates(
         cardsWithStates: List<CardWithGroupStates>,
-        outputStream: OutputStream,
+        out: Appendable,
         groupSettings: List<Group> = emptyList(),
         reviewLogs: List<ReviewLog> = emptyList(),
         cardQuestions: Map<Long, String> = emptyMap(),
@@ -491,7 +501,7 @@ object CardImportExport {
     ): ExportResult {
         return try {
             var rowCount = 0
-            val writer = outputStream.bufferedWriter(Charsets.UTF_8)
+            val writer: Appendable = out
 
             // Write format marker (V3)
             writer.write(HEADER_MARKER_V3)
@@ -641,10 +651,10 @@ object CardImportExport {
     /**
      * Simple export for backward compatibility (question\tanswer only)
      */
-    fun exportCards(cards: List<Card>, outputStream: OutputStream): ExportResult {
+    fun exportCards(cards: List<Card>, out: Appendable): ExportResult {
         return exportCardsWithGroups(
             cards.map { CardWithGroupNames(it, emptyList()) },
-            outputStream
+            out
         )
     }
 
@@ -959,10 +969,10 @@ object CardImportExport {
     fun appendReviewHistory(
         reviewLogs: List<ReviewLog>,
         cardQuestions: Map<Long, String>,
-        outputStream: OutputStream,
+        out: Appendable,
         opponentNamesById: Map<Long, String> = emptyMap()
     ) {
-        outputStream.bufferedWriter(Charsets.UTF_8).let { writer ->
+        out.let { writer ->
             writer.write(REVIEW_HISTORY_START)
             writer.newLine()
             writer.write(REVIEW_HISTORY_HEADERS)
@@ -1167,12 +1177,11 @@ object CardImportExport {
      * Fields may be quoted with double quotes per RFC 4180.
      * Returns pair of (valid cards, error messages).
      */
-    fun parseCsvCards(inputStream: InputStream): Pair<List<ParsedCard>, List<String>> {
+    fun parseCsvCards(content: String): Pair<List<ParsedCard>, List<String>> {
         val cards = mutableListOf<ParsedCard>()
         val errors = mutableListOf<String>()
 
         try {
-            val content = inputStream.bufferedReader(Charsets.UTF_8).readText()
             val lines = parseCsvLines(content)
 
             if (lines.isEmpty()) {
@@ -1248,14 +1257,14 @@ object CardImportExport {
      */
     fun exportCardsToCsv(
         cardsWithGroups: List<CardWithGroupNames>,
-        outputStream: OutputStream
+        out: Appendable
     ): ExportResult {
         return try {
             val anyCardHasImages = cardsWithGroups.any { (card, _) ->
                 card.imagePaths.isNotEmpty()
             }
 
-            outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
+            out.let { writer ->
                 // Write header row
                 val headerParts = mutableListOf(CSV_HEADER_CONCEPT, CSV_HEADER_DESCRIPTION)
                 if (anyCardHasImages) {
@@ -1419,4 +1428,56 @@ object CardImportExport {
 
         return rows
     }
+}
+
+// ==========================================================================
+// Stream adapters.
+//
+// Everything above operates on a List<String>, a String or an Appendable, and
+// so has no reason to be tied to a JVM. These six give it back the
+// InputStream/OutputStream surface every existing caller uses, so the split
+// costs nothing at the call sites. They are the part that stays behind when
+// the core moves to common code -- a browser has no java.io.
+// ==========================================================================
+
+/** Reads the whole stream as UTF-8 lines and parses it. */
+fun CardImportExport.parseCards(inputStream: InputStream): Pair<List<ParsedCard>, List<String>> =
+    parseCards(inputStream.bufferedReader(Charsets.UTF_8).readLines())
+
+/** Reads the whole stream as UTF-8 text and parses it as CSV. */
+fun CardImportExport.parseCsvCards(inputStream: InputStream): Pair<List<ParsedCard>, List<String>> =
+    parseCsvCards(inputStream.bufferedReader(Charsets.UTF_8).readText())
+
+fun CardImportExport.exportCardsWithGroups(
+    cardsWithGroups: List<CardWithGroupNames>,
+    outputStream: OutputStream
+): ExportResult = outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
+    exportCardsWithGroups(cardsWithGroups, writer)
+}
+
+fun CardImportExport.exportCardsWithGroupStates(
+    cardsWithStates: List<CardWithGroupStates>,
+    outputStream: OutputStream,
+    groupSettings: List<Group> = emptyList(),
+    reviewLogs: List<ReviewLog> = emptyList(),
+    cardQuestions: Map<Long, String> = emptyMap(),
+    opponents: List<Opponent> = emptyList(),
+    opponentNamesById: Map<Long, String> = emptyMap()
+): ExportResult = outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
+    exportCardsWithGroupStates(
+        cardsWithStates, writer, groupSettings, reviewLogs,
+        cardQuestions, opponents, opponentNamesById
+    )
+}
+
+fun CardImportExport.exportCards(cards: List<Card>, outputStream: OutputStream): ExportResult =
+    outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
+        exportCards(cards, writer)
+    }
+
+fun CardImportExport.exportCardsToCsv(
+    cardsWithGroups: List<CardWithGroupNames>,
+    outputStream: OutputStream
+): ExportResult = outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
+    exportCardsToCsv(cardsWithGroups, writer)
 }
