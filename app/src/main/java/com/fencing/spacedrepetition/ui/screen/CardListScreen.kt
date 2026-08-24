@@ -42,6 +42,7 @@ import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.ImportExportState
 import com.fencing.spacedrepetition.ui.viewmodel.SortDirection
 import com.fencing.spacedrepetition.ui.components.MarkdownText
+import com.fencing.spacedrepetition.util.Time
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -1142,7 +1143,7 @@ fun CardListItem(
                         } else {
                             val formatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
                             dueDateText = formatter.format(Date(card.nextReview))
-                            val now = System.currentTimeMillis()
+                            val now = Time.now()
                             val diff = card.nextReview - now
                             val daysDiff = (diff / (1000 * 60 * 60 * 24)).toInt()
                             dueDateColor = when {

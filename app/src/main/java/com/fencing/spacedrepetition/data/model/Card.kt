@@ -5,6 +5,7 @@ package com.fencing.spacedrepetition.data.model
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import com.fencing.spacedrepetition.util.Time
 
 @Entity(tableName = "cards")
 data class Card(
@@ -38,8 +39,8 @@ data class Card(
     // Common fields
     val lastReview: Long = 0L,
     val nextReview: Long = 0L,
-    val created: Long = System.currentTimeMillis(),
-    val modified: Long = System.currentTimeMillis(),
+    val created: Long = Time.now(),
+    val modified: Long = Time.now(),
     val isDisabled: Boolean = false
 )
 

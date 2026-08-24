@@ -21,7 +21,7 @@ fun saveImageToInternalStorage(context: Context, uri: Uri, subDir: String = "car
             imagesDir.mkdirs()
         }
 
-        val timestamp = System.currentTimeMillis()
+        val timestamp = Time.now()
         val extension = context.contentResolver.getType(uri)?.split("/")?.lastOrNull() ?: "jpg"
         val fileName = "${subDir}_${timestamp}.${extension}"
         val outputFile = File(imagesDir, fileName)

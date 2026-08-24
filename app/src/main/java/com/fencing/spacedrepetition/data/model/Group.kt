@@ -10,6 +10,7 @@ import androidx.room.Index
 import androidx.room.Junction
 import androidx.room.PrimaryKey
 import androidx.room.Relation
+import com.fencing.spacedrepetition.util.Time
 
 @Entity(tableName = "groups")
 data class Group(
@@ -18,7 +19,7 @@ data class Group(
     val name: String,
     val description: String = "",
     val independentLearning: Boolean = false,
-    val created: Long = System.currentTimeMillis(),
+    val created: Long = Time.now(),
     // Per-group settings overrides (null = use global default)
     val cardsPerSession: Int? = null,
     val autoShowAnswer: Boolean? = null,
@@ -112,7 +113,7 @@ data class CardGroupLearningState(
     // Common scheduling fields
     val lastReview: Long = 0L,
     val nextReview: Long = 0L,
-    val modified: Long = System.currentTimeMillis()
+    val modified: Long = Time.now()
 )
 
 data class CardWithGroups(

@@ -12,6 +12,7 @@ import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.model.SessionCard
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
+import com.fencing.spacedrepetition.util.Time
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -57,7 +58,7 @@ class PracticeViewModel(
 
     fun startNewSession(numberOfCards: Int = 3, groupId: Long? = null) {
         selectedGroupId = groupId
-        sessionStartTime = System.currentTimeMillis()
+        sessionStartTime = Time.now()
         viewModelScope.launch {
             _uiState.value = PracticeUiState.Loading
 
@@ -181,7 +182,7 @@ class PracticeViewModel(
                 val updatedCard = oldCard.copy(
                     question = question,
                     answer = answer,
-                    modified = System.currentTimeMillis()
+                    modified = Time.now()
                 )
                 repository.updateCard(updatedCard)
                 cards[cardIndex] = cards[cardIndex].copy(card = updatedCard)
@@ -197,7 +198,7 @@ class PracticeViewModel(
                 val oldCard = cards[cardIndex].card
                 val updatedCard = oldCard.copy(
                     imagePaths = imagePaths,
-                    modified = System.currentTimeMillis()
+                    modified = Time.now()
                 )
                 repository.updateCard(updatedCard)
                 cards[cardIndex] = cards[cardIndex].copy(card = updatedCard)
@@ -215,7 +216,7 @@ class PracticeViewModel(
                     question = question,
                     answer = answer,
                     imagePaths = imagePaths,
-                    modified = System.currentTimeMillis()
+                    modified = Time.now()
                 )
                 repository.updateCard(updatedCard)
                 cards[cardIndex] = cards[cardIndex].copy(card = updatedCard)

@@ -3,6 +3,7 @@
 
 package com.fencing.spacedrepetition.algorithm
 
+import com.fencing.spacedrepetition.util.Time
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.pow
@@ -111,7 +112,7 @@ class FSRSAlgorithm(
     fun schedule(
         card: FSRSCard,
         rating: Rating,
-        now: Long = System.currentTimeMillis(),
+        now: Long = Time.now(),
         stabilityMultiplier: Double = 1.0
     ): SchedulingInfo {
         val elapsedDays = if (card.lastReview == 0L) {
@@ -140,7 +141,7 @@ class FSRSAlgorithm(
     /**
      * Get all possible scheduling outcomes for a card.
      */
-    fun getSchedulingCards(card: FSRSCard, now: Long = System.currentTimeMillis()): Map<Rating, FSRSCard> {
+    fun getSchedulingCards(card: FSRSCard, now: Long = Time.now()): Map<Rating, FSRSCard> {
         return Rating.values().associateWith { rating ->
             schedule(card, rating, now).card
         }

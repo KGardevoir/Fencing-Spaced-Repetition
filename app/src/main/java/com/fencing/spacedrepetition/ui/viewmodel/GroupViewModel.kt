@@ -18,6 +18,7 @@ import com.fencing.spacedrepetition.util.CardImportExport
 import com.fencing.spacedrepetition.util.CardWithGroupNames
 import com.fencing.spacedrepetition.util.ExportResult
 import com.fencing.spacedrepetition.util.ParsedCard
+import com.fencing.spacedrepetition.util.Time
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -388,7 +389,7 @@ class GroupViewModel(
                             val updated = existing.copy(
                                 answer = answer,
                                 imagePaths = if (imagePaths.isNotEmpty()) imagePaths else existing.imagePaths,
-                                modified = System.currentTimeMillis()
+                                modified = Time.now()
                             )
                             cardRepository.updateCard(updated)
                             groupRepository.addCardToGroup(existing.id, groupId)

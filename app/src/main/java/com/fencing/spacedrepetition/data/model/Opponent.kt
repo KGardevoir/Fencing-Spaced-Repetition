@@ -6,6 +6,7 @@ package com.fencing.spacedrepetition.data.model
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.fencing.spacedrepetition.util.Time
 
 /**
  * A training partner / opponent whose skill level modulates the stability gain
@@ -27,6 +28,6 @@ data class Opponent(
 
     val notes: String = "",
 
-    val created: Long = System.currentTimeMillis(),
-    val modified: Long = System.currentTimeMillis()
+    val created: Long = Time.now(),
+    val modified: Long = Time.now()
 )

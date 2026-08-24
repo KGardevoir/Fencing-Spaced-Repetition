@@ -3,6 +3,7 @@
 
 package com.fencing.spacedrepetition.algorithm
 
+import com.fencing.spacedrepetition.util.Time
 import kotlin.math.max
 
 /**
@@ -54,7 +55,7 @@ class SM2Algorithm(
     /**
      * Schedule a card review based on quality rating (0-5)
      */
-    fun schedule(card: SM2Card, quality: Quality, now: Long = System.currentTimeMillis()): SM2SchedulingInfo {
+    fun schedule(card: SM2Card, quality: Quality, now: Long = Time.now()): SM2SchedulingInfo {
         return schedule(card, quality.ordinal, now)
     }
 
@@ -65,7 +66,7 @@ class SM2Algorithm(
      * @param now Current timestamp
      * @return Updated card and next review date
      */
-    fun schedule(card: SM2Card, quality: Int, now: Long = System.currentTimeMillis()): SM2SchedulingInfo {
+    fun schedule(card: SM2Card, quality: Int, now: Long = Time.now()): SM2SchedulingInfo {
         require(quality in 0..5) { "Quality must be between 0 and 5" }
 
         // Calculate new ease factor
@@ -136,7 +137,7 @@ class SM2Algorithm(
     /**
      * Check if a card is due for review
      */
-    fun isDue(card: SM2Card, now: Long = System.currentTimeMillis()): Boolean {
+    fun isDue(card: SM2Card, now: Long = Time.now()): Boolean {
         if (card.lastReview == 0L) return true
         val daysSinceReview = (now - card.lastReview) / (1000 * 60 * 60 * 24)
         return daysSinceReview >= card.interval
@@ -145,7 +146,7 @@ class SM2Algorithm(
     /**
      * Get all possible scheduling outcomes for a card
      */
-    fun getSchedulingCards(card: SM2Card, now: Long = System.currentTimeMillis()): Map<Quality, SM2Card> {
+    fun getSchedulingCards(card: SM2Card, now: Long = Time.now()): Map<Quality, SM2Card> {
         return Quality.values().associateWith { quality ->
             schedule(card, quality, now).card
         }
@@ -154,7 +155,7 @@ class SM2Algorithm(
     /**
      * Get scheduling info for simple 4-grade rating system
      */
-    fun getSimpleSchedulingCards(card: SM2Card, now: Long = System.currentTimeMillis()): Map<SimpleRating, SM2Card> {
+    fun getSimpleSchedulingCards(card: SM2Card, now: Long = Time.now()): Map<SimpleRating, SM2Card> {
         return SimpleRating.values().associateWith { rating ->
             schedule(card, convertRating(rating), now).card
         }

@@ -5,13 +5,14 @@ package com.fencing.spacedrepetition.data.model
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import com.fencing.spacedrepetition.util.Time
 
 @Entity(tableName = "practice_sessions")
 data class PracticeSession(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
 
-    val startTime: Long = System.currentTimeMillis(),
+    val startTime: Long = Time.now(),
     val endTime: Long? = null,
     val completed: Boolean = false,
 

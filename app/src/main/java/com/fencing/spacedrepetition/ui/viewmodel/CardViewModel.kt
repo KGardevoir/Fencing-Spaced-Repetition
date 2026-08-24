@@ -23,6 +23,7 @@ import com.fencing.spacedrepetition.util.CardImportExport
 import com.fencing.spacedrepetition.util.CardWithGroupNames
 import com.fencing.spacedrepetition.util.ExportResult
 import com.fencing.spacedrepetition.util.ParsedCard
+import com.fencing.spacedrepetition.util.Time
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -185,7 +186,7 @@ class CardViewModel(
     fun toggleCardDisabled(cardId: Long) {
         viewModelScope.launch {
             val card = repository.getCardById(cardId) ?: return@launch
-            repository.updateCard(card.copy(isDisabled = !card.isDisabled, modified = System.currentTimeMillis()))
+            repository.updateCard(card.copy(isDisabled = !card.isDisabled, modified = Time.now()))
         }
     }
 
@@ -194,7 +195,7 @@ class CardViewModel(
             val idsToUpdate = _selectedCardIds.value.toList()
             idsToUpdate.forEach { cardId ->
                 val card = repository.getCardById(cardId) ?: return@forEach
-                repository.updateCard(card.copy(isDisabled = disabled, modified = System.currentTimeMillis()))
+                repository.updateCard(card.copy(isDisabled = disabled, modified = Time.now()))
             }
             _selectedCardIds.value = emptySet()
             _isSelectionMode.value = false
@@ -252,7 +253,7 @@ class CardViewModel(
     fun updateCard(card: Card, groupIds: List<Long>, onSuccess: () -> Unit) {
         viewModelScope.launch {
             try {
-                repository.updateCard(card.copy(modified = System.currentTimeMillis()))
+                repository.updateCard(card.copy(modified = Time.now()))
                 repository.updateCardGroups(card.id, groupIds)
                 onSuccess()
             } catch (e: Exception) {
@@ -779,7 +780,7 @@ class CardViewModel(
                             val updated = existing.copy(
                                 answer = parsed.answer,
                                 imagePaths = if (decodedImagePaths.isNotEmpty()) decodedImagePaths else existing.imagePaths,
-                                modified = System.currentTimeMillis()
+                                modified = Time.now()
                             )
                             repository.updateCard(updated)
                             groupRepository.addCardToGroup(existing.id, groupId)

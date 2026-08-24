@@ -15,6 +15,7 @@ import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
 import com.fencing.spacedrepetition.util.CardImportExport
 import com.fencing.spacedrepetition.util.ExportResult
+import com.fencing.spacedrepetition.util.Time
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -96,7 +97,7 @@ class BackupWorker(
 
         return when (exportResult) {
             is ExportResult.Success -> {
-                preferences.setLastBackupTime(System.currentTimeMillis())
+                preferences.setLastBackupTime(Time.now())
                 pruneOldBackups(backupDir, preferences.maxBackupsKept.first())
                 Result.success()
             }

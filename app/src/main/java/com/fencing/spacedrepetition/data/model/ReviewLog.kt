@@ -5,6 +5,7 @@ package com.fencing.spacedrepetition.data.model
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import com.fencing.spacedrepetition.util.Time
 
 @Entity(tableName = "review_logs")
 data class ReviewLog(
@@ -13,7 +14,7 @@ data class ReviewLog(
 
     val cardId: Long,
     val sessionId: Long?,
-    val reviewTime: Long = System.currentTimeMillis(),
+    val reviewTime: Long = Time.now(),
 
     val grade: Int, // 1-4 (AGAIN, HARD, GOOD, EASY)
     val algorithm: String, // "FSRS" or "SM2"

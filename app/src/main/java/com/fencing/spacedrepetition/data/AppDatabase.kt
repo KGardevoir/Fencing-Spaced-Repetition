@@ -22,6 +22,7 @@ import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
+import com.fencing.spacedrepetition.util.Time
 
 @Database(
     entities = [Card::class, PracticeSession::class, ReviewLog::class, Group::class, CardGroupCrossRef::class, CardGroupLearningState::class, Opponent::class],
@@ -67,7 +68,7 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_card_group_cross_ref_groupId` ON `card_group_cross_ref`(`groupId`)")
 
                 // Migrate existing categories to groups
-                val currentTime = System.currentTimeMillis()
+                val currentTime = Time.now()
                 db.execSQL("""
                     INSERT INTO `groups` (`name`, `created`)
                     SELECT DISTINCT `category`, $currentTime

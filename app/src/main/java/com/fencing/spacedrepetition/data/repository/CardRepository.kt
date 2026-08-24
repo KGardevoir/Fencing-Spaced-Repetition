@@ -12,7 +12,7 @@ import com.fencing.spacedrepetition.data.dao.PracticeSessionDao
 import com.fencing.spacedrepetition.data.dao.ReviewLogDao
 import com.fencing.spacedrepetition.data.model.*
 import com.fencing.spacedrepetition.data.preferences.ThemePreferences
-import java.util.Calendar
+import com.fencing.spacedrepetition.util.Time
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
@@ -93,7 +93,7 @@ class CardRepository(
 
     suspend fun resetCardState(cardId: Long, resetGroupStates: Boolean = false) {
         val card = cardDao.getCardById(cardId) ?: return
-        val now = System.currentTimeMillis()
+        val now = Time.now()
         val resetCard = card.copy(
             // Reset FSRS state
             fsrsStability = 0.0,
@@ -137,7 +137,7 @@ class CardRepository(
                 sm2Repetitions = 0,
                 lastReview = 0L,
                 nextReview = 0L,
-                modified = System.currentTimeMillis()
+                modified = Time.now()
             )
             groupDao.updateLearningState(resetState)
         }
@@ -185,7 +185,7 @@ class CardRepository(
         groupId: Long? = null,
         opponentId: Long? = null
     ) {
-        val now = System.currentTimeMillis()
+        val now = Time.now()
         val elapsedDays = if (cardBefore.lastReview == 0L) 0 else
             ((now - cardBefore.lastReview) / (1000 * 60 * 60 * 24)).toInt()
         val groupName = groupId?.let { groupDao.getGroupById(it)?.name }
@@ -282,7 +282,7 @@ class CardRepository(
                 // Update existing card's answer (preserve learning state)
                 cardDao.updateCard(existingCard.copy(
                     answer = answer,
-                    modified = System.currentTimeMillis()
+                    modified = Time.now()
                 ))
                 cardId = existingCard.id
             } else {
@@ -317,7 +317,7 @@ class CardRepository(
                 // Update existing card's answer only (preserve learning state)
                 cardDao.updateCard(existingCard.copy(
                     answer = answer,
-                    modified = System.currentTimeMillis()
+                    modified = Time.now()
                 ))
             } else {
                 // Create new card
@@ -348,7 +348,7 @@ class CardRepository(
                 val updatedCard = card.copy(
                     id = existingCard.id,
                     created = existingCard.created, // Preserve original creation time
-                    modified = System.currentTimeMillis()
+                    modified = Time.now()
                 )
                 cardDao.updateCard(updatedCard)
                 cardId = existingCard.id
@@ -394,7 +394,7 @@ class CardRepository(
                 val updatedCard = card.copy(
                     id = existingCard.id,
                     created = existingCard.created,
-                    modified = System.currentTimeMillis()
+                    modified = Time.now()
                 )
                 cardDao.updateCard(updatedCard)
                 cardId = existingCard.id
@@ -492,7 +492,7 @@ class CardRepository(
     suspend fun completeSession(sessionId: Long, grades: List<Grade>) {
         val session = sessionDao.getSessionById(sessionId) ?: return
         val updatedSession = session.copy(
-            endTime = System.currentTimeMillis(),
+            endTime = Time.now(),
             completed = true,
             grades = grades.joinToString(",") { it.value.toString() }
         )
@@ -526,7 +526,7 @@ class CardRepository(
         groupId: Long? = null,
         opponentId: Long? = null
     ): Card {
-        val now = System.currentTimeMillis()
+        val now = Time.now()
         val elapsedDays = if (card.lastReview == 0L) 0 else
             ((now - card.lastReview) / (1000 * 60 * 60 * 24)).toInt()
 
@@ -594,7 +594,7 @@ class CardRepository(
         }
 
         // Use group-specific learning state
-        val now = System.currentTimeMillis()
+        val now = Time.now()
         var learningState = groupDao.getLearningState(card.id, groupId)
 
         // Initialize learning state if it doesn't exist
@@ -670,7 +670,7 @@ class CardRepository(
 
     /** Compute the result of grading [card] without persisting anything to the database. */
     suspend fun computeReview(card: Card, grade: Grade, groupId: Long? = null, opponentId: Long? = null): Card {
-        val now = System.currentTimeMillis()
+        val now = Time.now()
         val elapsedDays = if (card.lastReview == 0L) 0 else
             ((now - card.lastReview) / (1000 * 60 * 60 * 24)).toInt()
         val stabilityMultiplier = resolveStabilityMultiplier(opponentId)
@@ -686,7 +686,7 @@ class CardRepository(
         if (!group.independentLearning) {
             return computeReview(card, grade, groupId, opponentId)
         }
-        val now = System.currentTimeMillis()
+        val now = Time.now()
         val learningState = groupDao.getLearningState(card.id, groupId)
             ?: CardGroupLearningState(card.id, groupId)
         val elapsedDays = if (learningState.lastReview == 0L) 0 else
@@ -720,7 +720,7 @@ class CardRepository(
         cardsWithGrades: List<Triple<Card, Grade, Long?>>,
         sessionId: Long? = null
     ) {
-        val now = System.currentTimeMillis()
+        val now = Time.now()
         val reviewLogs = mutableListOf<ReviewLog>()
         val updatedCards = mutableListOf<Card>()
 
@@ -926,20 +926,9 @@ class CardRepository(
         val practiceDays = resolvePracticeDays(groupId)
         if (practiceDays.size >= 7 || practiceDays.isEmpty() || scheduledDays <= 1) return scheduledDays
 
-        val calendar = Calendar.getInstance()
-        calendar.add(Calendar.DAY_OF_YEAR, scheduledDays)
-        // Convert Calendar day-of-week (1=Sunday..7=Saturday) to ISO-8601 (1=Monday..7=Sunday)
-        val calendarDow = calendar.get(Calendar.DAY_OF_WEEK)
-        val targetDow = calendarDowToIso(calendarDow)
+        val targetDow = isoDayOfWeekAfter(Time.now(), scheduledDays, Time.utcOffsetSeconds())
 
         return scheduledDays + forwardDaysToNearestPracticeDay(targetDow, practiceDays)
-    }
-
-    /**
-     * Convert Calendar.DAY_OF_WEEK (1=Sunday..7=Saturday) to ISO-8601 (1=Monday..7=Sunday).
-     */
-    private fun calendarDowToIso(calendarDow: Int): Int {
-        return if (calendarDow == Calendar.SUNDAY) 7 else calendarDow - 1
     }
 
     private fun serializeCardState(card: Card): String {
@@ -1078,6 +1067,34 @@ class CardRepository(
          * days, returns how many days forward to advance to reach the nearest practice day.
          * Returns 0 if targetDow is already a practice day. Never rounds backward.
          */
+        /**
+         * ISO-8601 day of week (1=Monday..7=Sunday) of the local calendar date
+         * [days] days after the instant [nowMillis], for a zone currently
+         * [utcOffsetSeconds] from UTC.
+         *
+         * Replaces a `java.util.Calendar` computation. Calendar does not exist
+         * on Kotlin/Wasm, and the obvious multiplatform substitute --
+         * kotlinx-datetime -- pulls in `java.time`, which on this app's
+         * minSdk of 24 would require core library desugaring to avoid crashing
+         * on API 24/25. Plain arithmetic on the day number avoids both
+         * problems and needs no dependency at all.
+         *
+         * Shifting the instant by the offset and then dividing gives the local
+         * day number; adding whole days to that is calendar-day arithmetic, so
+         * a span crossing a daylight-saving boundary still lands on the
+         * intended weekday, exactly as `Calendar.add(DAY_OF_YEAR, n)` did.
+         *
+         * The +3 offset is the epoch's weekday: 1970-01-01 was a Thursday,
+         * ISO day 4.
+         */
+        internal fun isoDayOfWeekAfter(nowMillis: Long, days: Int, utcOffsetSeconds: Int): Int {
+            val localMillis = nowMillis + utcOffsetSeconds * 1000L
+            val localDay = localMillis.floorDiv(MILLIS_PER_DAY) + days
+            return ((localDay + 3).mod(7L) + 1).toInt()
+        }
+
+        private const val MILLIS_PER_DAY = 86_400_000L
+
         internal fun forwardDaysToNearestPracticeDay(targetDow: Int, practiceDays: Set<Int>): Int {
             if (practiceDays.contains(targetDow)) return 0
             var best = 7

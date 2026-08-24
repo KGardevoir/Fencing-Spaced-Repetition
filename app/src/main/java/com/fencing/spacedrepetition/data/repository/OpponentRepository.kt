@@ -5,6 +5,7 @@ package com.fencing.spacedrepetition.data.repository
 
 import com.fencing.spacedrepetition.data.dao.OpponentDao
 import com.fencing.spacedrepetition.data.model.Opponent
+import com.fencing.spacedrepetition.util.Time
 import kotlinx.coroutines.flow.Flow
 
 class OpponentRepository(private val opponentDao: OpponentDao) {
@@ -28,7 +29,7 @@ class OpponentRepository(private val opponentDao: OpponentDao) {
     suspend fun updateOpponent(opponent: Opponent) {
         val trimmed = opponent.copy(
             name = opponent.name.trim(),
-            modified = System.currentTimeMillis()
+            modified = Time.now()
         )
         opponentDao.updateOpponent(trimmed)
     }

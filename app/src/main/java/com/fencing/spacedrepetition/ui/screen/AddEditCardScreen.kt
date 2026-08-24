@@ -32,6 +32,7 @@ import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.Grade
 import androidx.activity.compose.BackHandler
+import com.fencing.spacedrepetition.util.Time
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.LazyColumn
@@ -384,7 +385,7 @@ fun AddEditCardScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = when {
                                     fsrsState == "NEW" && nextReview == 0L -> MaterialTheme.colorScheme.onSurfaceVariant
-                                    nextReview <= System.currentTimeMillis() -> MaterialTheme.colorScheme.error
+                                    nextReview <= Time.now() -> MaterialTheme.colorScheme.error
                                     else -> MaterialTheme.colorScheme.tertiary
                                 }
                             )
@@ -413,7 +414,7 @@ fun AddEditCardScreen(
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = when {
                                         groupFsrsState == "NEW" && groupReview == 0L -> MaterialTheme.colorScheme.onSurfaceVariant
-                                        groupReview <= System.currentTimeMillis() -> MaterialTheme.colorScheme.error
+                                        groupReview <= Time.now() -> MaterialTheme.colorScheme.error
                                         else -> MaterialTheme.colorScheme.tertiary
                                     }
                                 )
@@ -693,7 +694,7 @@ fun AddEditCardScreen(
                         // Card status summary
                         val statusText = when {
                             fsrsState == "NEW" && nextReview == 0L -> "New card"
-                            nextReview <= System.currentTimeMillis() -> "Due for review"
+                            nextReview <= Time.now() -> "Due for review"
                             else -> {
                                 val formatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
                                 "Next review: ${formatter.format(Date(nextReview))}"
@@ -1360,7 +1361,7 @@ fun IndependentLearningStateCard(
                 "No state yet"
             } else if (groupState.fsrsState == "NEW" && groupState.nextReview == 0L) {
                 "New card"
-            } else if (groupState.nextReview <= System.currentTimeMillis()) {
+            } else if (groupState.nextReview <= Time.now()) {
                 "Due for review"
             } else {
                 val formatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
@@ -1624,7 +1625,7 @@ data class IndependentLearningEdit(
 /** Formats the next-review status for display. */
 private fun formatReviewStatus(fsrsState: String, nextReview: Long): String = when {
     fsrsState == "NEW" && nextReview == 0L -> "New card"
-    nextReview <= System.currentTimeMillis() -> "Due now"
+    nextReview <= Time.now() -> "Due now"
     else -> {
         val formatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
         formatter.format(Date(nextReview))
@@ -1646,7 +1647,7 @@ private fun saveImageToInternalStorage(context: Context, uri: Uri): String? {
         }
 
         // Generate unique filename
-        val timestamp = System.currentTimeMillis()
+        val timestamp = Time.now()
         val extension = context.contentResolver.getType(uri)?.split("/")?.lastOrNull() ?: "jpg"
         val fileName = "card_image_${timestamp}.${extension}"
         val outputFile = File(imagesDir, fileName)

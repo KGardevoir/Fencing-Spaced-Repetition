@@ -8,6 +8,84 @@ import org.junit.Test
 
 class CardRepositoryTest {
 
+    // ==================== isoDayOfWeekAfter TESTS ====================
+
+    // 2026-08-23T12:00:00Z is a Sunday (ISO day 7).
+    private val sundayNoonUtc = 1787486400000L
+
+    @Test
+    fun `isoDayOfWeekAfter - zero days returns today`() {
+        assertEquals(7, CardRepository.isoDayOfWeekAfter(sundayNoonUtc, 0, 0))
+    }
+
+    @Test
+    fun `isoDayOfWeekAfter - walks forward through the week`() {
+        listOf(1, 2, 3, 4, 5, 6).forEachIndexed { i, dow ->
+            assertEquals(dow, CardRepository.isoDayOfWeekAfter(sundayNoonUtc, i + 1, 0))
+        }
+    }
+
+    @Test
+    fun `isoDayOfWeekAfter - wraps around a full week`() {
+        assertEquals(7, CardRepository.isoDayOfWeekAfter(sundayNoonUtc, 7, 0))
+        assertEquals(1, CardRepository.isoDayOfWeekAfter(sundayNoonUtc, 8, 0))
+    }
+
+    @Test
+    fun `isoDayOfWeekAfter - long intervals stay correct`() {
+        // 364 days is exactly 52 weeks, so the weekday must be unchanged.
+        assertEquals(7, CardRepository.isoDayOfWeekAfter(sundayNoonUtc, 364, 0))
+        assertEquals(1, CardRepository.isoDayOfWeekAfter(sundayNoonUtc, 365, 0))
+    }
+
+    @Test
+    fun `isoDayOfWeekAfter - negative offset can pull back to the previous day`() {
+        // 2026-08-24T01:00:00Z is Monday at UTC but still Sunday at UTC-05:00.
+        val mondayEarlyUtc = 1787533200000L
+        assertEquals(1, CardRepository.isoDayOfWeekAfter(mondayEarlyUtc, 0, 0))
+        assertEquals(7, CardRepository.isoDayOfWeekAfter(mondayEarlyUtc, 0, -5 * 3600))
+    }
+
+    @Test
+    fun `isoDayOfWeekAfter - positive offset can push on to the next day`() {
+        // 2026-08-23T23:00:00Z is Sunday at UTC but already Monday at UTC+09:00.
+        val sundayLateUtc = 1787526000000L
+        assertEquals(7, CardRepository.isoDayOfWeekAfter(sundayLateUtc, 0, 0))
+        assertEquals(1, CardRepository.isoDayOfWeekAfter(sundayLateUtc, 0, 9 * 3600))
+    }
+
+    @Test
+    fun `isoDayOfWeekAfter - handles instants before the epoch`() {
+        // 1969-12-31T12:00:00Z was a Wednesday (ISO 3); the epoch itself a Thursday.
+        assertEquals(3, CardRepository.isoDayOfWeekAfter(-43200000L, 0, 0))
+        assertEquals(4, CardRepository.isoDayOfWeekAfter(0L, 0, 0))
+    }
+
+    @Test
+    fun `isoDayOfWeekAfter - agrees with java util Calendar across a year of offsets`() {
+        // Differential test against the implementation this replaced, so any
+        // divergence in the day-number arithmetic shows up here.
+        val offsets = listOf(-11, -8, -5, 0, 1, 5, 9, 13).map { it * 3600 }
+        for (offsetSeconds in offsets) {
+            val zone = java.util.TimeZone.getTimeZone(
+                java.time.ZoneOffset.ofTotalSeconds(offsetSeconds)
+            )
+            for (days in 0..370) {
+                val calendar = java.util.Calendar.getInstance(zone)
+                calendar.timeInMillis = sundayNoonUtc
+                calendar.add(java.util.Calendar.DAY_OF_YEAR, days)
+                val calendarDow = calendar.get(java.util.Calendar.DAY_OF_WEEK)
+                val expected = if (calendarDow == java.util.Calendar.SUNDAY) 7 else calendarDow - 1
+
+                assertEquals(
+                    "offset=$offsetSeconds days=$days",
+                    expected,
+                    CardRepository.isoDayOfWeekAfter(sundayNoonUtc, days, offsetSeconds)
+                )
+            }
+        }
+    }
+
     // ==================== forwardDaysToNearestPracticeDay TESTS ====================
 
     @Test

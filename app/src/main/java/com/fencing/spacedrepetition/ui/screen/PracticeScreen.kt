@@ -30,6 +30,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import com.fencing.spacedrepetition.util.Time
 import kotlinx.coroutines.launch
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.SessionCard
@@ -725,7 +726,7 @@ private fun saveImageToInternalStorage(context: Context, uri: Uri): String? {
         }
 
         // Generate unique filename
-        val timestamp = System.currentTimeMillis()
+        val timestamp = Time.now()
         val extension = context.contentResolver.getType(uri)?.split("/")?.lastOrNull() ?: "jpg"
         val fileName = "card_image_${timestamp}.${extension}"
         val outputFile = File(imagesDir, fileName)

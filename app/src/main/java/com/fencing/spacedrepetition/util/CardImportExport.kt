@@ -4,6 +4,8 @@
 package com.fencing.spacedrepetition.util
 
 import android.content.Context
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.Group
@@ -699,7 +701,7 @@ object CardImportExport {
      * Note: This version cannot decode base64 images
      */
     fun parsedCardToCard(parsed: ParsedCard): Card {
-        val now = System.currentTimeMillis()
+        val now = Time.now()
 
         return if (parsed.hasFullState) {
             Card(
@@ -738,7 +740,7 @@ object CardImportExport {
      * Converts a ParsedCard to a Card entity with base64 image decoding
      */
     fun parsedCardToCard(context: Context, parsed: ParsedCard): Card {
-        val now = System.currentTimeMillis()
+        val now = Time.now()
 
         // Decode base64 images to file paths
         val decodedImagePaths = parsed.imageData.mapNotNull { base64Data ->
@@ -899,8 +901,24 @@ object CardImportExport {
     }
 
     /**
+     * Base64 codec used for the V3 export format's inline images.
+     *
+     * [Base64.encode] is byte-for-byte identical to `java.util.Base64`'s basic
+     * encoder, so files written before and after this change interoperate.
+     *
+     * Decoding needs [Base64.PaddingOption.PRESENT_OPTIONAL] to stay
+     * compatible: `java.util.Base64`'s decoder accepts input whose trailing
+     * '=' padding has been stripped, while the Kotlin default rejects it. Our
+     * own exports are always padded, but a hand-edited or third-party file
+     * need not be, and those used to import fine.
+     */
+    @OptIn(ExperimentalEncodingApi::class)
+    private val BASE64_LENIENT = Base64.withPadding(Base64.PaddingOption.PRESENT_OPTIONAL)
+
+    /**
      * Encodes image file to base64 string
      */
+    @OptIn(ExperimentalEncodingApi::class)
     fun encodeImageToBase64(imagePath: String): String? {
         return try {
             val file = File(imagePath)
@@ -908,7 +926,7 @@ object CardImportExport {
                 return null
             }
             val bytes = file.readBytes()
-            java.util.Base64.getEncoder().encodeToString(bytes)
+            Base64.encode(bytes)
         } catch (e: Exception) {
             e.printStackTrace()
             null
@@ -919,9 +937,10 @@ object CardImportExport {
      * Decodes base64 string and saves to internal storage
      * Returns the saved file path or null if failed
      */
+    @OptIn(ExperimentalEncodingApi::class)
     fun decodeImageFromBase64(context: Context, base64Data: String, subDir: String = "card_images"): String? {
         return try {
-            val bytes = java.util.Base64.getDecoder().decode(base64Data)
+            val bytes = BASE64_LENIENT.decode(base64Data)
 
             // Create images directory if it doesn't exist
             val imagesDir = File(context.filesDir, subDir)
@@ -930,7 +949,7 @@ object CardImportExport {
             }
 
             // Generate unique filename
-            val timestamp = System.currentTimeMillis()
+            val timestamp = Time.now()
             val fileName = "${subDir}_${timestamp}.jpg"
             val outputFile = File(imagesDir, fileName)
 

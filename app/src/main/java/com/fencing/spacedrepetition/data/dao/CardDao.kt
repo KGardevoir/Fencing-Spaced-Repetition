@@ -6,6 +6,7 @@ package com.fencing.spacedrepetition.data.dao
 import androidx.room.*
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardWithGroups
+import com.fencing.spacedrepetition.util.Time
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -23,13 +24,13 @@ interface CardDao {
     fun getCardByIdFlow(cardId: Long): Flow<Card?>
 
     @Query("SELECT * FROM cards WHERE nextReview <= :now AND isDisabled = 0 ORDER BY nextReview ASC LIMIT :limit")
-    suspend fun getDueCards(now: Long = System.currentTimeMillis(), limit: Int = 100): List<Card>
+    suspend fun getDueCards(now: Long = Time.now(), limit: Int = 100): List<Card>
 
     @Query("SELECT * FROM cards WHERE nextReview <= :now AND isDisabled = 0 ORDER BY nextReview ASC LIMIT :limit")
-    fun getDueCardsFlow(now: Long = System.currentTimeMillis(), limit: Int = 100): Flow<List<Card>>
+    fun getDueCardsFlow(now: Long = Time.now(), limit: Int = 100): Flow<List<Card>>
 
     @Query("SELECT COUNT(*) FROM cards WHERE nextReview <= :now AND isDisabled = 0")
-    fun getDueCardCount(now: Long = System.currentTimeMillis()): Flow<Int>
+    fun getDueCardCount(now: Long = Time.now()): Flow<Int>
 
     @Query("SELECT * FROM cards WHERE category = :category ORDER BY nextReview ASC")
     fun getCardsByCategory(category: String): Flow<List<Card>>
@@ -113,7 +114,7 @@ interface CardDao {
           END ASC
         LIMIT :limit
     """)
-    suspend fun getDueCardsByGroup(groupId: Long, now: Long = System.currentTimeMillis(), limit: Int = 100): List<Card>
+    suspend fun getDueCardsByGroup(groupId: Long, now: Long = Time.now(), limit: Int = 100): List<Card>
 
     @Query("""
         SELECT COUNT(DISTINCT c.id) FROM cards c
@@ -127,7 +128,7 @@ interface CardDao {
             ELSE c.nextReview
           END <= :now
     """)
-    fun getDueCardCountByGroup(groupId: Long, now: Long = System.currentTimeMillis()): Flow<Int>
+    fun getDueCardCountByGroup(groupId: Long, now: Long = Time.now()): Flow<Int>
 
     @Query("""
         SELECT COUNT(DISTINCT c.id) FROM cards c
