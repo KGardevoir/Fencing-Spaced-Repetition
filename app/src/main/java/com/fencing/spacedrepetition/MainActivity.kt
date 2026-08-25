@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -20,6 +21,9 @@ import com.fencing.spacedrepetition.data.preferences.ThemePreferences
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
+import com.fencing.spacedrepetition.util.FileImageStore
+import com.fencing.spacedrepetition.ui.image.ImageCache
+import com.fencing.spacedrepetition.ui.image.LocalImageCache
 import com.fencing.spacedrepetition.ui.navigation.AppNavigation
 import com.fencing.spacedrepetition.ui.theme.FencingSpacedRepetitionTheme
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
@@ -68,6 +72,10 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // One store and one cache for the process. Both are cheap to hold and
+        // the cache is only useful if it outlives a single screen.
+        val imageCache = ImageCache(FileImageStore(applicationContext))
+
         setContent {
             // Create settings ViewModel
             val settingsViewModel: SettingsViewModel = viewModel(
@@ -75,6 +83,7 @@ class MainActivity : ComponentActivity() {
             )
             val themeMode by settingsViewModel.themeMode.collectAsState()
 
+            CompositionLocalProvider(LocalImageCache provides imageCache) {
             FencingSpacedRepetitionTheme(themeMode = themeMode) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -106,6 +115,7 @@ class MainActivity : ComponentActivity() {
                         opponentViewModel = opponentViewModel
                     )
                 }
+            }
             }
         }
     }

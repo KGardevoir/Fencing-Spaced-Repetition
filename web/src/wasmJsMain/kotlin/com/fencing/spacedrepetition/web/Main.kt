@@ -4,6 +4,7 @@
 package com.fencing.spacedrepetition.web
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -14,7 +15,10 @@ import com.fencing.spacedrepetition.algorithm.SM2Algorithm
 import com.fencing.spacedrepetition.data.AppDatabase
 import com.fencing.spacedrepetition.data.getDatabase
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
+import com.fencing.spacedrepetition.ui.image.ImageCache
+import com.fencing.spacedrepetition.ui.image.LocalImageCache
 import com.fencing.spacedrepetition.ui.screen.OpponentsScreen
+import com.fencing.spacedrepetition.util.OpfsImageStore
 import com.fencing.spacedrepetition.ui.theme.FencingSpacedRepetitionTheme
 import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
 import com.fencing.spacedrepetition.util.Time
@@ -152,8 +156,12 @@ fun main() {
         """
     )
 
+    val imageCache = ImageCache(OpfsImageStore)
+
     ComposeViewport(viewportContainerId = "compose-root") {
-        Opponents()
+        CompositionLocalProvider(LocalImageCache provides imageCache) {
+            Opponents()
+        }
     }
 }
 
