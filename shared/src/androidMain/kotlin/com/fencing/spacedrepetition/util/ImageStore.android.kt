@@ -23,11 +23,18 @@ import java.io.File
  * database, and the database is fed by imports; without the check, a crafted
  * export could name any file the app can read and have export inline it as
  * base64.
+ *
+ * One flat directory, not the card_images/review_images split the old code
+ * used. A key is a content hash and carries no directory, so a store opened on
+ * the wrong one would simply fail to find images written by the other -- and
+ * with hashes for names there is nothing a split would organise. Images
+ * written before this still live in those directories and are still found,
+ * because their rows hold the full path.
  */
-class FileImageStore(context: Context, subDirectory: String = "card_images") : ImageStore {
+class FileImageStore(context: Context) : ImageStore {
 
     private val filesDir: File = context.filesDir
-    private val directory: File = File(context.filesDir, subDirectory)
+    private val directory: File = File(context.filesDir, DIRECTORY)
 
     override suspend fun read(key: String): ByteArray? = withContext(Dispatchers.IO) {
         val file = resolve(key) ?: return@withContext null
@@ -50,6 +57,10 @@ class FileImageStore(context: Context, subDirectory: String = "card_images") : I
         withContext(Dispatchers.IO) {
             resolve(key)?.takeIf { it.exists() }?.delete()
         }
+    }
+
+    private companion object {
+        const val DIRECTORY = "images"
     }
 
     private fun resolve(key: String): File? {

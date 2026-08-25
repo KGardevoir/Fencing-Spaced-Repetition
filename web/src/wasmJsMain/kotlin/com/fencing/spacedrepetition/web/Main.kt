@@ -17,8 +17,11 @@ import com.fencing.spacedrepetition.data.getDatabase
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
 import com.fencing.spacedrepetition.ui.image.ImageCache
 import com.fencing.spacedrepetition.ui.image.LocalImageCache
+import com.fencing.spacedrepetition.ui.image.LocalImagePicker
 import com.fencing.spacedrepetition.ui.screen.OpponentsScreen
 import com.fencing.spacedrepetition.util.OpfsImageStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import com.fencing.spacedrepetition.ui.theme.FencingSpacedRepetitionTheme
 import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
 import com.fencing.spacedrepetition.util.Time
@@ -157,9 +160,13 @@ fun main() {
     )
 
     val imageCache = ImageCache(OpfsImageStore)
+    val imagePicker = browserImagePicker(CoroutineScope(Dispatchers.Main), OpfsImageStore)
 
     ComposeViewport(viewportContainerId = "compose-root") {
-        CompositionLocalProvider(LocalImageCache provides imageCache) {
+        CompositionLocalProvider(
+            LocalImageCache provides imageCache,
+            LocalImagePicker provides imagePicker
+        ) {
             Opponents()
         }
     }

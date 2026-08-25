@@ -24,6 +24,8 @@ import com.fencing.spacedrepetition.data.repository.OpponentRepository
 import com.fencing.spacedrepetition.util.FileImageStore
 import com.fencing.spacedrepetition.ui.image.ImageCache
 import com.fencing.spacedrepetition.ui.image.LocalImageCache
+import com.fencing.spacedrepetition.ui.image.LocalImagePicker
+import com.fencing.spacedrepetition.ui.image.rememberAndroidImagePicker
 import com.fencing.spacedrepetition.ui.navigation.AppNavigation
 import com.fencing.spacedrepetition.ui.theme.FencingSpacedRepetitionTheme
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
@@ -74,7 +76,8 @@ class MainActivity : ComponentActivity() {
 
         // One store and one cache for the process. Both are cheap to hold and
         // the cache is only useful if it outlives a single screen.
-        val imageCache = ImageCache(FileImageStore(applicationContext))
+        val imageStore = FileImageStore(applicationContext)
+        val imageCache = ImageCache(imageStore)
 
         setContent {
             // Create settings ViewModel
@@ -83,7 +86,10 @@ class MainActivity : ComponentActivity() {
             )
             val themeMode by settingsViewModel.themeMode.collectAsState()
 
-            CompositionLocalProvider(LocalImageCache provides imageCache) {
+            CompositionLocalProvider(
+                LocalImageCache provides imageCache,
+                LocalImagePicker provides rememberAndroidImagePicker(imageStore)
+            ) {
             FencingSpacedRepetitionTheme(themeMode = themeMode) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
