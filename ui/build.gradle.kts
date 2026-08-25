@@ -77,7 +77,17 @@ kotlin {
                 // ViewModel and viewModelScope, under the same
                 // androidx.lifecycle package names the Android build already
                 // uses -- which is why the view models move across unchanged.
-                implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel:2.11.0")
+                //
+                // 2.9.x rather than the current 2.11.0, and the reason is not
+                // caution: declaring 2.11.0 raises the whole androidx
+                // lifecycle group to 2.11.0, including the artifacts Compose
+                // Multiplatform pulls in itself, and
+                // lifecycle-runtime-compose-android:2.11.0 requires Android
+                // Gradle plugin 9.1. This build is pinned to AGP 9.0 by the
+                // KSP problem in gradle.properties, so the ceiling on the
+                // lifecycle version is really that pin showing up somewhere
+                // new. It lifts when AGP does.
+                implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel:2.9.6")
             }
         }
 
