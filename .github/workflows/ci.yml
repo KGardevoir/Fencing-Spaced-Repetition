@@ -85,15 +85,14 @@ jobs:
 
       # How many tests each suite actually ran, on every run, green or red.
       #
-      # Last step on purpose: the logs API reads from the end, and output
-      # placed before the artifact upload sits behind its echoed inputs
-      # where a tail of the log will not reach it.
+      # Not a safety net: Gradle 9 fails a test task that has sources but
+      # discovers nothing (failOnNoDiscoveredTests), which is what the browser
+      # suite did when it crashed mid-run earlier in this port. So a green
+      # build already means every suite here ran and found tests. This is for
+      # the number -- watching the browser suite grow as screens move across,
+      # and noticing if one quietly stops covering as much as it did.
       #
-      # A wasmJs test task that discovers nothing still reports success, so a
-      # green build on its own does not distinguish a passing browser suite
-      # from one that never ran -- and that distinction has been wrong twice
-      # in this repository already. Reading it off the XML costs nothing and
-      # means nobody has to go spelunking in the log to find out.
+      # Late in the job on purpose: the logs API reads from the end.
       - name: Test totals
         if: always()
         run: |
