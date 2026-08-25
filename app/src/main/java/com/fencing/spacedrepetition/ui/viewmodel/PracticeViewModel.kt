@@ -316,12 +316,3 @@ class PracticeViewModel(
     }
 }
 
-sealed class PracticeUiState {
-    object Loading : PracticeUiState()
-    object Practicing : PracticeUiState()
-    object ReadyToGrade : PracticeUiState()
-    object Submitting : PracticeUiState()
-    object Completed : PracticeUiState()
-    object NoCards : PracticeUiState()
-    data class Error(val message: String) : PracticeUiState()
-}

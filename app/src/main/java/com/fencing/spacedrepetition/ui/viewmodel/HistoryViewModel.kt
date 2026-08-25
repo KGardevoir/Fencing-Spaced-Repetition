@@ -14,27 +14,6 @@ import com.fencing.spacedrepetition.data.repository.OpponentRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
-data class ReviewLogWithCard(
-    val reviewLog: ReviewLog,
-    val cardQuestion: String
-)
-
-data class SessionWithReviews(
-    val session: PracticeSession,
-    val reviewLogs: List<ReviewLogWithCard>
-)
-
-sealed class HistoryItem {
-    /** A completed practice session (may be expanded to show per-card grades). */
-    data class Session(val session: PracticeSession) : HistoryItem()
-
-    /** A single grade applied from the Add/Edit card screen (no session). */
-    data class QuickGrade(val log: ReviewLogWithCard) : HistoryItem()
-}
-
-/** Sentinel filter value: show only sessions/logs that are unassigned (opponentId == null). */
-const val OPPONENT_FILTER_NONE = -1L
-
 class HistoryViewModel(
     private val repository: CardRepository,
     private val opponentRepository: OpponentRepository
