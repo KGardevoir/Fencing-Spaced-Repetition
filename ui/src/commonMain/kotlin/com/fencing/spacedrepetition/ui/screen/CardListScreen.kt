@@ -3,8 +3,7 @@
 
 package com.fencing.spacedrepetition.ui.screen
 
-import android.net.Uri
-import androidx.activity.compose.BackHandler
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -28,7 +27,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import android.provider.OpenableColumns
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
@@ -853,27 +851,6 @@ fun ExportGroupSelectionDialog(
             }
         }
     )
-}
-
-/**
- * Extracts the display name (filename) from a content URI.
- */
-fun getFilenameFromUri(context: android.content.Context, uri: Uri): String? {
-    var result: String? = null
-    if (uri.scheme == "content") {
-        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (index >= 0) {
-                    result = cursor.getString(index)
-                }
-            }
-        }
-    }
-    if (result == null) {
-        result = uri.path?.substringAfterLast('/')
-    }
-    return result
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)

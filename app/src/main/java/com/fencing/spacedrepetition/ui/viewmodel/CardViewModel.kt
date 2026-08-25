@@ -39,18 +39,6 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-enum class CardSortOption(val label: String) {
-    DUE_DATE("Due Date"),
-    NAME("Name"),
-    REVIEWS("Reviews"),
-    DIFFICULTY("Difficulty")
-}
-
-enum class SortDirection {
-    ASCENDING,
-    DESCENDING
-}
-
 class CardViewModel(
     application: Application,
     private val repository: CardRepository,
