@@ -44,9 +44,10 @@ val coroutinesVersion = "1.10.2"
 //     in a second or two, without an emulator and without a browser.
 //
 //   wasmJs -- the browser core. It runs commonTest in a real browser engine,
-//     so we know FSRS and SM-2 schedule identically there. It does not yet
-//     compile the data layer; see the note above the KSP block at the bottom
-//     for what is blocking that and what has been ruled out.
+//     so we know FSRS and SM-2 schedule identically there, and it now compiles
+//     the whole data layer including the generated database. Opening one still
+//     needs a driver: androidx.sqlite:sqlite-web and WebWorkerSQLiteDriver,
+//     which is the next piece.
 kotlin {
     jvmToolchain(17)
 
@@ -154,35 +155,30 @@ android {
 // not used. Room's codegen is per-platform, and the bare one is the path that
 // threw the ClassCastException.
 //
-// Only the Android target generates a database, so only kspAndroid is wired
-// up. Two reasons, and both matter.
+// Room's compiler runs for every target now, because the @Database moved to
+// commonMain and Room generates a separate implementation per platform. That
+// is what @ConstructedBy is for: it names the constructor so Room does not
+// have to find the implementation reflectively, which it cannot do off the
+// JVM.
 //
-// The database is Android-only, and now that is the only part of the data
-// layer that is. Kotlin 2.4.10 reads Room's wasm klibs, so the entities,
-// converters, DAOs and repositories compile for the browser and live in
-// commonMain again.
-//
-// What is left for step 6 is the @Database itself. Putting it in commonMain
-// needs @ConstructedBy and a generated actual per target, which means
-// kspWasmJs and kspJvm alongside kspAndroid -- and that reintroduces the
-// several-generators-one-schema-directory race described below. It also wants
-// androidx.sqlite:sqlite-web and WebWorkerSQLiteDriver, without which a
-// browser database can be generated but not opened. Those belong together, in
-// one change, not bolted on here.
-//
-// And one generator means one writer of the exported schema. room.schemaLocation
-// is a single directory for the whole module, and when jvm generated a database
-// too, the two ran in parallel into it and produced a half-written file:
+// Which brings back the problem that made this Android-only. room.schemaLocation
+// names one directory for the whole module, and several KSP tasks writing it
+// at once produced a half-written file:
 //
 //     e: [ksp] JsonDecodingException: Unexpected JSON token at offset 13236
 //        ... at path: $.database.entities[4]
 //
-// which passed on one run and failed on the next. Room's own Gradle plugin is
-// the documented answer to that and would allow several generators again, but
-// its extension did not resolve under this build's plugin set, so the race is
-// removed by construction instead: the jvm target compiles the DAOs and
-// entities and never generates an implementation of them.
-val kspTargetNames = listOf("android")
+// passing on one run and failing on the next. Room's own Gradle plugin keeps
+// the directories apart and is the documented answer, but its extension did
+// not resolve under this build's plugin set and a second guess at the name is
+// not worth a round trip.
+//
+// So the tasks are ordered instead, below. The schema describes the database,
+// not the platform, so every target generates identical bytes -- ordering them
+// means they overwrite each other with the same content rather than
+// interleaving. That is a weaker guarantee than separate directories and it is
+// written down as such: if the targets ever diverge, this needs the plugin.
+val kspTargetNames = listOf("android", "jvm", "wasmJs")
 val kspConfigurationNames = kspTargetNames.map { target ->
     "ksp" + target.replaceFirstChar { it.uppercase() }
 }
@@ -213,34 +209,18 @@ dependencies {
 // the only record of what the database is supposed to look like, so it is
 // committed rather than generated-and-discarded: without it a migration can
 // only be checked by running the app.
-//
-// room.schemaLocation names one directory for the whole module, so it is only
-// safe while exactly one compilation generates a database. That is now true by
-// construction -- see the KSP block above -- and it is what the concurrent
-// half-written schema failure was about.
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
-// Kept for step 6, when Room has to reach the browser. It prints the wasmJs
-// compile classpath, which is currently:
-//
-//     kotlinx-coroutines-core-wasm-js, kotlin-stdlib-wasm-js, atomicfu-wasm-js
-//
-// and nothing else. That is the expected shape now that Room is declared in
-// jvmCommonMain, so it no longer answers the original question -- whether
-// Room's klib was absent or present-and-skipped when it was in commonMain --
-// because the configuration changed before this diagnostic produced any
-// readable output. Re-adding room3 to commonMain and running this task is the
-// first move of that investigation.
-tasks.register("dumpWasmJsCompileClasspath") {
-    val classpath = kotlin.targets.getByName("wasmJs")
-        .compilations.getByName("main")
-        .compileDependencyFiles
-    doLast {
-        // println, not logger.lifecycle: the CI step runs Gradle with -q,
-        // which suppresses the lifecycle log level. The first attempt at this
-        // diagnostic used lifecycle and printed nothing at all.
-        classpath.forEach { println("WASMCP: ${it.name}") }
+// The ordering the note above describes. Chained rather than fanned out, so
+// no two KSP tasks can be writing the schema directory at the same time.
+afterEvaluate {
+    val kspTaskNames = tasks.names
+        .filter { it.startsWith("ksp") && it.contains("Kotlin") }
+        .sorted()
+    logger.lifecycle("KSPCFG: serialising ksp tasks = $kspTaskNames")
+    kspTaskNames.zipWithNext().forEach { (earlier, later) ->
+        tasks.named(later) { mustRunAfter(tasks.named(earlier)) }
     }
 }

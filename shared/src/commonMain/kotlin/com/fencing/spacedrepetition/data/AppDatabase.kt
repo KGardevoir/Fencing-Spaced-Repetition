@@ -3,8 +3,10 @@
 
 package com.fencing.spacedrepetition.data
 
+import androidx.room3.ConstructedBy
 import androidx.room3.Database
 import androidx.room3.RoomDatabase
+import androidx.room3.RoomDatabaseConstructor
 import androidx.room3.ColumnTypeConverters
 import androidx.room3.migration.Migration
 import androidx.sqlite.*
@@ -28,6 +30,7 @@ import com.fencing.spacedrepetition.util.Time
     exportSchema = true
 )
 @ColumnTypeConverters(Converters::class)
+@ConstructedBy(AppDatabaseConstructor::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun cardDao(): CardDao
     abstract fun practiceSessionDao(): PracticeSessionDao
@@ -35,10 +38,22 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun groupDao(): GroupDao
     abstract fun opponentDao(): OpponentDao
 
-    // Empty, but not pointless: getDatabase is an extension on this companion
-    // (AppDatabase.android.kt), which is what lets every call site keep
-    // reading AppDatabase.getDatabase(context) unchanged.
+    // Empty, but not pointless: each platform's builder is an extension on
+    // this companion -- getDatabase(context) in androidMain -- which is what
+    // lets call sites stay unchanged while the builder itself, and the driver
+    // it needs, stay off common code.
     companion object
+}
+
+/**
+ * Room cannot find the generated implementation reflectively on every target,
+ * so a multiplatform database names its constructor. The compiler writes the
+ * actual object per target; there is no hand-written actual anywhere, which is
+ * what the suppression says.
+ */
+@Suppress("NO_ACTUAL_FOR_EXPECT", "EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING")
+expect object AppDatabaseConstructor : RoomDatabaseConstructor<AppDatabase> {
+    override fun initialize(): AppDatabase
 }
 
 /** The on-disk name of the database. Every platform's builder uses it. */
