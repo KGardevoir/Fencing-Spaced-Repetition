@@ -72,7 +72,22 @@ jobs:
             exit 1
           fi
 
+      - name: Upload test results
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-results
+          path: |
+            app/build/reports/tests/testDebugUnitTest/
+            shared/build/reports/tests/
+            ui/build/reports/tests/
+          retention-days: 14
+
       # How many tests each suite actually ran, on every run, green or red.
+      #
+      # Last step on purpose: the logs API reads from the end, and output
+      # placed before the artifact upload sits behind its echoed inputs
+      # where a tail of the log will not reach it.
       #
       # A wasmJs test task that discovers nothing still reports success, so a
       # green build on its own does not distinguish a passing browser suite
@@ -97,17 +112,6 @@ jobs:
           if [ "$any" = 0 ]; then
             echo "(no test-results XML anywhere -- nothing ran)"
           fi
-
-      - name: Upload test results
-        uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: test-results
-          path: |
-            app/build/reports/tests/testDebugUnitTest/
-            shared/build/reports/tests/
-            ui/build/reports/tests/
-          retention-days: 14
 
   web:
     name: Build Web Bundle
