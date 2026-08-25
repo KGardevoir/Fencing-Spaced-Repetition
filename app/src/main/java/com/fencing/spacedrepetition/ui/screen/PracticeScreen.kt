@@ -42,24 +42,23 @@ import com.fencing.spacedrepetition.ui.components.MarkdownText
 import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
 import androidx.compose.ui.text.input.TextFieldValue
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeUiState
-import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
-import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
 import java.io.File
 import java.io.FileOutputStream
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PracticeScreen(
-    viewModel: PracticeViewModel,
-    settingsViewModel: SettingsViewModel,
+    uiState: PracticeUiState,
+    sessionCards: List<SessionCard>,
+    currentCardIndex: Int,
+    autoShowAnswer: Boolean,
+    onUpdateCard: (Int, String, String, List<String>) -> Unit,
+    onNextCard: () -> Unit,
+    onPreviousCard: () -> Unit,
+    onFinishPractice: () -> Unit,
     onNavigateToGrading: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val sessionCards by viewModel.sessionCards.collectAsState()
-    val currentCardIndex by viewModel.currentCardIndex.collectAsState()
-    val autoShowAnswer by settingsViewModel.autoShowAnswer.collectAsState()
-
     var showEditDialog by remember { mutableStateOf(false) }
 
     // Edit dialog
@@ -68,7 +67,7 @@ fun PracticeScreen(
             card = sessionCards[currentCardIndex].card,
             onDismiss = { showEditDialog = false },
             onSave = { question, answer, imagePaths ->
-                viewModel.updateCardComplete(currentCardIndex, question, answer, imagePaths)
+                onUpdateCard(currentCardIndex, question, answer, imagePaths)
                 showEditDialog = false
             }
         )
@@ -154,11 +153,9 @@ fun PracticeScreen(
                             cardNumber = currentCardIndex + 1,
                             totalCards = sessionCards.size,
                             autoShowAnswer = autoShowAnswer,
-                            onNext = { viewModel.nextCard() },
-                            onPrevious = if (currentCardIndex > 0) {
-                                { viewModel.previousCard() }
-                            } else null,
-                            onFinish = { viewModel.finishPractice() }
+                            onNext = onNextCard,
+                            onPrevious = if (currentCardIndex > 0) onPreviousCard else null,
+                            onFinish = onFinishPractice
                         )
                     }
                 }

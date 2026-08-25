@@ -173,9 +173,20 @@ fun AppNavigation(
         }
 
         composable(Screen.Practice.route) {
+            val practiceUiState by practiceViewModel.uiState.collectAsState()
+            val practiceSessionCards by practiceViewModel.sessionCards.collectAsState()
+            val currentCardIndex by practiceViewModel.currentCardIndex.collectAsState()
+            val autoShowAnswer by settingsViewModel.autoShowAnswer.collectAsState()
+
             PracticeScreen(
-                viewModel = practiceViewModel,
-                settingsViewModel = settingsViewModel,
+                uiState = practiceUiState,
+                sessionCards = practiceSessionCards,
+                currentCardIndex = currentCardIndex,
+                autoShowAnswer = autoShowAnswer,
+                onUpdateCard = practiceViewModel::updateCardComplete,
+                onNextCard = practiceViewModel::nextCard,
+                onPreviousCard = practiceViewModel::previousCard,
+                onFinishPractice = practiceViewModel::finishPractice,
                 onNavigateToGrading = {
                     navController.navigate(Screen.Grading.route) {
                         popUpTo(Screen.Practice.route) { inclusive = false }
