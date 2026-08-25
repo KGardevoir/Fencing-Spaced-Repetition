@@ -3,7 +3,6 @@
 
 package com.fencing.spacedrepetition.ui.screen
 
-import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -24,7 +23,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.AlgorithmType
@@ -42,7 +43,11 @@ import com.fencing.spacedrepetition.util.formatDate
 import com.fencing.spacedrepetition.util.toOneDecimal
 import com.fencing.spacedrepetition.util.Time
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(
+    ExperimentalMaterial3Api::class,
+    ExperimentalFoundationApi::class,
+    ExperimentalComposeUiApi::class
+)
 @Composable
 fun CardListScreen(
     allCards: List<Card>,
