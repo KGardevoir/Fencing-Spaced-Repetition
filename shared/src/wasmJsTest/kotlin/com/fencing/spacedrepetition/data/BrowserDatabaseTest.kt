@@ -13,10 +13,9 @@ import kotlinx.coroutines.test.runTest
 /**
  * Opens the real browser database and puts a row through it.
  *
- * This is the only test in the project that exercises the whole browser
- * stack at once -- the vendored worker, SQLite's WebAssembly build, the
- * driver's message protocol, Room's generated wasm implementation and the
- * schema Room creates from the entities. Every one of those is a place where
+ * The narrowest test of the whole browser stack: the vendored worker,
+ * SQLite's WebAssembly build, the driver's message protocol, Room's generated
+ * wasm implementation and the schema Room creates from the entities. Every one of those is a place where
  * "it compiles" and "it works" come apart, which is why it runs against a
  * real browser engine rather than a fake.
  *
@@ -25,27 +24,27 @@ import kotlinx.coroutines.test.runTest
  * mistake only the browser finds. That means it writes to the app's own OPFS
  * database, so it cleans up after itself: the row it inserts is named for
  * this test and deleted before it returns.
+ *
+ * It does not close the database. getDatabase() hands out one shared instance
+ * per page, and closing it here would pull the storage out from under
+ * anything that ran afterwards.
  */
 class BrowserDatabaseTest {
 
     @Test
     fun insertsAndReadsBackAGroup() = runTest {
-        val database = AppDatabase.getDatabase()
-        try {
-            val dao = database.groupDao()
-            val id = dao.insertGroup(
-                Group(name = "browser-database-test", description = "round trip")
-            )
+        val dao = AppDatabase.getDatabase().groupDao()
 
-            val stored = dao.getGroupById(id)
-            assertNotNull(stored, "the row Room said it inserted was not there")
-            assertEquals("browser-database-test", stored.name)
-            assertEquals("round trip", stored.description)
+        val id = dao.insertGroup(
+            Group(name = "browser-database-test", description = "round trip")
+        )
 
-            dao.deleteGroupById(id)
-            assertNull(dao.getGroupById(id), "the row outlived its deletion")
-        } finally {
-            database.close()
-        }
+        val stored = dao.getGroupById(id)
+        assertNotNull(stored, "the row Room said it inserted was not there")
+        assertEquals("browser-database-test", stored.name)
+        assertEquals("round trip", stored.description)
+
+        dao.deleteGroupById(id)
+        assertNull(dao.getGroupById(id), "the row outlived its deletion")
     }
 }

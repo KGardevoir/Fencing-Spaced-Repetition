@@ -24,7 +24,28 @@ import org.w3c.dom.Worker
  * navigator.storage.persist() -- and on iOS that is only honoured for a web
  * app added to the home screen.
  */
+private var INSTANCE: AppDatabase? = null
+
+/**
+ * The one database, built on first use and kept.
+ *
+ * Not an optimisation. Each call to the builder creates its own Web Worker,
+ * its own SQLite instance and its own attempt to take the OPFS SAH pool's
+ * exclusive lock on the same directory -- so a second live database does not
+ * merely waste a megabyte of WebAssembly, it competes with the first for
+ * storage that only one holder can have. The Android twin has cached its
+ * instance since before this port; this half simply had not, and the browser
+ * test suite is what noticed, by opening three databases in one page and
+ * taking the browser down with it.
+ *
+ * No lock around it, unlike Android's: this runs on the browser's single main
+ * thread, so there is no second caller to race with. The worker is where the
+ * concurrency lives, and it is behind the driver.
+ */
 fun AppDatabase.Companion.getDatabase(): AppDatabase =
+    INSTANCE ?: buildDatabase().also { INSTANCE = it }
+
+private fun buildDatabase(): AppDatabase =
     Room.databaseBuilder<AppDatabase>(name = DATABASE_NAME)
         .setDriver(WebWorkerSQLiteDriver(createSqliteWorker()))
         // Room defaults to write-ahead logging, which SQLite's OPFS backends
