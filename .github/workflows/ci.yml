@@ -34,20 +34,39 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # On failure, repeat just the compiler/KSP errors at the very end of the
-      # log. Gradle buries them hundreds of lines up behind npm chatter and
-      # task output, which makes a failure needlessly expensive to read.
+      # On failure, repeat what matters at the very end of the log. Gradle
+      # buries it hundreds of lines up behind npm chatter and task output,
+      # which makes a failure needlessly expensive to read.
+      #
+      # Gradle's own failure block comes first and unconditionally, because it
+      # is the only part that is present for every kind of failure. The
+      # compiler and KSP lines follow when there are any. Printing only the
+      # latter is how a yarn install failure once reached the end of the log
+      # looking like a KSP configuration dump.
       - name: Run unit tests
         run: |
           set -o pipefail
           if ! ./gradlew :shared:allTests :ui:allTests :app:testDebugUnitTest 2>&1 | tee /tmp/build.log; then
             echo ""
+            echo "===================== what failed ======================="
+            grep -A12 -E "^\* What went wrong:" /tmp/build.log | awk 'NR <= 40' || true
+
+            echo ""
+            echo "===================== failing tests ====================="
+            failures=$(grep -E "FAILED$|tests completed, .* failed" /tmp/build.log || true)
+            if [ -n "$failures" ]; then
+              printf '%s\n' "$failures" | awk 'NR <= 40'
+            else
+              echo "(no test failures -- the build did not get that far)"
+            fi
+
+            echo ""
             echo "================= compiler / KSP errors ================="
             errors=$(grep -A2 -E "^e: |^Tried the following|^<init> ->|^KSPCFG:|^w: .Default Kotlin Hierarchy|klib|Skipping|incompatible ABI|metadata version" /tmp/build.log || true)
             if [ -n "$errors" ]; then
-              printf '%s\n' "$errors" | awk 'NR <= 140'
+              printf '%s\n' "$errors" | awk 'NR <= 120'
             else
-              echo "(no compiler or KSP errors in the log -- failure was elsewhere)"
+              echo "(none)"
             fi
             echo "========================================================="
             exit 1
@@ -97,12 +116,25 @@ jobs:
           set -o pipefail
           if ! ./gradlew :web:wasmJsBrowserDistribution 2>&1 | tee /tmp/build.log; then
             echo ""
+            echo "===================== what failed ======================="
+            grep -A12 -E "^\* What went wrong:" /tmp/build.log | awk 'NR <= 40' || true
+
+            echo ""
+            echo "===================== failing tests ====================="
+            failures=$(grep -E "FAILED$|tests completed, .* failed" /tmp/build.log || true)
+            if [ -n "$failures" ]; then
+              printf '%s\n' "$failures" | awk 'NR <= 40'
+            else
+              echo "(no test failures -- the build did not get that far)"
+            fi
+
+            echo ""
             echo "================= compiler / KSP errors ================="
             errors=$(grep -A2 -E "^e: |^Tried the following|^<init> ->|^KSPCFG:|^w: .Default Kotlin Hierarchy|klib|Skipping|incompatible ABI|metadata version" /tmp/build.log || true)
             if [ -n "$errors" ]; then
-              printf '%s\n' "$errors" | awk 'NR <= 140'
+              printf '%s\n' "$errors" | awk 'NR <= 120'
             else
-              echo "(no compiler or KSP errors in the log -- failure was elsewhere)"
+              echo "(none)"
             fi
             echo "========================================================="
             exit 1
@@ -173,12 +205,25 @@ jobs:
           set -o pipefail
           if ! ./gradlew assembleDebug 2>&1 | tee /tmp/build.log; then
             echo ""
+            echo "===================== what failed ======================="
+            grep -A12 -E "^\* What went wrong:" /tmp/build.log | awk 'NR <= 40' || true
+
+            echo ""
+            echo "===================== failing tests ====================="
+            failures=$(grep -E "FAILED$|tests completed, .* failed" /tmp/build.log || true)
+            if [ -n "$failures" ]; then
+              printf '%s\n' "$failures" | awk 'NR <= 40'
+            else
+              echo "(no test failures -- the build did not get that far)"
+            fi
+
+            echo ""
             echo "================= compiler / KSP errors ================="
             errors=$(grep -A2 -E "^e: |^Tried the following|^<init> ->|^KSPCFG:|^w: .Default Kotlin Hierarchy|klib|Skipping|incompatible ABI|metadata version" /tmp/build.log || true)
             if [ -n "$errors" ]; then
-              printf '%s\n' "$errors" | awk 'NR <= 140'
+              printf '%s\n' "$errors" | awk 'NR <= 120'
             else
-              echo "(no compiler or KSP errors in the log -- failure was elsewhere)"
+              echo "(none)"
             fi
             echo "========================================================="
             exit 1
