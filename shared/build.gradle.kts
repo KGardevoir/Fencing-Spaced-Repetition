@@ -119,15 +119,6 @@ kotlin {
             }
         }
 
-        val wasmJsMain by getting {
-            dependencies {
-                // WebWorkerSQLiteDriver: SQLite compiled to WebAssembly, run
-                // in a Web Worker so queries stay off the main thread, with
-                // the database file living in the Origin Private File System.
-                implementation("androidx.sqlite:sqlite-web:$sqliteVersion")
-            }
-        }
-
         val commonTest by getting {
             dependencies {
                 implementation(kotlin("test"))
