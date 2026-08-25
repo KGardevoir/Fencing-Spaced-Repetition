@@ -15,6 +15,7 @@ import com.fencing.spacedrepetition.data.repository.OpponentRepository
 import com.fencing.spacedrepetition.ui.theme.FencingSpacedRepetitionTheme
 import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
 import kotlin.test.Test
+import kotlin.test.assertTrue
 
 /**
  * The first screen of the app, running end to end in a browser.
@@ -25,15 +26,58 @@ import kotlin.test.Test
  * fake would answer a much smaller question -- this is here to check that the
  * whole column holds up on a platform none of it was written for.
  *
- * The row is written before the screen is composed and removed afterwards,
- * so running this repeatedly against the same browser profile leaves nothing
- * behind.
+ * Deliberately three tests rather than one, in increasing order of how much
+ * has to work: the database alone, then the screen drawn against it, then a
+ * row travelling from the database into the composition. A single test that
+ * did all three would fail identically whichever layer broke, and on wasm the
+ * failure often arrives with no message at all -- so the split is what makes
+ * a red run readable.
  */
 class OpponentsScreenTest {
 
     @OptIn(ExperimentalTestApi::class)
     @Test
-    fun showsAnOpponentThatIsInTheDatabase() = runComposeUiTest {
+    fun theDatabaseIsReachableFromThisModule() = runComposeUiTest {
+        // :shared declares the SQLite worker as a local npm package. This
+        // asserts it survives into a different module's test bundle, which is
+        // not something the dependency declaration makes obvious.
+        val database = AppDatabase.getDatabase()
+        try {
+            val repository = OpponentRepository(database.opponentDao())
+            val id = repository.insertOpponent(Opponent(name = "opponents-reachable-test"))
+            assertTrue(id > 0, "the database accepted no rows")
+            repository.getOpponentById(id)?.let { repository.deleteOpponent(it) }
+        } finally {
+            database.close()
+        }
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun theScreenDraws() = runComposeUiTest {
+        val database = AppDatabase.getDatabase()
+        try {
+            setContent {
+                FencingSpacedRepetitionTheme {
+                    OpponentsScreen(
+                        viewModel = OpponentViewModel(
+                            OpponentRepository(database.opponentDao())
+                        ),
+                        onNavigateBack = {}
+                    )
+                }
+            }
+
+            // The title is static, so this needs nothing from the database.
+            onNodeWithText("Opponents").assertIsDisplayed()
+        } finally {
+            database.close()
+        }
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun aStoredOpponentReachesTheComposition() = runComposeUiTest {
         val database = AppDatabase.getDatabase()
         val repository = OpponentRepository(database.opponentDao())
         val name = "opponents-screen-test"
