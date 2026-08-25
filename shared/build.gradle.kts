@@ -267,16 +267,3 @@ afterEvaluate {
         tasks.named(later) { mustRunAfter(tasks.named(earlier)) }
     }
 }
-
-// Print every test as it runs. Gradle is silent about passing tests, which is
-// tolerable for the JVM suites -- they are fast and their absence would be
-// obvious -- but not for the browser suite: a wasmJs test task that discovers
-// nothing still reports success, and "BUILD SUCCESSFUL" would then mean the
-// browser database was never opened. This makes the difference visible.
-tasks.withType<AbstractTestTask>().configureEach {
-    testLogging {
-        events("passed", "skipped", "failed")
-        showExceptions = true
-        showStackTraces = true
-    }
-}

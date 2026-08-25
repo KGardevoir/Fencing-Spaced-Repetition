@@ -20,3 +20,23 @@ plugins {
     id("org.jetbrains.compose") version "1.11.1" apply false
     id("com.google.devtools.ksp") version "2.3.11" apply false
 }
+
+// Print every test as it runs, in every module.
+//
+// Gradle says nothing about passing tests, which is tolerable for a JVM suite
+// whose absence would be obvious, and not for a browser suite: a wasmJs test
+// task that discovers nothing still reports success, so "BUILD SUCCESSFUL"
+// alone cannot distinguish a passing browser test from one that never ran.
+//
+// Here rather than in each module because that distinction is not module
+// specific, and because a new module would otherwise start out silent -- which
+// is exactly what happened when :ui was added.
+subprojects {
+    tasks.withType<AbstractTestTask>().configureEach {
+        testLogging {
+            events("passed", "skipped", "failed")
+            showExceptions = true
+            showStackTraces = true
+        }
+    }
+}
