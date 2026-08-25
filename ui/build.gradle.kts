@@ -63,16 +63,21 @@ kotlin {
                 implementation(compose.material3)
                 implementation(compose.ui)
 
-                // Material's core icon set. Declared explicitly because
-                // material3 does not depend on it, and pinned to 1.7.3
-                // because that is the last version JetBrains published --
-                // the icons artifacts were discontinued after 1.7. The core
-                // set is a few dozen fixed vector paths that have not changed
-                // in years, so an old artifact is a fair trade against
-                // hand-copying path data. The extended set, which :app uses
-                // for Sort and NoteAdd, has no multiplatform build at all and
-                // will have to be vendored icon by icon.
+                // Material's icons. Declared explicitly because material3
+                // does not depend on them, and pinned to 1.7.3 because that
+                // is the last version JetBrains published -- the icons
+                // artifacts were discontinued after 1.7. They are fixed
+                // vector paths that have not changed in years, so an old
+                // artifact is a fair trade against hand-copying path data.
+                //
+                // The extended set is here because this app's screens use 40
+                // icons outside the core 40-odd, and it does ship a wasmJs
+                // build despite the deprecation. The alternative was writing
+                // out 40 ImageVectors by hand. Nothing is bundled that is not
+                // referenced: each icon is its own lazily-built property, so
+                // dead-code elimination keeps only the ones a screen names.
                 implementation("org.jetbrains.compose.material:material-icons-core:1.7.3")
+                implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
 
                 // ViewModel and viewModelScope, under the same
                 // androidx.lifecycle package names the Android build already
