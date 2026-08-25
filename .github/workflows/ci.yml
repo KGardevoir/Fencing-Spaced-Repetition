@@ -72,6 +72,32 @@ jobs:
             exit 1
           fi
 
+      # How many tests each suite actually ran, on every run, green or red.
+      #
+      # A wasmJs test task that discovers nothing still reports success, so a
+      # green build on its own does not distinguish a passing browser suite
+      # from one that never ran -- and that distinction has been wrong twice
+      # in this repository already. Reading it off the XML costs nothing and
+      # means nobody has to go spelunking in the log to find out.
+      - name: Test totals
+        if: always()
+        run: |
+          shopt -s nullglob
+          any=0
+          for dir in $(find . -type d -path "*/build/test-results/*" | sort); do
+            files=("$dir"/*.xml)
+            [ ${#files[@]} -eq 0 ] && continue
+            any=1
+            tests=$(cat "${files[@]}" | grep -o 'tests="[0-9]*"' | grep -o '[0-9]*' | paste -sd+ - | bc)
+            fails=$(cat "${files[@]}" | grep -o 'failures="[0-9]*"' | grep -o '[0-9]*' | paste -sd+ - | bc)
+            errs=$(cat "${files[@]}" | grep -o 'errors="[0-9]*"' | grep -o '[0-9]*' | paste -sd+ - | bc)
+            printf '%-64s %4s tests  %s failed  %s errors\n' \
+              "${dir#./}" "${tests:-0}" "${fails:-0}" "${errs:-0}"
+          done
+          if [ "$any" = 0 ]; then
+            echo "(no test-results XML anywhere -- nothing ran)"
+          fi
+
       - name: Upload test results
         uses: actions/upload-artifact@v7
         if: always()
