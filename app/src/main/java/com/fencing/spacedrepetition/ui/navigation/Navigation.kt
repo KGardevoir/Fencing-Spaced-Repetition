@@ -140,8 +140,30 @@ fun AppNavigation(
         }
 
         composable(Screen.History.route) {
+            val historyItems by historyViewModel.historyItems.collectAsState()
+            val historyOpponents by historyViewModel.opponents.collectAsState()
+            val historyOpponentFilter by historyViewModel.opponentFilter.collectAsState()
+            val historySearchQuery by historyViewModel.searchQuery.collectAsState()
+            val historySelectedGroup by historyViewModel.selectedGroup.collectAsState()
+            val historyAvailableGroups by historyViewModel.availableGroups.collectAsState()
+
             HistoryScreen(
-                viewModel = historyViewModel,
+                historyItems = historyItems,
+                opponents = historyOpponents,
+                opponentFilter = historyOpponentFilter,
+                searchQuery = historySearchQuery,
+                selectedGroup = historySelectedGroup,
+                availableGroups = historyAvailableGroups,
+                reviewLogsForSession = { sessionId ->
+                    remember(sessionId) { historyViewModel.getReviewLogsForSession(sessionId) }
+                        .collectAsState(initial = emptyList()).value
+                },
+                onSearchQueryChange = { historyViewModel.searchQuery.value = it },
+                onSelectedGroupChange = { historyViewModel.selectedGroup.value = it },
+                onSetOpponentFilter = historyViewModel::setOpponentFilter,
+                onUpdateReviewLogNotes = historyViewModel::updateReviewLogNotes,
+                onUpdateReviewLogOpponent = historyViewModel::updateReviewLogOpponent,
+                onCreateOpponent = historyViewModel::createOpponent,
                 onNavigateBack = {
                     navController.popBackStack()
                 }
@@ -165,8 +187,23 @@ fun AppNavigation(
         }
 
         composable(Screen.Grading.route) {
+            val gradingUiState by practiceViewModel.uiState.collectAsState()
+            val gradingSessionCards by practiceViewModel.sessionCards.collectAsState()
+            val gradingOpponents by practiceViewModel.opponents.collectAsState()
+            val gradingSessionOpponentId by practiceViewModel.sessionOpponentId.collectAsState()
+
             GradingScreen(
-                viewModel = practiceViewModel,
+                uiState = gradingUiState,
+                sessionCards = gradingSessionCards,
+                opponents = gradingOpponents,
+                sessionOpponentId = gradingSessionOpponentId,
+                onSetSessionOpponent = practiceViewModel::setSessionOpponent,
+                onCreateOpponent = practiceViewModel::createOpponent,
+                onUpdateOpponentDifficulty = practiceViewModel::updateOpponentDifficulty,
+                onUpdateGrade = practiceViewModel::updateGrade,
+                onUpdateNotes = practiceViewModel::updateNotes,
+                onUpdateOpponent = practiceViewModel::updateOpponent,
+                onSubmitGrades = practiceViewModel::submitGrades,
                 onComplete = {
                     practiceViewModel.resetSession()
                     navController.navigate(Screen.Home.route) {

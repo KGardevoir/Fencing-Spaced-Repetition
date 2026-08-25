@@ -36,20 +36,25 @@ import com.fencing.spacedrepetition.ui.components.MarkdownToolbarState
 import com.fencing.spacedrepetition.ui.components.OpponentPicker
 import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeUiState
-import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 import com.fencing.spacedrepetition.util.saveImageToInternalStorage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GradingScreen(
-    viewModel: PracticeViewModel,
+    uiState: PracticeUiState,
+    sessionCards: List<SessionCard>,
+    opponents: List<Opponent>,
+    sessionOpponentId: Long?,
+    onSetSessionOpponent: (Long?) -> Unit,
+    onCreateOpponent: suspend (String, Double) -> Long,
+    onUpdateOpponentDifficulty: (Long, Double) -> Unit,
+    onUpdateGrade: (Int, Grade) -> Unit,
+    onUpdateNotes: (Int, String, List<String>) -> Unit,
+    onUpdateOpponent: (Int, Long?) -> Unit,
+    onSubmitGrades: () -> Unit,
     onComplete: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val sessionCards by viewModel.sessionCards.collectAsState()
-    val opponents by viewModel.opponents.collectAsState()
-    val sessionOpponentId by viewModel.sessionOpponentId.collectAsState()
 
     var showConfirmDialog by remember { mutableStateOf(false) }
     val markdownToolbarState = rememberMarkdownToolbarState()
@@ -158,9 +163,9 @@ fun GradingScreen(
                             OpponentPicker(
                                 selectedOpponentId = sessionOpponentId,
                                 opponents = opponents,
-                                onOpponentSelected = { viewModel.setSessionOpponent(it) },
-                                onCreate = { name, mult -> viewModel.createOpponent(name, mult) },
-                                onUpdateDifficulty = { id, mult -> viewModel.updateOpponentDifficulty(id, mult) },
+                                onOpponentSelected = onSetSessionOpponent,
+                                onCreate = onCreateOpponent,
+                                onUpdateDifficulty = onUpdateOpponentDifficulty,
                                 label = "Opponent (all cards)"
                             )
 
@@ -177,19 +182,19 @@ fun GradingScreen(
                                         cardNumber = index + 1,
                                         opponents = opponents,
                                         onGradeSelected = { grade ->
-                                            viewModel.updateGrade(index, grade)
+                                            onUpdateGrade(index, grade)
                                         },
                                         onNotesChanged = { notes, images ->
-                                            viewModel.updateNotes(index, notes, images)
+                                            onUpdateNotes(index, notes, images)
                                         },
                                         onOpponentSelected = { opponentId ->
-                                            viewModel.updateOpponent(index, opponentId)
+                                            onUpdateOpponent(index, opponentId)
                                         },
                                         onCreateOpponent = { name, mult ->
-                                            viewModel.createOpponent(name, mult)
+                                            onCreateOpponent(name, mult)
                                         },
                                         onOpponentDifficultyChanged = { opponentId, newMult ->
-                                            viewModel.updateOpponentDifficulty(opponentId, newMult)
+                                            onUpdateOpponentDifficulty(opponentId, newMult)
                                         },
                                         toolbarState = markdownToolbarState
                                     )
@@ -247,7 +252,7 @@ fun GradingScreen(
                     Button(
                         onClick = {
                             showConfirmDialog = false
-                            viewModel.submitGrades()
+                            onSubmitGrades()
                         }
                     ) {
                         Text("Submit")

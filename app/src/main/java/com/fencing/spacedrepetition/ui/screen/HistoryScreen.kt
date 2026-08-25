@@ -39,7 +39,6 @@ import com.fencing.spacedrepetition.ui.components.MarkdownToolbarState
 import com.fencing.spacedrepetition.ui.components.OpponentPicker
 import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryItem
-import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.OPPONENT_FILTER_NONE
 import com.fencing.spacedrepetition.ui.viewmodel.ReviewLogWithCard
 import com.fencing.spacedrepetition.util.saveImageToInternalStorage
@@ -49,15 +48,21 @@ import java.util.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(
-    viewModel: HistoryViewModel,
+    historyItems: List<HistoryItem>,
+    opponents: List<Opponent>,
+    opponentFilter: Long?,
+    searchQuery: String,
+    selectedGroup: String?,
+    availableGroups: List<String>,
+    reviewLogsForSession: @Composable (Long) -> List<ReviewLogWithCard>,
+    onSearchQueryChange: (String) -> Unit,
+    onSelectedGroupChange: (String?) -> Unit,
+    onSetOpponentFilter: (Long?) -> Unit,
+    onUpdateReviewLogNotes: (ReviewLog, String, List<String>) -> Unit,
+    onUpdateReviewLogOpponent: (ReviewLog, Long?) -> Unit,
+    onCreateOpponent: suspend (String, Double) -> Long,
     onNavigateBack: () -> Unit
 ) {
-    val historyItems by viewModel.historyItems.collectAsState()
-    val opponents by viewModel.opponents.collectAsState()
-    val opponentFilter by viewModel.opponentFilter.collectAsState()
-    val searchQuery by viewModel.searchQuery.collectAsState()
-    val selectedGroup by viewModel.selectedGroup.collectAsState()
-    val availableGroups by viewModel.availableGroups.collectAsState()
     val markdownToolbarState = rememberMarkdownToolbarState()
     val hasActiveFilters = searchQuery.isNotBlank() || selectedGroup != null || opponentFilter != null
 
@@ -84,9 +89,9 @@ fun HistoryScreen(
         ) {
             SearchAndFilterBar(
                 searchQuery = searchQuery,
-                onSearchQueryChange = { viewModel.searchQuery.value = it },
+                onSearchQueryChange = onSearchQueryChange,
                 selectedGroup = selectedGroup,
-                onGroupSelected = { viewModel.selectedGroup.value = it },
+                onGroupSelected = onSelectedGroupChange,
                 availableGroups = availableGroups
             )
 
@@ -95,7 +100,7 @@ fun HistoryScreen(
                 OpponentFilterRow(
                     opponents = opponents,
                     selected = opponentFilter,
-                    onSelect = viewModel::setOpponentFilter
+                    onSelect = onSetOpponentFilter
                 )
             }
 
@@ -121,9 +126,9 @@ fun HistoryScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             TextButton(onClick = {
-                                viewModel.searchQuery.value = ""
-                                viewModel.selectedGroup.value = null
-                                viewModel.setOpponentFilter(null)
+                                onSearchQueryChange("")
+                                onSelectedGroupChange(null)
+                                onSetOpponentFilter(null)
                             }) {
                                 Text("Clear filters")
                             }
@@ -159,14 +164,19 @@ fun HistoryScreen(
                         when (item) {
                             is HistoryItem.Session -> SessionHistoryCard(
                                 session = item.session,
-                                viewModel = viewModel,
+                                reviewLogsForSession = reviewLogsForSession,
                                 opponents = opponents,
+                                onUpdateReviewLogNotes = onUpdateReviewLogNotes,
+                                onUpdateReviewLogOpponent = onUpdateReviewLogOpponent,
+                                onCreateOpponent = onCreateOpponent,
                                 toolbarState = markdownToolbarState
                             )
                             is HistoryItem.QuickGrade -> QuickGradeCard(
                                 logWithCard = item.log,
-                                viewModel = viewModel,
                                 opponents = opponents,
+                                onUpdateReviewLogNotes = onUpdateReviewLogNotes,
+                                onUpdateReviewLogOpponent = onUpdateReviewLogOpponent,
+                                onCreateOpponent = onCreateOpponent,
                                 toolbarState = markdownToolbarState
                             )
                         }
@@ -294,12 +304,15 @@ private fun OpponentFilterRow(
 @Composable
 fun SessionHistoryCard(
     session: PracticeSession,
-    viewModel: HistoryViewModel,
+    reviewLogsForSession: @Composable (Long) -> List<ReviewLogWithCard>,
     opponents: List<Opponent>,
+    onUpdateReviewLogNotes: (ReviewLog, String, List<String>) -> Unit,
+    onUpdateReviewLogOpponent: (ReviewLog, Long?) -> Unit,
+    onCreateOpponent: suspend (String, Double) -> Long,
     toolbarState: MarkdownToolbarState? = null
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val reviewLogs by viewModel.getReviewLogsForSession(session.id).collectAsState(initial = emptyList())
+    val reviewLogs = reviewLogsForSession(session.id)
 
     val dateFormatter = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
     val timeFormatter = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
@@ -414,8 +427,10 @@ fun SessionHistoryCard(
                         reviewLogs.forEach { logWithCard ->
                             ReviewLogRow(
                                 logWithCard = logWithCard,
-                                viewModel = viewModel,
                                 opponents = opponents,
+                                onUpdateReviewLogNotes = onUpdateReviewLogNotes,
+                                onUpdateReviewLogOpponent = onUpdateReviewLogOpponent,
+                                onCreateOpponent = onCreateOpponent,
                                 toolbarState = toolbarState
                             )
                         }
@@ -430,8 +445,10 @@ fun SessionHistoryCard(
 @Composable
 private fun QuickGradeCard(
     logWithCard: ReviewLogWithCard,
-    viewModel: HistoryViewModel,
     opponents: List<Opponent>,
+    onUpdateReviewLogNotes: (ReviewLog, String, List<String>) -> Unit,
+    onUpdateReviewLogOpponent: (ReviewLog, Long?) -> Unit,
+    onCreateOpponent: suspend (String, Double) -> Long,
     toolbarState: MarkdownToolbarState? = null
 ) {
     val log = logWithCard.reviewLog
@@ -546,15 +563,13 @@ private fun QuickGradeCard(
                     reviewLog = log,
                     opponents = opponents,
                     onSave = { notes, images ->
-                        viewModel.updateReviewLogNotes(log, notes, images)
+                        onUpdateReviewLogNotes(log, notes, images)
                         showNoteEditor = false
                     },
                     onOpponentChange = { opponentId ->
-                        viewModel.updateReviewLogOpponent(log, opponentId)
+                        onUpdateReviewLogOpponent(log, opponentId)
                     },
-                    onCreateOpponent = { name, mult ->
-                        viewModel.createOpponent(name, mult)
-                    },
+                    onCreateOpponent = onCreateOpponent,
                     toolbarState = toolbarState
                 )
             }
@@ -594,8 +609,10 @@ private fun opponentLabel(opponentId: Long?, opponents: List<Opponent>): String?
 @Composable
 private fun ReviewLogRow(
     logWithCard: ReviewLogWithCard,
-    viewModel: HistoryViewModel,
     opponents: List<Opponent>,
+    onUpdateReviewLogNotes: (ReviewLog, String, List<String>) -> Unit,
+    onUpdateReviewLogOpponent: (ReviewLog, Long?) -> Unit,
+    onCreateOpponent: suspend (String, Double) -> Long,
     toolbarState: MarkdownToolbarState? = null
 ) {
     val log = logWithCard.reviewLog
@@ -718,15 +735,13 @@ private fun ReviewLogRow(
                 reviewLog = log,
                 opponents = opponents,
                 onSave = { notes, images ->
-                    viewModel.updateReviewLogNotes(log, notes, images)
+                    onUpdateReviewLogNotes(log, notes, images)
                     showNoteEditor = false
                 },
                 onOpponentChange = { opponentId ->
-                    viewModel.updateReviewLogOpponent(log, opponentId)
+                    onUpdateReviewLogOpponent(log, opponentId)
                 },
-                onCreateOpponent = { name, mult ->
-                    viewModel.createOpponent(name, mult)
-                },
+                onCreateOpponent = onCreateOpponent,
                 toolbarState = toolbarState
             )
         }
