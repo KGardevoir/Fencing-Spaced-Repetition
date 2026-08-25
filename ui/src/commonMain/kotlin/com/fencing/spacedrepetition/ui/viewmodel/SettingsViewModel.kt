@@ -6,6 +6,7 @@ package com.fencing.spacedrepetition.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.data.preferences.AppPreferences
+import com.fencing.spacedrepetition.data.preferences.SettingsConstants
 import com.fencing.spacedrepetition.data.preferences.ThemeMode
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -15,15 +16,7 @@ import kotlinx.coroutines.launch
 
 class SettingsViewModel(
     private val themePreferences: AppPreferences,
-    /**
-     * Runs a backup now, if the platform can.
-     *
-     * A parameter rather than a call into BackupScheduler, which is
-     * WorkManager and so Android's alone. The browser has no equivalent --
-     * a page that is not open cannot back anything up -- so it passes a
-     * no-op, and the button is simply inert there rather than absent.
-     */
-    private val runBackup: suspend () -> Unit = {}
+    private val backups: BackupScheduling = NoBackups
 ) : ViewModel() {
 
     val themeMode: StateFlow<ThemeMode> = themePreferences.themeMode
@@ -33,7 +26,7 @@ class SettingsViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     val cardsPerSession: StateFlow<Int> = themePreferences.cardsPerSession
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_CARDS_PER_SESSION)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsConstants.DEFAULT_CARDS_PER_SESSION)
 
     val selectedGroupId: StateFlow<Long?> = themePreferences.selectedGroupId
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
@@ -42,40 +35,40 @@ class SettingsViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     val maximumInterval: StateFlow<Int> = themePreferences.maximumInterval
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_MAXIMUM_INTERVAL)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsConstants.DEFAULT_MAXIMUM_INTERVAL)
 
     val practicesPerWeek: StateFlow<Int> = themePreferences.practicesPerWeek
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_PRACTICES_PER_WEEK)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsConstants.DEFAULT_PRACTICES_PER_WEEK)
 
     val practiceDays: StateFlow<Set<Int>> = themePreferences.practiceDays
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_PRACTICE_DAYS)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsConstants.DEFAULT_PRACTICE_DAYS)
 
     val randomizeBucketHours: StateFlow<Int> = themePreferences.randomizeBucketHours
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_RANDOMIZE_BUCKET_HOURS)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsConstants.DEFAULT_RANDOMIZE_BUCKET_HOURS)
 
     val fsrsRetention: StateFlow<Int> = themePreferences.fsrsRetention
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_FSRS_RETENTION)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsConstants.DEFAULT_FSRS_RETENTION)
 
     val sm2IntervalModifier: StateFlow<Int> = themePreferences.sm2IntervalModifier
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_SM2_INTERVAL_MODIFIER)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsConstants.DEFAULT_SM2_INTERVAL_MODIFIER)
 
     val fsrsEnableFuzzing: StateFlow<Boolean> = themePreferences.fsrsEnableFuzzing
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_FSRS_ENABLE_FUZZING)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsConstants.DEFAULT_FSRS_ENABLE_FUZZING)
 
     val autoBackupEnabled: StateFlow<Boolean> = themePreferences.autoBackupEnabled
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_AUTO_BACKUP_ENABLED)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsConstants.DEFAULT_AUTO_BACKUP_ENABLED)
 
     val autoBackupUri: StateFlow<String?> = themePreferences.autoBackupUri
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val autoBackupIntervalDays: StateFlow<Int> = themePreferences.autoBackupIntervalDays
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_AUTO_BACKUP_INTERVAL_DAYS)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsConstants.DEFAULT_AUTO_BACKUP_INTERVAL_DAYS)
 
     val lastBackupTime: StateFlow<Long> = themePreferences.lastBackupTime
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
 
     val maxBackupsKept: StateFlow<Int> = themePreferences.maxBackupsKept
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemePreferences.DEFAULT_MAX_BACKUPS_KEPT)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsConstants.DEFAULT_MAX_BACKUPS_KEPT)
 
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch {
@@ -165,39 +158,38 @@ class SettingsViewModel(
     fun setAutoBackupEnabled(enabled: Boolean) {
         viewModelScope.launch {
             themePreferences.setAutoBackupEnabled(enabled)
-            val context = getApplication<Application>()
-            if (enabled && themePreferences.autoBackupUri.first() != null) {
-                BackupScheduler.schedule(context, themePreferences.autoBackupIntervalDays.first())
-            } else {
-                BackupScheduler.cancel(context)
-            }
+            backups.reschedule(
+                enabled = enabled,
+                uri = themePreferences.autoBackupUri.first(),
+                intervalDays = themePreferences.autoBackupIntervalDays.first()
+            )
         }
     }
 
     fun setAutoBackupUri(uri: String?) {
         viewModelScope.launch {
             themePreferences.setAutoBackupUri(uri)
-            val context = getApplication<Application>()
-            if (uri != null && themePreferences.autoBackupEnabled.first()) {
-                BackupScheduler.schedule(context, themePreferences.autoBackupIntervalDays.first())
-            } else {
-                BackupScheduler.cancel(context)
-            }
+            backups.reschedule(
+                enabled = themePreferences.autoBackupEnabled.first(),
+                uri = uri,
+                intervalDays = themePreferences.autoBackupIntervalDays.first()
+            )
         }
     }
 
     fun setAutoBackupIntervalDays(days: Int) {
         viewModelScope.launch {
             themePreferences.setAutoBackupIntervalDays(days)
-            val context = getApplication<Application>()
-            if (themePreferences.autoBackupEnabled.first() && themePreferences.autoBackupUri.first() != null) {
-                BackupScheduler.schedule(context, days)
-            }
+            backups.reschedule(
+                enabled = themePreferences.autoBackupEnabled.first(),
+                uri = themePreferences.autoBackupUri.first(),
+                intervalDays = days
+            )
         }
     }
 
     fun runBackupNow() {
-        viewModelScope.launch { runBackup() }
+        viewModelScope.launch { backups.runNow() }
     }
 
     fun setMaxBackupsKept(count: Int) {

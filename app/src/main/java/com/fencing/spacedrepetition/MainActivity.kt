@@ -177,10 +177,7 @@ class SettingsViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(SettingsViewModel::class.java)) {
-            return SettingsViewModel(
-                themePreferences,
-                runBackup = { BackupScheduler.runNow(application) }
-            ) as T
+            return SettingsViewModel(themePreferences, WorkManagerBackups(application)) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
@@ -208,5 +205,28 @@ class OpponentViewModelFactory(
             return OpponentViewModel(opponentRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
+    }
+}
+
+/**
+ * The Android half of [BackupScheduling]: WorkManager.
+ *
+ * Here rather than in the view model because WorkManager is Android's, and
+ * the settings screen that drives it is not.
+ */
+class WorkManagerBackups(
+    private val application: android.app.Application
+) : com.fencing.spacedrepetition.ui.viewmodel.BackupScheduling {
+
+    override suspend fun reschedule(enabled: Boolean, uri: String?, intervalDays: Int) {
+        if (enabled && uri != null) {
+            BackupScheduler.schedule(application, intervalDays)
+        } else {
+            BackupScheduler.cancel(application)
+        }
+    }
+
+    override suspend fun runNow() {
+        BackupScheduler.runNow(application)
     }
 }
