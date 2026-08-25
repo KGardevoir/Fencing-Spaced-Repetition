@@ -35,12 +35,12 @@ import kotlin.test.assertSame
  * than inside and the assertion runs before the browser has done anything,
  * and the test passes whatever happened.
  */
+@OptIn(ExperimentalTestApi::class)
 class HomeScreenTest {
 
     private val sabre = Group(id = 1, name = "Sabre footwork")
     private val epee = Group(id = 2, name = "Epee distance")
 
-    @OptIn(ExperimentalTestApi::class)
     private fun home(
         cardsToPractise: Int = 12,
         onSelectGroup: (Group) -> Unit = {},
@@ -94,19 +94,22 @@ class HomeScreenTest {
         onNodeWithText("No cards in Sabre footwork").assertIsDisplayed()
     }
 
+    // run { } so the body can hold a counter and the function still returns
+    // the promise: a block-bodied test returns Unit, and the promise would be
+    // dropped rather than awaited.
     @Test
-    fun pressingPracticeReportsItOnce() {
+    fun pressingPracticeReportsItOnce() = run {
         var started = 0
-        return home(onStartPractice = { started++ }) {
+        home(onStartPractice = { started++ }) {
             onNodeWithText("Practice 3 cards, grade at the end").performClick()
             assertEquals(1, started, "practice was not started exactly once")
         }
     }
 
     @Test
-    fun choosingAnotherGroupReportsThatGroup() {
+    fun choosingAnotherGroupReportsThatGroup() = run {
         var chosen: Group? = null
-        return home(onSelectGroup = { chosen = it }) {
+        home(onSelectGroup = { chosen = it }) {
             onNodeWithText("Sabre footwork").performClick()
             onNodeWithText("Epee distance").performClick()
             assertSame(epee, chosen, "expected Epee distance, got ${chosen?.name}")
