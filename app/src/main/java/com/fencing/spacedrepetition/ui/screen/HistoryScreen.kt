@@ -3,9 +3,6 @@
 
 package com.fencing.spacedrepetition.ui.screen
 
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -21,7 +18,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -38,13 +34,13 @@ import com.fencing.spacedrepetition.ui.components.MarkdownText
 import com.fencing.spacedrepetition.ui.components.MarkdownToolbarState
 import com.fencing.spacedrepetition.ui.components.OpponentPicker
 import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
+import com.fencing.spacedrepetition.ui.image.LocalImagePicker
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryItem
 import com.fencing.spacedrepetition.ui.viewmodel.OPPONENT_FILTER_NONE
 import com.fencing.spacedrepetition.ui.viewmodel.ReviewLogWithCard
 import com.fencing.spacedrepetition.util.formatDate
 import com.fencing.spacedrepetition.util.formatDateAndTime
 import com.fencing.spacedrepetition.util.formatTimeOfDay
-import com.fencing.spacedrepetition.util.saveImageToInternalStorage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -758,7 +754,6 @@ private fun HistoryNoteEditor(
     onCreateOpponent: suspend (String, Double) -> Long,
     toolbarState: MarkdownToolbarState? = null
 ) {
-    val context = LocalContext.current
     var notesValue by rememberSaveable(reviewLog.id, stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(reviewLog.notes))
     }
@@ -768,16 +763,7 @@ private fun HistoryNoteEditor(
         )
     }
 
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let {
-            val savedPath = saveImageToInternalStorage(context, it, "review_images")
-            if (savedPath != null) {
-                noteImages = noteImages + savedPath
-            }
-        }
-    }
+    val imagePicker = LocalImagePicker.current
 
     Column(
         modifier = Modifier
@@ -823,7 +809,7 @@ private fun HistoryNoteEditor(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             OutlinedButton(
-                onClick = { imagePickerLauncher.launch("image/*") }
+                onClick = { imagePicker.pick { key -> noteImages = noteImages + key } }
             ) {
                 Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(4.dp))

@@ -3,10 +3,6 @@
 
 package com.fencing.spacedrepetition.ui.screen
 
-import android.content.Context
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -22,7 +18,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.graphics.Color
@@ -31,22 +26,26 @@ import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.Grade
-import androidx.activity.compose.BackHandler
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.backhandler.BackHandler
 import com.fencing.spacedrepetition.util.Time
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.ui.image.LocalImagePicker
 import com.fencing.spacedrepetition.util.formatDate
 import com.fencing.spacedrepetition.util.formatDateWithoutYear
 import com.fencing.spacedrepetition.ui.components.CardImagesEdit
 import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
 import com.fencing.spacedrepetition.ui.components.MarkdownKeyboardToolbar
 import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
-import java.io.File
-import java.io.FileOutputStream
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(
+    ExperimentalMaterial3Api::class,
+    ExperimentalLayoutApi::class,
+    ExperimentalComposeUiApi::class
+)
 @Composable
 fun AddEditCardScreen(
     allGroups: List<Group>,
@@ -71,7 +70,6 @@ fun AddEditCardScreen(
     onCreateGroup: (name: String, onCreated: (Long) -> Unit) -> Unit,
     onNavigateBack: () -> Unit
 ) {
-    val context = LocalContext.current
     var question by rememberSaveable { mutableStateOf(cardToEdit?.question ?: "") }
     var answerFieldValue by rememberSaveable(stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(cardToEdit?.answer ?: ""))
@@ -96,19 +94,7 @@ fun AddEditCardScreen(
     var showUnsavedChangesDialog by rememberSaveable { mutableStateOf(false) }
     val markdownToolbarState = rememberMarkdownToolbarState()
 
-    // Image picker launcher
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let {
-            // Copy image to app's internal storage and save path
-            val savedPath = saveImageToInternalStorage(context, it)
-            if (savedPath != null) {
-                imagePaths = (imagePaths + savedPath).toMutableList()
-                isDirty = true
-            }
-        }
-    }
+    val imagePicker = LocalImagePicker.current
 
     // Mutable state for editing independent learning states (groupId -> state fields)
     var independentLearningEdits by remember(learningStates) {
@@ -242,7 +228,12 @@ fun AddEditCardScreen(
                             Text("Images", style = MaterialTheme.typography.titleMedium)
                         }
                         OutlinedButton(
-                            onClick = { imagePickerLauncher.launch("image/*") },
+                            onClick = {
+                                imagePicker.pick { key ->
+                                    imagePaths = (imagePaths + key).toMutableList()
+                                    isDirty = true
+                                }
+                            },
                             modifier = Modifier.height(36.dp)
                         ) {
                             Icon(
@@ -1621,36 +1612,3 @@ private fun formatReviewStatus(fsrsState: String, nextReview: Long): String = wh
     else -> formatDate(nextReview)
 }
 
-/**
- * Save image from URI to app's internal storage
- * Returns the saved file path or null if failed
- */
-private fun saveImageToInternalStorage(context: Context, uri: Uri): String? {
-    return try {
-        val inputStream = context.contentResolver.openInputStream(uri) ?: return null
-
-        // Create images directory if it doesn't exist
-        val imagesDir = File(context.filesDir, "card_images")
-        if (!imagesDir.exists()) {
-            imagesDir.mkdirs()
-        }
-
-        // Generate unique filename
-        val timestamp = Time.now()
-        val extension = context.contentResolver.getType(uri)?.split("/")?.lastOrNull() ?: "jpg"
-        val fileName = "card_image_${timestamp}.${extension}"
-        val outputFile = File(imagesDir, fileName)
-
-        // Copy file
-        FileOutputStream(outputFile).use { outputStream ->
-            inputStream.copyTo(outputStream)
-        }
-        inputStream.close()
-
-        // Return the file URI as string
-        outputFile.absolutePath
-    } catch (e: Exception) {
-        e.printStackTrace()
-        null
-    }
-}

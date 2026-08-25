@@ -3,10 +3,8 @@
 
 package com.fencing.spacedrepetition.ui.screen
 
-import android.net.Uri
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,7 +18,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -35,10 +32,10 @@ import com.fencing.spacedrepetition.ui.components.MarkdownText
 import com.fencing.spacedrepetition.ui.components.MarkdownToolbarState
 import com.fencing.spacedrepetition.ui.components.OpponentPicker
 import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
+import com.fencing.spacedrepetition.ui.image.LocalImagePicker
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeUiState
-import com.fencing.spacedrepetition.util.saveImageToInternalStorage
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun GradingScreen(
     uiState: PracticeUiState,
@@ -280,7 +277,6 @@ fun GradingCardItem(
     onOpponentDifficultyChanged: ((Long, Double) -> Unit)? = null,
     toolbarState: MarkdownToolbarState? = null
 ) {
-    val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
     var notesExpanded by remember { mutableStateOf(false) }
     var notesValue by remember(sessionCard.card.id) {
@@ -290,17 +286,7 @@ fun GradingCardItem(
         mutableStateOf(sessionCard.noteImagePaths)
     }
 
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let {
-            val savedPath = saveImageToInternalStorage(context, it, "review_images")
-            if (savedPath != null) {
-                noteImages = noteImages + savedPath
-                onNotesChanged(notesValue.text, noteImages)
-            }
-        }
-    }
+    val imagePicker = LocalImagePicker.current
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -481,7 +467,12 @@ fun GradingCardItem(
                 }
 
                 OutlinedButton(
-                    onClick = { imagePickerLauncher.launch("image/*") }
+                    onClick = {
+                        imagePicker.pick { key ->
+                            noteImages = noteImages + key
+                            onNotesChanged(notesValue.text, noteImages)
+                        }
+                    }
                 ) {
                     Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))

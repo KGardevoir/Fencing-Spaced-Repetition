@@ -3,10 +3,6 @@
 
 package com.fencing.spacedrepetition.ui.screen
 
-import android.content.Context
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -24,7 +20,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
@@ -41,9 +36,8 @@ import com.fencing.spacedrepetition.ui.components.MarkdownKeyboardToolbar
 import com.fencing.spacedrepetition.ui.components.MarkdownText
 import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
 import androidx.compose.ui.text.input.TextFieldValue
+import com.fencing.spacedrepetition.ui.image.LocalImagePicker
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeUiState
-import java.io.File
-import java.io.FileOutputStream
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -564,20 +558,7 @@ fun EditCardDialog(
     var imagePaths by rememberSaveable(card.id) { mutableStateOf(card.imagePaths.toMutableList()) }
     val markdownToolbarState = rememberMarkdownToolbarState()
 
-    val context = LocalContext.current
-
-    // Image picker launcher
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let {
-            // Copy image to app's internal storage and save path
-            val savedPath = saveImageToInternalStorage(context, it)
-            if (savedPath != null) {
-                imagePaths = (imagePaths + savedPath).toMutableList()
-            }
-        }
-    }
+    val imagePicker = LocalImagePicker.current
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -647,7 +628,11 @@ fun EditCardDialog(
                                 )
                             }
                             OutlinedButton(
-                                onClick = { imagePickerLauncher.launch("image/*") },
+                                onClick = {
+                                    imagePicker.pick { key ->
+                                        imagePaths = (imagePaths + key).toMutableList()
+                                    }
+                                },
                                 modifier = Modifier.height(32.dp),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                             ) {
@@ -708,36 +693,3 @@ fun EditCardDialog(
     }
 }
 
-/**
- * Save image from URI to app's internal storage
- * Returns the saved file path or null if failed
- */
-private fun saveImageToInternalStorage(context: Context, uri: Uri): String? {
-    return try {
-        val inputStream = context.contentResolver.openInputStream(uri) ?: return null
-
-        // Create images directory if it doesn't exist
-        val imagesDir = File(context.filesDir, "card_images")
-        if (!imagesDir.exists()) {
-            imagesDir.mkdirs()
-        }
-
-        // Generate unique filename
-        val timestamp = Time.now()
-        val extension = context.contentResolver.getType(uri)?.split("/")?.lastOrNull() ?: "jpg"
-        val fileName = "card_image_${timestamp}.${extension}"
-        val outputFile = File(imagesDir, fileName)
-
-        // Copy file
-        FileOutputStream(outputFile).use { outputStream ->
-            inputStream.copyTo(outputStream)
-        }
-        inputStream.close()
-
-        // Return the file URI as string
-        outputFile.absolutePath
-    } catch (e: Exception) {
-        e.printStackTrace()
-        null
-    }
-}
