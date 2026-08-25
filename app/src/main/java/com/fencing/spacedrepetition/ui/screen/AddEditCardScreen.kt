@@ -37,14 +37,14 @@ import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.util.formatDate
+import com.fencing.spacedrepetition.util.formatDateWithoutYear
 import com.fencing.spacedrepetition.ui.components.CardImagesEdit
 import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
 import com.fencing.spacedrepetition.ui.components.MarkdownKeyboardToolbar
 import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
 import java.io.File
 import java.io.FileOutputStream
-import java.text.SimpleDateFormat
-import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -500,8 +500,7 @@ fun AddEditCardScreen(
                                                 appliedGradeGroupId = null
                                                 isDirty = true
                                                 scope.launch {
-                                                    val dateStr = SimpleDateFormat("MMM dd", Locale.getDefault())
-                                                        .format(Date(updated.nextReview))
+                                                    val dateStr = formatDateWithoutYear(updated.nextReview)
                                                     snackbarHostState.showSnackbar(
                                                         "Grade staged — save to apply (next: $dateStr)"
                                                     )
@@ -562,8 +561,7 @@ fun AddEditCardScreen(
                                                         appliedGradeGroupId = group.id
                                                         isDirty = true
                                                         scope.launch {
-                                                            val dateStr = SimpleDateFormat("MMM dd", Locale.getDefault())
-                                                                .format(Date(updated.nextReview))
+                                                            val dateStr = formatDateWithoutYear(updated.nextReview)
                                                             snackbarHostState.showSnackbar(
                                                                 "${group.name}: Grade staged — save to apply (next: $dateStr)"
                                                             )
@@ -694,8 +692,7 @@ fun AddEditCardScreen(
                             fsrsState == "NEW" && nextReview == 0L -> "New card"
                             nextReview <= Time.now() -> "Due for review"
                             else -> {
-                                val formatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-                                "Next review: ${formatter.format(Date(nextReview))}"
+                                "Next review: ${formatDate(nextReview)}"
                             }
                         }
                         Spacer(modifier = Modifier.height(4.dp))
@@ -1360,8 +1357,7 @@ fun IndependentLearningStateCard(
             } else if (groupState.nextReview <= Time.now()) {
                 "Due for review"
             } else {
-                val formatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-                "Next: ${formatter.format(Date(groupState.nextReview))}"
+                "Next: ${formatDate(groupState.nextReview)}"
             }
             Text(
                 statusText,
@@ -1622,10 +1618,7 @@ data class IndependentLearningEdit(
 private fun formatReviewStatus(fsrsState: String, nextReview: Long): String = when {
     fsrsState == "NEW" && nextReview == 0L -> "New card"
     nextReview <= Time.now() -> "Due now"
-    else -> {
-        val formatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-        formatter.format(Date(nextReview))
-    }
+    else -> formatDate(nextReview)
 }
 
 /**

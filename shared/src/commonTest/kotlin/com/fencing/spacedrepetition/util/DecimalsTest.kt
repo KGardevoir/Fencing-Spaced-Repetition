@@ -48,10 +48,40 @@ class DecimalsTest {
         assertEquals("-0.50", (-0.5).toTwoDecimals())
         assertEquals("-0.05", (-0.05).toTwoDecimals())
         assertEquals("-1.25", (-1.25).toTwoDecimals())
+        assertEquals("-0.00", (-0.004).toTwoDecimals())
+        // Half away from zero on the negative side too: roundToLong on the
+        // signed value rounds half up, and would give "-1.23" here.
+        assertEquals("-1.24", (-1.235).toTwoDecimals())
     }
 
     @Test
     fun handlesZero() {
         assertEquals("0.00", 0.0.toTwoDecimals())
+    }
+
+    @Test
+    fun padsToOnePlace() {
+        assertEquals("1.0", 1.0.toOneDecimal())
+        assertEquals("0.5", 0.5.toOneDecimal())
+        assertEquals("2.5", 2.5.toOneDecimal())
+        assertEquals("0.0", 0.0.toOneDecimal())
+    }
+
+    @Test
+    fun roundsHalfAwayFromZeroAtOnePlace() {
+        assertEquals("1.3", 1.25.toOneDecimal())
+        assertEquals("1.2", 1.24.toOneDecimal())
+        assertEquals("3.0", 2.99.toOneDecimal())
+        assertEquals("10.0", 9.99.toOneDecimal())
+    }
+
+    @Test
+    fun keepsTheSignWhenOnePlaceRoundsToZero() {
+        // 2.5 - easeFactor is the card list's SM-2 difficulty, and it goes
+        // slightly negative for an easy card. "%.1f" prints "-0.0" there, and
+        // taking the sign from the rounded result would print "0.0".
+        assertEquals("-0.0", (-0.04).toOneDecimal())
+        assertEquals("-0.5", (-0.5).toOneDecimal())
+        assertEquals("-1.3", (-1.25).toOneDecimal())
     }
 }

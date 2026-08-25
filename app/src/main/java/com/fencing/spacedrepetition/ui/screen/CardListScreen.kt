@@ -40,9 +40,9 @@ import com.fencing.spacedrepetition.ui.viewmodel.SortDirection
 import com.fencing.spacedrepetition.ui.components.CsvGroupSelectionDialog
 import com.fencing.spacedrepetition.ui.components.MarkdownText
 import com.fencing.spacedrepetition.util.ParsedCard
+import com.fencing.spacedrepetition.util.formatDate
+import com.fencing.spacedrepetition.util.toOneDecimal
 import com.fencing.spacedrepetition.util.Time
-import java.text.SimpleDateFormat
-import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -951,8 +951,7 @@ fun CardListItem(
                             dueDateText = "New card"
                             dueDateColor = MaterialTheme.colorScheme.onSurfaceVariant
                         } else {
-                            val formatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-                            dueDateText = formatter.format(Date(card.nextReview))
+                            dueDateText = formatDate(card.nextReview)
                             val now = Time.now()
                             val diff = card.nextReview - now
                             val daysDiff = (diff / (1000 * 60 * 60 * 24)).toInt()
@@ -984,8 +983,8 @@ fun CardListItem(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             val difficulty = when (card.algorithm) {
-                                AlgorithmType.FSRS -> String.format("%.1f", card.fsrsDifficulty)
-                                AlgorithmType.SM2 -> String.format("%.1f", 2.5 - card.sm2EaseFactor)
+                                AlgorithmType.FSRS -> card.fsrsDifficulty.toOneDecimal()
+                                AlgorithmType.SM2 -> (2.5 - card.sm2EaseFactor).toOneDecimal()
                             }
                             Text(
                                 text = "• Difficulty: $difficulty",
@@ -1115,7 +1114,6 @@ fun CardListItem(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    val formatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
                     independentGroups.forEach { group ->
                         val state = learningStates.find { it.groupId == group.id }
                         val stateText = if (state == null) {
@@ -1124,7 +1122,7 @@ fun CardListItem(
                             val nextReview = if (state.nextReview == 0L) {
                                 "New"
                             } else {
-                                formatter.format(Date(state.nextReview))
+                                formatDate(state.nextReview)
                             }
                             "${group.name}: Next ${nextReview} (${state.fsrsState})"
                         }
@@ -1154,8 +1152,7 @@ fun CardListItem(
                 val nextReviewText = if (card.nextReview == 0L) {
                     "New card"
                 } else {
-                    val formatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-                    "Next: ${formatter.format(Date(card.nextReview))}"
+                    "Next: ${formatDate(card.nextReview)}"
                 }
 
                 Row(

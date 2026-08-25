@@ -41,9 +41,10 @@ import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryItem
 import com.fencing.spacedrepetition.ui.viewmodel.OPPONENT_FILTER_NONE
 import com.fencing.spacedrepetition.ui.viewmodel.ReviewLogWithCard
+import com.fencing.spacedrepetition.util.formatDate
+import com.fencing.spacedrepetition.util.formatDateAndTime
+import com.fencing.spacedrepetition.util.formatTimeOfDay
 import com.fencing.spacedrepetition.util.saveImageToInternalStorage
-import java.text.SimpleDateFormat
-import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -314,9 +315,6 @@ fun SessionHistoryCard(
     var expanded by remember { mutableStateOf(false) }
     val reviewLogs = reviewLogsForSession(session.id)
 
-    val dateFormatter = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
-    val timeFormatter = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
-    val sessionDate = remember(session.startTime) { Date(session.startTime) }
 
     val gradeCounts = remember(reviewLogs) {
         reviewLogs.groupBy { it.reviewLog.grade }.mapValues { it.value.size }
@@ -347,11 +345,11 @@ fun SessionHistoryCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = dateFormatter.format(sessionDate),
+                        text = formatDate(session.startTime, padDay = false),
                         style = MaterialTheme.typography.titleMedium
                     )
                     Text(
-                        text = timeFormatter.format(sessionDate),
+                        text = formatTimeOfDay(session.startTime),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -453,7 +451,6 @@ private fun QuickGradeCard(
 ) {
     val log = logWithCard.reviewLog
     val grade = Grade.fromValue(log.grade)
-    val dateFormatter = remember { SimpleDateFormat("MMM d, yyyy h:mm a", Locale.getDefault()) }
     var showNoteEditor by remember { mutableStateOf(false) }
 
     val gradeColor = when (grade) {
@@ -519,7 +516,7 @@ private fun QuickGradeCard(
                             if (groupLabel != null) append(" · $groupLabel")
                             if (opponentLabel != null) append(" · vs ").append(opponentLabel)
                             append(" · ")
-                            append(dateFormatter.format(Date(log.reviewTime)))
+                            append(formatDateAndTime(log.reviewTime))
                         },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
