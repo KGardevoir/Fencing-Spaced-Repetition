@@ -158,12 +158,12 @@ kotlin {
         val commonTest by getting {
             dependencies {
                 implementation(kotlin("test"))
-            }
-        }
 
-        val wasmJsTest by getting {
-            dependencies {
-                // runTest, so the browser test can await the worker.
+                // runTest, so a suspending function can be tested on every
+                // target. It matters most on wasm, where the result is a
+                // promise the harness has to await -- but the hashing and
+                // storage tests are only worth having if they run everywhere,
+                // since agreeing across platforms is the thing being checked.
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:$coroutinesVersion")
             }
         }
