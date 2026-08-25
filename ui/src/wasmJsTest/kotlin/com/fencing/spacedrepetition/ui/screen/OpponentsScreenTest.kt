@@ -15,8 +15,8 @@ import com.fencing.spacedrepetition.ui.theme.FencingSpacedRepetitionTheme
 import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import kotlin.test.fail
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.withTimeout
 
 /**
  * The first screen of the app, running end to end in a browser.
@@ -52,6 +52,21 @@ class OpponentsScreenTest {
             val id = repository.insertOpponent(Opponent(name = "opponents-reachable-test"))
             assertTrue(id > 0, "the database accepted no rows")
             repository.getOpponentById(id)?.let { repository.deleteOpponent(it) }
+        }
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun theOpponentFlowEmits() = runComposeUiTest {
+        // The one thing the passing tests never touch. insertOpponent and
+        // getOpponentById are single suspend round-trips to the worker; a Flow
+        // query is Room's invalidation tracker, which is a different mechanism
+        // and the only part of this path not yet exercised in a browser.
+        val repository = OpponentRepository(AppDatabase.getDatabase().opponentDao())
+
+        val emitted = runCatching { repository.getAllOpponents().first() }
+        emitted.exceptionOrNull()?.let { error ->
+            fail("the opponents Flow threw ${describe(error)}")
         }
     }
 
@@ -95,8 +110,14 @@ class OpponentsScreenTest {
             // while it spun, and it could only ever time out. Suspending here
             // hands control back to the browser, which is what lets the reply
             // arrive at all.
-            withTimeout(30_000) {
+            //
+            // No withTimeout around it: the harness has its own, and a virtual
+            // clock would fire an inner one before any real work completed.
+            val awaited = runCatching {
                 viewModel.opponents.first { opponents -> opponents.any { it.name == name } }
+            }
+            awaited.exceptionOrNull()?.let { error ->
+                fail("waiting for the row threw ${describe(error)}")
             }
             awaitIdle()
 
@@ -105,4 +126,13 @@ class OpponentsScreenTest {
             repository.getOpponentById(id)?.let { repository.deleteOpponent(it) }
         }
     }
+
+    /**
+     * wasm exceptions frequently reach the test report as a bare "Error" with
+     * nothing after it, which localises nothing. This puts the type, the
+     * message and the cause into the assertion text instead.
+     */
+    private fun describe(error: Throwable): String =
+        "${error::class.simpleName}: ${error.message ?: "(no message)"}" +
+            (error.cause?.let { " <- ${it::class.simpleName}: ${it.message ?: "(no message)"}" } ?: "")
 }
