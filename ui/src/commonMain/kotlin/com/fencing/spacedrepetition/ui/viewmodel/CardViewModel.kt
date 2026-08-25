@@ -107,6 +107,9 @@ open class CardViewModel(
         }
     }
 
+    // flatMapLatest is still experimental, and this is the second place in the
+    // class that uses it -- the other one is annotated a few dozen lines up.
+    @OptIn(ExperimentalCoroutinesApi::class)
     val filteredCards: StateFlow<List<Card>> = _showDisabledFilter.flatMapLatest { showDisabled ->
         combine(
             allCardsWithGroups,
