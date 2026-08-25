@@ -63,6 +63,12 @@ kotlin {
                 implementation(compose.material3)
                 implementation(compose.ui)
 
+                // BackHandler, which the group editor uses to guard unsaved
+                // changes. Declared rather than relied on: material3 lists it
+                // among its dependencies, but not as an api one, so it reaches
+                // the runtime classpath and never the compile classpath.
+                implementation("org.jetbrains.compose.ui:ui-backhandler:1.11.1")
+
                 // Material's icons. Declared explicitly because material3
                 // does not depend on them, and pinned to 1.7.3 because that
                 // is the last version JetBrains published -- the icons
