@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Enmar Abrams
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package com.fencing.spacedrepetition.util
 
 import com.fencing.spacedrepetition.data.model.AlgorithmType
@@ -415,7 +418,7 @@ class CardImportExportTest {
         )
 
         val outputStream = ByteArrayOutputStream()
-        val result = CardImportExport.exportCardsWithGroupStates(cardsWithStates, outputStream)
+        val result = CardImportExport.exportCardsWithGroupStates(cardsWithStates, outputStream, images = NoImages)
 
         assertTrue(result is ExportResult.Success)
         assertEquals(1, (result as ExportResult.Success).exportedCount)
@@ -464,7 +467,7 @@ class CardImportExportTest {
         )
 
         val outputStream = ByteArrayOutputStream()
-        val result = CardImportExport.exportCardsWithGroupStates(cardsWithStates, outputStream)
+        val result = CardImportExport.exportCardsWithGroupStates(cardsWithStates, outputStream, images = NoImages)
 
         assertTrue(result is ExportResult.Success)
         assertEquals(2, (result as ExportResult.Success).exportedCount) // 1 global + 1 group-specific
@@ -582,7 +585,8 @@ class CardImportExportTest {
                 groupNames = listOf("NormalGroup", "IndependentGroup"),
                 groupSpecificStates = mapOf("IndependentGroup" to groupState)
             )),
-            outputStream
+            outputStream,
+            images = NoImages
         )
 
         // Import V2
@@ -754,4 +758,14 @@ class CardImportExportTest {
         // The exact count may vary based on how Java handles \r, but should parse at least 2
         assertTrue(cards.size >= 2)
     }
+
+    /**
+     * Reads no images.
+     *
+     * These tests export cards that have none, and the real reader needs a
+     * Context and confines itself to filesDir. Passed explicitly rather than
+     * defaulted: a default that quietly reads nothing is how images would go
+     * missing from a real export without anyone noticing.
+     */
+    private val NoImages = ImageReader { null }
 }

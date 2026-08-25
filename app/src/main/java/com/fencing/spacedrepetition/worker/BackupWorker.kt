@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Enmar Abrams
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package com.fencing.spacedrepetition.worker
 
 import android.content.Context
@@ -6,12 +9,17 @@ import androidx.documentfile.provider.DocumentFile
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.fencing.spacedrepetition.data.AppDatabase
+import com.fencing.spacedrepetition.data.getDatabase
 import com.fencing.spacedrepetition.data.preferences.ThemePreferences
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
 import com.fencing.spacedrepetition.util.CardImportExport
+import com.fencing.spacedrepetition.util.FileImageReader
+import com.fencing.spacedrepetition.util.createCompressedOutputStream
+import com.fencing.spacedrepetition.util.exportCardsWithGroupStates
 import com.fencing.spacedrepetition.util.ExportResult
+import com.fencing.spacedrepetition.util.Time
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -82,7 +90,7 @@ class BackupWorker(
                 val outputStream = CardImportExport.createCompressedOutputStream(fileStream)
                 val result = CardImportExport.exportCardsWithGroupStates(
                     cardsWithStates, outputStream, allGroups, reviewLogs, cardQuestions,
-                    opponents, opponentNamesById
+                    opponents, opponentNamesById, FileImageReader(applicationContext)
                 )
                 outputStream.close()
                 result
@@ -93,7 +101,7 @@ class BackupWorker(
 
         return when (exportResult) {
             is ExportResult.Success -> {
-                preferences.setLastBackupTime(System.currentTimeMillis())
+                preferences.setLastBackupTime(Time.now())
                 pruneOldBackups(backupDir, preferences.maxBackupsKept.first())
                 Result.success()
             }

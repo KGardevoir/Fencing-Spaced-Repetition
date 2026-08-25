@@ -92,7 +92,6 @@ adb install app/build/outputs/apk/release/app-release.apk
 - [ ] Test card creation, editing, deletion
 - [ ] Test practice sessions
 - [ ] Test import/export functionality
-- [ ] **DO NOT** test donations (they won't work until published)
 - [ ] Check ProGuard hasn't broken anything
 
 ## Creating Store Assets
@@ -162,50 +161,16 @@ adb exec-out screencap -p > screenshot.png
 - Use: https://screenshots.pro/
 - Or: https://www.figma.com/ with device mockups
 
-## Setting Up In-App Products
+## In-App Products
 
-The app has 3 donation tiers that need to be configured in Play Console.
+None. The app ships no in-app purchase SDK.
 
-### Step 1: Access In-App Products
+Google Play Billing was removed so the app can be distributed through
+[F-Droid](https://f-droid.org/), which only builds software whose dependencies
+are all free software. Donations are handled by outbound links from the
+Settings screen; the destinations are defined in `SupportLinks.kt`.
 
-1. Go to Play Console → Your App
-2. Select "Monetize" → "In-app products"
-3. Click "Create product" (do this 3 times)
-
-### Step 2: Create Donation Products
-
-**Product 1: Small Donation**
-- Product ID: `donation_small`
-- Name: "Small Coffee"
-- Description: "Buy me a small coffee - support app development"
-- Price: $0.99 (or equivalent in your currency)
-- Status: Active
-
-**Product 2: Medium Donation**
-- Product ID: `donation_medium`
-- Name: "Big Coffee"
-- Description: "Buy me a big coffee - support app development"
-- Price: $2.99
-- Status: Active
-
-**Product 3: Large Donation**
-- Product ID: `donation_large`
-- Name: "Generous Support"
-- Description: "Generous support for app development"
-- Price: $4.99
-- Status: Active
-
-**Important Notes:**
-- Product IDs MUST match exactly what's in BillingManager.kt
-- These are consumable products (users can purchase multiple times)
-- You can adjust prices for different countries
-
-### Step 3: Testing Donations (Before Launch)
-
-1. Add test account emails in Play Console → Settings → License testing
-2. Build a test release (internal testing track)
-3. Install and test donation flow
-4. Test accounts can make purchases without being charged
+Nothing needs to be configured under Play Console -> Monetize.
 
 ## Creating Your Play Console Listing
 
@@ -526,12 +491,6 @@ Play Console → Monetize → In-app products:
 - [ ] Category selected
 - [ ] Content rating completed
 - [ ] Privacy policy URL set
-
-### In-App Products
-- [ ] donation_small created ($0.99)
-- [ ] donation_medium created ($2.99)
-- [ ] donation_large created ($4.99)
-- [ ] All products activated
 
 ### Privacy & Compliance
 - [ ] Privacy policy hosted publicly

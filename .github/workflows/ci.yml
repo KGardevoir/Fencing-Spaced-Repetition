@@ -34,15 +34,149 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      # On failure, repeat what matters at the very end of the log. Gradle
+      # buries it hundreds of lines up behind npm chatter and task output,
+      # which makes a failure needlessly expensive to read.
+      #
+      # Gradle's own failure block comes first and unconditionally, because it
+      # is the only part that is present for every kind of failure. The
+      # compiler and KSP lines follow when there are any. Printing only the
+      # latter is how a yarn install failure once reached the end of the log
+      # looking like a KSP configuration dump.
       - name: Run unit tests
-        run: ./gradlew testDebugUnitTest
+        run: |
+          set -o pipefail
+          if ! ./gradlew :shared:allTests :ui:allTests :app:testDebugUnitTest 2>&1 | tee /tmp/build.log; then
+            echo ""
+            echo "===================== what failed ======================="
+            grep -A12 -E "^\* What went wrong:" /tmp/build.log | awk 'NR <= 40' || true
+
+            echo ""
+            echo "===================== failing tests ====================="
+            failures=$(grep -E "FAILED$|tests completed, .* failed" /tmp/build.log || true)
+            if [ -n "$failures" ]; then
+              printf '%s\n' "$failures" | awk 'NR <= 40'
+            else
+              echo "(no test failures -- the build did not get that far)"
+            fi
+
+            echo ""
+            echo "================= compiler / KSP errors ================="
+            errors=$(grep -A2 -E "^e: |^Tried the following|^<init> ->|^KSPCFG:|^w: .Default Kotlin Hierarchy|klib|Skipping|incompatible ABI|metadata version" /tmp/build.log || true)
+            if [ -n "$errors" ]; then
+              printf '%s\n' "$errors" | awk 'NR <= 120'
+            else
+              echo "(none)"
+            fi
+            echo "========================================================="
+            exit 1
+          fi
 
       - name: Upload test results
         uses: actions/upload-artifact@v7
         if: always()
         with:
           name: test-results
-          path: app/build/reports/tests/testDebugUnitTest/
+          path: |
+            app/build/reports/tests/testDebugUnitTest/
+            shared/build/reports/tests/
+            ui/build/reports/tests/
+          retention-days: 14
+
+      # How many tests each suite actually ran, on every run, green or red.
+      #
+      # Not a safety net: Gradle 9 fails a test task that has sources but
+      # discovers nothing (failOnNoDiscoveredTests), which is what the browser
+      # suite did when it crashed mid-run earlier in this port. So a green
+      # build already means every suite here ran and found tests. This is for
+      # the number -- watching the browser suite grow as screens move across,
+      # and noticing if one quietly stops covering as much as it did.
+      #
+      # Late in the job on purpose: the logs API reads from the end.
+      - name: Test totals
+        if: always()
+        run: |
+          shopt -s nullglob
+          any=0
+          for dir in $(find . -type d -path "*/build/test-results/*" | sort); do
+            files=("$dir"/*.xml)
+            [ ${#files[@]} -eq 0 ] && continue
+            any=1
+            tests=$(cat "${files[@]}" | grep -o 'tests="[0-9]*"' | grep -o '[0-9]*' | paste -sd+ - | bc)
+            fails=$(cat "${files[@]}" | grep -o 'failures="[0-9]*"' | grep -o '[0-9]*' | paste -sd+ - | bc)
+            errs=$(cat "${files[@]}" | grep -o 'errors="[0-9]*"' | grep -o '[0-9]*' | paste -sd+ - | bc)
+            printf '%-64s %4s tests  %s failed  %s errors\n' \
+              "${dir#./}" "${tests:-0}" "${fails:-0}" "${errs:-0}"
+          done
+          if [ "$any" = 0 ]; then
+            echo "(no test-results XML anywhere -- nothing ran)"
+          fi
+
+  web:
+    name: Build Web Bundle
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build web distribution
+        run: |
+          set -o pipefail
+          if ! ./gradlew :web:wasmJsBrowserDistribution 2>&1 | tee /tmp/build.log; then
+            echo ""
+            echo "===================== what failed ======================="
+            grep -A12 -E "^\* What went wrong:" /tmp/build.log | awk 'NR <= 40' || true
+
+            echo ""
+            echo "===================== failing tests ====================="
+            failures=$(grep -E "FAILED$|tests completed, .* failed" /tmp/build.log || true)
+            if [ -n "$failures" ]; then
+              printf '%s\n' "$failures" | awk 'NR <= 40'
+            else
+              echo "(no test failures -- the build did not get that far)"
+            fi
+
+            echo ""
+            echo "================= compiler / KSP errors ================="
+            errors=$(grep -A2 -E "^e: |^Tried the following|^<init> ->|^KSPCFG:|^w: .Default Kotlin Hierarchy|klib|Skipping|incompatible ABI|metadata version" /tmp/build.log || true)
+            if [ -n "$errors" ]; then
+              printf '%s\n' "$errors" | awk 'NR <= 120'
+            else
+              echo "(none)"
+            fi
+            echo "========================================================="
+            exit 1
+          fi
+
+      - name: List bundle contents
+        run: ls -lh web/build/dist/wasmJs/productionExecutable/
+
+      - name: Upload web bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-bundle
+          path: web/build/dist/wasmJs/productionExecutable/
           retention-days: 14
 
   build:
@@ -96,7 +230,41 @@ jobs:
           DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
           DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
           DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
-        run: ./gradlew assembleDebug
+        run: |
+          set -o pipefail
+          if ! ./gradlew assembleDebug 2>&1 | tee /tmp/build.log; then
+            echo ""
+            echo "===================== what failed ======================="
+            grep -A12 -E "^\* What went wrong:" /tmp/build.log | awk 'NR <= 40' || true
+
+            echo ""
+            echo "===================== failing tests ====================="
+            failures=$(grep -E "FAILED$|tests completed, .* failed" /tmp/build.log || true)
+            if [ -n "$failures" ]; then
+              printf '%s\n' "$failures" | awk 'NR <= 40'
+            else
+              echo "(no test failures -- the build did not get that far)"
+            fi
+
+            echo ""
+            echo "================= compiler / KSP errors ================="
+            errors=$(grep -A2 -E "^e: |^Tried the following|^<init> ->|^KSPCFG:|^w: .Default Kotlin Hierarchy|klib|Skipping|incompatible ABI|metadata version" /tmp/build.log || true)
+            if [ -n "$errors" ]; then
+              printf '%s\n' "$errors" | awk 'NR <= 120'
+            else
+              echo "(none)"
+            fi
+            echo "========================================================="
+            exit 1
+          fi
+
+      - name: Upload Room schema
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: room-schemas
+          path: shared/schemas/
+          retention-days: 14
 
       - name: Rename debug APK
         id: artifact

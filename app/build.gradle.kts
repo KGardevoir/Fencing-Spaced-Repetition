@@ -1,7 +1,10 @@
 plugins {
     id("com.android.application")
+    // Applied explicitly because gradle.properties sets android.builtInKotlin=false.
+    // AGP 9 would otherwise supply the Kotlin plugin itself, and that is off for
+    // the reason spelled out in gradle.properties.
+    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
-    id("com.google.devtools.ksp")
 }
 
 val gitCommit: String = try {
@@ -96,6 +99,17 @@ android {
 }
 
 dependencies {
+    // Platform-independent core: scheduling algorithms, settings constants,
+    // clock, and the whole Room data layer -- entities, DAOs and the database
+    // itself. :shared exposes Room and coroutines through api(), so the
+    // coordinates that used to be listed here live there now.
+    implementation(project(":shared"))
+
+    // The Compose user interface, shared with the browser build. :ui exposes
+    // :shared through api(), so the line above is redundant in dependency
+    // terms and kept for what it says: this app is built on that core.
+    implementation(project(":ui"))
+
     // Core Android
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
@@ -112,12 +126,6 @@ dependencies {
     // Navigation
     implementation("androidx.navigation:navigation-compose:2.7.5")
 
-    // Room
-    val roomVersion = "2.7.1"
-    implementation("androidx.room:room-runtime:$roomVersion")
-    implementation("androidx.room:room-ktx:$roomVersion")
-    ksp("androidx.room:room-compiler:$roomVersion")
-
     // ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")
 
@@ -130,14 +138,12 @@ dependencies {
     // DocumentFile for writing backups to a user-selected SAF folder
     implementation("androidx.documentfile:documentfile:1.0.1")
 
-    // Coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    // Coroutines. The version tracks :shared's coroutines-core: the -android
+    // artifact is a companion to a specific core version, and letting Gradle
+    // resolve a newer core underneath an older -android is how Dispatchers.Main
+    // breaks at runtime rather than at build time.
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
-    // Coil for image loading
-    implementation("io.coil-kt:coil-compose:2.5.0")
-
-    // Google Play Billing
-    implementation("com.android.billingclient:billing-ktx:6.1.0")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

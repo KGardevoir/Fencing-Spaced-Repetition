@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Enmar Abrams
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package com.fencing.spacedrepetition
 
 import android.os.Bundle
@@ -6,20 +9,27 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fencing.spacedrepetition.data.AppDatabase
+import com.fencing.spacedrepetition.data.getDatabase
 import com.fencing.spacedrepetition.data.preferences.ThemePreferences
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
+import com.fencing.spacedrepetition.util.FileImageStore
+import com.fencing.spacedrepetition.ui.image.ImageCache
+import com.fencing.spacedrepetition.ui.image.LocalImageCache
+import com.fencing.spacedrepetition.ui.image.LocalImagePicker
+import com.fencing.spacedrepetition.ui.image.rememberAndroidImagePicker
 import com.fencing.spacedrepetition.ui.navigation.AppNavigation
 import com.fencing.spacedrepetition.ui.theme.FencingSpacedRepetitionTheme
-import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
-import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.AndroidCardViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.AndroidGroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
@@ -64,6 +74,11 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // One store and one cache for the process. Both are cheap to hold and
+        // the cache is only useful if it outlives a single screen.
+        val imageStore = FileImageStore(applicationContext)
+        val imageCache = ImageCache(imageStore)
+
         setContent {
             // Create settings ViewModel
             val settingsViewModel: SettingsViewModel = viewModel(
@@ -71,19 +86,23 @@ class MainActivity : ComponentActivity() {
             )
             val themeMode by settingsViewModel.themeMode.collectAsState()
 
+            CompositionLocalProvider(
+                LocalImageCache provides imageCache,
+                LocalImagePicker provides rememberAndroidImagePicker(imageStore)
+            ) {
             FencingSpacedRepetitionTheme(themeMode = themeMode) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
                     // Create ViewModels with repositories
-                    val cardViewModel: CardViewModel = viewModel(
+                    val cardViewModel: AndroidCardViewModel = viewModel(
                         factory = CardViewModelFactory(application, repository, groupRepository, opponentRepository)
                     )
                     val practiceViewModel: PracticeViewModel = viewModel(
                         factory = PracticeViewModelFactory(repository, opponentRepository)
                     )
-                    val groupViewModel: GroupViewModel = viewModel(
+                    val groupViewModel: AndroidGroupViewModel = viewModel(
                         factory = GroupViewModelFactory(application, groupRepository, repository)
                     )
                     val historyViewModel: HistoryViewModel = viewModel(
@@ -103,6 +122,7 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+            }
         }
     }
 }
@@ -116,8 +136,8 @@ class CardViewModelFactory(
 ) : androidx.lifecycle.ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(CardViewModel::class.java)) {
-            return CardViewModel(application, repository, groupRepository, opponentRepository) as T
+        if (modelClass.isAssignableFrom(AndroidCardViewModel::class.java)) {
+            return AndroidCardViewModel(application, repository, groupRepository, opponentRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
@@ -143,8 +163,8 @@ class GroupViewModelFactory(
 ) : androidx.lifecycle.ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(GroupViewModel::class.java)) {
-            return GroupViewModel(application, groupRepository, cardRepository) as T
+        if (modelClass.isAssignableFrom(AndroidGroupViewModel::class.java)) {
+            return AndroidGroupViewModel(application, groupRepository, cardRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
@@ -157,7 +177,7 @@ class SettingsViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(SettingsViewModel::class.java)) {
-            return SettingsViewModel(application, themePreferences) as T
+            return SettingsViewModel(themePreferences, WorkManagerBackups(application)) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
@@ -185,5 +205,28 @@ class OpponentViewModelFactory(
             return OpponentViewModel(opponentRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
+    }
+}
+
+/**
+ * The Android half of [BackupScheduling]: WorkManager.
+ *
+ * Here rather than in the view model because WorkManager is Android's, and
+ * the settings screen that drives it is not.
+ */
+class WorkManagerBackups(
+    private val application: android.app.Application
+) : com.fencing.spacedrepetition.ui.viewmodel.BackupScheduling {
+
+    override suspend fun reschedule(enabled: Boolean, uri: String?, intervalDays: Int) {
+        if (enabled && uri != null) {
+            BackupScheduler.schedule(application, intervalDays)
+        } else {
+            BackupScheduler.cancel(application)
+        }
+    }
+
+    override suspend fun runNow() {
+        BackupScheduler.runNow(application)
     }
 }

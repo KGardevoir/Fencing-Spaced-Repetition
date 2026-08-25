@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Enmar Abrams
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package com.fencing.spacedrepetition.util
 
 import com.fencing.spacedrepetition.data.model.AlgorithmType
@@ -260,7 +263,7 @@ class CsvImportExportTest {
 
         val cardsWithGroups = listOf(CardWithGroupNames(card, listOf("Foil")))
         val outputStream = ByteArrayOutputStream()
-        val result = CardImportExport.exportCardsToCsv(cardsWithGroups, outputStream)
+        val result = CardImportExport.exportCardsToCsv(cardsWithGroups, outputStream, images = NoImages)
 
         assertTrue(result is ExportResult.Success)
         assertEquals(1, (result as ExportResult.Success).exportedCount)
@@ -285,7 +288,7 @@ class CsvImportExportTest {
 
         val cardsWithGroups = listOf(CardWithGroupNames(card, emptyList()))
         val outputStream = ByteArrayOutputStream()
-        CardImportExport.exportCardsToCsv(cardsWithGroups, outputStream)
+        CardImportExport.exportCardsToCsv(cardsWithGroups, outputStream, images = NoImages)
 
         val content = outputStream.toString(Charsets.UTF_8.name())
         val lines = content.trim().lines()
@@ -306,7 +309,7 @@ class CsvImportExportTest {
 
         val cardsWithGroups = listOf(CardWithGroupNames(card, emptyList()))
         val outputStream = ByteArrayOutputStream()
-        CardImportExport.exportCardsToCsv(cardsWithGroups, outputStream)
+        CardImportExport.exportCardsToCsv(cardsWithGroups, outputStream, images = NoImages)
 
         val content = outputStream.toString(Charsets.UTF_8.name())
         // Should contain quoted field with newline
@@ -325,7 +328,7 @@ class CsvImportExportTest {
 
         val cardsWithGroups = listOf(CardWithGroupNames(card, emptyList()))
         val outputStream = ByteArrayOutputStream()
-        CardImportExport.exportCardsToCsv(cardsWithGroups, outputStream)
+        CardImportExport.exportCardsToCsv(cardsWithGroups, outputStream, images = NoImages)
 
         val content = outputStream.toString(Charsets.UTF_8.name())
         val header = content.lines().first()
@@ -340,7 +343,7 @@ class CsvImportExportTest {
     @Test
     fun `exportCardsToCsv - empty card list`() {
         val outputStream = ByteArrayOutputStream()
-        val result = CardImportExport.exportCardsToCsv(emptyList(), outputStream)
+        val result = CardImportExport.exportCardsToCsv(emptyList(), outputStream, images = NoImages)
 
         assertTrue(result is ExportResult.Success)
         assertEquals(0, (result as ExportResult.Success).exportedCount)
@@ -365,7 +368,7 @@ class CsvImportExportTest {
             CardWithGroupNames(card2, emptyList())
         )
         val exportStream = ByteArrayOutputStream()
-        CardImportExport.exportCardsToCsv(cardsWithGroups, exportStream)
+        CardImportExport.exportCardsToCsv(cardsWithGroups, exportStream, images = NoImages)
 
         // Import
         val importStream = ByteArrayInputStream(exportStream.toByteArray())
@@ -392,7 +395,8 @@ class CsvImportExportTest {
         val exportStream = ByteArrayOutputStream()
         CardImportExport.exportCardsToCsv(
             listOf(CardWithGroupNames(card, emptyList())),
-            exportStream
+            exportStream,
+            images = NoImages
         )
 
         val importStream = ByteArrayInputStream(exportStream.toByteArray())
@@ -417,7 +421,8 @@ class CsvImportExportTest {
         val exportStream = ByteArrayOutputStream()
         CardImportExport.exportCardsToCsv(
             listOf(CardWithGroupNames(card, emptyList())),
-            exportStream
+            exportStream,
+            images = NoImages
         )
 
         val importStream = ByteArrayInputStream(exportStream.toByteArray())
@@ -504,4 +509,14 @@ class CsvImportExportTest {
     fun `generateCsvExportFilename - special characters`() {
         assertEquals("Test_Group_cards.csv", CardImportExport.generateCsvExportFilename("Test/Group"))
     }
+
+    /**
+     * Reads no images.
+     *
+     * These tests export cards that have none, and the real reader needs a
+     * Context and confines itself to filesDir. Passed explicitly rather than
+     * defaulted: a default that quietly reads nothing is how images would go
+     * missing from a real export without anyone noticing.
+     */
+    private val NoImages = ImageReader { null }
 }

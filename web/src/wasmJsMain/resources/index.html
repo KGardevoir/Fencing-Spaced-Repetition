@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AnkiFlex</title>
+  <style>
+    /* Compose draws into a canvas that fills the viewport. Everything the
+       page used to style -- prose, tables, a bordered demo box -- belonged to
+       the smoke page and went with it. */
+    :root { color-scheme: light dark; }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    #app { height: 100%; }
+    #app:empty::after {
+      content: "Loading\2026";
+      display: block;
+      padding: 2rem;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      opacity: 0.7;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="fencing-web.js"></script>
+</body>
+</html>

@@ -36,15 +36,13 @@ We do NOT collect, store, or transmit:
 The app is distributed through the Google Play Store, which is operated by Google LLC. Google may collect certain information as described in their privacy policy:
 - https://policies.google.com/privacy
 
-### Google Play Billing
+### Donations
 
-If you choose to make a donation through the app, the transaction is processed by Google Play's in-app billing system. We do NOT:
-- Store your payment information
-- Have access to your credit card or payment details
-- Collect any information about your donation
-
-Google Play handles all payment processing securely. Please refer to Google's privacy policy for information about how they handle payment data:
-- https://payments.google.com/payments/apis-secure/u/0/get_legal_document?ldo=0&ldt=privacynotice
+The app contains no in-app purchase or payment system. The Settings screen
+offers links to external donation pages; tapping one hands the URL to your
+browser and the app's involvement ends there. Any data collected after that
+point is governed by the privacy policy of the site you land on, not this one.
+The app never learns whether you visited, donated, or how much.
 
 ### Data Shared with Third Parties
 
@@ -70,7 +68,7 @@ The app is appropriate for users of all ages, including children, as it contains
 
 Your data security is important to us:
 - All flashcard and study data is stored locally on your device
-- No data is transmitted over the internet (except for donation processing by Google)
+- No data is transmitted over the internet by the app at all
 - You have full control over your data
 - You can export your data at any time through the app's export feature
 
@@ -108,12 +106,10 @@ The app does not require any account creation, registration, or login. You can u
 
 ## Permissions
 
-The app requests the following Android permissions:
-
-- **BILLING**: Required for processing donations through Google Play. This permission allows the app to communicate with Google Play's billing system but does not give us access to your payment information.
+The app requests no Android permissions at all.
 
 The app does NOT request:
-- Internet access (except what's required for Google Play Billing)
+- Internet access
 - Location access
 - Camera access (unless you explicitly choose to add an image to a card)
 - Contacts access
@@ -143,7 +139,6 @@ By using this app, you consent to this privacy policy.
 - ✅ All your data stays on your device
 - ✅ We collect ZERO personal information
 - ✅ No ads, no tracking, no analytics
-- ✅ Optional donations processed securely by Google
 - ✅ You have complete control over your data
 - ✅ Open source and verifiable
 - ✅ No account or registration required

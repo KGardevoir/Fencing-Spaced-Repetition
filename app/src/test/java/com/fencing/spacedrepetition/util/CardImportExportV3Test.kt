@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Enmar Abrams
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package com.fencing.spacedrepetition.util
 
 import com.fencing.spacedrepetition.data.model.AlgorithmType
@@ -29,6 +32,20 @@ class CardImportExportV3Test {
         )
     }
 
+    /**
+     * Reads whatever path it is given.
+     *
+     * Not FileImageReader: that one needs a Context and deliberately refuses
+     * paths outside filesDir, and these tests read temp files. What is under
+     * test here is encodeImageToBase64's behaviour given a reader -- that it
+     * base64s what it gets and returns null when it gets nothing -- which is
+     * exactly why the reader is a parameter.
+     */
+    private object TempFileReader : ImageReader {
+        override fun read(path: String): ByteArray? =
+            File(path).takeIf { it.exists() }?.readBytes()
+    }
+
     @Test
     fun `test base64 image encoding`() {
         // Create a temporary file
@@ -36,7 +53,7 @@ class CardImportExportV3Test {
         try {
             tempFile.writeBytes(createTestImageBytes())
 
-            val encoded = CardImportExport.encodeImageToBase64(tempFile.absolutePath)
+            val encoded = CardImportExport.encodeImageToBase64(tempFile.absolutePath, TempFileReader)
             assertNotNull(encoded)
             assertTrue(encoded!!.isNotEmpty())
 
@@ -50,7 +67,7 @@ class CardImportExportV3Test {
 
     @Test
     fun `test base64 image encoding - nonexistent file`() {
-        val encoded = CardImportExport.encodeImageToBase64("/nonexistent/file.png")
+        val encoded = CardImportExport.encodeImageToBase64("/nonexistent/file.png", TempFileReader)
         assertNull(encoded)
     }
 
@@ -105,7 +122,7 @@ class CardImportExportV3Test {
 
             val outputStream = ByteArrayOutputStream()
             val gzipOut = CardImportExport.createCompressedOutputStream(outputStream)
-            val result = CardImportExport.exportCardsWithGroupStates(cardsWithStates, gzipOut)
+            val result = CardImportExport.exportCardsWithGroupStates(cardsWithStates, gzipOut, images = TempFileReader)
             gzipOut.close()
 
             assertTrue(result is ExportResult.Success)
@@ -163,7 +180,8 @@ class CardImportExportV3Test {
                         groupSpecificStates = emptyMap()
                     )
                 ),
-                gzipOut
+                gzipOut,
+                images = TempFileReader
             )
             gzipOut.close()
 
@@ -219,7 +237,7 @@ class CardImportExportV3Test {
 
         val outputStream = ByteArrayOutputStream()
         val gzipOut = CardImportExport.createCompressedOutputStream(outputStream)
-        val result = CardImportExport.exportCardsWithGroupStates(cardsWithStates, gzipOut)
+        val result = CardImportExport.exportCardsWithGroupStates(cardsWithStates, gzipOut, images = TempFileReader)
         gzipOut.close()
 
         assertTrue(result is ExportResult.Success)
@@ -257,13 +275,13 @@ class CardImportExportV3Test {
 
         // Export without compression
         val uncompressedStream = ByteArrayOutputStream()
-        CardImportExport.exportCardsWithGroupStates(cardsWithStates, uncompressedStream)
+        CardImportExport.exportCardsWithGroupStates(cardsWithStates, uncompressedStream, images = TempFileReader)
         val uncompressedSize = uncompressedStream.toByteArray().size
 
         // Export with compression
         val compressedStream = ByteArrayOutputStream()
         val gzipOut = CardImportExport.createCompressedOutputStream(compressedStream)
-        CardImportExport.exportCardsWithGroupStates(cardsWithStates, gzipOut)
+        CardImportExport.exportCardsWithGroupStates(cardsWithStates, gzipOut, images = TempFileReader)
         gzipOut.close()
         val compressedSize = compressedStream.toByteArray().size
 
