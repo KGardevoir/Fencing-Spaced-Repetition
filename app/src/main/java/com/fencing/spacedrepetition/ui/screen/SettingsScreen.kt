@@ -3,10 +3,6 @@
 
 package com.fencing.spacedrepetition.ui.screen
 
-import android.content.Intent
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -21,51 +17,61 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.documentfile.provider.DocumentFile
 import com.fencing.spacedrepetition.BuildConfig
+import com.fencing.spacedrepetition.algorithm.ScheduleEstimate
 import com.fencing.spacedrepetition.SupportLinks
 import com.fencing.spacedrepetition.data.preferences.SettingsConstants
 import com.fencing.spacedrepetition.data.preferences.ThemeMode
 import com.fencing.spacedrepetition.ui.components.FsrsRetentionPreview
 import com.fencing.spacedrepetition.ui.components.RetentionSelector
-import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
-import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.fencing.spacedrepetition.util.formatDateAtTime
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    settingsViewModel: SettingsViewModel,
-    cardViewModel: CardViewModel,
+    totalCards: Int,
+    themeMode: ThemeMode,
+    autoShowAnswer: Boolean,
+    cardsPerSession: Int,
+    randomizeDueCards: Boolean,
+    randomizeBucketHours: Int,
+    maximumInterval: Int,
+    practiceDays: Set<Int>,
+    fsrsRetention: Int,
+    practiceScheduleEstimate: ScheduleEstimate?,
+    historyWindowDays: Int,
+    sm2IntervalModifier: Int,
+    fsrsEnableFuzzing: Boolean,
+    autoBackupEnabled: Boolean,
+    autoBackupIntervalDays: Int,
+    lastBackupTime: Long,
+    maxBackupsKept: Int,
+    // Where backups go. The screen only ever shows this name and asks for a
+    // new folder; picking one is the platform's business, not the screen's.
+    backupFolderName: String?,
+    onPickBackupFolder: () -> Unit,
+    onSetThemeMode: (ThemeMode) -> Unit,
+    onSetAutoShowAnswer: (Boolean) -> Unit,
+    onSetCardsPerSession: (Int) -> Unit,
+    onSetRandomizeDueCards: (Boolean) -> Unit,
+    onSetRandomizeBucketHours: (Int) -> Unit,
+    onSetMaximumInterval: (Int) -> Unit,
+    onTogglePracticeDay: (Int) -> Unit,
+    onSetFsrsRetention: (Int) -> Unit,
+    onSetHistoryWindowDays: (Int) -> Unit,
+    onSetSm2IntervalModifier: (Int) -> Unit,
+    onSetFsrsEnableFuzzing: (Boolean) -> Unit,
+    onSetAutoBackupEnabled: (Boolean) -> Unit,
+    onSetAutoBackupIntervalDays: (Int) -> Unit,
+    onSetMaxBackupsKept: (Int) -> Unit,
+    onRunBackupNow: () -> Unit,
+    onDeleteAllCards: () -> Unit,
+    onOpenLink: (String) -> Unit,
     onNavigateBack: () -> Unit
 ) {
-    val totalCards by cardViewModel.cardCount.collectAsState()
     var showDeleteAllDialog by remember { mutableStateOf(false) }
-
-    val themeMode by settingsViewModel.themeMode.collectAsState()
-    val autoShowAnswer by settingsViewModel.autoShowAnswer.collectAsState()
-    val cardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
-    val randomizeDueCards by settingsViewModel.randomizeDueCards.collectAsState()
-    val randomizeBucketHours by settingsViewModel.randomizeBucketHours.collectAsState()
-    val maximumInterval by settingsViewModel.maximumInterval.collectAsState()
-    val practiceDays by settingsViewModel.practiceDays.collectAsState()
-    val fsrsRetention by settingsViewModel.fsrsRetention.collectAsState()
-    val practiceScheduleEstimate by cardViewModel.practiceScheduleEstimate.collectAsState()
-    val historyWindowDays by cardViewModel.historyWindowDays.collectAsState()
-    val sm2IntervalModifier by settingsViewModel.sm2IntervalModifier.collectAsState()
-    val fsrsEnableFuzzing by settingsViewModel.fsrsEnableFuzzing.collectAsState()
-    val autoBackupEnabled by settingsViewModel.autoBackupEnabled.collectAsState()
-    val autoBackupUri by settingsViewModel.autoBackupUri.collectAsState()
-    val autoBackupIntervalDays by settingsViewModel.autoBackupIntervalDays.collectAsState()
-    val lastBackupTime by settingsViewModel.lastBackupTime.collectAsState()
-    val maxBackupsKept by settingsViewModel.maxBackupsKept.collectAsState()
-
-    val context = LocalContext.current
 
     val bucketPresets = SettingsConstants.BUCKET_PRESETS
     val currentBucketIndex = SettingsConstants.findPresetIndex(bucketPresets, randomizeBucketHours)
@@ -81,22 +87,6 @@ fun SettingsScreen(
 
     val maxBackupsKeptPresets = SettingsConstants.MAX_BACKUPS_KEPT_PRESETS
     val currentMaxBackupsKeptIndex = SettingsConstants.findPresetIndex(maxBackupsKeptPresets, maxBackupsKept)
-
-    val backupFolderName = autoBackupUri?.let { uriString ->
-        DocumentFile.fromTreeUri(context, Uri.parse(uriString))?.name
-    }
-
-    val folderPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocumentTree()
-    ) { uri ->
-        if (uri != null) {
-            context.contentResolver.takePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-            )
-            settingsViewModel.setAutoBackupUri(uri.toString())
-        }
-    }
 
     Scaffold(
         topBar = {
@@ -132,13 +122,13 @@ fun SettingsScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { settingsViewModel.setThemeMode(mode) }
+                        .clickable { onSetThemeMode(mode) }
                         .padding(vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     RadioButton(
                         selected = themeMode == mode,
-                        onClick = { settingsViewModel.setThemeMode(mode) }
+                        onClick = { onSetThemeMode(mode) }
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
@@ -198,7 +188,7 @@ fun SettingsScreen(
                 }
                 Slider(
                     value = cardsPerSession.toFloat(),
-                    onValueChange = { settingsViewModel.setCardsPerSession(it.roundToInt()) },
+                    onValueChange = { onSetCardsPerSession(it.roundToInt()) },
                     valueRange = SettingsConstants.CARDS_PER_SESSION_MIN..SettingsConstants.CARDS_PER_SESSION_MAX,
                     steps = SettingsConstants.CARDS_PER_SESSION_STEPS,
                     modifier = Modifier.fillMaxWidth()
@@ -216,7 +206,7 @@ fun SettingsScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { settingsViewModel.setAutoShowAnswer(!autoShowAnswer) }
+                    .clickable { onSetAutoShowAnswer(!autoShowAnswer) }
                     .padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -234,7 +224,7 @@ fun SettingsScreen(
                 }
                 Switch(
                     checked = autoShowAnswer,
-                    onCheckedChange = { settingsViewModel.setAutoShowAnswer(it) }
+                    onCheckedChange = onSetAutoShowAnswer
                 )
             }
 
@@ -244,7 +234,7 @@ fun SettingsScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { settingsViewModel.setRandomizeDueCards(!randomizeDueCards) }
+                    .clickable { onSetRandomizeDueCards(!randomizeDueCards) }
                     .padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -262,7 +252,7 @@ fun SettingsScreen(
                 }
                 Switch(
                     checked = randomizeDueCards,
-                    onCheckedChange = { settingsViewModel.setRandomizeDueCards(it) }
+                    onCheckedChange = onSetRandomizeDueCards
                 )
             }
 
@@ -293,7 +283,7 @@ fun SettingsScreen(
                         value = currentBucketIndex.toFloat(),
                         onValueChange = { newIndex ->
                             val presetValue = bucketPresets[newIndex.roundToInt()].first
-                            settingsViewModel.setRandomizeBucketHours(presetValue)
+                            onSetRandomizeBucketHours(presetValue)
                         },
                         valueRange = 0f..(bucketPresets.size - 1).toFloat(),
                         steps = bucketPresets.size - 2,
@@ -338,7 +328,7 @@ fun SettingsScreen(
                         val selected = practiceDays.contains(day)
                         FilterChip(
                             selected = selected,
-                            onClick = { settingsViewModel.togglePracticeDay(day) },
+                            onClick = { onTogglePracticeDay(day) },
                             label = { Text(label) },
                             modifier = Modifier.size(width = 42.dp, height = 36.dp),
                             colors = FilterChipDefaults.filterChipColors(
@@ -398,7 +388,7 @@ fun SettingsScreen(
                     value = currentPresetIndex.toFloat(),
                     onValueChange = { newIndex ->
                         val presetValue = intervalPresets[newIndex.roundToInt()].first
-                        settingsViewModel.setMaximumInterval(presetValue)
+                        onSetMaximumInterval(presetValue)
                     },
                     valueRange = 0f..(intervalPresets.size - 1).toFloat(),
                     steps = intervalPresets.size - 2,
@@ -425,13 +415,13 @@ fun SettingsScreen(
                 )
                 RetentionSelector(
                     retentionPercent = fsrsRetention,
-                    onRetentionChange = { settingsViewModel.setFsrsRetention(it) },
+                    onRetentionChange = onSetFsrsRetention,
                     cardsInRotation = totalCards,
                     scheduleDaysPerWeek = practiceDays.size,
                     scheduleSetsPerPractice = cardsPerSession,
                     historyEstimate = practiceScheduleEstimate,
                     historyWindowDays = historyWindowDays,
-                    onHistoryWindowDaysChange = { cardViewModel.setHistoryWindowDays(it) }
+                    onHistoryWindowDaysChange = onSetHistoryWindowDays
                 )
                 Text(
                     text = "Target probability of remembering a card when it comes due (FSRS only).",
@@ -447,7 +437,7 @@ fun SettingsScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { settingsViewModel.setFsrsEnableFuzzing(!fsrsEnableFuzzing) }
+                    .clickable { onSetFsrsEnableFuzzing(!fsrsEnableFuzzing) }
                     .padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -465,7 +455,7 @@ fun SettingsScreen(
                 }
                 Switch(
                     checked = fsrsEnableFuzzing,
-                    onCheckedChange = { settingsViewModel.setFsrsEnableFuzzing(it) }
+                    onCheckedChange = onSetFsrsEnableFuzzing
                 )
             }
 
@@ -496,7 +486,7 @@ fun SettingsScreen(
                     value = currentSm2ModifierIndex.toFloat(),
                     onValueChange = { newIndex ->
                         val presetValue = sm2ModifierPresets[newIndex.roundToInt()].first
-                        settingsViewModel.setSm2IntervalModifier(presetValue)
+                        onSetSm2IntervalModifier(presetValue)
                     },
                     valueRange = 0f..(sm2ModifierPresets.size - 1).toFloat(),
                     steps = sm2ModifierPresets.size - 2,
@@ -527,7 +517,7 @@ fun SettingsScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { settingsViewModel.setAutoBackupEnabled(!autoBackupEnabled) }
+                    .clickable { onSetAutoBackupEnabled(!autoBackupEnabled) }
                     .padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -545,14 +535,14 @@ fun SettingsScreen(
                 }
                 Switch(
                     checked = autoBackupEnabled,
-                    onCheckedChange = { settingsViewModel.setAutoBackupEnabled(it) }
+                    onCheckedChange = onSetAutoBackupEnabled
                 )
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
             OutlinedButton(
-                onClick = { folderPickerLauncher.launch(null) },
+                onClick = onPickBackupFolder,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(
@@ -599,7 +589,7 @@ fun SettingsScreen(
                     value = currentBackupIntervalIndex.toFloat(),
                     onValueChange = { newIndex ->
                         val presetValue = backupIntervalPresets[newIndex.roundToInt()].first
-                        settingsViewModel.setAutoBackupIntervalDays(presetValue)
+                        onSetAutoBackupIntervalDays(presetValue)
                     },
                     valueRange = 0f..(backupIntervalPresets.size - 1).toFloat(),
                     steps = backupIntervalPresets.size - 2,
@@ -634,7 +624,7 @@ fun SettingsScreen(
                     value = currentMaxBackupsKeptIndex.toFloat(),
                     onValueChange = { newIndex ->
                         val presetValue = maxBackupsKeptPresets[newIndex.roundToInt()].first
-                        settingsViewModel.setMaxBackupsKept(presetValue)
+                        onSetMaxBackupsKept(presetValue)
                     },
                     valueRange = 0f..(maxBackupsKeptPresets.size - 1).toFloat(),
                     steps = maxBackupsKeptPresets.size - 2,
@@ -651,8 +641,7 @@ fun SettingsScreen(
 
             Text(
                 text = if (lastBackupTime > 0) {
-                    "Last backup: " + SimpleDateFormat("MMM d, yyyy 'at' h:mm a", Locale.getDefault())
-                        .format(Date(lastBackupTime))
+                    "Last backup: " + formatDateAtTime(lastBackupTime)
                 } else {
                     "No backup has been made yet"
                 },
@@ -663,7 +652,7 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             OutlinedButton(
-                onClick = { settingsViewModel.runBackupNow() },
+                onClick = onRunBackupNow,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = backupFolderName != null
             ) {
@@ -693,7 +682,7 @@ fun SettingsScreen(
             SupportLinks.links.forEach { link ->
                 ElevatedButton(
                     onClick = {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link.url)))
+                        onOpenLink(link.url)
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -840,7 +829,7 @@ fun SettingsScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        cardViewModel.deleteAllCards()
+                        onDeleteAllCards()
                         showDeleteAllDialog = false
                     },
                     colors = ButtonDefaults.buttonColors(

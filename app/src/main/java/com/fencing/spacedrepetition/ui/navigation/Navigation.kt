@@ -26,6 +26,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
 import android.net.Uri
+import android.content.Intent
+import androidx.documentfile.provider.DocumentFile
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 
@@ -472,9 +474,82 @@ fun AppNavigation(
         }
 
         composable(Screen.Settings.route) {
+            val settingsContext = LocalContext.current
+            val totalCards by cardViewModel.cardCount.collectAsState()
+            val themeMode by settingsViewModel.themeMode.collectAsState()
+            val autoShowAnswer by settingsViewModel.autoShowAnswer.collectAsState()
+            val settingsCardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
+            val randomizeDueCards by settingsViewModel.randomizeDueCards.collectAsState()
+            val randomizeBucketHours by settingsViewModel.randomizeBucketHours.collectAsState()
+            val maximumInterval by settingsViewModel.maximumInterval.collectAsState()
+            val practiceDays by settingsViewModel.practiceDays.collectAsState()
+            val fsrsRetention by settingsViewModel.fsrsRetention.collectAsState()
+            val practiceScheduleEstimate by cardViewModel.practiceScheduleEstimate.collectAsState()
+            val historyWindowDays by cardViewModel.historyWindowDays.collectAsState()
+            val sm2IntervalModifier by settingsViewModel.sm2IntervalModifier.collectAsState()
+            val fsrsEnableFuzzing by settingsViewModel.fsrsEnableFuzzing.collectAsState()
+            val autoBackupEnabled by settingsViewModel.autoBackupEnabled.collectAsState()
+            val autoBackupUri by settingsViewModel.autoBackupUri.collectAsState()
+            val autoBackupIntervalDays by settingsViewModel.autoBackupIntervalDays.collectAsState()
+            val lastBackupTime by settingsViewModel.lastBackupTime.collectAsState()
+            val maxBackupsKept by settingsViewModel.maxBackupsKept.collectAsState()
+
+            // Resolving a tree URI to a folder name, and asking for a new one,
+            // are both storage-framework work; the screen only shows the name.
+            val backupFolderName = autoBackupUri?.let { uriString ->
+                DocumentFile.fromTreeUri(settingsContext, Uri.parse(uriString))?.name
+            }
+            val folderPickerLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.OpenDocumentTree()
+            ) { uri ->
+                if (uri != null) {
+                    settingsContext.contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                    settingsViewModel.setAutoBackupUri(uri.toString())
+                }
+            }
+
             SettingsScreen(
-                settingsViewModel = settingsViewModel,
-                cardViewModel = cardViewModel,
+                totalCards = totalCards,
+                themeMode = themeMode,
+                autoShowAnswer = autoShowAnswer,
+                cardsPerSession = settingsCardsPerSession,
+                randomizeDueCards = randomizeDueCards,
+                randomizeBucketHours = randomizeBucketHours,
+                maximumInterval = maximumInterval,
+                practiceDays = practiceDays,
+                fsrsRetention = fsrsRetention,
+                practiceScheduleEstimate = practiceScheduleEstimate,
+                historyWindowDays = historyWindowDays,
+                sm2IntervalModifier = sm2IntervalModifier,
+                fsrsEnableFuzzing = fsrsEnableFuzzing,
+                autoBackupEnabled = autoBackupEnabled,
+                autoBackupIntervalDays = autoBackupIntervalDays,
+                lastBackupTime = lastBackupTime,
+                maxBackupsKept = maxBackupsKept,
+                backupFolderName = backupFolderName,
+                onPickBackupFolder = { folderPickerLauncher.launch(null) },
+                onSetThemeMode = settingsViewModel::setThemeMode,
+                onSetAutoShowAnswer = settingsViewModel::setAutoShowAnswer,
+                onSetCardsPerSession = settingsViewModel::setCardsPerSession,
+                onSetRandomizeDueCards = settingsViewModel::setRandomizeDueCards,
+                onSetRandomizeBucketHours = settingsViewModel::setRandomizeBucketHours,
+                onSetMaximumInterval = settingsViewModel::setMaximumInterval,
+                onTogglePracticeDay = settingsViewModel::togglePracticeDay,
+                onSetFsrsRetention = settingsViewModel::setFsrsRetention,
+                onSetHistoryWindowDays = cardViewModel::setHistoryWindowDays,
+                onSetSm2IntervalModifier = settingsViewModel::setSm2IntervalModifier,
+                onSetFsrsEnableFuzzing = settingsViewModel::setFsrsEnableFuzzing,
+                onSetAutoBackupEnabled = settingsViewModel::setAutoBackupEnabled,
+                onSetAutoBackupIntervalDays = settingsViewModel::setAutoBackupIntervalDays,
+                onSetMaxBackupsKept = settingsViewModel::setMaxBackupsKept,
+                onRunBackupNow = settingsViewModel::runBackupNow,
+                onDeleteAllCards = { cardViewModel.deleteAllCards() },
+                onOpenLink = { url ->
+                    settingsContext.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                },
                 onNavigateBack = {
                     navController.popBackStack()
                 }
