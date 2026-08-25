@@ -448,4 +448,14 @@ open class CardViewModel(
     fun resetImportExportState() {
         _importExportState.value = ImportExportState.Idle
     }
+
+    /**
+     * Shows a message where import and export progress is shown.
+     *
+     * For a platform that cannot do a transfer at all: the browser reports
+     * that here rather than leaving a button that appears to do nothing.
+     */
+    fun reportImportExportError(message: String) {
+        _importExportState.value = ImportExportState.Error(message)
+    }
 }
