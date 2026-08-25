@@ -3,6 +3,9 @@
 
 package com.fencing.spacedrepetition.ui.screen
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithText
@@ -75,11 +78,10 @@ class OpponentsScreenTest {
     fun theScreenDraws() = runComposeUiTest {
         setContent {
             FencingSpacedRepetitionTheme {
-                OpponentsScreen(
-                    viewModel = OpponentViewModel(
+                OpponentsScreenBoundTo(
+                    OpponentViewModel(
                         OpponentRepository(AppDatabase.getDatabase().opponentDao())
-                    ),
-                    onNavigateBack = {}
+                    )
                 )
             }
         }
@@ -99,7 +101,7 @@ class OpponentsScreenTest {
             val viewModel = OpponentViewModel(repository)
             setContent {
                 FencingSpacedRepetitionTheme {
-                    OpponentsScreen(viewModel = viewModel, onNavigateBack = {})
+                    OpponentsScreenBoundTo(viewModel)
                 }
             }
 
@@ -135,4 +137,28 @@ class OpponentsScreenTest {
     private fun describe(error: Throwable): String =
         "${error::class.simpleName}: ${error.message ?: "(no message)"}" +
             (error.cause?.let { " <- ${it::class.simpleName}: ${it.message ?: "(no message)"}" } ?: "")
+}
+
+/**
+ * The wiring the screen no longer does for itself.
+ *
+ * OpponentsScreen takes values and callbacks now, but these tests are here to
+ * exercise the whole column -- view model, repository, Room, the worker -- so
+ * the view model stays and this binds it, exactly as Navigation does.
+ */
+@Composable
+private fun OpponentsScreenBoundTo(viewModel: OpponentViewModel) {
+    val opponents by viewModel.opponents.collectAsState()
+    val error by viewModel.error.collectAsState()
+    OpponentsScreen(
+        opponents = opponents,
+        error = error,
+        onAddOpponent = { name, multiplier, notes, onDone ->
+            viewModel.addOpponent(name, multiplier, notes, onDone)
+        },
+        onUpdateOpponent = { opponent, onDone -> viewModel.updateOpponent(opponent, onDone) },
+        onDeleteOpponent = { viewModel.deleteOpponent(it) },
+        onClearError = viewModel::clearError,
+        onNavigateBack = {}
+    )
 }

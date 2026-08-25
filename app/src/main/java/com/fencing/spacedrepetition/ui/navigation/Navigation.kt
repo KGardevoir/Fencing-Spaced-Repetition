@@ -135,8 +135,20 @@ fun AppNavigation(
         }
 
         composable(Screen.Opponents.route) {
+            val opponents by opponentViewModel.opponents.collectAsState()
+            val opponentError by opponentViewModel.error.collectAsState()
+
             OpponentsScreen(
-                viewModel = opponentViewModel,
+                opponents = opponents,
+                error = opponentError,
+                onAddOpponent = { name, multiplier, notes, onDone ->
+                    opponentViewModel.addOpponent(name, multiplier, notes, onDone)
+                },
+                onUpdateOpponent = { opponent, onDone ->
+                    opponentViewModel.updateOpponent(opponent, onDone)
+                },
+                onDeleteOpponent = { opponentViewModel.deleteOpponent(it) },
+                onClearError = opponentViewModel::clearError,
                 onNavigateBack = {
                     navController.popBackStack()
                 }

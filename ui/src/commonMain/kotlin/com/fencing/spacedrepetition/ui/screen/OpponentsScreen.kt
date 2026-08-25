@@ -25,18 +25,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Opponent
-import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
 import com.fencing.spacedrepetition.util.toTwoDecimals
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OpponentsScreen(
-    viewModel: OpponentViewModel,
+    opponents: List<Opponent>,
+    error: String?,
+    onAddOpponent: (name: String, skillMultiplier: Double, notes: String, onDone: (Long) -> Unit) -> Unit,
+    onUpdateOpponent: (opponent: Opponent, onDone: () -> Unit) -> Unit,
+    onDeleteOpponent: (Opponent) -> Unit,
+    onClearError: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
-    val opponents by viewModel.opponents.collectAsState()
-    val error by viewModel.error.collectAsState()
-
     var editing by remember { mutableStateOf<Opponent?>(null) }
     var showAdd by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<Opponent?>(null) }
@@ -119,10 +120,10 @@ fun OpponentsScreen(
             initial = null,
             onDismiss = {
                 showAdd = false
-                viewModel.clearError()
+                onClearError()
             },
             onSave = { name, mult, notes ->
-                viewModel.addOpponent(name, mult, notes) {
+                onAddOpponent(name, mult, notes) {
                     showAdd = false
                 }
             },
@@ -135,10 +136,10 @@ fun OpponentsScreen(
             initial = target,
             onDismiss = {
                 editing = null
-                viewModel.clearError()
+                onClearError()
             },
             onSave = { name, mult, notes ->
-                viewModel.updateOpponent(
+                onUpdateOpponent(
                     target.copy(name = name, skillMultiplier = mult, notes = notes)
                 ) {
                     editing = null
@@ -155,7 +156,7 @@ fun OpponentsScreen(
             text = { Text("Past review history will keep the opponent ID but show as \"[deleted]\".") },
             confirmButton = {
                 TextButton(onClick = {
-                    viewModel.deleteOpponent(target)
+                    onDeleteOpponent(target)
                     pendingDelete = null
                 }) { Text("Delete") }
             },
