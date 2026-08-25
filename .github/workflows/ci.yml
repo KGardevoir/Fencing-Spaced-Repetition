@@ -40,7 +40,7 @@ jobs:
       - name: Run unit tests
         run: |
           set -o pipefail
-          if ! ./gradlew :shared:allTests :app:testDebugUnitTest 2>&1 | tee /tmp/build.log; then
+          if ! ./gradlew :shared:allTests :ui:allTests :app:testDebugUnitTest 2>&1 | tee /tmp/build.log; then
             echo ""
             echo "================= compiler / KSP errors ================="
             errors=$(grep -A2 -E "^e: |^Tried the following|^<init> ->|^KSPCFG:|^w: .Default Kotlin Hierarchy|klib|Skipping|incompatible ABI|metadata version" /tmp/build.log || true)
@@ -61,6 +61,7 @@ jobs:
           path: |
             app/build/reports/tests/testDebugUnitTest/
             shared/build/reports/tests/
+            ui/build/reports/tests/
           retention-days: 14
 
   web:

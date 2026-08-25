@@ -22,6 +22,10 @@ plugins {
 // it.
 //
 // No jvm target, therefore, and no KSP: nothing here is annotated.
+//
+// The tests run in a real browser engine for the same reason :shared's do:
+// on wasm, "it compiles" and "it renders" are separate claims, and only one
+// of them is worth having.
 kotlin {
     jvmToolchain(17)
 
@@ -35,7 +39,14 @@ kotlin {
         // Matches :shared and :web. The whole wasm build has to agree on the
         // module format, and the SQLite worker URL needs import.meta.
         useEsModules()
-        browser()
+
+        browser {
+            testTask {
+                useKarma {
+                    useChromeHeadless()
+                }
+            }
+        }
     }
 
     sourceSets {
@@ -50,6 +61,19 @@ kotlin {
                 implementation(compose.foundation)
                 implementation(compose.material3)
                 implementation(compose.ui)
+            }
+        }
+
+        val commonTest by getting {
+            dependencies {
+                implementation(kotlin("test"))
+
+                // Compose's own test harness. The point of using it here
+                // rather than asserting on plain values is that it composes
+                // for real: a theme that compiles but throws on first
+                // composition would still pass a value-level test.
+                @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+                implementation(compose.uiTest)
             }
         }
 
