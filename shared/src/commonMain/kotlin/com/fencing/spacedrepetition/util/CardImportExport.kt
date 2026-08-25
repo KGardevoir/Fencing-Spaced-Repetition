@@ -854,8 +854,9 @@ object CardImportExport {
 
     /**
      * Decodes one inline base64 image to bytes, or null if the data is not
-     * valid base64. Storing those bytes is the platform's problem, not this
-     * function's -- see decodeImageFromBase64 in the Android half.
+     * valid base64. Storing those bytes is the image store's problem, not
+     * this function's -- see storeImages, which suspends because storing one
+     * in a browser does.
      */
     @OptIn(ExperimentalEncodingApi::class)
     fun decodeBase64Image(base64Data: String): ByteArray? {
@@ -1016,7 +1017,10 @@ object CardImportExport {
     /**
      * Converts ParsedReviewLogs to ReviewLog entities using a question->cardId map.
      * Skips logs for cards not found in the map.
-     * Does not decode images (legacy overload for backward compatibility).
+     *
+     * Carries no images: an import reaches this through the suspending
+     * extension of the same name, which stores them first. Everything else
+     * about a log is copied here, once, for both callers.
      */
     fun parsedReviewLogsToEntities(
         parsed: List<ParsedReviewLog>,

@@ -35,6 +35,24 @@ interface ImageStore {
 
     /** Removes the image, if it is there. Missing keys are not an error. */
     suspend fun delete(key: String)
+
+    /**
+     * A synchronous view of [keys], for the export format code.
+     *
+     * That code walks a whole collection building one long string and has no
+     * suspension point to reach a browser's storage from, so an export has to
+     * be handed something it can call. The default reads every key up front
+     * and answers from memory, which is the only thing a browser can do: the
+     * finished file is assembled in memory there anyway.
+     *
+     * A platform whose storage is synchronous underneath should override this
+     * and read on demand -- see FileImageStore, where the whole collection's
+     * images would otherwise be held at once to write a file that is streamed.
+     */
+    suspend fun readerFor(keys: Collection<String>): ImageReader {
+        val loaded = keys.distinct().associateWith { read(it) }
+        return ImageReader { loaded[it] }
+    }
 }
 
 /**

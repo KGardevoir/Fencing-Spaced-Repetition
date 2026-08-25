@@ -376,14 +376,15 @@ class CardRepository(
 
     /**
      * @param toCard turns a parsed record into a Card. Passed in rather than
-     *   called directly because the conversion decodes inline base64 images to
-     *   files, which is the one genuinely platform-specific step in an import
-     *   and the only reason this method used to need an Android Context.
+     *   called directly because the conversion decodes inline base64 images
+     *   and puts them in the image store, which is the one step of an import
+     *   that has to wait on something -- a browser's storage is asynchronous,
+     *   which is why the parameter suspends.
      */
     suspend fun importCardsWithGroupStates(
         parsedCards: List<ParsedCard>,
         existingGroups: Map<String, Long>,
-        toCard: (ParsedCard) -> Card
+        toCard: suspend (ParsedCard) -> Card
     ): Int {
         // Group parsed cards by concept (same card, different state contexts)
         val cardsByQuestion = parsedCards.groupBy { it.concept }
