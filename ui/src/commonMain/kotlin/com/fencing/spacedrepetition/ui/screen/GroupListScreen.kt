@@ -3,9 +3,6 @@
 
 package com.fencing.spacedrepetition.ui.screen
 
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,88 +14,54 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.util.ParsedCard
 import com.fencing.spacedrepetition.ui.viewmodel.GroupSortOption
-import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.ImportExportState
 
+/**
+ * The list of groups.
+ *
+ * Values and callbacks rather than a view model, so it can live in shared
+ * code. The four file pickers went with it: choosing a file is an Android
+ * activity result here and a very different thing in a browser, so the screen
+ * now only says which group the user asked to import or export, and whoever
+ * hosts it decides how a file is chosen.
+ *
+ * @param dueCardCountFor a composable lookup rather than a map, deliberately.
+ *   The count comes from a Flow per group, and the list only composes the rows
+ *   on screen; handing over a finished map would start a collector for every
+ *   group in the collection whether or not anyone can see it.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GroupListScreen(
-    groupViewModel: GroupViewModel,
+    groups: List<Group>,
+    sortOption: GroupSortOption,
+    importExportState: ImportExportState,
+    dueCardCountFor: @Composable (Long) -> Int,
+    onSetSortOption: (GroupSortOption) -> Unit,
+    onDeleteGroup: (Group) -> Unit,
+    onDismissImportExport: () -> Unit,
+    onImportTsv: (Group) -> Unit,
+    onExportTsv: (Group) -> Unit,
+    onImportCsv: (Group) -> Unit,
+    onExportCsv: (Group) -> Unit,
+    pendingCsvTargetGroup: Group? = null,
+    onCsvImportInto: (List<ParsedCard>, List<String>, Long) -> Unit = { _, _, _ -> },
+    onCsvImportIntoNewGroup: (List<ParsedCard>, List<String>, String) -> Unit = { _, _, _ -> },
     onNavigateBack: () -> Unit,
     onNavigateToEdit: (Long) -> Unit = {},
     onNavigateToAdd: () -> Unit = {}
 ) {
-    val groups by groupViewModel.sortedGroups.collectAsState()
-    val importExportState by groupViewModel.importExportState.collectAsState()
-    val groupSortOption by groupViewModel.groupSortOption.collectAsState()
-    val context = LocalContext.current
-
     var showDeleteDialog by remember { mutableStateOf<Group?>(null) }
-    var groupForImport by remember { mutableStateOf<Group?>(null) }
-    var groupForExport by remember { mutableStateOf<Group?>(null) }
-    var groupForCsvImport by remember { mutableStateOf<Group?>(null) }
-    var groupForCsvExport by remember { mutableStateOf<Group?>(null) }
     var showSortMenu by remember { mutableStateOf(false) }
 
     // Scroll to top when sort option changes
     val groupListState = rememberLazyListState()
-    LaunchedEffect(groupSortOption) {
+    LaunchedEffect(sortOption) {
         groupListState.scrollToItem(0)
-    }
-
-    // File picker for import
-    val importLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri?.let {
-            groupForImport?.let { group ->
-                groupViewModel.importCardsToGroup(group.id, uri, context.contentResolver)
-            }
-        }
-        groupForImport = null
-    }
-
-    // File picker for export
-    val exportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/gzip")
-    ) { uri: Uri? ->
-        uri?.let {
-            groupForExport?.let { group ->
-                groupViewModel.exportGroupCards(group.id, uri, context.contentResolver)
-            }
-        }
-        groupForExport = null
-    }
-
-    // CSV file picker for import
-    val csvImportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri?.let {
-            groupForCsvImport?.let { group ->
-                val filename = getFilenameFromUri(context, uri) ?: "import.csv"
-                groupViewModel.csvImportParseFile(uri, context.contentResolver, filename)
-            }
-        }
-        if (uri == null) {
-            groupForCsvImport = null
-        }
-    }
-
-    // CSV file picker for export
-    val csvExportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("text/csv")
-    ) { uri: Uri? ->
-        uri?.let {
-            groupForCsvExport?.let { group ->
-                groupViewModel.exportGroupCardsCsv(group.id, uri, context.contentResolver)
-            }
-        }
-        groupForCsvExport = null
     }
 
     Scaffold(
@@ -123,11 +86,11 @@ fun GroupListScreen(
                                 DropdownMenuItem(
                                     text = { Text(option.label) },
                                     onClick = {
-                                        groupViewModel.setGroupSortOption(option)
+                                        onSetSortOption(option)
                                         showSortMenu = false
                                     },
                                     leadingIcon = {
-                                        if (groupSortOption == option) {
+                                        if (sortOption == option) {
                                             Icon(Icons.Default.Check, contentDescription = null)
                                         }
                                     }
@@ -188,26 +151,13 @@ fun GroupListScreen(
                 items(groups, key = { it.id }) { group ->
                     GroupListItem(
                         group = group,
-                        dueCardCount = groupViewModel.getDueCardCountForGroup(group.id)
-                            .collectAsState(initial = 0).value,
+                        dueCardCount = dueCardCountFor(group.id),
                         onEdit = { onNavigateToEdit(group.id) },
                         onDelete = { showDeleteDialog = group },
-                        onImport = {
-                            groupForImport = group
-                            importLauncher.launch(arrayOf("application/gzip", "application/x-gzip", "text/plain", "text/tab-separated-values", "application/octet-stream", "*/*"))
-                        },
-                        onExport = {
-                            groupForExport = group
-                            exportLauncher.launch(groupViewModel.generateExportFilename(group.name))
-                        },
-                        onCsvImport = {
-                            groupForCsvImport = group
-                            csvImportLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "application/octet-stream", "*/*"))
-                        },
-                        onCsvExport = {
-                            groupForCsvExport = group
-                            csvExportLauncher.launch(groupViewModel.generateCsvExportFilename(group.name))
-                        }
+                        onImport = { onImportTsv(group) },
+                        onExport = { onExportTsv(group) },
+                        onCsvImport = { onImportCsv(group) },
+                        onCsvExport = { onExportCsv(group) }
                     )
                 }
             }
@@ -226,7 +176,7 @@ fun GroupListScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        groupViewModel.deleteGroup(group)
+                        onDeleteGroup(group)
                         showDeleteDialog = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
@@ -255,7 +205,7 @@ fun GroupListScreen(
         }
         is ImportExportState.ImportSuccess -> {
             AlertDialog(
-                onDismissRequest = { groupViewModel.resetImportExportState() },
+                onDismissRequest = { onDismissImportExport() },
                 icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                 title = { Text("Import Complete") },
                 text = {
@@ -277,7 +227,7 @@ fun GroupListScreen(
                     }
                 },
                 confirmButton = {
-                    Button(onClick = { groupViewModel.resetImportExportState() }) {
+                    Button(onClick = { onDismissImportExport() }) {
                         Text("OK")
                     }
                 }
@@ -285,12 +235,12 @@ fun GroupListScreen(
         }
         is ImportExportState.ExportSuccess -> {
             AlertDialog(
-                onDismissRequest = { groupViewModel.resetImportExportState() },
+                onDismissRequest = { onDismissImportExport() },
                 icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                 title = { Text("Export Complete") },
                 text = { Text("Successfully exported ${state.exportedCount} cards.") },
                 confirmButton = {
-                    Button(onClick = { groupViewModel.resetImportExportState() }) {
+                    Button(onClick = { onDismissImportExport() }) {
                         Text("OK")
                     }
                 }
@@ -298,25 +248,25 @@ fun GroupListScreen(
         }
         is ImportExportState.Error -> {
             AlertDialog(
-                onDismissRequest = { groupViewModel.resetImportExportState() },
+                onDismissRequest = { onDismissImportExport() },
                 icon = { Icon(Icons.Default.Error, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
                 title = { Text("Error") },
                 text = { Text(state.message) },
                 confirmButton = {
-                    Button(onClick = { groupViewModel.resetImportExportState() }) {
+                    Button(onClick = { onDismissImportExport() }) {
                         Text("OK")
                     }
                 }
             )
         }
         is ImportExportState.CsvPendingGroupSelection -> {
-            // For group-level CSV import, we already know the target group
-            val targetGroup = groupForCsvImport
+            // A group-level import already knows where the cards go, so it
+            // skips the picker. Which group that is belongs to whoever
+            // launched the file chooser, so it arrives as a parameter.
+            val targetGroup = pendingCsvTargetGroup
             if (targetGroup != null) {
-                // Skip the group selection dialog and import directly into the target group
                 LaunchedEffect(state) {
-                    groupViewModel.csvImportComplete(state.parsedCards, state.parseErrors, targetGroup.id)
-                    groupForCsvImport = null
+                    onCsvImportInto(state.parsedCards, state.parseErrors, targetGroup.id)
                 }
             } else {
                 CsvGroupSelectionDialog(
@@ -324,14 +274,12 @@ fun GroupListScreen(
                     existingGroups = groups,
                     cardCount = state.parsedCards.size,
                     onConfirm = { groupId ->
-                        groupViewModel.csvImportComplete(state.parsedCards, state.parseErrors, groupId)
+                        onCsvImportInto(state.parsedCards, state.parseErrors, groupId)
                     },
                     onCreateGroup = { groupName ->
-                        groupViewModel.addGroup(groupName) { newGroupId ->
-                            groupViewModel.csvImportComplete(state.parsedCards, state.parseErrors, newGroupId)
-                        }
+                        onCsvImportIntoNewGroup(state.parsedCards, state.parseErrors, groupName)
                     },
-                    onDismiss = { groupViewModel.resetImportExportState() }
+                    onDismiss = { onDismissImportExport() }
                 )
             }
         }

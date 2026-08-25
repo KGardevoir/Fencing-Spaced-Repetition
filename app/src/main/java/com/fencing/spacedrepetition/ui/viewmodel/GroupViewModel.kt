@@ -38,25 +38,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-sealed class ImportExportState {
-    object Idle : ImportExportState()
-    object Loading : ImportExportState()
-    data class ImportSuccess(val importedCount: Int, val skippedCount: Int, val errors: List<String>) : ImportExportState()
-    data class ExportSuccess(val exportedCount: Int) : ImportExportState()
-    data class Error(val message: String) : ImportExportState()
-    /** CSV import parsed cards and is waiting for the user to select/create a group */
-    data class CsvPendingGroupSelection(
-        val parsedCards: List<ParsedCard>,
-        val parseErrors: List<String>,
-        val suggestedGroupName: String
-    ) : ImportExportState()
-}
-
-enum class GroupSortOption(val label: String) {
-    NAME("Name"),
-    CARD_COUNT("Card Count")
-}
-
 class GroupViewModel(
     application: Application,
     private val groupRepository: GroupRepository,

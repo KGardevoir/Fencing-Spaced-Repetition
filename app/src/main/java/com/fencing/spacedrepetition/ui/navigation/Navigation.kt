@@ -21,6 +21,13 @@ import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
+import com.fencing.spacedrepetition.ui.screen.getFilenameFromUri
+import androidx.compose.ui.platform.LocalContext
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
+import android.net.Uri
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 
 sealed class Screen(val route: String) {
     object Home : Screen("home")
@@ -218,8 +225,113 @@ fun AppNavigation(
 
         composable(Screen.GroupList.route) {
             val groups by groupViewModel.allGroups.collectAsState()
+            // The file pickers GroupListScreen used to own. They are Android
+            // activity results, so they stay on this side of the boundary; the
+            // screen only says which group the user asked to import or export.
+            val sortedGroups by groupViewModel.sortedGroups.collectAsState()
+            val importExportState by groupViewModel.importExportState.collectAsState()
+            val groupSortOption by groupViewModel.groupSortOption.collectAsState()
+            val context = LocalContext.current
+
+            var groupForImport by remember { mutableStateOf<Group?>(null) }
+            var groupForExport by remember { mutableStateOf<Group?>(null) }
+            var groupForCsvImport by remember { mutableStateOf<Group?>(null) }
+            var groupForCsvExport by remember { mutableStateOf<Group?>(null) }
+
+            val importLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.OpenDocument()
+            ) { uri: Uri? ->
+                uri?.let {
+                    groupForImport?.let { group ->
+                        groupViewModel.importCardsToGroup(group.id, uri, context.contentResolver)
+                    }
+                }
+                groupForImport = null
+            }
+
+            val exportLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.CreateDocument("application/gzip")
+            ) { uri: Uri? ->
+                uri?.let {
+                    groupForExport?.let { group ->
+                        groupViewModel.exportGroupCards(group.id, uri, context.contentResolver)
+                    }
+                }
+                groupForExport = null
+            }
+
+            val csvImportLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.OpenDocument()
+            ) { uri: Uri? ->
+                uri?.let {
+                    groupForCsvImport?.let {
+                        val filename = getFilenameFromUri(context, uri) ?: "import.csv"
+                        groupViewModel.csvImportParseFile(uri, context.contentResolver, filename)
+                    }
+                }
+                if (uri == null) {
+                    groupForCsvImport = null
+                }
+            }
+
+            val csvExportLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.CreateDocument("text/csv")
+            ) { uri: Uri? ->
+                uri?.let {
+                    groupForCsvExport?.let { group ->
+                        groupViewModel.exportGroupCardsCsv(group.id, uri, context.contentResolver)
+                    }
+                }
+                groupForCsvExport = null
+            }
+
             GroupListScreen(
-                groupViewModel = groupViewModel,
+                groups = sortedGroups,
+                sortOption = groupSortOption,
+                importExportState = importExportState,
+                dueCardCountFor = { groupId ->
+                    groupViewModel.getDueCardCountForGroup(groupId)
+                        .collectAsState(initial = 0).value
+                },
+                onSetSortOption = { groupViewModel.setGroupSortOption(it) },
+                onDeleteGroup = { groupViewModel.deleteGroup(it) },
+                onDismissImportExport = { groupViewModel.resetImportExportState() },
+                onImportTsv = { group ->
+                    groupForImport = group
+                    importLauncher.launch(
+                        arrayOf(
+                            "application/gzip", "application/x-gzip", "text/plain",
+                            "text/tab-separated-values", "application/octet-stream", "*/*"
+                        )
+                    )
+                },
+                onExportTsv = { group ->
+                    groupForExport = group
+                    exportLauncher.launch(groupViewModel.generateExportFilename(group.name))
+                },
+                onImportCsv = { group ->
+                    groupForCsvImport = group
+                    csvImportLauncher.launch(
+                        arrayOf(
+                            "text/csv", "text/comma-separated-values", "text/plain",
+                            "application/octet-stream", "*/*"
+                        )
+                    )
+                },
+                onExportCsv = { group ->
+                    groupForCsvExport = group
+                    csvExportLauncher.launch(groupViewModel.generateCsvExportFilename(group.name))
+                },
+                pendingCsvTargetGroup = groupForCsvImport,
+                onCsvImportInto = { parsedCards, parseErrors, groupId ->
+                    groupViewModel.csvImportComplete(parsedCards, parseErrors, groupId)
+                    groupForCsvImport = null
+                },
+                onCsvImportIntoNewGroup = { parsedCards, parseErrors, groupName ->
+                    groupViewModel.addGroup(groupName) { newGroupId ->
+                        groupViewModel.csvImportComplete(parsedCards, parseErrors, newGroupId)
+                    }
+                },
                 onNavigateBack = {
                     navController.popBackStack()
                 },
