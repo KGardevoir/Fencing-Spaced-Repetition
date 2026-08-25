@@ -6,139 +6,37 @@ package com.fencing.spacedrepetition.ui.viewmodel
 import android.app.Application
 import android.content.ContentResolver
 import android.net.Uri
-import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
-import com.fencing.spacedrepetition.data.model.Group
-import com.fencing.spacedrepetition.data.model.GroupWithCards
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.util.CardImportExport
-import com.fencing.spacedrepetition.util.createCompressedOutputStream
-import com.fencing.spacedrepetition.util.FileImageReader
-import com.fencing.spacedrepetition.util.decodeImageFromBase64
-import com.fencing.spacedrepetition.util.parsedCardToCard
-import com.fencing.spacedrepetition.util.smartInputStream
-import com.fencing.spacedrepetition.util.exportCardsToCsv
-import com.fencing.spacedrepetition.util.exportCardsWithGroupStates
-import com.fencing.spacedrepetition.util.parseCards
-import com.fencing.spacedrepetition.util.parseCsvCards
 import com.fencing.spacedrepetition.util.CardWithGroupNames
 import com.fencing.spacedrepetition.util.ExportResult
+import com.fencing.spacedrepetition.util.FileImageReader
 import com.fencing.spacedrepetition.util.ParsedCard
-import com.fencing.spacedrepetition.util.Time
+import com.fencing.spacedrepetition.util.createCompressedOutputStream
+import com.fencing.spacedrepetition.util.decodeImageFromBase64
+import com.fencing.spacedrepetition.util.exportCardsToCsv
+import com.fencing.spacedrepetition.util.exportCardsWithGroupStates
+import com.fencing.spacedrepetition.util.openSmartInputStream
+import com.fencing.spacedrepetition.util.parseCards
+import com.fencing.spacedrepetition.util.parseCsvCards
+import com.fencing.spacedrepetition.util.parsedCardToCard
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class GroupViewModel(
-    application: Application,
-    private val groupRepository: GroupRepository,
-    private val cardRepository: CardRepository
-) : AndroidViewModel(application) {
-
-    val allGroups: StateFlow<List<Group>> = groupRepository.getAllGroups()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    private val _groupSortOption = MutableStateFlow(GroupSortOption.NAME)
-    val groupSortOption: StateFlow<GroupSortOption> = _groupSortOption.asStateFlow()
-
-    fun setGroupSortOption(option: GroupSortOption) {
-        _groupSortOption.value = option
-    }
-
-    val sortedGroups: StateFlow<List<Group>> = combine(
-        groupRepository.getAllGroupsWithCards(),
-        _groupSortOption
-    ) { groupsWithCards, sortOption ->
-        when (sortOption) {
-            GroupSortOption.NAME -> groupsWithCards.map { it.group }.sortedBy { it.name.lowercase() }
-            GroupSortOption.CARD_COUNT -> groupsWithCards.sortedByDescending { it.cards.size }.map { it.group }
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val groupCount: StateFlow<Int> = groupRepository.getGroupCount()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
-
-    private val _selectedGroupForPractice = MutableStateFlow<Group?>(null)
-    val selectedGroupForPractice: StateFlow<Group?> = _selectedGroupForPractice.asStateFlow()
-
-    fun selectGroupForPractice(group: Group?) {
-        _selectedGroupForPractice.value = group
-    }
-
-    fun addGroup(name: String, description: String = "", onSuccess: (Long) -> Unit = {}) {
-        viewModelScope.launch {
-            try {
-                val group = Group(name = name, description = description)
-                val newId = groupRepository.insertGroup(group)
-                onSuccess(newId)
-            } catch (e: Exception) {
-                // Handle error
-            }
-        }
-    }
-
-    fun addGroupWithSettings(group: Group, onSuccess: () -> Unit = {}) {
-        viewModelScope.launch {
-            try {
-                val newId = groupRepository.insertGroup(group)
-                if (group.independentLearning) {
-                    groupRepository.toggleIndependentLearning(newId, true)
-                }
-                onSuccess()
-            } catch (e: Exception) {
-                // Handle error
-            }
-        }
-    }
-
-    fun updateGroup(group: Group, onSuccess: () -> Unit = {}) {
-        viewModelScope.launch {
-            try {
-                groupRepository.updateGroup(group)
-                onSuccess()
-            } catch (e: Exception) {
-                // Handle error
-            }
-        }
-    }
-
-    fun deleteGroup(group: Group) {
-        viewModelScope.launch {
-            groupRepository.deleteGroup(group)
-        }
-    }
-
-    fun toggleIndependentLearning(groupId: Long, enabled: Boolean, onSuccess: () -> Unit = {}) {
-        viewModelScope.launch {
-            try {
-                groupRepository.toggleIndependentLearning(groupId, enabled)
-                onSuccess()
-            } catch (e: Exception) {
-                // Handle error
-            }
-        }
-    }
-
-    fun getDueCardCountForGroup(groupId: Long): Flow<Int> =
-        groupRepository.getDueCardCountByGroup(groupId)
-
-    // Import/Export state
-    private val _importExportState = MutableStateFlow<ImportExportState>(ImportExportState.Idle)
-    val importExportState: StateFlow<ImportExportState> = _importExportState.asStateFlow()
-
-    fun resetImportExportState() {
-        _importExportState.value = ImportExportState.Idle
-    }
+/**
+ * The half of group import and export that needs a file. See
+ * AndroidCardViewModel for why this is split and why it is a subclass.
+ */
+class AndroidGroupViewModel(
+    private val application: Application,
+    groupRepository: GroupRepository,
+    cardRepository: CardRepository
+) : GroupViewModel(groupRepository, cardRepository) {
 
     fun exportGroupCards(groupId: Long, uri: Uri, contentResolver: ContentResolver) {
         viewModelScope.launch {
@@ -165,7 +63,7 @@ class GroupViewModel(
                         val outputStream = CardImportExport.createCompressedOutputStream(fileStream)
                         val exportResult = CardImportExport.exportCardsWithGroupStates(
                             cardsWithStates, outputStream, allGroups,
-                            images = FileImageReader(getApplication())
+                            images = FileImageReader(application)
                         )
                         outputStream.close()  // Ensure GZIP stream is properly closed
                         exportResult
@@ -257,12 +155,12 @@ class GroupViewModel(
                         hasGroupSpecificStates -> {
                             // V2 format with group-specific states (decode base64 images)
                             cardRepository.importCardsWithGroupStates(parsedCards, groupNameMap) {
-                                CardImportExport.parsedCardToCard(getApplication(), it)
+                                CardImportExport.parsedCardToCard(application, it)
                             }
                         }
                         hasFullState -> {
                             // V1 full import with state - also add to target group (decode base64 images)
-                            val cards = parsedCards.map { CardImportExport.parsedCardToCard(getApplication(), it) }
+                            val cards = parsedCards.map { CardImportExport.parsedCardToCard(application, it) }
                             // Merge target group with any groups from file
                             val targetGroupName = groupRepository.getGroupById(groupId)?.name
                             val groupNamesPerCard = parsedCards.map { parsed ->
@@ -363,7 +261,7 @@ class GroupViewModel(
                 val importedCount = withContext(Dispatchers.IO) {
                     val cardsToImport = parsedCards.map { parsed ->
                         val decodedImagePaths = parsed.imageData.mapNotNull { base64Data ->
-                            CardImportExport.decodeImageFromBase64(getApplication(), base64Data)
+                            CardImportExport.decodeImageFromBase64(application, base64Data)
                         }
                         parsed.concept to Pair(parsed.answer, decodedImagePaths)
                     }
@@ -428,7 +326,7 @@ class GroupViewModel(
 
                 val result = withContext(Dispatchers.IO) {
                     contentResolver.openOutputStream(uri)?.use { fileStream ->
-                        CardImportExport.exportCardsToCsv(cardsWithNames, fileStream, FileImageReader(getApplication()))
+                        CardImportExport.exportCardsToCsv(cardsWithNames, fileStream, FileImageReader(application))
                     } ?: ExportResult.Error("Failed to open file for writing")
                 }
 
@@ -440,5 +338,4 @@ class GroupViewModel(
                 _importExportState.value = ImportExportState.Error("CSV export failed: ${e.message}")
             }
         }
-    }
-}
+    }}

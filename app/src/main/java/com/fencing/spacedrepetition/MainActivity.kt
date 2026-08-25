@@ -28,8 +28,8 @@ import com.fencing.spacedrepetition.ui.image.LocalImagePicker
 import com.fencing.spacedrepetition.ui.image.rememberAndroidImagePicker
 import com.fencing.spacedrepetition.ui.navigation.AppNavigation
 import com.fencing.spacedrepetition.ui.theme.FencingSpacedRepetitionTheme
-import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
-import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.AndroidCardViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.AndroidGroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
@@ -96,13 +96,13 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     // Create ViewModels with repositories
-                    val cardViewModel: CardViewModel = viewModel(
+                    val cardViewModel: AndroidCardViewModel = viewModel(
                         factory = CardViewModelFactory(application, repository, groupRepository, opponentRepository)
                     )
                     val practiceViewModel: PracticeViewModel = viewModel(
                         factory = PracticeViewModelFactory(repository, opponentRepository)
                     )
-                    val groupViewModel: GroupViewModel = viewModel(
+                    val groupViewModel: AndroidGroupViewModel = viewModel(
                         factory = GroupViewModelFactory(application, groupRepository, repository)
                     )
                     val historyViewModel: HistoryViewModel = viewModel(
@@ -136,8 +136,8 @@ class CardViewModelFactory(
 ) : androidx.lifecycle.ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(CardViewModel::class.java)) {
-            return CardViewModel(application, repository, groupRepository, opponentRepository) as T
+        if (modelClass.isAssignableFrom(AndroidCardViewModel::class.java)) {
+            return AndroidCardViewModel(application, repository, groupRepository, opponentRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
@@ -163,8 +163,8 @@ class GroupViewModelFactory(
 ) : androidx.lifecycle.ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(GroupViewModel::class.java)) {
-            return GroupViewModel(application, groupRepository, cardRepository) as T
+        if (modelClass.isAssignableFrom(AndroidGroupViewModel::class.java)) {
+            return AndroidGroupViewModel(application, groupRepository, cardRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

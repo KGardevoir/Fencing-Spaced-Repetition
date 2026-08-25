@@ -19,8 +19,8 @@ import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.ui.screen.*
-import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
-import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.AndroidCardViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.AndroidGroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
@@ -52,9 +52,9 @@ sealed class Screen(val route: String) {
 
 @Composable
 fun AppNavigation(
-    cardViewModel: CardViewModel,
+    cardViewModel: AndroidCardViewModel,
     practiceViewModel: PracticeViewModel,
-    groupViewModel: GroupViewModel,
+    groupViewModel: AndroidGroupViewModel,
     settingsViewModel: SettingsViewModel,
     historyViewModel: HistoryViewModel,
     opponentViewModel: OpponentViewModel,
@@ -739,8 +739,8 @@ fun AppNavigation(
  */
 @Composable
 private fun CardEditor(
-    cardViewModel: CardViewModel,
-    groupViewModel: GroupViewModel,
+    cardViewModel: AndroidCardViewModel,
+    groupViewModel: AndroidGroupViewModel,
     cardToEdit: Card?,
     initialGroupId: Long?,
     onNavigateBack: () -> Unit
