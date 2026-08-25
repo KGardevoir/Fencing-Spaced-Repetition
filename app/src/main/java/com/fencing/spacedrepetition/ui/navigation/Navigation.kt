@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.flowOf
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.fencing.spacedrepetition.BuildConfig
+import com.fencing.spacedrepetition.BuildInfo
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.Group
@@ -676,6 +678,12 @@ fun AppNavigation(
 
             SettingsScreen(
                 totalCards = totalCards,
+                buildInfo = BuildInfo(
+                    versionName = BuildConfig.VERSION_NAME,
+                    versionCode = BuildConfig.VERSION_CODE,
+                    buildType = BuildConfig.BUILD_TYPE,
+                    gitCommit = BuildConfig.GIT_COMMIT
+                ),
                 themeMode = themeMode,
                 autoShowAnswer = autoShowAnswer,
                 cardsPerSession = settingsCardsPerSession,

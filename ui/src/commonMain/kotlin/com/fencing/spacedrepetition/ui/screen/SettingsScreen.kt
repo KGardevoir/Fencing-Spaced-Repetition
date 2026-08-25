@@ -18,7 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.fencing.spacedrepetition.BuildConfig
+import com.fencing.spacedrepetition.BuildInfo
 import com.fencing.spacedrepetition.algorithm.ScheduleEstimate
 import com.fencing.spacedrepetition.SupportLinks
 import com.fencing.spacedrepetition.data.preferences.SettingsConstants
@@ -32,6 +32,7 @@ import kotlin.math.roundToInt
 @Composable
 fun SettingsScreen(
     totalCards: Int,
+    buildInfo: BuildInfo,
     themeMode: ThemeMode,
     autoShowAnswer: Boolean,
     cardsPerSession: Int,
@@ -731,7 +732,7 @@ fun SettingsScreen(
                     ) {
                         Text("Version", style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                            "${buildInfo.versionName} (${buildInfo.versionCode})",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -743,7 +744,7 @@ fun SettingsScreen(
                     ) {
                         Text("Build", style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            BuildConfig.BUILD_TYPE,
+                            buildInfo.buildType,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -755,7 +756,7 @@ fun SettingsScreen(
                     ) {
                         Text("Commit", style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            BuildConfig.GIT_COMMIT,
+                            buildInfo.gitCommit,
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                             ),
