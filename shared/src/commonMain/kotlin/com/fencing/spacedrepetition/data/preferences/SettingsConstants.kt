@@ -14,6 +14,48 @@ object SettingsConstants {
     const val MIN_FSRS_RETENTION = 70
     const val MAX_FSRS_RETENTION = 97
 
+    /**
+     * Defaults and bounds for every stored setting.
+     *
+     * These lived on the Android preferences class, which put the definition
+     * of "the default number of cards per session" behind DataStore and a
+     * Context. Two implementations of AppPreferences now need them and have to
+     * agree, so they belong here -- the same move the retention bounds above
+     * already made, for the same reason. ThemePreferences keeps them as
+     * aliases so its existing call sites are untouched.
+     */
+    const val DEFAULT_CARDS_PER_SESSION = 3
+    const val MIN_CARDS_PER_SESSION = 1
+    const val MAX_CARDS_PER_SESSION = 20
+
+    const val DEFAULT_MAXIMUM_INTERVAL = 365
+    const val MIN_MAXIMUM_INTERVAL = 7
+    const val MAX_MAXIMUM_INTERVAL = 3650
+
+    const val DEFAULT_PRACTICES_PER_WEEK = 7
+    const val MIN_PRACTICES_PER_WEEK = 1
+    const val MAX_PRACTICES_PER_WEEK = 7
+
+    const val DEFAULT_RANDOMIZE_BUCKET_HOURS = 24
+
+    /** ISO-8601 weekdays, 1 = Monday. Every day, by default. */
+    val DEFAULT_PRACTICE_DAYS: Set<Int> = setOf(1, 2, 3, 4, 5, 6, 7)
+
+    const val DEFAULT_FSRS_RETENTION = 90
+
+    const val DEFAULT_SM2_INTERVAL_MODIFIER = 100
+    const val MIN_SM2_INTERVAL_MODIFIER = 50
+    const val MAX_SM2_INTERVAL_MODIFIER = 200
+
+    const val DEFAULT_FSRS_ENABLE_FUZZING = false
+
+    const val DEFAULT_AUTO_BACKUP_ENABLED = false
+    const val DEFAULT_AUTO_BACKUP_INTERVAL_DAYS = 1
+
+    const val DEFAULT_MAX_BACKUPS_KEPT = 7
+    const val MIN_MAX_BACKUPS_KEPT = 1
+    const val MAX_MAX_BACKUPS_KEPT = 30
+
     /** Cards per session slider range and steps. */
     const val CARDS_PER_SESSION_MIN = 1f
     const val CARDS_PER_SESSION_MAX = 6f
