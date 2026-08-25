@@ -3,30 +3,18 @@
 
 package com.fencing.spacedrepetition.web
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.ComposeViewport
 import com.fencing.spacedrepetition.algorithm.FSRSAlgorithm
 import com.fencing.spacedrepetition.algorithm.SM2Algorithm
-import com.fencing.spacedrepetition.data.preferences.ThemeMode
+import com.fencing.spacedrepetition.data.AppDatabase
+import com.fencing.spacedrepetition.data.getDatabase
+import com.fencing.spacedrepetition.data.repository.OpponentRepository
+import com.fencing.spacedrepetition.ui.screen.OpponentsScreen
 import com.fencing.spacedrepetition.ui.theme.FencingSpacedRepetitionTheme
+import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
 import com.fencing.spacedrepetition.util.Time
 
 /**
@@ -149,75 +137,45 @@ fun main() {
         <h2>SM-2</h2>
         <p>A card with ease factor 2.5 and a 10-day interval, after 3 reps.</p>
         ${sm2Table()}
-        <h2>Compose</h2>
+        <h2>The app</h2>
         <p>
-          The app's own Material theme, drawn by Compose on a canvas below.
-          Same colours and type scale as the Android build, from the same
-          source file.
+          A real screen from the app, drawn by Compose and backed by the real
+          database. Opponents added below are written to SQLite in the Origin
+          Private File System and are still there after a reload.
         </p>
         <div id="compose-root" class="compose-root"></div>
         <p class="footnote">
-          Not the app yet -- no cards on this page, and nothing here is stored.
-          It exists to prove the core and the toolkit both run in a browser.
+          One screen of several. The back arrow has nowhere to go yet.
         </p>
         """
     )
 
     ComposeViewport(viewportContainerId = "compose-root") {
-        ThemeProof()
+        Opponents()
     }
 }
 
 /**
- * The smallest thing that proves the shared theme reached the browser.
+ * The opponents screen, wired to the browser database.
  *
- * Deliberately not a screen: a screen needs a view model and a database, and
- * this is here to answer a narrower question -- does Compose render at all,
- * with our colours and our type scale, from the same file the Android build
- * reads. The theme mode is switchable because that is the one part of the
- * theme with platform-specific behaviour behind it, so it is worth being able
- * to see all three.
+ * This is the first piece of the app proper to run in a browser: the same
+ * screen file the Android build draws, the same view model, the same
+ * repository, over SQLite in the Origin Private File System. Nothing here is
+ * a browser-specific reimplementation -- the only line that knows which
+ * platform it is on is getDatabase(), whose wasm actual supplies the Web
+ * Worker driver.
+ *
+ * The view model is constructed directly rather than through a factory
+ * because there is no navigation graph yet to own it. That changes when the
+ * rest of the screens arrive.
  */
 @Composable
-private fun ThemeProof() {
-    var themeMode by remember { mutableStateOf(ThemeMode.SYSTEM) }
+private fun Opponents() {
+    val viewModel = remember {
+        OpponentViewModel(OpponentRepository(AppDatabase.getDatabase().opponentDao()))
+    }
 
-    FencingSpacedRepetitionTheme(themeMode) {
-        Surface(modifier = Modifier.fillMaxSize()) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text("Delayed choice", style = MaterialTheme.typography.headlineSmall)
-                Text(
-                    "Practise first, grade afterwards.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-
-                Card {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text("Parry four, riposte", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "Due today",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ThemeMode.entries.forEach { mode ->
-                        if (mode == themeMode) {
-                            Button(onClick = { themeMode = mode }) { Text(mode.name) }
-                        } else {
-                            OutlinedButton(onClick = { themeMode = mode }) { Text(mode.name) }
-                        }
-                    }
-                }
-            }
-        }
+    FencingSpacedRepetitionTheme {
+        OpponentsScreen(viewModel = viewModel, onNavigateBack = {})
     }
 }

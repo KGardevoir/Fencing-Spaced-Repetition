@@ -62,6 +62,22 @@ kotlin {
                 implementation(compose.foundation)
                 implementation(compose.material3)
                 implementation(compose.ui)
+
+                // Material's core icon set. Declared explicitly because
+                // material3 does not depend on it, and pinned to 1.7.3
+                // because that is the last version JetBrains published --
+                // the icons artifacts were discontinued after 1.7. The core
+                // set is a few dozen fixed vector paths that have not changed
+                // in years, so an old artifact is a fair trade against
+                // hand-copying path data. The extended set, which :app uses
+                // for Sort and NoteAdd, has no multiplatform build at all and
+                // will have to be vendored icon by icon.
+                implementation("org.jetbrains.compose.material:material-icons-core:1.7.3")
+
+                // ViewModel and viewModelScope, under the same
+                // androidx.lifecycle package names the Android build already
+                // uses -- which is why the view models move across unchanged.
+                implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel:2.11.0")
             }
         }
 

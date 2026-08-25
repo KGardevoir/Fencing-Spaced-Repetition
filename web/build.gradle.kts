@@ -6,11 +6,11 @@ plugins {
     id("org.jetbrains.compose")
 }
 
-// The browser build. Today it produces a smoke page rather than the app: it
-// loads the real :shared scheduling core in a browser, shows what it computes,
-// and draws the shared Compose theme on a canvas beneath it.
+// The browser build: the scheduling core's own output, and beneath it the
+// first real screen of the app -- :ui's OpponentsScreen over the browser
+// database, both unmodified from what Android runs.
 //
-// The screens follow, from :ui. Keeping the entry point here rather than in
+// The remaining screens follow. Keeping the entry point here rather than in
 // :shared or :ui means both of those stay libraries, and the Android build
 // never sees any of this.
 kotlin {
