@@ -117,6 +117,11 @@ kotlin {
             dependencies {
                 implementation(kotlin("test"))
 
+                // runTest, for the parts of the browser build that are
+                // suspending rather than drawn: reading a chosen file, and
+                // the gzip round trip underneath an import and an export.
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+
                 // Compose's own test harness. The point of using it rather
                 // than asserting on plain values is that it composes for
                 // real: a theme that compiles but throws on first composition

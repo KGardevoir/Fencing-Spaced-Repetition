@@ -3,105 +3,24 @@
 
 package com.fencing.spacedrepetition.util
 
-// The Android half of the import/export format. Everything here needs a
-// Context, a file, a stream or gzip; everything that does not is in :shared,
-// in commonMain, and compiles for the browser too.
+// The Android half of the import/export format: streams and gzip. Everything
+// that does not need them is in :shared, in commonMain, and compiles for the
+// browser too -- including the conversions that store an imported image,
+// which used to be here because they needed a Context and now go through the
+// image store instead.
 //
 // These are extensions on CardImportExport rather than members so the object
 // itself can be common. Call sites are unchanged apart from an import.
 
-import android.content.Context
-import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import java.io.BufferedInputStream
-import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
-
-/**
- * Converts a ParsedCard to a Card entity with base64 image decoding
- */
-fun CardImportExport.parsedCardToCard(context: Context, parsed: ParsedCard): Card {
-    val now = Time.now()
-
-    // Decode base64 images to file paths
-    val decodedImagePaths = parsed.imageData.mapNotNull { base64Data ->
-        decodeImageFromBase64(context, base64Data)
-    }
-
-    return if (parsed.hasFullState) {
-        Card(
-            question = parsed.concept,
-            answer = parsed.answer,
-            imagePaths = decodedImagePaths,
-            algorithm = parsed.algorithm ?: AlgorithmType.FSRS,
-            nextReview = parsed.nextReview ?: 0L,
-            lastReview = parsed.lastReview ?: 0L,
-            fsrsStability = parsed.fsrsStability ?: 0.0,
-            fsrsDifficulty = parsed.fsrsDifficulty ?: 0.0,
-            fsrsState = parsed.fsrsState ?: "NEW",
-            fsrsReps = parsed.fsrsReps ?: 0,
-            fsrsLapses = parsed.fsrsLapses ?: 0,
-            fsrsScheduledDays = parsed.fsrsScheduledDays ?: 0,
-            fsrsElapsedDays = parsed.fsrsElapsedDays ?: 0,
-            sm2EaseFactor = parsed.sm2EaseFactor ?: 2.5,
-            sm2Interval = parsed.sm2Interval ?: 0,
-            sm2Repetitions = parsed.sm2Repetitions ?: 0,
-            created = now,
-            modified = now
-        )
-    } else {
-        Card(
-            question = parsed.concept,
-            answer = parsed.answer,
-            imagePaths = decodedImagePaths,
-            algorithm = AlgorithmType.FSRS,
-            created = now,
-            modified = now
-        )
-    }
-}
-
-/**
- * Converts ParsedReviewLogs to ReviewLog entities using a question->cardId map.
- * Skips logs for cards not found in the map.
- * Decodes base64 images and saves them to internal storage.
- */
-fun CardImportExport.parsedReviewLogsToEntities(
-    context: Context,
-    parsed: List<CardImportExport.ParsedReviewLog>,
-    questionToCardId: Map<String, Long>,
-    opponentNameToId: Map<String, Long> = emptyMap()
-): List<ReviewLog> {
-    return parsed.mapNotNull { p ->
-        val cardId = questionToCardId[p.cardQuestion] ?: return@mapNotNull null
-        // Decode base64 images for review log notes
-        val decodedImagePaths = p.imageData.mapNotNull { base64 ->
-            decodeImageFromBase64(context, base64, "review_images")
-        }
-        ReviewLog(
-            cardId = cardId,
-            sessionId = null,
-            reviewTime = p.reviewTime,
-            grade = p.grade,
-            algorithm = p.algorithm,
-            stateBefore = p.stateBefore,
-            stateAfter = p.stateAfter,
-            scheduledDays = p.scheduledDays,
-            elapsedDays = p.elapsedDays,
-            groupName = p.groupName,
-            notes = p.notes,
-            imagePaths = decodedImagePaths.joinToString(","),
-            opponentId = p.opponentName?.let { opponentNameToId[it] },
-            stabilityMultiplier = p.stabilityMultiplier
-        )
-    }
-}
 
 /**
  * Wraps an OutputStream with GZIP compression
@@ -135,75 +54,16 @@ fun CardImportExport.smartInputStream(inputStream: InputStream): InputStream {
     }
 }
 
-/**
- * Decodes one inline base64 image and stores it under the app's files
- * directory, returning the path to reach it by, or null if either step fails.
- * The decode itself is common code; only the storing is Android's.
- */
-fun CardImportExport.decodeImageFromBase64(
-    context: Context,
-    base64Data: String,
-    subDir: String = "card_images"
-): String? {
-    val bytes = decodeBase64Image(base64Data) ?: return null
-    return try {
-        val imagesDir = File(context.filesDir, subDir)
-        if (!imagesDir.exists()) {
-            imagesDir.mkdirs()
-        }
-        val outputFile = File(imagesDir, "${subDir}_${Time.now()}.jpg")
-        outputFile.writeBytes(bytes)
-        outputFile.absolutePath
-    } catch (e: Exception) {
-        null
-    }
-}
-
 // ==========================================================================
 // Stream adapters.
 //
-// Everything above operates on a List<String>, a String or an Appendable, and
-// so has no reason to be tied to a JVM. These six give it back the
-// InputStream/OutputStream surface every existing caller uses, so the split
-// costs nothing at the call sites. They are the part that stays behind when
-// the core moves to common code -- a browser has no java.io.
+// Everything in the format code operates on a List<String>, a String or an
+// Appendable, and so has no reason to be tied to a JVM. These give it back
+// the InputStream/OutputStream surface the backup worker and the tests use,
+// so the split costs nothing at those call sites. They are the part that
+// stayed behind when the core moved to common code -- a browser has no
+// java.io.
 // ==========================================================================
-
-/**
- * Reads images off the filesystem for export.
- *
- * Resolves a key the same two ways FileImageStore does, and has to: images
- * attached since the store arrived are content keys with no directory in them,
- * and images from before it are absolute paths. Reading only absolute paths
- * would export every old image and silently drop every new one -- the export
- * would succeed, be short, and say nothing about it.
- *
- * Synchronous, and so not the store itself, because the export format code is
- * synchronous all the way down. Making it suspend is what the browser will
- * need when it grows an export path; on Android there is nothing to gain from
- * it, so the duplication is a few lines rather than a rewrite of the format
- * code ahead of a caller that needs it.
- *
- * Resolution itself is shared with the store -- see resolveImageFile -- so the
- * containment check cannot drift between the two.
- */
-class FileImageReader(context: Context) : ImageReader {
-
-    private val filesDir: File = context.filesDir
-    private val directory: File = imageDirectory(context)
-
-    override fun read(path: String): ByteArray? {
-        val file = resolve(path) ?: return null
-        if (!file.exists() || !file.canRead()) return null
-        return try {
-            file.readBytes()
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    private fun resolve(key: String): File? = resolveImageFile(key, directory, filesDir)
-}
 
 /** Reads the whole stream as UTF-8 lines and parses it. */
 fun CardImportExport.parseCards(inputStream: InputStream): Pair<List<ParsedCard>, List<String>> =

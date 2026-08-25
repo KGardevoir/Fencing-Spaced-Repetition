@@ -336,9 +336,10 @@ class CsvImportExportTest {
         assertFalse(header.contains("Images"))
     }
 
-    // Note: Tests for image encoding in CSV export require android.util.Base64
-    // which is not available in JVM unit tests. Image encoding is tested in V3 tests
-    // which share the same encodeImageToBase64/decodeImageFromBase64 infrastructure.
+    // Note: image encoding in CSV export is covered by the V3 tests, which
+    // share the same encodeImageToBase64. The other half -- storing what an
+    // import decodes -- is ImportExportImagesTest in :shared, where it can be
+    // run against a store on every platform.
 
     @Test
     fun `exportCardsToCsv - empty card list`() {

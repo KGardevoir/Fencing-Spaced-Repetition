@@ -19,6 +19,11 @@ import java.io.File
  * content key the next time it is written rather than in a migration that
  * would have to read every picture in the collection at once.
  *
+ * Nothing writes such a path any more. The last thing that did was the
+ * import, which decoded inline base64 images to files of its own; it stores
+ * them here now, so an imported picture is deduplicated against the ones
+ * already in the collection instead of being a new file every time.
+ *
  * The legacy branch checks the path is inside filesDir. A key comes out of the
  * database, and the database is fed by imports; without the check, a crafted
  * export could name any file the app can read and have export inline it as
@@ -35,6 +40,10 @@ class FileImageStore(context: Context) : ImageStore {
 
     private val filesDir: File = context.filesDir
     private val directory: File = imageDirectory(context)
+
+    // One reader, held rather than made per export: it is two File fields and
+    // no state, and an export asks for it once.
+    private val reader = FileImageReader(context)
 
     override suspend fun read(key: String): ByteArray? = withContext(Dispatchers.IO) {
         val file = resolve(key) ?: return@withContext null
@@ -58,6 +67,13 @@ class FileImageStore(context: Context) : ImageStore {
             resolve(key)?.takeIf { it.exists() }?.delete()
         }
     }
+
+    /**
+     * The keys are ignored: files are already at hand, so an export reads them
+     * as it writes each line rather than loading the collection's every image
+     * into memory first, which is what the default in [ImageStore] does.
+     */
+    override suspend fun readerFor(keys: Collection<String>): ImageReader = reader
 
     private fun resolve(key: String): File? = resolveImageFile(key, directory, filesDir)
 }

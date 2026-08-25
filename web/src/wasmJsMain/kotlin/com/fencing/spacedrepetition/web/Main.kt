@@ -18,7 +18,7 @@ import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
 import com.fencing.spacedrepetition.ui.App
-import com.fencing.spacedrepetition.ui.UnavailableFileTransfer
+import com.fencing.spacedrepetition.ui.browserFileTransfer
 import com.fencing.spacedrepetition.ui.image.ImageCache
 import com.fencing.spacedrepetition.ui.image.LocalImageCache
 import com.fencing.spacedrepetition.ui.image.LocalImagePicker
@@ -39,8 +39,8 @@ import kotlinx.coroutines.Dispatchers
  * Everything below this file is shared with the Android build: the same
  * screens, the same view models, the same repositories, the same scheduling.
  * What is here is the four answers the browser has to give -- where the
- * database is, where settings are, where images are, and what happens when
- * the user asks for a file -- and then it gets out of the way.
+ * database is, where settings are, where images are, and what a file chooser
+ * is -- and then it gets out of the way.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
@@ -58,13 +58,19 @@ fun main() {
     val opponentRepository = OpponentRepository(database.opponentDao())
 
     val imageCache = ImageCache(OpfsImageStore)
-    val imagePicker = browserImagePicker(CoroutineScope(Dispatchers.Main), OpfsImageStore)
+    // One scope for the page's two file dialogs -- picking an image, and
+    // picking a deck to import. Neither belongs to a composition: a chooser
+    // outlives whatever screen opened it.
+    val scope = CoroutineScope(Dispatchers.Main)
+    val imagePicker = browserImagePicker(scope, OpfsImageStore)
 
     ComposeViewport(viewportContainerId = "app") {
         val cardViewModel = remember {
-            CardViewModel(cardRepository, groupRepository, opponentRepository)
+            CardViewModel(cardRepository, groupRepository, opponentRepository, OpfsImageStore)
         }
-        val groupViewModel = remember { GroupViewModel(groupRepository, cardRepository) }
+        val groupViewModel = remember {
+            GroupViewModel(groupRepository, cardRepository, OpfsImageStore)
+        }
         val practiceViewModel = remember {
             PracticeViewModel(cardRepository, opponentRepository)
         }
@@ -88,9 +94,7 @@ fun main() {
                     opponentViewModel = opponentViewModel,
                     buildInfo = webBuildInfo(),
                     transfer = remember {
-                        UnavailableFileTransfer { message ->
-                            cardViewModel.reportImportExportError(message)
-                        }
+                        browserFileTransfer(scope, cardViewModel, groupViewModel)
                     },
                     onOpenLink = { url -> openInNewTab(url) },
                     // No storage-framework folder to name, and nothing to
