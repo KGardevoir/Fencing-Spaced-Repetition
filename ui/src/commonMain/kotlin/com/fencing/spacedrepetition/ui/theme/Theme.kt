@@ -3,15 +3,13 @@
 
 package com.fencing.spacedrepetition.ui.theme
 
-import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.*
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalView
-import androidx.core.view.WindowCompat
 import com.fencing.spacedrepetition.data.preferences.ThemeMode
 
 private val DarkColorScheme = darkColorScheme(
@@ -83,15 +81,7 @@ fun FencingSpacedRepetitionTheme(
         else -> LightColorScheme
     }
 
-    val view = LocalView.current
-    if (!view.isInEditMode) {
-        SideEffect {
-            val window = (view.context as Activity).window
-            @Suppress("DEPRECATION")
-            window.statusBarColor = colorScheme.primary.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
-        }
-    }
+    ApplySystemBarStyle(darkTheme, colorScheme)
 
     MaterialTheme(
         colorScheme = colorScheme,
@@ -99,3 +89,17 @@ fun FencingSpacedRepetitionTheme(
         content = content
     )
 }
+
+/**
+ * Tints whatever the platform draws around the app.
+ *
+ * On Android that is the status bar, which is part of the window and has to
+ * be told the theme changed. A browser has no equivalent under the app's
+ * control -- the closest thing is the theme-color meta tag, which belongs to
+ * the document rather than to a composition -- so the browser actual does
+ * nothing. Expressed as expect/actual rather than a nullable callback because
+ * it is a genuine platform difference, and this way neither side can forget
+ * to handle it.
+ */
+@Composable
+internal expect fun ApplySystemBarStyle(darkTheme: Boolean, colorScheme: ColorScheme)

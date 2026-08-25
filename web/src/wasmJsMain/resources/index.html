@@ -30,6 +30,15 @@
       content: "Loading WebAssembly…";
       opacity: 0.7;
     }
+    /* The Compose canvas sizes itself to this container, and a container with
+       only a canvas in it would otherwise be zero tall. */
+    .compose-root {
+      height: 22rem;
+      margin-top: 0.75rem;
+      border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+      border-radius: 8px;
+      overflow: hidden;
+    }
   </style>
 </head>
 <body>

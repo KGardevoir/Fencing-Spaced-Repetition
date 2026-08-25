@@ -57,3 +57,4 @@ rootProject.name = "FencingSpacedRepetition"
 include(":shared")
 include(":web")
 include(":app")
+include(":ui")

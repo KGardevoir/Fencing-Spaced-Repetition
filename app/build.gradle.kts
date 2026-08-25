@@ -105,6 +105,11 @@ dependencies {
     // coordinates that used to be listed here live there now.
     implementation(project(":shared"))
 
+    // The Compose user interface, shared with the browser build. :ui exposes
+    // :shared through api(), so the line above is redundant in dependency
+    // terms and kept for what it says: this app is built on that core.
+    implementation(project(":ui"))
+
     // Core Android
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")

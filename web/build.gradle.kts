@@ -2,15 +2,17 @@
 
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
+    id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.compose")
 }
 
 // The browser build. Today it produces a smoke page rather than the app: it
-// loads the real :shared scheduling core in a browser and shows what it
-// computes, which is the first artifact of this port anyone can actually open.
+// loads the real :shared scheduling core in a browser, shows what it computes,
+// and draws the shared Compose theme on a canvas beneath it.
 //
-// The Compose UI will land here later. Keeping it out of :shared means that
-// module stays a library with no entry point, and the Android build never sees
-// any of this.
+// The screens follow, from :ui. Keeping the entry point here rather than in
+// :shared or :ui means both of those stay libraries, and the Android build
+// never sees any of this.
 kotlin {
     jvmToolchain(17)
 
@@ -35,6 +37,14 @@ kotlin {
         val wasmJsMain by getting {
             dependencies {
                 implementation(project(":shared"))
+
+                // The shared Compose user interface. Today the page uses it
+                // only for the theme; the screens follow.
+                implementation(project(":ui"))
+                implementation(compose.runtime)
+                implementation(compose.foundation)
+                implementation(compose.material3)
+                implementation(compose.ui)
             }
         }
     }

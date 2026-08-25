@@ -17,12 +17,6 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
-enum class ThemeMode {
-    SYSTEM,
-    LIGHT,
-    DARK
-}
-
 class ThemePreferences(private val context: Context) : SchedulingPreferences {
     private val THEME_KEY = stringPreferencesKey("theme_mode")
     private val AUTO_SHOW_ANSWER_KEY = booleanPreferencesKey("auto_show_answer")

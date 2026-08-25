@@ -14,5 +14,9 @@ plugins {
     id("org.jetbrains.kotlin.android") version "2.4.10" apply false
     id("org.jetbrains.kotlin.multiplatform") version "2.4.10" apply false
     id("org.jetbrains.kotlin.plugin.compose") version "2.4.10" apply false
+    // Compose Multiplatform. Distinct from the line above: that one is
+    // Kotlin's Compose compiler plugin and moves with Kotlin, this one is the
+    // multiplatform runtime and its own Gradle plugin.
+    id("org.jetbrains.compose") version "1.11.1" apply false
     id("com.google.devtools.ksp") version "2.3.11" apply false
 }
