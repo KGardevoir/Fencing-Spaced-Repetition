@@ -25,7 +25,8 @@ plugins {
 //
 // The tests run in a real browser engine for the same reason :shared's do:
 // on wasm, "it compiles" and "it renders" are separate claims, and only one
-// of them is worth having.
+// of them is worth having. They are browser-only -- see the note on the test
+// source set below.
 kotlin {
     jvmToolchain(17)
 
@@ -64,14 +65,19 @@ kotlin {
             }
         }
 
-        val commonTest by getting {
+        // wasmJsTest rather than commonTest: runComposeUiTest needs a real UI
+        // environment, and Android's local unit-test variant -- which is what
+        // :ui:allTests runs -- is not one. Covering the Android theme this way
+        // needs an instrumented test on an emulator, which this project's CI
+        // does not have.
+        val wasmJsTest by getting {
             dependencies {
                 implementation(kotlin("test"))
 
-                // Compose's own test harness. The point of using it here
-                // rather than asserting on plain values is that it composes
-                // for real: a theme that compiles but throws on first
-                // composition would still pass a value-level test.
+                // Compose's own test harness. The point of using it rather
+                // than asserting on plain values is that it composes for
+                // real: a theme that compiles but throws on first composition
+                // would still pass a value-level test.
                 @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
                 implementation(compose.uiTest)
             }

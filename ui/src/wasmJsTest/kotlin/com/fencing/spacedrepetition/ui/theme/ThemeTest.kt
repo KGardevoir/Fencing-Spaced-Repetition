@@ -15,7 +15,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Composes the theme for real, on every platform :ui targets.
+ * Composes the theme for real, in a browser.
  *
  * The reason to run this rather than compare colour constants: a theme that
  * compiles can still throw on first composition, and on the browser it can
@@ -26,6 +26,14 @@ import kotlin.test.assertEquals
  * The colour assertions read the scheme from inside the composition rather
  * than from the private schemes in Theme.kt, so they check what a screen
  * would actually be handed.
+ *
+ * wasmJsTest rather than commonTest, and the reason is worth recording:
+ * runComposeUiTest needs a real UI environment, and on Android that means an
+ * instrumented test on a device or emulator, not the local unit-test variant
+ * -- which is where :ui:allTests would put a commonTest, and where it throws
+ * on the first call. Covering the Android theme the same way needs an
+ * emulator this project's CI does not have, the same gap that leaves the
+ * database migrations unexercised.
  */
 class ThemeTest {
 
