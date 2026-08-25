@@ -177,7 +177,10 @@ class SettingsViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(SettingsViewModel::class.java)) {
-            return SettingsViewModel(application, themePreferences) as T
+            return SettingsViewModel(
+                themePreferences,
+                runBackup = { BackupScheduler.runNow(application) }
+            ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

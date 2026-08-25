@@ -3,12 +3,10 @@
 
 package com.fencing.spacedrepetition.ui.viewmodel
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.fencing.spacedrepetition.data.preferences.AppPreferences
 import com.fencing.spacedrepetition.data.preferences.ThemeMode
-import com.fencing.spacedrepetition.data.preferences.ThemePreferences
-import com.fencing.spacedrepetition.worker.BackupScheduler
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -16,9 +14,17 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class SettingsViewModel(
-    application: Application,
-    private val themePreferences: ThemePreferences
-) : AndroidViewModel(application) {
+    private val themePreferences: AppPreferences,
+    /**
+     * Runs a backup now, if the platform can.
+     *
+     * A parameter rather than a call into BackupScheduler, which is
+     * WorkManager and so Android's alone. The browser has no equivalent --
+     * a page that is not open cannot back anything up -- so it passes a
+     * no-op, and the button is simply inert there rather than absent.
+     */
+    private val runBackup: suspend () -> Unit = {}
+) : ViewModel() {
 
     val themeMode: StateFlow<ThemeMode> = themePreferences.themeMode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemeMode.SYSTEM)
@@ -191,7 +197,7 @@ class SettingsViewModel(
     }
 
     fun runBackupNow() {
-        BackupScheduler.runNow(getApplication())
+        viewModelScope.launch { runBackup() }
     }
 
     fun setMaxBackupsKept(count: Int) {
