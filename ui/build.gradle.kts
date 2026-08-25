@@ -89,6 +89,12 @@ kotlin {
                 // androidx.lifecycle package names the Android build already
                 // uses -- which is why the view models move across unchanged.
                 //
+                // api rather than implementation: OpponentViewModel is public
+                // and extends ViewModel, so anything calling a method on one
+                // needs the supertype resolvable. As implementation it is not,
+                // and the caller gets "Cannot access 'androidx.lifecycle.
+                // ViewModel' which is a supertype of 'OpponentViewModel'".
+                //
                 // 2.9.x rather than the current 2.11.0, and the reason is not
                 // caution: declaring 2.11.0 raises the whole androidx
                 // lifecycle group to 2.11.0, including the artifacts Compose
@@ -98,7 +104,7 @@ kotlin {
                 // KSP problem in gradle.properties, so the ceiling on the
                 // lifecycle version is really that pin showing up somewhere
                 // new. It lifts when AGP does.
-                implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel:2.9.6")
+                api("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel:2.9.6")
             }
         }
 
