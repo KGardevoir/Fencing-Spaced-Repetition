@@ -3,7 +3,6 @@
 
 package com.fencing.spacedrepetition.ui.components
 
-import android.content.res.Configuration
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -21,10 +20,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.isImeVisible
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 
@@ -107,20 +102,13 @@ fun rememberMarkdownToolbarState(): MarkdownToolbarState {
  * }
  * ```
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MarkdownKeyboardToolbar(
     state: MarkdownToolbarState,
     modifier: Modifier = Modifier
 ) {
-    val isImeVisible = WindowInsets.isImeVisible
-    val configuration = LocalConfiguration.current
-    val hasPhysicalKeyboard =
-        configuration.keyboard == Configuration.KEYBOARD_QWERTY ||
-        configuration.keyboard == Configuration.KEYBOARD_12KEY
-
     AnimatedVisibility(
-        visible = state.isFocused && (isImeVisible || hasPhysicalKeyboard),
+        visible = state.isFocused && keyboardIsAvailableForEditing(),
         enter = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(),
         exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut(),
         modifier = modifier
