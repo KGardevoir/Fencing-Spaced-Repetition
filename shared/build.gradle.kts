@@ -1,5 +1,6 @@
 @file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
 
+import java.util.zip.ZipFile
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -287,7 +288,10 @@ tasks.register("dumpSqliteWebApi") {
 
         klibs.forEach { klib ->
             println("SQLITEWEB: artifact ${klib.name}")
-            java.util.zip.ZipFile(klib).use { zip ->
+            // Imported at the top of the file rather than written
+            // out here: in a Kotlin DSL build script 'java' is the
+            // Java extension accessor, which shadows the package.
+            ZipFile(klib).use { zip ->
                 val entries = zip.entries().toList()
 
                 entries.map { it.name }
