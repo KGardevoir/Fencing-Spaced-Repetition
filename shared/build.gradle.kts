@@ -1,6 +1,5 @@
 @file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
 
-import java.util.zip.ZipFile
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -266,53 +265,6 @@ afterEvaluate {
     logger.lifecycle("KSPCFG: serialising ksp tasks = $kspTaskNames")
     kspTaskNames.zipWithNext().forEach { (earlier, later) ->
         tasks.named(later) { mustRunAfter(tasks.named(earlier)) }
-    }
-}
-
-// TEMPORARY, paired with the CI step of the same name. androidx publishes no
-// reference documentation for androidx.sqlite:sqlite-web, so this prints what
-// the klib actually contains: the packages it declares and the names inside
-// them. That is the difference between knowing the driver's import and
-// guessing it, and it costs one task rather than one CI round trip per guess.
-// Delete once the browser database test is green.
-tasks.register("dumpSqliteWebApi") {
-    description = "Prints the packages and top-level names in the sqlite-web klib."
-    doLast {
-        val klibs = configurations.getByName("wasmJsCompileClasspath")
-            .incoming.artifactView { isLenient = true }.files
-            .filter { it.name.contains("sqlite-web") }
-
-        if (klibs.isEmpty()) {
-            println("SQLITEWEB: nothing named sqlite-web on the wasmJs compile classpath")
-        }
-
-        klibs.forEach { klib ->
-            println("SQLITEWEB: artifact ${klib.name}")
-            // Imported at the top of the file rather than written
-            // out here: in a Kotlin DSL build script 'java' is the
-            // Java extension accessor, which shadows the package.
-            ZipFile(klib).use { zip ->
-                val entries = zip.entries().toList()
-
-                entries.map { it.name }
-                    .mapNotNull { Regex("package_([\\w.]+)").find(it)?.groupValues?.get(1) }
-                    .distinct().sorted()
-                    .forEach { println("SQLITEWEB: package $it") }
-
-                // Declaration names survive in the metadata as plain strings,
-                // which is enough to tell a constructor's shape from a guess.
-                val names = entries
-                    .filter { it.name.endsWith(".knm") }
-                    .flatMap { entry ->
-                        val text = zip.getInputStream(entry).readBytes()
-                            .toString(Charsets.ISO_8859_1)
-                        Regex("[A-Za-z][A-Za-z0-9_.]{3,}").findAll(text).map { it.value }
-                    }
-                    .filter { it.contains("Worker") || it.contains("Driver") }
-                    .distinct().sorted()
-                names.forEach { println("SQLITEWEB: name $it") }
-            }
-        }
     }
 }
 
