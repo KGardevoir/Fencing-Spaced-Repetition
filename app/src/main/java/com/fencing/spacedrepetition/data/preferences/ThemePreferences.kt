@@ -52,8 +52,11 @@ class ThemePreferences(private val context: Context) : SchedulingPreferences {
 
         // FSRS desired retention as integer percent (70–97), default 90 %
         const val DEFAULT_FSRS_RETENTION = 90
-        const val MIN_FSRS_RETENTION = 70
-        const val MAX_FSRS_RETENTION = 97
+        // The values themselves live in SettingsConstants, which is shared
+        // with the browser build. Kept here as aliases so the Android call
+        // sites that already read them through this class still compile.
+        const val MIN_FSRS_RETENTION = SettingsConstants.MIN_FSRS_RETENTION
+        const val MAX_FSRS_RETENTION = SettingsConstants.MAX_FSRS_RETENTION
 
         // SM-2 interval modifier as integer percent (50–200), default 100 %
         const val DEFAULT_SM2_INTERVAL_MODIFIER = 100

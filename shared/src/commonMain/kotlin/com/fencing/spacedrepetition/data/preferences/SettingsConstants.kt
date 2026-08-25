@@ -4,6 +4,16 @@
 package com.fencing.spacedrepetition.data.preferences
 
 object SettingsConstants {
+    /**
+     * Desired-retention range for FSRS, as integer percent.
+     *
+     * Here rather than on the Android preferences class that used to own them,
+     * because the retention planner and the retention slider both need these
+     * bounds and neither is Android-specific.
+     */
+    const val MIN_FSRS_RETENTION = 70
+    const val MAX_FSRS_RETENTION = 97
+
     /** Cards per session slider range and steps. */
     const val CARDS_PER_SESSION_MIN = 1f
     const val CARDS_PER_SESSION_MAX = 6f

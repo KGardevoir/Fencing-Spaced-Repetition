@@ -4,7 +4,7 @@
 package com.fencing.spacedrepetition.algorithm
 
 import com.fencing.spacedrepetition.data.model.PracticeHistoryStats
-import com.fencing.spacedrepetition.data.preferences.ThemePreferences
+import com.fencing.spacedrepetition.data.preferences.SettingsConstants
 import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -60,7 +60,7 @@ object RetentionPlanner {
         val targetIntervalDays = 7.0 * max(cardsInRotation, 1) / weeklyCapacity
         val retention = (1.0 + FACTOR * targetIntervalDays / TYPICAL_STABILITY_DAYS).pow(-DECAY)
         return (retention * 100).roundToInt()
-            .coerceIn(ThemePreferences.MIN_FSRS_RETENTION, ThemePreferences.MAX_FSRS_RETENTION)
+            .coerceIn(SettingsConstants.MIN_FSRS_RETENTION, SettingsConstants.MAX_FSRS_RETENTION)
     }
 
     /**

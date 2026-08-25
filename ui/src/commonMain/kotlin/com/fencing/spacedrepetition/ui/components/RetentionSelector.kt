@@ -37,7 +37,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.algorithm.RetentionPlanner
 import com.fencing.spacedrepetition.algorithm.ScheduleEstimate
-import com.fencing.spacedrepetition.data.preferences.ThemePreferences
+import com.fencing.spacedrepetition.data.preferences.SettingsConstants
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
@@ -256,9 +256,9 @@ fun RetentionSelector(
             Slider(
                 value = retentionPercent.toFloat(),
                 onValueChange = { onRetentionChange(it.roundToInt()) },
-                valueRange = ThemePreferences.MIN_FSRS_RETENTION.toFloat()..
-                    ThemePreferences.MAX_FSRS_RETENTION.toFloat(),
-                steps = ThemePreferences.MAX_FSRS_RETENTION - ThemePreferences.MIN_FSRS_RETENTION - 1,
+                valueRange = SettingsConstants.MIN_FSRS_RETENTION.toFloat()..
+                    SettingsConstants.MAX_FSRS_RETENTION.toFloat(),
+                steps = SettingsConstants.MAX_FSRS_RETENTION - SettingsConstants.MIN_FSRS_RETENTION - 1,
                 modifier = Modifier.weight(1f),
                 enabled = enabled
             )

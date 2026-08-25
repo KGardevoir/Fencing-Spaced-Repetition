@@ -3,7 +3,8 @@
 
 package com.fencing.spacedrepetition.ui.screen
 
-import androidx.activity.compose.BackHandler
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -25,7 +26,7 @@ import com.fencing.spacedrepetition.ui.components.FsrsRetentionPreview
 import com.fencing.spacedrepetition.ui.components.RetentionSelector
 import kotlin.math.roundToInt
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun GroupEditScreen(
     group: Group,
@@ -101,6 +102,9 @@ fun GroupEditScreen(
     val isDirty = buildUpdatedGroup() != group
     var showUnsavedChangesDialog by rememberSaveable { mutableStateOf(false) }
 
+    // Compose Multiplatform's own BackHandler, not the one from
+    // androidx.activity: same signature, and it is a real back gesture on
+    // Android and the browser's back navigation on the web.
     BackHandler(enabled = isDirty) {
         showUnsavedChangesDialog = true
     }

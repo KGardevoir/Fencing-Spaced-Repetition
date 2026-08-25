@@ -4,11 +4,11 @@
 package com.fencing.spacedrepetition.algorithm
 
 import com.fencing.spacedrepetition.data.model.PracticeHistoryStats
-import com.fencing.spacedrepetition.data.preferences.ThemePreferences
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import com.fencing.spacedrepetition.data.preferences.SettingsConstants
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class RetentionPlannerTest {
 
@@ -46,9 +46,10 @@ class RetentionPlannerTest {
             RetentionPlanner.suggestedRetention(0.0, 0.0, 0)      // degenerate input
         )
         extremes.forEach { suggestion ->
+            // kotlin.test takes the message second; JUnit4 took it first.
             assertTrue(
-                "Suggestion $suggestion out of range",
-                suggestion in ThemePreferences.MIN_FSRS_RETENTION..ThemePreferences.MAX_FSRS_RETENTION
+                suggestion in SettingsConstants.MIN_FSRS_RETENTION..SettingsConstants.MAX_FSRS_RETENTION,
+                "Suggestion $suggestion out of range"
             )
         }
     }
