@@ -22,8 +22,28 @@ import androidx.compose.runtime.staticCompositionLocalOf
  * appears in a screen.
  */
 fun interface ImagePicker {
-    fun pick(onPicked: (String) -> Unit)
+    fun pick(onPicked: (PickedImage) -> Unit)
 }
+
+/**
+ * An image the user chose, now in the store.
+ *
+ * Carries its size because that is the one moment anything knows it, and
+ * because storage here is the user's own device: there is no quota to enforce
+ * and no server to protect, so a large image is not an error, just something
+ * worth mentioning once. See [LARGE_IMAGE_BYTES].
+ */
+data class PickedImage(val key: String, val byteCount: Int)
+
+/**
+ * The size above which attaching an image is worth a word.
+ *
+ * Two megabytes is around where a phone photo lands untouched. Nothing is
+ * resized on the way in -- a browser scales images to fit when drawing them,
+ * and the copy on disk is the user's own -- so this is advice rather than a
+ * limit, and it does not stop anything.
+ */
+const val LARGE_IMAGE_BYTES = 2 * 1024 * 1024
 
 val LocalImagePicker = staticCompositionLocalOf<ImagePicker> {
     error("No ImagePicker provided. Wrap the app in CompositionLocalProvider(LocalImagePicker provides ...)")

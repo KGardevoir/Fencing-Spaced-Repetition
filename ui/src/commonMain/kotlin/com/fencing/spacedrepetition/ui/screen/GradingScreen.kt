@@ -32,6 +32,8 @@ import com.fencing.spacedrepetition.ui.components.MarkdownText
 import com.fencing.spacedrepetition.ui.components.MarkdownToolbarState
 import com.fencing.spacedrepetition.ui.components.OpponentPicker
 import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
+import com.fencing.spacedrepetition.ui.components.LargeImageNotice
+import com.fencing.spacedrepetition.ui.image.LARGE_IMAGE_BYTES
 import com.fencing.spacedrepetition.ui.image.LocalImagePicker
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeUiState
 
@@ -287,6 +289,7 @@ fun GradingCardItem(
     }
 
     val imagePicker = LocalImagePicker.current
+    var lastLargeImageBytes by remember { mutableStateOf<Int?>(null) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -463,14 +466,17 @@ fun GradingCardItem(
                         },
                         maxHeight = 100
                     )
+                    LargeImageNotice(lastLargeImageBytes)
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
                 OutlinedButton(
                     onClick = {
-                        imagePicker.pick { key ->
-                            noteImages = noteImages + key
+                        imagePicker.pick { picked ->
+                            noteImages = noteImages + picked.key
                             onNotesChanged(notesValue.text, noteImages)
+                            lastLargeImageBytes =
+                                picked.byteCount.takeIf { it > LARGE_IMAGE_BYTES }
                         }
                     }
                 ) {

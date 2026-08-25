@@ -28,7 +28,7 @@ import kotlinx.coroutines.launch
 fun rememberAndroidImagePicker(store: ImageStore): ImagePicker {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val pending = remember { arrayOfNulls<(String) -> Unit>(1) }
+    val pending = remember { arrayOfNulls<(PickedImage) -> Unit>(1) }
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -49,7 +49,7 @@ fun rememberAndroidImagePicker(store: ImageStore): ImagePicker {
                 ?.takeIf { it.isNotBlank() }
                 ?: "jpg"
 
-            onPicked(store.write(bytes, extension))
+            onPicked(PickedImage(store.write(bytes, extension), bytes.size))
         }
     }
 

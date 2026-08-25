@@ -36,6 +36,8 @@ import com.fencing.spacedrepetition.ui.components.MarkdownKeyboardToolbar
 import com.fencing.spacedrepetition.ui.components.MarkdownText
 import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
 import androidx.compose.ui.text.input.TextFieldValue
+import com.fencing.spacedrepetition.ui.components.LargeImageNotice
+import com.fencing.spacedrepetition.ui.image.LARGE_IMAGE_BYTES
 import com.fencing.spacedrepetition.ui.image.LocalImagePicker
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeUiState
 
@@ -559,6 +561,7 @@ fun EditCardDialog(
     val markdownToolbarState = rememberMarkdownToolbarState()
 
     val imagePicker = LocalImagePicker.current
+    var lastLargeImageBytes by remember { mutableStateOf<Int?>(null) }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -629,8 +632,10 @@ fun EditCardDialog(
                             }
                             OutlinedButton(
                                 onClick = {
-                                    imagePicker.pick { key ->
-                                        imagePaths = (imagePaths + key).toMutableList()
+                                    imagePicker.pick { picked ->
+                                        imagePaths = (imagePaths + picked.key).toMutableList()
+                                        lastLargeImageBytes =
+                                            picked.byteCount.takeIf { it > LARGE_IMAGE_BYTES }
                                     }
                                 },
                                 modifier = Modifier.height(32.dp),
@@ -656,6 +661,7 @@ fun EditCardDialog(
                                 modifier = Modifier.fillMaxWidth(),
                                 maxHeight = 120
                             )
+                            LargeImageNotice(lastLargeImageBytes)
                         } else {
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(

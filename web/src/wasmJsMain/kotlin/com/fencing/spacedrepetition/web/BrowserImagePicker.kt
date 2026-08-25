@@ -4,6 +4,7 @@
 package com.fencing.spacedrepetition.web
 
 import com.fencing.spacedrepetition.ui.image.ImagePicker
+import com.fencing.spacedrepetition.ui.image.PickedImage
 import com.fencing.spacedrepetition.util.ImageStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.await
@@ -28,7 +29,7 @@ fun browserImagePicker(scope: CoroutineScope, store: ImageStore): ImagePicker =
             val picked = pickImageFile().await<JsAny?>() ?: return@launch
             val bytes = picked.bytes()
             val key = store.write(bytes, picked.extension())
-            onPicked(key)
+            onPicked(PickedImage(key, bytes.size))
         }
     }
 

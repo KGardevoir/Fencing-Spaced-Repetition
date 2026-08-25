@@ -34,6 +34,8 @@ import com.fencing.spacedrepetition.ui.components.MarkdownText
 import com.fencing.spacedrepetition.ui.components.MarkdownToolbarState
 import com.fencing.spacedrepetition.ui.components.OpponentPicker
 import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
+import com.fencing.spacedrepetition.ui.components.LargeImageNotice
+import com.fencing.spacedrepetition.ui.image.LARGE_IMAGE_BYTES
 import com.fencing.spacedrepetition.ui.image.LocalImagePicker
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryItem
 import com.fencing.spacedrepetition.ui.viewmodel.OPPONENT_FILTER_NONE
@@ -764,6 +766,7 @@ private fun HistoryNoteEditor(
     }
 
     val imagePicker = LocalImagePicker.current
+    var lastLargeImageBytes by remember { mutableStateOf<Int?>(null) }
 
     Column(
         modifier = Modifier
@@ -801,6 +804,7 @@ private fun HistoryNoteEditor(
                 },
                 maxHeight = 100
             )
+            LargeImageNotice(lastLargeImageBytes)
             Spacer(modifier = Modifier.height(8.dp))
         }
 
@@ -809,7 +813,12 @@ private fun HistoryNoteEditor(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             OutlinedButton(
-                onClick = { imagePicker.pick { key -> noteImages = noteImages + key } }
+                onClick = {
+                    imagePicker.pick { picked ->
+                        noteImages = noteImages + picked.key
+                        lastLargeImageBytes = picked.byteCount.takeIf { it > LARGE_IMAGE_BYTES }
+                    }
+                }
             ) {
                 Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(4.dp))

@@ -33,6 +33,8 @@ import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.ui.components.LargeImageNotice
+import com.fencing.spacedrepetition.ui.image.LARGE_IMAGE_BYTES
 import com.fencing.spacedrepetition.ui.image.LocalImagePicker
 import com.fencing.spacedrepetition.util.formatDate
 import com.fencing.spacedrepetition.util.formatDateWithoutYear
@@ -95,6 +97,7 @@ fun AddEditCardScreen(
     val markdownToolbarState = rememberMarkdownToolbarState()
 
     val imagePicker = LocalImagePicker.current
+    var lastLargeImageBytes by remember { mutableStateOf<Int?>(null) }
 
     // Mutable state for editing independent learning states (groupId -> state fields)
     var independentLearningEdits by remember(learningStates) {
@@ -229,9 +232,11 @@ fun AddEditCardScreen(
                         }
                         OutlinedButton(
                             onClick = {
-                                imagePicker.pick { key ->
-                                    imagePaths = (imagePaths + key).toMutableList()
+                                imagePicker.pick { picked ->
+                                    imagePaths = (imagePaths + picked.key).toMutableList()
                                     isDirty = true
+                                    lastLargeImageBytes =
+                                        picked.byteCount.takeIf { it > LARGE_IMAGE_BYTES }
                                 }
                             },
                             modifier = Modifier.height(36.dp)
@@ -256,6 +261,7 @@ fun AddEditCardScreen(
                             },
                             modifier = Modifier.fillMaxWidth()
                         )
+                        LargeImageNotice(lastLargeImageBytes)
                     } else {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
