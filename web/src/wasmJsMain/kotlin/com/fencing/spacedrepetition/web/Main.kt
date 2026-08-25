@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.ComposeViewport
@@ -128,6 +129,9 @@ private fun clockTable(): String {
     """
 }
 
+// ComposeViewport is opt-in in Compose Multiplatform 1.11: it is the entry
+// point for the web target and its shape is still settling.
+@OptIn(ExperimentalComposeUiApi::class)
 fun main() {
     render(
         """
