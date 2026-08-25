@@ -32,6 +32,20 @@ class CardImportExportV3Test {
         )
     }
 
+    /**
+     * Reads whatever path it is given.
+     *
+     * Not FileImageReader: that one needs a Context and deliberately refuses
+     * paths outside filesDir, and these tests read temp files. What is under
+     * test here is encodeImageToBase64's behaviour given a reader -- that it
+     * base64s what it gets and returns null when it gets nothing -- which is
+     * exactly why the reader is a parameter.
+     */
+    private object TempFileReader : ImageReader {
+        override fun read(path: String): ByteArray? =
+            File(path).takeIf { it.exists() }?.readBytes()
+    }
+
     @Test
     fun `test base64 image encoding`() {
         // Create a temporary file
@@ -39,7 +53,7 @@ class CardImportExportV3Test {
         try {
             tempFile.writeBytes(createTestImageBytes())
 
-            val encoded = CardImportExport.encodeImageToBase64(tempFile.absolutePath, FileImageReader)
+            val encoded = CardImportExport.encodeImageToBase64(tempFile.absolutePath, TempFileReader)
             assertNotNull(encoded)
             assertTrue(encoded!!.isNotEmpty())
 
@@ -53,7 +67,7 @@ class CardImportExportV3Test {
 
     @Test
     fun `test base64 image encoding - nonexistent file`() {
-        val encoded = CardImportExport.encodeImageToBase64("/nonexistent/file.png", FileImageReader)
+        val encoded = CardImportExport.encodeImageToBase64("/nonexistent/file.png", TempFileReader)
         assertNull(encoded)
     }
 

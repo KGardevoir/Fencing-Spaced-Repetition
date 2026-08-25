@@ -15,6 +15,7 @@ import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
 import com.fencing.spacedrepetition.util.CardImportExport
+import com.fencing.spacedrepetition.util.FileImageReader
 import com.fencing.spacedrepetition.util.createCompressedOutputStream
 import com.fencing.spacedrepetition.util.exportCardsWithGroupStates
 import com.fencing.spacedrepetition.util.ExportResult
@@ -89,7 +90,7 @@ class BackupWorker(
                 val outputStream = CardImportExport.createCompressedOutputStream(fileStream)
                 val result = CardImportExport.exportCardsWithGroupStates(
                     cardsWithStates, outputStream, allGroups, reviewLogs, cardQuestions,
-                    opponents, opponentNamesById
+                    opponents, opponentNamesById, FileImageReader(applicationContext)
                 )
                 outputStream.close()
                 result

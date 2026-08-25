@@ -170,13 +170,30 @@ fun CardImportExport.decodeImageFromBase64(
 // ==========================================================================
 
 /**
- * Reads images straight off the filesystem, which is what the export code did
- * inline before the reader became a parameter. Absolute paths, no Context: it
- * is the read half only, and export never writes an image.
+ * Reads images off the filesystem for export.
+ *
+ * Resolves a key the same two ways FileImageStore does, and has to: images
+ * attached since the store arrived are content keys with no directory in them,
+ * and images from before it are absolute paths. Reading only absolute paths
+ * would export every old image and silently drop every new one -- the export
+ * would succeed, be short, and say nothing about it.
+ *
+ * Synchronous, and so not the store itself, because the export format code is
+ * synchronous all the way down. Making it suspend is what the browser will
+ * need when it grows an export path; on Android there is nothing to gain from
+ * it, so the duplication is a few lines rather than a rewrite of the format
+ * code ahead of a caller that needs it.
+ *
+ * Resolution itself is shared with the store -- see resolveImageFile -- so the
+ * containment check cannot drift between the two.
  */
-object FileImageReader : ImageReader {
+class FileImageReader(context: Context) : ImageReader {
+
+    private val filesDir: File = context.filesDir
+    private val directory: File = imageDirectory(context)
+
     override fun read(path: String): ByteArray? {
-        val file = File(path)
+        val file = resolve(path) ?: return null
         if (!file.exists() || !file.canRead()) return null
         return try {
             file.readBytes()
@@ -184,6 +201,8 @@ object FileImageReader : ImageReader {
             null
         }
     }
+
+    private fun resolve(key: String): File? = resolveImageFile(key, directory, filesDir)
 }
 
 /** Reads the whole stream as UTF-8 lines and parses it. */
@@ -209,7 +228,7 @@ fun CardImportExport.exportCardsWithGroupStates(
     cardQuestions: Map<Long, String> = emptyMap(),
     opponents: List<Opponent> = emptyList(),
     opponentNamesById: Map<Long, String> = emptyMap(),
-    images: ImageReader = FileImageReader
+    images: ImageReader
 ): ExportResult = outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
     exportCardsWithGroupStates(
         cardsWithStates, writer, images, groupSettings, reviewLogs,
@@ -225,7 +244,7 @@ fun CardImportExport.exportCards(cards: List<Card>, outputStream: OutputStream):
 fun CardImportExport.exportCardsToCsv(
     cardsWithGroups: List<CardWithGroupNames>,
     outputStream: OutputStream,
-    images: ImageReader = FileImageReader
+    images: ImageReader
 ): ExportResult = outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
     exportCardsToCsv(cardsWithGroups, writer, images)
 }

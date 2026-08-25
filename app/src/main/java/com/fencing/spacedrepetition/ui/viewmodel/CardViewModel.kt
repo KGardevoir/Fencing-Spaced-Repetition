@@ -21,6 +21,7 @@ import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
 import com.fencing.spacedrepetition.util.CardImportExport
 import com.fencing.spacedrepetition.util.createCompressedOutputStream
+import com.fencing.spacedrepetition.util.FileImageReader
 import com.fencing.spacedrepetition.util.decodeImageFromBase64
 import com.fencing.spacedrepetition.util.parsedCardToCard
 import com.fencing.spacedrepetition.util.parsedReviewLogsToEntities
@@ -492,7 +493,7 @@ class CardViewModel(
                         val outputStream = CardImportExport.createCompressedOutputStream(fileStream)
                         val exportResult = CardImportExport.exportCardsWithGroupStates(
                             cardsWithStates, outputStream, allGroups, reviewLogs, cardQuestions,
-                            opponents, opponentNamesById
+                            opponents, opponentNamesById, FileImageReader(getApplication())
                         )
                         outputStream.close()
                         exportResult
@@ -562,7 +563,7 @@ class CardViewModel(
                         val outputStream = CardImportExport.createCompressedOutputStream(fileStream)
                         val exportResult = CardImportExport.exportCardsWithGroupStates(
                             filteredCardsWithStates, outputStream, selectedGroups, reviewLogs, cardQuestions,
-                            opponents, opponentNamesById
+                            opponents, opponentNamesById, FileImageReader(getApplication())
                         )
                         outputStream.close()
                         exportResult
@@ -829,7 +830,7 @@ class CardViewModel(
 
                 val result = withContext(Dispatchers.IO) {
                     contentResolver.openOutputStream(uri)?.use { fileStream ->
-                        CardImportExport.exportCardsToCsv(cardsWithGroups, fileStream)
+                        CardImportExport.exportCardsToCsv(cardsWithGroups, fileStream, FileImageReader(getApplication()))
                     } ?: ExportResult.Error("Failed to open file for writing")
                 }
 
@@ -877,7 +878,7 @@ class CardViewModel(
 
                 val result = withContext(Dispatchers.IO) {
                     contentResolver.openOutputStream(uri)?.use { fileStream ->
-                        CardImportExport.exportCardsToCsv(filteredCards, fileStream)
+                        CardImportExport.exportCardsToCsv(filteredCards, fileStream, FileImageReader(getApplication()))
                     } ?: ExportResult.Error("Failed to open file for writing")
                 }
 

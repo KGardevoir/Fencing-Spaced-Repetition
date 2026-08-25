@@ -16,6 +16,7 @@ import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.util.CardImportExport
 import com.fencing.spacedrepetition.util.createCompressedOutputStream
+import com.fencing.spacedrepetition.util.FileImageReader
 import com.fencing.spacedrepetition.util.decodeImageFromBase64
 import com.fencing.spacedrepetition.util.parsedCardToCard
 import com.fencing.spacedrepetition.util.smartInputStream
@@ -162,7 +163,10 @@ class GroupViewModel(
                     contentResolver.openOutputStream(uri)?.use { fileStream ->
                         // Wrap with GZIP compression
                         val outputStream = CardImportExport.createCompressedOutputStream(fileStream)
-                        val exportResult = CardImportExport.exportCardsWithGroupStates(cardsWithStates, outputStream, allGroups)
+                        val exportResult = CardImportExport.exportCardsWithGroupStates(
+                            cardsWithStates, outputStream, allGroups,
+                            images = FileImageReader(getApplication())
+                        )
                         outputStream.close()  // Ensure GZIP stream is properly closed
                         exportResult
                     } ?: ExportResult.Error("Failed to open file for writing")
@@ -424,7 +428,7 @@ class GroupViewModel(
 
                 val result = withContext(Dispatchers.IO) {
                     contentResolver.openOutputStream(uri)?.use { fileStream ->
-                        CardImportExport.exportCardsToCsv(cardsWithNames, fileStream)
+                        CardImportExport.exportCardsToCsv(cardsWithNames, fileStream, FileImageReader(getApplication()))
                     } ?: ExportResult.Error("Failed to open file for writing")
                 }
 

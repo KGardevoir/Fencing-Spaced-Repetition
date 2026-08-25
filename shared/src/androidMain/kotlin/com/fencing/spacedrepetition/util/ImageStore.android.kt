@@ -34,7 +34,7 @@ import java.io.File
 class FileImageStore(context: Context) : ImageStore {
 
     private val filesDir: File = context.filesDir
-    private val directory: File = File(context.filesDir, DIRECTORY)
+    private val directory: File = imageDirectory(context)
 
     override suspend fun read(key: String): ByteArray? = withContext(Dispatchers.IO) {
         val file = resolve(key) ?: return@withContext null
@@ -59,15 +59,5 @@ class FileImageStore(context: Context) : ImageStore {
         }
     }
 
-    private companion object {
-        const val DIRECTORY = "images"
-    }
-
-    private fun resolve(key: String): File? {
-        if (!key.startsWith("/")) return File(directory, key)
-        val file = File(key)
-        val canonical = runCatching { file.canonicalFile }.getOrNull() ?: return null
-        val root = runCatching { filesDir.canonicalFile }.getOrNull() ?: return null
-        return if (canonical.path.startsWith(root.path + File.separator)) canonical else null
-    }
+    private fun resolve(key: String): File? = resolveImageFile(key, directory, filesDir)
 }
