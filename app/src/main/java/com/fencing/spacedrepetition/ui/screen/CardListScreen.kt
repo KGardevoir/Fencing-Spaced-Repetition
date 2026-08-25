@@ -5,8 +5,6 @@ package com.fencing.spacedrepetition.ui.screen
 
 import android.net.Uri
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -28,21 +26,20 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import android.provider.OpenableColumns
 import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
+import com.fencing.spacedrepetition.data.model.CardWithGroups
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.ui.viewmodel.CardSortOption
-import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
-import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.ImportExportState
 import com.fencing.spacedrepetition.ui.viewmodel.SortDirection
 import com.fencing.spacedrepetition.ui.components.CsvGroupSelectionDialog
 import com.fencing.spacedrepetition.ui.components.MarkdownText
+import com.fencing.spacedrepetition.util.ParsedCard
 import com.fencing.spacedrepetition.util.Time
 import java.text.SimpleDateFormat
 import java.util.*
@@ -50,28 +47,53 @@ import java.util.*
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun CardListScreen(
-    viewModel: CardViewModel,
-    groupViewModel: GroupViewModel,
+    allCards: List<Card>,
+    allCardsWithGroups: List<CardWithGroups>,
+    groups: List<Group>,
+    selectedGroupFilters: Set<Long>,
+    showDisabledFilter: Boolean,
+    searchQuery: String,
+    cardCount: Int,
+    importExportState: ImportExportState,
+    cardSortOption: CardSortOption,
+    sortDirection: SortDirection,
+    isSelectionMode: Boolean,
+    selectedCardIds: Set<Long>,
+    learningStatesFor: @Composable (Long) -> List<CardGroupLearningState>,
+    onUpdateSearchQuery: (String) -> Unit,
+    onClearGroupFilters: () -> Unit,
+    onToggleGroupFilter: (Long) -> Unit,
+    onToggleDisabledFilter: () -> Unit,
+    onSetCardSortOption: (CardSortOption) -> Unit,
+    onToggleSortDirection: () -> Unit,
+    onToggleSelectionMode: () -> Unit,
+    onExitSelectionMode: () -> Unit,
+    onSelectAllCards: () -> Unit,
+    onToggleCardSelection: (Long) -> Unit,
+    onSetSelectedCardsDisabled: (Boolean) -> Unit,
+    onToggleCardDisabled: (Long) -> Unit,
+    onDeleteCard: (Card) -> Unit,
+    onDeleteSelectedCards: () -> Unit,
+    onUpdateSelectedCardsGroups: (List<Long>) -> Unit,
+    onResetSelectedCardsGlobalState: () -> Unit,
+    onResetSelectedCardsInGroups: (Set<Long>) -> Unit,
+    onResetSelectedCardsBothStates: (Set<Long>) -> Unit,
+    onResetImportExportState: () -> Unit,
+    onCsvImportInto: (List<ParsedCard>, List<String>, Long) -> Unit,
+    onCsvImportIntoNewGroup: (List<ParsedCard>, List<String>, String) -> Unit,
+    // The six file operations. Each one asks the caller to put a file picker
+    // in front of the user; where the bytes come from or go is the platform's
+    // business, so the screen never sees a Uri.
+    onImportArchive: () -> Unit,
+    onExportAllArchive: (includeHistory: Boolean) -> Unit,
+    onExportGroupsArchive: (groupIds: List<Long>, includeHistory: Boolean) -> Unit,
+    onImportCsv: () -> Unit,
+    onExportAllCsv: () -> Unit,
+    onExportGroupsCsv: (groupIds: List<Long>) -> Unit,
     onNavigateToAddCard: (Long?) -> Unit,
     onNavigateToEditCard: (Card) -> Unit,
     onNavigateBack: () -> Unit
 ) {
-    val allCards by viewModel.filteredCards.collectAsState()
-    val allCardsWithGroups by viewModel.allCardsWithGroups.collectAsState()
-    val groups by groupViewModel.allGroups.collectAsState()
-    val selectedGroupFilters by viewModel.selectedGroupFilters.collectAsState()
-    val showDisabledFilter by viewModel.showDisabledFilter.collectAsState()
-    val searchQuery by viewModel.searchQuery.collectAsState()
-    val cardCount by viewModel.cardCount.collectAsState()
-    val importExportState by viewModel.importExportState.collectAsState()
-    val cardSortOption by viewModel.cardSortOption.collectAsState()
-    val sortDirection by viewModel.sortDirection.collectAsState()
-    val context = LocalContext.current
-
-    // Selection mode state
-    val isSelectionMode by viewModel.isSelectionMode.collectAsState()
-    val selectedCardIds by viewModel.selectedCardIds.collectAsState()
-
     var showDeleteDialog by remember { mutableStateOf<Card?>(null) }
     var showMenu by remember { mutableStateOf(false) }
     var showSortMenu by remember { mutableStateOf(false) }
@@ -79,72 +101,14 @@ fun CardListScreen(
     var showBulkGroupDialog by remember { mutableStateOf(false) }
     var showBulkResetDialog by remember { mutableStateOf(false) }
     var showGroupSelectionDialog by remember { mutableStateOf(false) }
-    var selectedGroupsForExport by remember { mutableStateOf<List<Long>>(emptyList()) }
     var showCsvGroupSelectionForExport by remember { mutableStateOf(false) }
-    var selectedGroupsForCsvExport by remember { mutableStateOf<List<Long>>(emptyList()) }
     var showExportHistoryDialog by remember { mutableStateOf(false) }
     var exportHistoryPendingGroupIds by remember { mutableStateOf<List<Long>?>(null) } // null = export all
     var includeHistoryInExport by remember { mutableStateOf(false) }
 
-    // File picker for import
-    val importLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri?.let {
-            viewModel.importCards(uri, context.contentResolver)
-        }
-    }
-
-    // File picker for export
-    val exportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/gzip")
-    ) { uri: Uri? ->
-        uri?.let {
-            viewModel.exportAllCards(uri, context.contentResolver, includeHistoryInExport)
-        }
-    }
-
-    // File picker for export selected groups
-    val exportSelectedGroupsLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/gzip")
-    ) { uri: Uri? ->
-        uri?.let {
-            viewModel.exportSelectedGroups(selectedGroupsForExport, uri, context.contentResolver, includeHistoryInExport)
-        }
-    }
-
-    // CSV file picker for import
-    val csvImportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri?.let {
-            // Extract filename from URI
-            val filename = getFilenameFromUri(context, uri) ?: "import.csv"
-            viewModel.csvImportParseFile(uri, context.contentResolver, filename)
-        }
-    }
-
-    // CSV file picker for export all cards
-    val csvExportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("text/csv")
-    ) { uri: Uri? ->
-        uri?.let {
-            viewModel.exportAllCardsCsv(uri, context.contentResolver)
-        }
-    }
-
-    // CSV file picker for export selected groups
-    val csvExportSelectedGroupsLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("text/csv")
-    ) { uri: Uri? ->
-        uri?.let {
-            viewModel.exportSelectedGroupsCsv(selectedGroupsForCsvExport, uri, context.contentResolver)
-        }
-    }
-
     // Handle back press when in selection mode
     if (isSelectionMode) {
-        BackHandler { viewModel.exitSelectionMode() }
+        BackHandler(onBack = onExitSelectionMode)
     }
 
     // Scroll to top when sort option or direction changes
@@ -160,12 +124,12 @@ fun CardListScreen(
                 TopAppBar(
                     title = { Text("${selectedCardIds.size} selected") },
                     navigationIcon = {
-                        IconButton(onClick = { viewModel.exitSelectionMode() }) {
+                        IconButton(onClick = onExitSelectionMode) {
                             Icon(Icons.Default.Close, "Exit selection")
                         }
                     },
                     actions = {
-                        IconButton(onClick = { viewModel.selectAllCards() }) {
+                        IconButton(onClick = onSelectAllCards) {
                             Icon(Icons.Default.SelectAll, "Select all")
                         }
                         IconButton(
@@ -181,13 +145,13 @@ fun CardListScreen(
                             Icon(Icons.Default.Refresh, "Reset state")
                         }
                         IconButton(
-                            onClick = { viewModel.setSelectedCardsDisabled(true) },
+                            onClick = { onSetSelectedCardsDisabled(true) },
                             enabled = selectedCardIds.isNotEmpty()
                         ) {
                             Icon(Icons.Default.Block, "Disable selected")
                         }
                         IconButton(
-                            onClick = { viewModel.setSelectedCardsDisabled(false) },
+                            onClick = { onSetSelectedCardsDisabled(false) },
                             enabled = selectedCardIds.isNotEmpty()
                         ) {
                             Icon(Icons.Default.PlayArrow, "Enable selected")
@@ -213,7 +177,7 @@ fun CardListScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = { viewModel.toggleSortDirection() }) {
+                        IconButton(onClick = onToggleSortDirection) {
                             Icon(
                                 imageVector = if (sortDirection == SortDirection.ASCENDING)
                                     Icons.Default.ArrowUpward
@@ -234,7 +198,7 @@ fun CardListScreen(
                                     DropdownMenuItem(
                                         text = { Text(option.label) },
                                         onClick = {
-                                            viewModel.setCardSortOption(option)
+                                            onSetCardSortOption(option)
                                             showSortMenu = false
                                         },
                                         leadingIcon = {
@@ -258,7 +222,7 @@ fun CardListScreen(
                                     text = { Text("Select Cards") },
                                     onClick = {
                                         showMenu = false
-                                        viewModel.toggleSelectionMode()
+                                        onToggleSelectionMode()
                                     },
                                     leadingIcon = {
                                         Icon(Icons.Default.CheckBox, contentDescription = null)
@@ -269,7 +233,7 @@ fun CardListScreen(
                                     text = { Text("Import Cards") },
                                     onClick = {
                                         showMenu = false
-                                        importLauncher.launch(arrayOf("application/gzip", "application/x-gzip", "text/plain", "text/tab-separated-values", "application/octet-stream", "*/*"))
+                                        onImportArchive()
                                     },
                                     leadingIcon = {
                                         Icon(Icons.Default.FileUpload, contentDescription = null)
@@ -302,7 +266,7 @@ fun CardListScreen(
                                     text = { Text("Import CSV") },
                                     onClick = {
                                         showMenu = false
-                                        csvImportLauncher.launch(arrayOf("text/csv", "text/comma-separated-values", "text/plain", "application/octet-stream", "*/*"))
+                                        onImportCsv()
                                     },
                                     leadingIcon = {
                                         Icon(Icons.Default.TableChart, contentDescription = null)
@@ -312,7 +276,7 @@ fun CardListScreen(
                                     text = { Text("Export All as CSV") },
                                     onClick = {
                                         showMenu = false
-                                        csvExportLauncher.launch("all_cards.csv")
+                                        onExportAllCsv()
                                     },
                                     leadingIcon = {
                                         Icon(Icons.Default.GridOn, contentDescription = null)
@@ -357,7 +321,7 @@ fun CardListScreen(
             // Search field
             OutlinedTextField(
                 value = searchQuery,
-                onValueChange = { viewModel.updateSearchQuery(it) },
+                onValueChange = onUpdateSearchQuery,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -370,7 +334,7 @@ fun CardListScreen(
                 },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.updateSearchQuery("") }) {
+                        IconButton(onClick = { onUpdateSearchQuery("") }) {
                             Icon(
                                 imageVector = Icons.Default.Close,
                                 contentDescription = "Clear search"
@@ -392,21 +356,21 @@ fun CardListScreen(
                 item {
                     FilterChip(
                         selected = selectedGroupFilters.isEmpty() && !showDisabledFilter,
-                        onClick = { viewModel.clearGroupFilters() },
+                        onClick = onClearGroupFilters,
                         label = { Text("All") }
                     )
                 }
                 items(groups) { group ->
                     FilterChip(
                         selected = group.id in selectedGroupFilters,
-                        onClick = { viewModel.toggleGroupFilter(group.id) },
+                        onClick = { onToggleGroupFilter(group.id) },
                         label = { Text(group.name) }
                     )
                 }
                 item {
                     FilterChip(
                         selected = showDisabledFilter,
-                        onClick = { viewModel.toggleDisabledFilter() },
+                        onClick = onToggleDisabledFilter,
                         label = { Text("Disabled") },
                         leadingIcon = {
                             Icon(
@@ -474,8 +438,7 @@ fun CardListScreen(
                             .find { it.card.id == card.id }?.groups ?: emptyList()
 
                         // Get learning states for this card
-                        val learningStates by viewModel.getLearningStatesForCard(card.id)
-                            .collectAsState(initial = emptyList())
+                        val learningStates = learningStatesFor(card.id)
 
                         CardListItem(
                             card = card,
@@ -486,12 +449,12 @@ fun CardListScreen(
                             sortOption = cardSortOption,
                             onEdit = { onNavigateToEditCard(card) },
                             onDelete = { showDeleteDialog = card },
-                            onToggleDisabled = { viewModel.toggleCardDisabled(card.id) },
-                            onToggleSelection = { viewModel.toggleCardSelection(card.id) },
+                            onToggleDisabled = { onToggleCardDisabled(card.id) },
+                            onToggleSelection = { onToggleCardSelection(card.id) },
                             onLongPress = {
                                 if (!isSelectionMode) {
-                                    viewModel.toggleSelectionMode()
-                                    viewModel.toggleCardSelection(card.id)
+                                    onToggleSelectionMode()
+                                    onToggleCardSelection(card.id)
                                 }
                             }
                         )
@@ -511,7 +474,7 @@ fun CardListScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.deleteCard(card)
+                        onDeleteCard(card)
                         showDeleteDialog = null
                     },
                     colors = ButtonDefaults.buttonColors(
@@ -542,7 +505,7 @@ fun CardListScreen(
         }
         is ImportExportState.ImportSuccess -> {
             AlertDialog(
-                onDismissRequest = { viewModel.resetImportExportState() },
+                onDismissRequest = onResetImportExportState,
                 icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                 title = { Text("Import Complete") },
                 text = {
@@ -564,7 +527,7 @@ fun CardListScreen(
                     }
                 },
                 confirmButton = {
-                    Button(onClick = { viewModel.resetImportExportState() }) {
+                    Button(onClick = onResetImportExportState) {
                         Text("OK")
                     }
                 }
@@ -572,12 +535,12 @@ fun CardListScreen(
         }
         is ImportExportState.ExportSuccess -> {
             AlertDialog(
-                onDismissRequest = { viewModel.resetImportExportState() },
+                onDismissRequest = onResetImportExportState,
                 icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                 title = { Text("Export Complete") },
                 text = { Text("Successfully exported ${state.exportedCount} cards.") },
                 confirmButton = {
-                    Button(onClick = { viewModel.resetImportExportState() }) {
+                    Button(onClick = onResetImportExportState) {
                         Text("OK")
                     }
                 }
@@ -585,12 +548,12 @@ fun CardListScreen(
         }
         is ImportExportState.Error -> {
             AlertDialog(
-                onDismissRequest = { viewModel.resetImportExportState() },
+                onDismissRequest = onResetImportExportState,
                 icon = { Icon(Icons.Default.Error, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
                 title = { Text("Error") },
                 text = { Text(state.message) },
                 confirmButton = {
-                    Button(onClick = { viewModel.resetImportExportState() }) {
+                    Button(onClick = onResetImportExportState) {
                         Text("OK")
                     }
                 }
@@ -602,14 +565,12 @@ fun CardListScreen(
                 existingGroups = groups,
                 cardCount = state.parsedCards.size,
                 onConfirm = { groupId ->
-                    viewModel.csvImportComplete(state.parsedCards, state.parseErrors, groupId)
+                    onCsvImportInto(state.parsedCards, state.parseErrors, groupId)
                 },
                 onCreateGroup = { groupName ->
-                    groupViewModel.addGroup(groupName) { newGroupId ->
-                        viewModel.csvImportComplete(state.parsedCards, state.parseErrors, newGroupId)
-                    }
+                    onCsvImportIntoNewGroup(state.parsedCards, state.parseErrors, groupName)
                 },
-                onDismiss = { viewModel.resetImportExportState() }
+                onDismiss = onResetImportExportState
             )
         }
         is ImportExportState.Idle -> { /* No dialog */ }
@@ -625,7 +586,7 @@ fun CardListScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.deleteSelectedCards()
+                        onDeleteSelectedCards()
                         showBulkDeleteDialog = false
                     },
                     colors = ButtonDefaults.buttonColors(
@@ -651,15 +612,15 @@ fun CardListScreen(
             currentGroupFilter = null,
             onDismiss = { showBulkResetDialog = false },
             onResetGlobal = {
-                viewModel.resetSelectedCardsGlobalState()
+                onResetSelectedCardsGlobalState()
                 showBulkResetDialog = false
             },
             onResetGroups = { groupIds ->
-                viewModel.resetSelectedCardsInGroups(groupIds)
+                onResetSelectedCardsInGroups(groupIds)
                 showBulkResetDialog = false
             },
             onResetBoth = { groupIds ->
-                viewModel.resetSelectedCardsBothStates(groupIds)
+                onResetSelectedCardsBothStates(groupIds)
                 showBulkResetDialog = false
             }
         )
@@ -671,7 +632,7 @@ fun CardListScreen(
             groups = groups,
             onDismiss = { showBulkGroupDialog = false },
             onConfirm = { selectedGroupIds ->
-                viewModel.updateSelectedCardsGroups(selectedGroupIds)
+                onUpdateSelectedCardsGroups(selectedGroupIds)
                 showBulkGroupDialog = false
             }
         )
@@ -683,7 +644,6 @@ fun CardListScreen(
             groups = groups,
             onDismiss = { showGroupSelectionDialog = false },
             onConfirm = { selectedGroupIds ->
-                selectedGroupsForExport = selectedGroupIds
                 showGroupSelectionDialog = false
                 exportHistoryPendingGroupIds = selectedGroupIds
                 showExportHistoryDialog = true
@@ -721,9 +681,9 @@ fun CardListScreen(
                     showExportHistoryDialog = false
                     val pendingGroups = exportHistoryPendingGroupIds
                     if (pendingGroups == null) {
-                        exportLauncher.launch("all_cards.tsv.gz")
+                        onExportAllArchive(includeHistoryInExport)
                     } else {
-                        exportSelectedGroupsLauncher.launch("selected_groups_cards.tsv.gz")
+                        onExportGroupsArchive(pendingGroups, includeHistoryInExport)
                     }
                 }) {
                     Text("Export")
@@ -743,9 +703,8 @@ fun CardListScreen(
             groups = groups,
             onDismiss = { showCsvGroupSelectionForExport = false },
             onConfirm = { selectedGroupIds ->
-                selectedGroupsForCsvExport = selectedGroupIds
                 showCsvGroupSelectionForExport = false
-                csvExportSelectedGroupsLauncher.launch("selected_groups_cards.csv")
+                onExportGroupsCsv(selectedGroupIds)
             }
         )
     }
@@ -1264,7 +1223,7 @@ fun InfoChip(
 @Composable
 fun BulkResetDialog(
     selectedCardIds: Set<Long>,
-    allCardsWithGroups: List<com.fencing.spacedrepetition.data.model.CardWithGroups>,
+    allCardsWithGroups: List<CardWithGroups>,
     currentGroupFilter: Group?,
     onDismiss: () -> Unit,
     onResetGlobal: () -> Unit,

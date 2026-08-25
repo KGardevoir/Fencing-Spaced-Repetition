@@ -231,9 +231,146 @@ fun AppNavigation(
         }
 
         composable(Screen.CardList.route) {
+            val cardListContext = LocalContext.current
+            val allCards by cardViewModel.filteredCards.collectAsState()
+            val allCardsWithGroups by cardViewModel.allCardsWithGroups.collectAsState()
+            val cardListGroups by groupViewModel.allGroups.collectAsState()
+            val selectedGroupFilters by cardViewModel.selectedGroupFilters.collectAsState()
+            val showDisabledFilter by cardViewModel.showDisabledFilter.collectAsState()
+            val cardSearchQuery by cardViewModel.searchQuery.collectAsState()
+            val cardListCount by cardViewModel.cardCount.collectAsState()
+            val cardImportExportState by cardViewModel.importExportState.collectAsState()
+            val cardSortOption by cardViewModel.cardSortOption.collectAsState()
+            val sortDirection by cardViewModel.sortDirection.collectAsState()
+            val isSelectionMode by cardViewModel.isSelectionMode.collectAsState()
+            val selectedCardIds by cardViewModel.selectedCardIds.collectAsState()
+
+            // What each picker is for, once it comes back with a Uri. The
+            // screen asks for a file operation and never sees the Uri.
+            var archiveExportIncludesHistory by remember { mutableStateOf(false) }
+            var archiveExportGroupIds by remember { mutableStateOf<List<Long>?>(null) }
+            var csvExportGroupIds by remember { mutableStateOf<List<Long>?>(null) }
+
+            val archiveImportLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.OpenDocument()
+            ) { uri: Uri? ->
+                uri?.let { cardViewModel.importCards(it, cardListContext.contentResolver) }
+            }
+            val archiveExportLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.CreateDocument("application/gzip")
+            ) { uri: Uri? ->
+                uri?.let {
+                    val groupIds = archiveExportGroupIds
+                    if (groupIds == null) {
+                        cardViewModel.exportAllCards(
+                            it, cardListContext.contentResolver, archiveExportIncludesHistory
+                        )
+                    } else {
+                        cardViewModel.exportSelectedGroups(
+                            groupIds, it, cardListContext.contentResolver, archiveExportIncludesHistory
+                        )
+                    }
+                }
+            }
+            val cardCsvImportLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.OpenDocument()
+            ) { uri: Uri? ->
+                uri?.let {
+                    val filename = getFilenameFromUri(cardListContext, it) ?: "import.csv"
+                    cardViewModel.csvImportParseFile(it, cardListContext.contentResolver, filename)
+                }
+            }
+            val cardCsvExportLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.CreateDocument("text/csv")
+            ) { uri: Uri? ->
+                uri?.let {
+                    val groupIds = csvExportGroupIds
+                    if (groupIds == null) {
+                        cardViewModel.exportAllCardsCsv(it, cardListContext.contentResolver)
+                    } else {
+                        cardViewModel.exportSelectedGroupsCsv(
+                            groupIds, it, cardListContext.contentResolver
+                        )
+                    }
+                }
+            }
+
             CardListScreen(
-                viewModel = cardViewModel,
-                groupViewModel = groupViewModel,
+                allCards = allCards,
+                allCardsWithGroups = allCardsWithGroups,
+                groups = cardListGroups,
+                selectedGroupFilters = selectedGroupFilters,
+                showDisabledFilter = showDisabledFilter,
+                searchQuery = cardSearchQuery,
+                cardCount = cardListCount,
+                importExportState = cardImportExportState,
+                cardSortOption = cardSortOption,
+                sortDirection = sortDirection,
+                isSelectionMode = isSelectionMode,
+                selectedCardIds = selectedCardIds,
+                learningStatesFor = { cardId ->
+                    remember(cardId) { cardViewModel.getLearningStatesForCard(cardId) }
+                        .collectAsState(initial = emptyList()).value
+                },
+                onUpdateSearchQuery = cardViewModel::updateSearchQuery,
+                onClearGroupFilters = cardViewModel::clearGroupFilters,
+                onToggleGroupFilter = cardViewModel::toggleGroupFilter,
+                onToggleDisabledFilter = cardViewModel::toggleDisabledFilter,
+                onSetCardSortOption = cardViewModel::setCardSortOption,
+                onToggleSortDirection = cardViewModel::toggleSortDirection,
+                onToggleSelectionMode = cardViewModel::toggleSelectionMode,
+                onExitSelectionMode = cardViewModel::exitSelectionMode,
+                onSelectAllCards = cardViewModel::selectAllCards,
+                onToggleCardSelection = cardViewModel::toggleCardSelection,
+                onSetSelectedCardsDisabled = { cardViewModel.setSelectedCardsDisabled(it) },
+                onToggleCardDisabled = cardViewModel::toggleCardDisabled,
+                onDeleteCard = cardViewModel::deleteCard,
+                onDeleteSelectedCards = { cardViewModel.deleteSelectedCards() },
+                onUpdateSelectedCardsGroups = { cardViewModel.updateSelectedCardsGroups(it) },
+                onResetSelectedCardsGlobalState = { cardViewModel.resetSelectedCardsGlobalState() },
+                onResetSelectedCardsInGroups = { cardViewModel.resetSelectedCardsInGroups(it) },
+                onResetSelectedCardsBothStates = { cardViewModel.resetSelectedCardsBothStates(it) },
+                onResetImportExportState = cardViewModel::resetImportExportState,
+                onCsvImportInto = cardViewModel::csvImportComplete,
+                onCsvImportIntoNewGroup = { parsed, errors, groupName ->
+                    groupViewModel.addGroup(groupName) { newGroupId ->
+                        cardViewModel.csvImportComplete(parsed, errors, newGroupId)
+                    }
+                },
+                onImportArchive = {
+                    archiveImportLauncher.launch(
+                        arrayOf(
+                            "application/gzip", "application/x-gzip", "text/plain",
+                            "text/tab-separated-values", "application/octet-stream", "*/*"
+                        )
+                    )
+                },
+                onExportAllArchive = { includeHistory ->
+                    archiveExportGroupIds = null
+                    archiveExportIncludesHistory = includeHistory
+                    archiveExportLauncher.launch("all_cards.tsv.gz")
+                },
+                onExportGroupsArchive = { groupIds, includeHistory ->
+                    archiveExportGroupIds = groupIds
+                    archiveExportIncludesHistory = includeHistory
+                    archiveExportLauncher.launch("selected_groups_cards.tsv.gz")
+                },
+                onImportCsv = {
+                    cardCsvImportLauncher.launch(
+                        arrayOf(
+                            "text/csv", "text/comma-separated-values", "text/plain",
+                            "application/octet-stream", "*/*"
+                        )
+                    )
+                },
+                onExportAllCsv = {
+                    csvExportGroupIds = null
+                    cardCsvExportLauncher.launch("all_cards.csv")
+                },
+                onExportGroupsCsv = { groupIds ->
+                    csvExportGroupIds = groupIds
+                    cardCsvExportLauncher.launch("selected_groups_cards.csv")
+                },
                 onNavigateToAddCard = { groupId ->
                     initialGroupIdForNewCard = groupId
                     navController.navigate(Screen.AddCard.route)
