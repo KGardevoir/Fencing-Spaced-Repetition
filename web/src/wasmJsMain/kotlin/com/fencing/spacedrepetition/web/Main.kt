@@ -4,6 +4,8 @@
 package com.fencing.spacedrepetition.web
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.window.ComposeViewport
@@ -175,7 +177,20 @@ private fun Opponents() {
         OpponentViewModel(OpponentRepository(AppDatabase.getDatabase().opponentDao()))
     }
 
+    val opponents by viewModel.opponents.collectAsState()
+    val error by viewModel.error.collectAsState()
+
     FencingSpacedRepetitionTheme {
-        OpponentsScreen(viewModel = viewModel, onNavigateBack = {})
+        OpponentsScreen(
+            opponents = opponents,
+            error = error,
+            onAddOpponent = { name, multiplier, notes, onDone ->
+                viewModel.addOpponent(name, multiplier, notes, onDone)
+            },
+            onUpdateOpponent = { opponent, onDone -> viewModel.updateOpponent(opponent, onDone) },
+            onDeleteOpponent = { viewModel.deleteOpponent(it) },
+            onClearError = viewModel::clearError,
+            onNavigateBack = {}
+        )
     }
 }
