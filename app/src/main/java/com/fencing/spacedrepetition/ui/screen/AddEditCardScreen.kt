@@ -33,7 +33,6 @@ import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.Grade
 import androidx.activity.compose.BackHandler
 import com.fencing.spacedrepetition.util.Time
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -42,8 +41,6 @@ import com.fencing.spacedrepetition.ui.components.CardImagesEdit
 import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
 import com.fencing.spacedrepetition.ui.components.MarkdownKeyboardToolbar
 import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
-import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
-import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -52,10 +49,26 @@ import java.util.*
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AddEditCardScreen(
-    viewModel: CardViewModel,
-    groupViewModel: GroupViewModel,
+    allGroups: List<Group>,
+    cardGroups: List<Group>,
+    learningStates: List<CardGroupLearningState>,
     cardToEdit: Card? = null,
     initialGroupId: Long? = null,
+    onComputeGrade: (cardId: Long, grade: Grade, groupId: Long?, onComputed: (Card) -> Unit) -> Unit,
+    onResetCardState: (cardId: Long, resetGroupStates: Boolean, onDone: () -> Unit) -> Unit,
+    onResetCardStateInGroup: (cardId: Long, groupId: Long, onDone: () -> Unit) -> Unit,
+    onUpdateCard: (card: Card, groupIds: List<Long>, onSuccess: () -> Unit) -> Unit,
+    onRecordGradeFromEdit: (before: Card, after: Card, grade: Grade, groupId: Long?) -> Unit,
+    onUpdateLearningState: (CardGroupLearningState) -> Unit,
+    onAddCard: (
+        question: String,
+        answer: String,
+        groupIds: List<Long>,
+        algorithm: AlgorithmType,
+        imagePaths: List<String>,
+        onSuccess: () -> Unit
+    ) -> Unit,
+    onCreateGroup: (name: String, onCreated: (Long) -> Unit) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -65,16 +78,6 @@ fun AddEditCardScreen(
     }
     var selectedAlgorithm by rememberSaveable { mutableStateOf(cardToEdit?.algorithm ?: AlgorithmType.FSRS) }
     var imagePaths by rememberSaveable { mutableStateOf<List<String>>(cardToEdit?.imagePaths?.toMutableList() ?: mutableListOf()) }
-
-    // Group selection state
-    val allGroups by groupViewModel.allGroups.collectAsState()
-    // Stabilize the flow so collectAsState doesn't restart (and briefly emit emptyList()) on
-    // every recomposition, which would reset selectedGroupIds via remember(cardGroups, …).
-    val cardGroupsFlow = remember(cardToEdit?.id) {
-        cardToEdit?.let { card -> viewModel.getGroupsForCard(card.id) }
-            ?: flowOf(emptyList<Group>())
-    }
-    val cardGroups by cardGroupsFlow.collectAsState(initial = emptyList())
 
     var selectedGroupIds by remember(cardGroups, initialGroupId) {
         val initialIds = cardGroups.map { it.id }.toMutableSet()
@@ -106,11 +109,6 @@ fun AddEditCardScreen(
             }
         }
     }
-
-    // Independent learning states
-    val learningStates by cardToEdit?.let { card ->
-        viewModel.getLearningStatesForCard(card.id).collectAsState(initial = emptyList())
-    } ?: remember { mutableStateOf(emptyList<CardGroupLearningState>()) }
 
     // Mutable state for editing independent learning states (groupId -> state fields)
     var independentLearningEdits by remember(learningStates) {
@@ -485,7 +483,7 @@ fun AddEditCardScreen(
                                     CompactGradeButton(
                                         grade = grade,
                                         onClick = {
-                                            viewModel.computeGradeCard(cardToEdit.id, grade) { updated ->
+                                            onComputeGrade(cardToEdit.id, grade, null) { updated ->
                                                 fsrsStability = updated.fsrsStability.toString()
                                                 fsrsDifficulty = updated.fsrsDifficulty.toString()
                                                 fsrsReps = updated.fsrsReps.toString()
@@ -548,7 +546,7 @@ fun AddEditCardScreen(
                                             CompactGradeButton(
                                                 grade = grade,
                                                 onClick = {
-                                                    viewModel.computeGradeCard(cardToEdit.id, grade, group.id) { updated ->
+                                                    onComputeGrade(cardToEdit.id, grade, group.id) { updated ->
                                                         independentLearningEdits = independentLearningEdits + (group.id to IndependentLearningEdit(
                                                             fsrsStability = updated.fsrsStability.toString(),
                                                             fsrsDifficulty = updated.fsrsDifficulty.toString(),
@@ -887,7 +885,7 @@ fun AddEditCardScreen(
                             },
                             onReset = {
                                 cardToEdit?.let { card ->
-                                    viewModel.resetCardStateInGroup(card.id, group.id) {
+                                    onResetCardStateInGroup(card.id, group.id) {
                                         // Reset local edit state
                                         independentLearningEdits = independentLearningEdits + (group.id to IndependentLearningEdit())
                                     }
@@ -928,45 +926,43 @@ fun AddEditCardScreen(
                                 lastReview = lastReview,
                                 nextReview = nextReview
                             )
-                            viewModel.updateCard(
+                            onUpdateCard(
                                 updatedCard,
-                                groupIds = selectedGroupIds.toList(),
-                                onSuccess = {
-                                    // Record a history entry if a grade was applied via the grade buttons
-                                    val grade = appliedGrade
-                                    if (grade != null && cardToEdit != null) {
-                                        viewModel.recordGradeFromEdit(cardToEdit, updatedCard, grade, appliedGradeGroupId)
-                                    }
-                                    // Save independent learning state changes
-                                    independentLearningEdits.forEach { (groupId, edit) ->
-                                        val existingState = learningStates.find { it.groupId == groupId }
-                                        if (existingState != null) {
-                                            val updatedState = existingState.copy(
-                                                fsrsStability = edit.fsrsStability.toDoubleOrNull() ?: existingState.fsrsStability,
-                                                fsrsDifficulty = edit.fsrsDifficulty.toDoubleOrNull() ?: existingState.fsrsDifficulty,
-                                                fsrsReps = edit.fsrsReps.toIntOrNull() ?: existingState.fsrsReps,
-                                                fsrsLapses = edit.fsrsLapses.toIntOrNull() ?: existingState.fsrsLapses,
-                                                fsrsState = edit.fsrsState,
-                                                sm2EaseFactor = edit.sm2EaseFactor.toDoubleOrNull() ?: existingState.sm2EaseFactor,
-                                                sm2Interval = edit.sm2Interval.toIntOrNull() ?: existingState.sm2Interval,
-                                                sm2Repetitions = edit.sm2Repetitions.toIntOrNull() ?: existingState.sm2Repetitions
-                                            )
-                                            viewModel.updateLearningState(updatedState)
-                                        }
-                                    }
-                                    isDirty = false
-                                    onNavigateBack()
+                                selectedGroupIds.toList()
+                            ) {
+                                // Record a history entry if a grade was applied via the grade buttons
+                                val grade = appliedGrade
+                                if (grade != null && cardToEdit != null) {
+                                    onRecordGradeFromEdit(cardToEdit, updatedCard, grade, appliedGradeGroupId)
                                 }
-                            )
+                                // Save independent learning state changes
+                                independentLearningEdits.forEach { (groupId, edit) ->
+                                    val existingState = learningStates.find { it.groupId == groupId }
+                                    if (existingState != null) {
+                                        val updatedState = existingState.copy(
+                                            fsrsStability = edit.fsrsStability.toDoubleOrNull() ?: existingState.fsrsStability,
+                                            fsrsDifficulty = edit.fsrsDifficulty.toDoubleOrNull() ?: existingState.fsrsDifficulty,
+                                            fsrsReps = edit.fsrsReps.toIntOrNull() ?: existingState.fsrsReps,
+                                            fsrsLapses = edit.fsrsLapses.toIntOrNull() ?: existingState.fsrsLapses,
+                                            fsrsState = edit.fsrsState,
+                                            sm2EaseFactor = edit.sm2EaseFactor.toDoubleOrNull() ?: existingState.sm2EaseFactor,
+                                            sm2Interval = edit.sm2Interval.toIntOrNull() ?: existingState.sm2Interval,
+                                            sm2Repetitions = edit.sm2Repetitions.toIntOrNull() ?: existingState.sm2Repetitions
+                                        )
+                                        onUpdateLearningState(updatedState)
+                                    }
+                                }
+                                isDirty = false
+                                onNavigateBack()
+                            }
                         } else {
-                            viewModel.addCard(
-                                question = question,
-                                answer = answerFieldValue.text,
-                                groupIds = selectedGroupIds.toList(),
-                                algorithm = selectedAlgorithm,
-                                imagePaths = imagePaths,
-                                onSuccess = { isDirty = false; onNavigateBack() }
-                            )
+                            onAddCard(
+                                question,
+                                answerFieldValue.text,
+                                selectedGroupIds.toList(),
+                                selectedAlgorithm,
+                                imagePaths
+                            ) { isDirty = false; onNavigateBack() }
                         }
                     }
                 },
@@ -1111,7 +1107,7 @@ fun AddEditCardScreen(
                         // Reset Global State Only
                         Button(
                             onClick = {
-                                viewModel.resetCardState(cardToEdit.id, resetGroupStates = false) {
+                                onResetCardState(cardToEdit.id, false) {
                                     // Reset local global state variables
                                     fsrsStability = "0.0"
                                     fsrsDifficulty = "0.0"
@@ -1138,7 +1134,7 @@ fun AddEditCardScreen(
                         OutlinedButton(
                             onClick = {
                                 independentLearningGroups.forEach { group ->
-                                    viewModel.resetCardStateInGroup(cardToEdit.id, group.id) {
+                                    onResetCardStateInGroup(cardToEdit.id, group.id) {
                                         // Reset local edit state for this group
                                         independentLearningEdits = independentLearningEdits + (group.id to IndependentLearningEdit())
                                     }
@@ -1158,7 +1154,7 @@ fun AddEditCardScreen(
                         // Reset Both
                         OutlinedButton(
                             onClick = {
-                                viewModel.resetCardState(cardToEdit.id, resetGroupStates = true) {
+                                onResetCardState(cardToEdit.id, true) {
                                     // Reset local global state
                                     fsrsStability = "0.0"
                                     fsrsDifficulty = "0.0"
@@ -1200,7 +1196,7 @@ fun AddEditCardScreen(
                 confirmButton = {
                     Button(
                         onClick = {
-                            viewModel.resetCardState(cardToEdit.id) {
+                            onResetCardState(cardToEdit.id, false) {
                                 // Reset local state variables too
                                 fsrsStability = "0.0"
                                 fsrsDifficulty = "0.0"
@@ -1249,7 +1245,7 @@ fun AddEditCardScreen(
                 Button(
                     onClick = {
                         if (newGroupName.isNotBlank()) {
-                            groupViewModel.addGroup(newGroupName) { newId ->
+                            onCreateGroup(newGroupName) { newId ->
                                 selectedGroupIds = selectedGroupIds + newId
                                 showCreateGroupDialog = false
                             }

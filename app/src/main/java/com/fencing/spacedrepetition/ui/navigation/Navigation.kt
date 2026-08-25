@@ -9,10 +9,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.navigation.NavHostController
+import kotlinx.coroutines.flow.flowOf
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.fencing.spacedrepetition.data.model.Card
+import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.ui.screen.*
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
@@ -386,8 +388,8 @@ fun AppNavigation(
         }
 
         composable(Screen.AddCard.route) {
-            AddEditCardScreen(
-                viewModel = cardViewModel,
+            CardEditor(
+                cardViewModel = cardViewModel,
                 groupViewModel = groupViewModel,
                 cardToEdit = null,
                 initialGroupId = initialGroupIdForNewCard,
@@ -399,10 +401,11 @@ fun AppNavigation(
         }
 
         composable("edit_card/{cardId}") {
-            AddEditCardScreen(
-                viewModel = cardViewModel,
+            CardEditor(
+                cardViewModel = cardViewModel,
                 groupViewModel = groupViewModel,
                 cardToEdit = cardToEdit,
+                initialGroupId = null,
                 onNavigateBack = {
                     cardToEdit = null
                     navController.popBackStack()
@@ -704,4 +707,59 @@ fun AppNavigation(
             )
         }
     }
+}
+
+/**
+ * Binds the two view models the card editor used to take directly.
+ *
+ * Both flows are remembered by card id so collectAsState does not restart --
+ * and briefly re-emit emptyList() -- on every recomposition, which would reset
+ * the editor's group selection under it. That stabilisation used to live in
+ * the screen; it belongs wherever the flows are created.
+ */
+@Composable
+private fun CardEditor(
+    cardViewModel: CardViewModel,
+    groupViewModel: GroupViewModel,
+    cardToEdit: Card?,
+    initialGroupId: Long?,
+    onNavigateBack: () -> Unit
+) {
+    val allGroups by groupViewModel.allGroups.collectAsState()
+    val cardGroupsFlow = remember(cardToEdit?.id) {
+        cardToEdit?.let { cardViewModel.getGroupsForCard(it.id) } ?: flowOf(emptyList<Group>())
+    }
+    val cardGroups by cardGroupsFlow.collectAsState(initial = emptyList())
+    val learningStatesFlow = remember(cardToEdit?.id) {
+        cardToEdit?.let { cardViewModel.getLearningStatesForCard(it.id) }
+            ?: flowOf(emptyList<CardGroupLearningState>())
+    }
+    val learningStates by learningStatesFlow.collectAsState(initial = emptyList())
+
+    AddEditCardScreen(
+        allGroups = allGroups,
+        cardGroups = cardGroups,
+        learningStates = learningStates,
+        cardToEdit = cardToEdit,
+        initialGroupId = initialGroupId,
+        onComputeGrade = { cardId, grade, groupId, onComputed ->
+            cardViewModel.computeGradeCard(cardId, grade, groupId, onComputed)
+        },
+        onResetCardState = { cardId, resetGroupStates, onDone ->
+            cardViewModel.resetCardState(cardId, resetGroupStates, onDone)
+        },
+        onResetCardStateInGroup = { cardId, groupId, onDone ->
+            cardViewModel.resetCardStateInGroup(cardId, groupId, onDone)
+        },
+        onUpdateCard = cardViewModel::updateCard,
+        onRecordGradeFromEdit = { before, after, grade, groupId ->
+            cardViewModel.recordGradeFromEdit(before, after, grade, groupId)
+        },
+        onUpdateLearningState = { cardViewModel.updateLearningState(it) },
+        onAddCard = { question, answer, groupIds, algorithm, imagePaths, onSuccess ->
+            cardViewModel.addCard(question, answer, groupIds, algorithm, imagePaths, onSuccess)
+        },
+        onCreateGroup = { name, onCreated -> groupViewModel.addGroup(name, onSuccess = onCreated) },
+        onNavigateBack = onNavigateBack
+    )
 }
