@@ -10,6 +10,7 @@ plugins {
 
 val roomVersion = "3.0.1"
 val sqliteVersion = "2.7.0"
+val browserVersion = "0.5.0"
 val coroutinesVersion = "1.10.2"
 
 // Platform-independent core of the app: the scheduling algorithms and the
@@ -68,6 +69,11 @@ kotlin {
     jvm()
 
     wasmJs {
+        // The worker is addressed as new URL(..., import.meta.url), which
+        // webpack rewrites into a chunk reference. import.meta only exists in
+        // an ES module, so the output format is not incidental here.
+        useEsModules()
+
         browser {
             testTask {
                 useKarma {
@@ -119,9 +125,46 @@ kotlin {
             }
         }
 
+        val wasmJsMain by getting {
+            // Worker and the other browser declarations are behind this
+            // marker; androidx's own sqlite-web opts in the same way.
+            languageSettings.optIn("kotlin.js.ExperimentalWasmJsInterop")
+
+            dependencies {
+                // WebWorkerSQLiteDriver: a SQLiteDriver that does no SQLite
+                // work itself, but posts messages to a Web Worker that does.
+                implementation("androidx.sqlite:sqlite-web:$sqliteVersion")
+
+                // org.w3c.dom.Worker. The browser declarations left the
+                // Kotlin standard library, so on wasmJs they are a dependency
+                // rather than something already on the classpath.
+                implementation("org.jetbrains.kotlinx:kotlinx-browser:$browserVersion")
+
+                // The worker itself, vendored, because androidx publishes the
+                // driver without one -- see third_party/sqlite-web-worker.
+                // A directory rather than a registry coordinate: the file is
+                // in this repository, and webpack pulls it out of node_modules
+                // once yarn has linked it there.
+                implementation(
+                    npm(
+                        "fencing-sqlite-web-worker",
+                        rootProject.layout.projectDirectory
+                            .dir("third_party/sqlite-web-worker").asFile
+                    )
+                )
+            }
+        }
+
         val commonTest by getting {
             dependencies {
                 implementation(kotlin("test"))
+            }
+        }
+
+        val wasmJsTest by getting {
+            dependencies {
+                // runTest, so the browser test can await the worker.
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:$coroutinesVersion")
             }
         }
     }
@@ -222,5 +265,49 @@ afterEvaluate {
     logger.lifecycle("KSPCFG: serialising ksp tasks = $kspTaskNames")
     kspTaskNames.zipWithNext().forEach { (earlier, later) ->
         tasks.named(later) { mustRunAfter(tasks.named(earlier)) }
+    }
+}
+
+// TEMPORARY, paired with the CI step of the same name. androidx publishes no
+// reference documentation for androidx.sqlite:sqlite-web, so this prints what
+// the klib actually contains: the packages it declares and the names inside
+// them. That is the difference between knowing the driver's import and
+// guessing it, and it costs one task rather than one CI round trip per guess.
+// Delete once the browser database test is green.
+tasks.register("dumpSqliteWebApi") {
+    description = "Prints the packages and top-level names in the sqlite-web klib."
+    doLast {
+        val klibs = configurations.getByName("wasmJsCompileClasspath")
+            .incoming.artifactView { isLenient = true }.files
+            .filter { it.name.contains("sqlite-web") }
+
+        if (klibs.isEmpty()) {
+            println("SQLITEWEB: nothing named sqlite-web on the wasmJs compile classpath")
+        }
+
+        klibs.forEach { klib ->
+            println("SQLITEWEB: artifact ${klib.name}")
+            java.util.zip.ZipFile(klib).use { zip ->
+                val entries = zip.entries().toList()
+
+                entries.map { it.name }
+                    .mapNotNull { Regex("package_([\\w.]+)").find(it)?.groupValues?.get(1) }
+                    .distinct().sorted()
+                    .forEach { println("SQLITEWEB: package $it") }
+
+                // Declaration names survive in the metadata as plain strings,
+                // which is enough to tell a constructor's shape from a guess.
+                val names = entries
+                    .filter { it.name.endsWith(".knm") }
+                    .flatMap { entry ->
+                        val text = zip.getInputStream(entry).readBytes()
+                            .toString(Charsets.ISO_8859_1)
+                        Regex("[A-Za-z][A-Za-z0-9_.]{3,}").findAll(text).map { it.value }
+                    }
+                    .filter { it.contains("Worker") || it.contains("Driver") }
+                    .distinct().sorted()
+                names.forEach { println("SQLITEWEB: name $it") }
+            }
+        }
     }
 }

@@ -1,0 +1,11 @@
+{
+  "name": "fencing-sqlite-web-worker",
+  "version": "0.0.0",
+  "description": "Web Worker that backs WebWorkerSQLiteDriver with SQLite compiled to WebAssembly",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "worker.js",
+  "dependencies": {
+    "@sqlite.org/sqlite-wasm": "3.53.0-build1"
+  }
+}

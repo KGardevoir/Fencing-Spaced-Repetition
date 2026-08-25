@@ -53,17 +53,19 @@ jobs:
             exit 1
           fi
 
-      # TEMPORARY, paired with the dumpWasmJsCompileClasspath task in
-      # shared/build.gradle.kts. Last step on purpose: the logs API reads from
-      # the end, and when this ran before the tests its output sat too far up
-      # the log to reach. Removed once the wasm classpath is understood.
-      - name: Dump the wasmJs compile classpath
+      # TEMPORARY, paired with the dumpSqliteWebApi task in
+      # shared/build.gradle.kts. androidx ships no reference docs for
+      # sqlite-web, so this prints the klib's own packages and names. Last step
+      # on purpose: the logs API reads from the end, and output placed before
+      # the tests sits too far up the log to reach. Removed once the browser
+      # database test is green.
+      - name: Dump the sqlite-web API
         if: always()
         continue-on-error: true
         run: |
-          ./gradlew :shared:dumpWasmJsCompileClasspath -q 2>&1 \
-            | grep -E "WASMCP:|klib|Skipping|incompatible" \
-            | awk 'NR <= 60'
+          ./gradlew :shared:dumpSqliteWebApi -q 2>&1 \
+            | grep -E "SQLITEWEB:" \
+            | awk 'NR <= 80'
 
       - name: Upload test results
         uses: actions/upload-artifact@v7

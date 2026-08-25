@@ -16,6 +16,13 @@ kotlin {
 
     wasmJs {
         outputModuleName.set("fencing-web")
+
+        // :shared addresses the SQLite worker relative to import.meta.url,
+        // and this is the module that actually gets bundled, so the format
+        // has to be settled here too. index.html already loads the bundle
+        // with type="module".
+        useEsModules()
+
         browser {
             commonWebpackConfig {
                 outputFileName = "fencing-web.js"
