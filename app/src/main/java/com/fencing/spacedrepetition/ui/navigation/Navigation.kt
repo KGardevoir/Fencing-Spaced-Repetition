@@ -4,6 +4,7 @@
 package com.fencing.spacedrepetition.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -58,12 +59,50 @@ fun AppNavigation(
         startDestination = Screen.Home.route
     ) {
         composable(Screen.Home.route) {
+            // Everything HomeScreen used to work out for itself. It lives here
+            // now because it is state management rather than presentation, and
+            // because the view models it reads cannot follow that screen into
+            // shared code.
+            val groups by groupViewModel.allGroups.collectAsState()
+            val savedGroupId by settingsViewModel.selectedGroupId.collectAsState()
+            val globalCardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
+            val totalCardCount by cardViewModel.cardCount.collectAsState()
+            val totalDueCount by cardViewModel.dueCardCount.collectAsState()
+
+            val selectedGroup = groups.find { it.id == savedGroupId } ?: groups.firstOrNull()
+
+            // Persist a fallback selection once groups exist and the saved one
+            // does not. A write, so it belongs with the view models.
+            LaunchedEffect(groups, savedGroupId) {
+                if (groups.isNotEmpty() && groups.none { it.id == savedGroupId }) {
+                    settingsViewModel.setSelectedGroupId(groups.first().id)
+                }
+            }
+
+            // A group's own cards-per-session overrides the global setting.
+            val cardsPerSession = selectedGroup?.cardsPerSession ?: globalCardsPerSession
+
+            val cardsToPractise = selectedGroup?.let { group ->
+                cardViewModel.getCardCountByGroup(group.id).collectAsState(initial = 0).value
+            } ?: totalCardCount
+
+            val dueCount = selectedGroup?.let { group ->
+                cardViewModel.getDueCardCountByGroup(group.id).collectAsState(initial = 0).value
+            } ?: totalDueCount
+
             HomeScreen(
-                cardViewModel = cardViewModel,
-                practiceViewModel = practiceViewModel,
-                groupViewModel = groupViewModel,
-                settingsViewModel = settingsViewModel,
-                onNavigateToPractice = {
+                groups = groups,
+                selectedGroup = selectedGroup,
+                cardsPerSession = cardsPerSession,
+                totalCardCount = totalCardCount,
+                totalDueCount = totalDueCount,
+                cardsToPractise = cardsToPractise,
+                dueCount = dueCount,
+                onSelectGroup = { group ->
+                    settingsViewModel.setSelectedGroupId(group.id)
+                },
+                onStartPractice = {
+                    practiceViewModel.startNewSession(cardsPerSession, selectedGroup?.id)
                     navController.navigate(Screen.Practice.route)
                 },
                 onNavigateToCards = {

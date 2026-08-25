@@ -19,59 +19,51 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Group
-import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
-import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
-import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
-import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
 
+/**
+ * The home screen.
+ *
+ * Takes values and callbacks rather than view models, like GroupEditScreen
+ * does. That is what lets it live in shared code -- the view models it used to
+ * take are AndroidViewModels, holding a Context for import and export, and
+ * nothing holding a Context can follow this screen into a browser.
+ *
+ * It also leaves the screen easier to reason about. Everything it used to
+ * derive -- which group is selected, which card counts apply to it, whether
+ * to persist a fallback selection -- was state management rather than
+ * presentation, and it now happens where the view models are.
+ *
+ * Both a whole-collection and a per-group count are needed, and they are not
+ * interchangeable: the two stat cards at the top report the collection, while
+ * the practice row reports the selected group.
+ *
+ * @param totalCardCount every card, for the stat card and the empty state.
+ * @param totalDueCount every due card, for the stat card.
+ * @param cardsToPractise cards available in [selectedGroup], or in the whole
+ *   collection when no group is selected. Gates the practice button.
+ * @param dueCount due cards on the same basis, shown next to the group name.
+ * @param onStartPractice begins a session and navigates to it -- one callback
+ *   because the button always did both.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    cardViewModel: CardViewModel,
-    practiceViewModel: PracticeViewModel,
-    groupViewModel: GroupViewModel,
-    settingsViewModel: SettingsViewModel,
-    onNavigateToPractice: () -> Unit,
+    groups: List<Group>,
+    selectedGroup: Group?,
+    cardsPerSession: Int,
+    totalCardCount: Int,
+    totalDueCount: Int,
+    cardsToPractise: Int,
+    dueCount: Int,
+    onSelectGroup: (Group) -> Unit,
+    onStartPractice: () -> Unit,
     onNavigateToCards: () -> Unit,
     onNavigateToGroups: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToHistory: () -> Unit,
     onNavigateToOpponents: () -> Unit
 ) {
-    val dueCardCount by cardViewModel.dueCardCount.collectAsState()
-    val totalCards by cardViewModel.cardCount.collectAsState()
-    val groups by groupViewModel.allGroups.collectAsState()
-    val globalCardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
-    val savedGroupId by settingsViewModel.selectedGroupId.collectAsState()
-
     var showGroupSelectionDialog by remember { mutableStateOf(false) }
-
-    // Derive selected group from persisted ID and groups list
-    val selectedGroup = groups.find { it.id == savedGroupId } ?: groups.firstOrNull()
-
-    // Auto-select first group when groups become available and no valid selection exists
-    LaunchedEffect(groups, savedGroupId) {
-        if (groups.isNotEmpty()) {
-            val currentGroupExists = groups.any { it.id == savedGroupId }
-            if (!currentGroupExists) {
-                // Save the first group's ID if no valid selection
-                settingsViewModel.setSelectedGroupId(groups.first().id)
-            }
-        }
-    }
-
-    // Resolve cardsPerSession: group override takes precedence over global
-    val cardsPerSession = selectedGroup?.cardsPerSession ?: globalCardsPerSession
-
-    // Calculate total cards for selected group (allow additional studying)
-    val cardsForSelectedGroup = selectedGroup?.let { group ->
-        cardViewModel.getCardCountByGroup(group.id).collectAsState(initial = 0).value
-    } ?: totalCards
-
-    // Still track due cards for display
-    val dueForSelectedGroup = selectedGroup?.let { group ->
-        cardViewModel.getDueCardCountByGroup(group.id).collectAsState(initial = 0).value
-    } ?: dueCardCount
 
     Scaffold(
         topBar = {
@@ -147,7 +139,7 @@ fun HomeScreen(
             ) {
                 StatCard(
                     icon = Icons.Default.Schedule,
-                    value = dueCardCount.toString(),
+                    value = totalDueCount.toString(),
                     label = "Due Now",
                     modifier = Modifier.weight(1f),
                     color = MaterialTheme.colorScheme.secondaryContainer
@@ -155,7 +147,7 @@ fun HomeScreen(
 
                 StatCard(
                     icon = Icons.AutoMirrored.Filled.LibraryBooks,
-                    value = totalCards.toString(),
+                    value = totalCardCount.toString(),
                     label = "Total Cards",
                     modifier = Modifier.weight(1f),
                     color = MaterialTheme.colorScheme.tertiaryContainer
@@ -193,7 +185,7 @@ fun HomeScreen(
                             )
                         }
                         Text(
-                            text = "$dueForSelectedGroup due",
+                            text = "$dueCount due",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -209,14 +201,11 @@ fun HomeScreen(
 
             // Main actions
             Button(
-                onClick = {
-                    practiceViewModel.startNewSession(cardsPerSession, selectedGroup?.id)
-                    onNavigateToPractice()
-                },
+                onClick = onStartPractice,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(64.dp),
-                enabled = cardsForSelectedGroup >= 1
+                enabled = cardsToPractise >= 1
             ) {
                 Icon(
                     Icons.Default.PlayArrow,
@@ -230,9 +219,9 @@ fun HomeScreen(
                 )
             }
 
-            if (cardsForSelectedGroup < 1) {
+            if (cardsToPractise < 1) {
                 Text(
-                    text = if (totalCards == 0) "Add some cards to get started"
+                    text = if (totalCardCount == 0) "Add some cards to get started"
                     else if (selectedGroup != null) "No cards in ${selectedGroup.name}"
                     else "No cards available",
                     style = MaterialTheme.typography.bodyLarge,
@@ -287,7 +276,7 @@ fun HomeScreen(
             groups = groups,
             selectedGroup = selectedGroup,
             onSelect = { group ->
-                settingsViewModel.setSelectedGroupId(group.id)
+                onSelectGroup(group)
                 showGroupSelectionDialog = false
             },
             onDismiss = { showGroupSelectionDialog = false }
