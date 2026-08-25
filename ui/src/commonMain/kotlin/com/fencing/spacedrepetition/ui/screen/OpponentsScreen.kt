@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
+import com.fencing.spacedrepetition.util.toTwoDecimals
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -195,7 +196,7 @@ private fun OpponentRow(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "Skill × ${"%.2f".format(opponent.skillMultiplier)}",
+                    text = "Skill × ${opponent.skillMultiplier.toTwoDecimals()}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -233,7 +234,7 @@ fun OpponentEditorDialog(
 ) {
     var name by rememberSaveable(initial?.id) { mutableStateOf(initial?.name ?: "") }
     var multiplierText by rememberSaveable(initial?.id) {
-        mutableStateOf("%.2f".format(initial?.skillMultiplier ?: 1.0))
+        mutableStateOf((initial?.skillMultiplier ?: 1.0).toTwoDecimals())
     }
     var notes by rememberSaveable(initial?.id) { mutableStateOf(initial?.notes ?: "") }
 
@@ -241,7 +242,7 @@ fun OpponentEditorDialog(
     val canSave = name.isNotBlank() && multiplier != null
 
     val isDirty = name != (initial?.name ?: "") ||
-        multiplierText != "%.2f".format(initial?.skillMultiplier ?: 1.0) ||
+        multiplierText != (initial?.skillMultiplier ?: 1.0).toTwoDecimals() ||
         notes != (initial?.notes ?: "")
     var showUnsavedChangesDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -317,8 +318,8 @@ fun OpponentEditorDialog(
                 ) {
                     listOf(0.5, 0.75, 1.0, 1.25, 1.5).forEach { preset ->
                         AssistChip(
-                            onClick = { multiplierText = "%.2f".format(preset) },
-                            label = { Text("×${"%.2f".format(preset)}") }
+                            onClick = { multiplierText = preset.toTwoDecimals() },
+                            label = { Text("×${preset.toTwoDecimals()}") }
                         )
                     }
                 }
