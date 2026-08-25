@@ -84,13 +84,21 @@ class HomeScreenTest {
     }
 
     @Test
+    fun theHeaderSaysHowManyCardsASessionHolds() = home {
+        onNodeWithText("Practice 3 cards, grade at the end").assertIsDisplayed()
+    }
+
+    // "Start Practice" is the button; the sentence above it is only a
+    // subtitle, and asserting enablement on that Text passes whatever the
+    // button is doing.
+    @Test
     fun practiceIsOfferedWhenTheGroupHasCards() = home(cardsToPractise = 12) {
-        onNodeWithText("Practice 3 cards, grade at the end").assertIsEnabled()
+        onNodeWithText("Start Practice").assertIsEnabled()
     }
 
     @Test
     fun practiceIsRefusedWhenTheGroupIsEmpty() = home(cardsToPractise = 0) {
-        onNodeWithText("Practice 3 cards, grade at the end").assertIsNotEnabled()
+        onNodeWithText("Start Practice").assertIsNotEnabled()
         onNodeWithText("No cards in Sabre footwork").assertIsDisplayed()
     }
 
@@ -101,7 +109,7 @@ class HomeScreenTest {
     fun pressingPracticeReportsItOnce() = run {
         var started = 0
         home(onStartPractice = { started++ }) {
-            onNodeWithText("Practice 3 cards, grade at the end").performClick()
+            onNodeWithText("Start Practice").performClick()
             assertEquals(1, started, "practice was not started exactly once")
         }
     }
