@@ -222,7 +222,8 @@ class ReviewHistoryImportExportTest {
         CardImportExport.exportCardsWithGroupStates(
             cardsWithStates, output,
             reviewLogs = reviewLogs,
-            cardQuestions = cardQuestions
+            cardQuestions = cardQuestions,
+            images = NoImages
         )
         val content = output.toString(Charsets.UTF_8.name())
 
@@ -237,7 +238,7 @@ class ReviewHistoryImportExportTest {
         val cardsWithStates = listOf(CardWithGroupStates(card, emptyList(), emptyMap()))
 
         val output = ByteArrayOutputStream()
-        CardImportExport.exportCardsWithGroupStates(cardsWithStates, output)
+        CardImportExport.exportCardsWithGroupStates(cardsWithStates, output, images = NoImages)
         val content = output.toString(Charsets.UTF_8.name())
 
         assertFalse(content.contains("#REVIEW_HISTORY_START"))
@@ -261,7 +262,8 @@ class ReviewHistoryImportExportTest {
         CardImportExport.exportCardsWithGroupStates(
             cardsWithStates, output,
             reviewLogs = listOf(log),
-            cardQuestions = mapOf(1L to "Parry question")
+            cardQuestions = mapOf(1L to "Parry question"),
+            images = NoImages
         )
         val content = output.toString(Charsets.UTF_8.name())
 
@@ -285,7 +287,8 @@ class ReviewHistoryImportExportTest {
         CardImportExport.exportCardsWithGroupStates(
             cardsWithStates, output,
             reviewLogs = listOf(log),
-            cardQuestions = mapOf(1L to "What is a feint?")
+            cardQuestions = mapOf(1L to "What is a feint?"),
+            images = NoImages
         )
 
         val input = ByteArrayInputStream(output.toByteArray())
@@ -308,7 +311,7 @@ class ReviewHistoryImportExportTest {
         val cardsWithStates = listOf(CardWithGroupStates(card, emptyList(), emptyMap()))
 
         val output = ByteArrayOutputStream()
-        CardImportExport.exportCardsWithGroupStates(cardsWithStates, output)
+        CardImportExport.exportCardsWithGroupStates(cardsWithStates, output, images = NoImages)
 
         val input = ByteArrayInputStream(output.toByteArray())
         CardImportExport.parseCards(input)
@@ -337,7 +340,8 @@ class ReviewHistoryImportExportTest {
             listOf(CardWithGroupStates(card, emptyList(), emptyMap())),
             output,
             reviewLogs = listOf(originalLog),
-            cardQuestions = mapOf(cardId to cardQuestion)
+            cardQuestions = mapOf(cardId to cardQuestion),
+            images = NoImages
         )
 
         val input = ByteArrayInputStream(output.toByteArray())
@@ -377,7 +381,8 @@ class ReviewHistoryImportExportTest {
             listOf(CardWithGroupStates(card, emptyList(), emptyMap())),
             output,
             reviewLogs = logs,
-            cardQuestions = mapOf(cardId to cardQuestion)
+            cardQuestions = mapOf(cardId to cardQuestion),
+            images = NoImages
         )
 
         val input = ByteArrayInputStream(output.toByteArray())
@@ -423,7 +428,8 @@ class ReviewHistoryImportExportTest {
             listOf(CardWithGroupStates(card, emptyList(), emptyMap())),
             output,
             reviewLogs = listOf(skipLog),
-            cardQuestions = mapOf(1L to "Skip me")
+            cardQuestions = mapOf(1L to "Skip me"),
+            images = NoImages
         )
         val content = output.toString(Charsets.UTF_8.name())
         assertTrue(content.contains("#REVIEW_HISTORY_START"))
@@ -457,7 +463,8 @@ class ReviewHistoryImportExportTest {
             listOf(CardWithGroupStates(card, emptyList(), emptyMap())),
             output,
             reviewLogs = listOf(skipLog),
-            cardQuestions = mapOf(cardId to cardQuestion)
+            cardQuestions = mapOf(cardId to cardQuestion),
+            images = NoImages
         )
 
         val input = ByteArrayInputStream(output.toByteArray())
@@ -497,7 +504,8 @@ class ReviewHistoryImportExportTest {
             listOf(CardWithGroupStates(card, emptyList(), emptyMap())),
             output,
             reviewLogs = logs,
-            cardQuestions = mapOf(cardId to cardQuestion)
+            cardQuestions = mapOf(cardId to cardQuestion),
+            images = NoImages
         )
 
         val input = ByteArrayInputStream(output.toByteArray())
@@ -575,7 +583,8 @@ class ReviewHistoryImportExportTest {
             listOf(CardWithGroupStates(card, emptyList(), emptyMap())),
             output,
             reviewLogs = listOf(log),
-            cardQuestions = mapOf(cardId to cardQuestion)
+            cardQuestions = mapOf(cardId to cardQuestion),
+            images = NoImages
         )
 
         val input = ByteArrayInputStream(output.toByteArray())
@@ -603,7 +612,8 @@ class ReviewHistoryImportExportTest {
             listOf(CardWithGroupStates(card, emptyList(), emptyMap())),
             output,
             reviewLogs = listOf(log),
-            cardQuestions = mapOf(cardId to cardQuestion)
+            cardQuestions = mapOf(cardId to cardQuestion),
+            images = NoImages
         )
 
         val input = ByteArrayInputStream(output.toByteArray())
@@ -631,7 +641,8 @@ class ReviewHistoryImportExportTest {
             listOf(CardWithGroupStates(card, emptyList(), emptyMap())),
             output,
             reviewLogs = listOf(log),
-            cardQuestions = mapOf(cardId to cardQuestion)
+            cardQuestions = mapOf(cardId to cardQuestion),
+            images = NoImages
         )
 
         val input = ByteArrayInputStream(output.toByteArray())
@@ -698,7 +709,8 @@ class ReviewHistoryImportExportTest {
             listOf(CardWithGroupStates(card, emptyList(), emptyMap())),
             output,
             reviewLogs = listOf(log),
-            cardQuestions = mapOf(cardId to cardQuestion)
+            cardQuestions = mapOf(cardId to cardQuestion),
+            images = NoImages
         )
 
         val input = ByteArrayInputStream(output.toByteArray())
@@ -727,7 +739,8 @@ class ReviewHistoryImportExportTest {
             listOf(CardWithGroupStates(card, emptyList(), emptyMap())),
             output,
             reviewLogs = listOf(log),
-            cardQuestions = mapOf(cardId to cardQuestion)
+            cardQuestions = mapOf(cardId to cardQuestion),
+            images = NoImages
         )
 
         val input = ByteArrayInputStream(output.toByteArray())
@@ -739,4 +752,14 @@ class ReviewHistoryImportExportTest {
         )
         assertEquals("", entities[0].notes)
     }
+
+    /**
+     * Reads no images.
+     *
+     * These tests export cards that have none, and the real reader needs a
+     * Context and confines itself to filesDir. Passed explicitly rather than
+     * defaulted: a default that quietly reads nothing is how images would go
+     * missing from a real export without anyone noticing.
+     */
+    private val NoImages = ImageReader { null }
 }

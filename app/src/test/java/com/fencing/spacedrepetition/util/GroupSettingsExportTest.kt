@@ -194,7 +194,8 @@ class GroupSettingsExportTest {
         CardImportExport.exportCardsWithGroupStates(
             listOf(CardWithGroupStates(card, listOf("CustomGroup"), emptyMap())),
             output,
-            groupSettings = groups
+            groupSettings = groups,
+            images = NoImages
         )
 
         val content = output.toString(Charsets.UTF_8.name())
@@ -219,7 +220,8 @@ class GroupSettingsExportTest {
         CardImportExport.exportCardsWithGroupStates(
             listOf(CardWithGroupStates(card, listOf("DefaultGroup", "CustomGroup"), emptyMap())),
             output,
-            groupSettings = groups
+            groupSettings = groups,
+            images = NoImages
         )
 
         val content = output.toString(Charsets.UTF_8.name())
@@ -303,7 +305,8 @@ class GroupSettingsExportTest {
         CardImportExport.exportCardsWithGroupStates(
             listOf(CardWithGroupStates(card, listOf("Epee Drills"), emptyMap())),
             output,
-            groupSettings = groups
+            groupSettings = groups,
+            images = NoImages
         )
 
         // Import
@@ -360,7 +363,8 @@ class GroupSettingsExportTest {
         CardImportExport.exportCardsWithGroupStates(
             listOf(CardWithGroupStates(card, listOf("Advanced"), mapOf("Advanced" to groupState))),
             output,
-            groupSettings = groups
+            groupSettings = groups,
+            images = NoImages
         )
 
         // Import
@@ -466,7 +470,8 @@ class GroupSettingsExportTest {
         CardImportExport.exportCardsWithGroupStates(
             listOf(CardWithGroupStates(card, listOf("RetentionGroup"))),
             output,
-            groupSettings = listOf(group)
+            groupSettings = listOf(group),
+            images = NoImages
         )
 
         val content = output.toString(Charsets.UTF_8.name())
@@ -489,7 +494,8 @@ class GroupSettingsExportTest {
         CardImportExport.exportCardsWithGroupStates(
             listOf(CardWithGroupStates(card, listOf("NoRetentionGroup"))),
             output,
-            groupSettings = listOf(group)
+            groupSettings = listOf(group),
+            images = NoImages
         )
 
         val content = output.toString(Charsets.UTF_8.name())
@@ -517,7 +523,8 @@ class GroupSettingsExportTest {
         CardImportExport.exportCardsWithGroupStates(
             listOf(CardWithGroupStates(card, listOf("FencingDrills"))),
             output,
-            groupSettings = listOf(group)
+            groupSettings = listOf(group),
+            images = NoImages
         )
 
         // Import
@@ -537,4 +544,14 @@ class GroupSettingsExportTest {
         assertEquals(75, applied.sm2IntervalModifier)
         assertEquals(4,  applied.cardsPerSession)
     }
+
+    /**
+     * Reads no images.
+     *
+     * These tests export cards that have none, and the real reader needs a
+     * Context and confines itself to filesDir. Passed explicitly rather than
+     * defaulted: a default that quietly reads nothing is how images would go
+     * missing from a real export without anyone noticing.
+     */
+    private val NoImages = ImageReader { null }
 }

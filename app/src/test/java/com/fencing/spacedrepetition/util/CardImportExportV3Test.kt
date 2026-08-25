@@ -122,7 +122,7 @@ class CardImportExportV3Test {
 
             val outputStream = ByteArrayOutputStream()
             val gzipOut = CardImportExport.createCompressedOutputStream(outputStream)
-            val result = CardImportExport.exportCardsWithGroupStates(cardsWithStates, gzipOut)
+            val result = CardImportExport.exportCardsWithGroupStates(cardsWithStates, gzipOut, images = TempFileReader)
             gzipOut.close()
 
             assertTrue(result is ExportResult.Success)
@@ -180,7 +180,8 @@ class CardImportExportV3Test {
                         groupSpecificStates = emptyMap()
                     )
                 ),
-                gzipOut
+                gzipOut,
+                images = TempFileReader
             )
             gzipOut.close()
 
@@ -236,7 +237,7 @@ class CardImportExportV3Test {
 
         val outputStream = ByteArrayOutputStream()
         val gzipOut = CardImportExport.createCompressedOutputStream(outputStream)
-        val result = CardImportExport.exportCardsWithGroupStates(cardsWithStates, gzipOut)
+        val result = CardImportExport.exportCardsWithGroupStates(cardsWithStates, gzipOut, images = TempFileReader)
         gzipOut.close()
 
         assertTrue(result is ExportResult.Success)
@@ -274,13 +275,13 @@ class CardImportExportV3Test {
 
         // Export without compression
         val uncompressedStream = ByteArrayOutputStream()
-        CardImportExport.exportCardsWithGroupStates(cardsWithStates, uncompressedStream)
+        CardImportExport.exportCardsWithGroupStates(cardsWithStates, uncompressedStream, images = TempFileReader)
         val uncompressedSize = uncompressedStream.toByteArray().size
 
         // Export with compression
         val compressedStream = ByteArrayOutputStream()
         val gzipOut = CardImportExport.createCompressedOutputStream(compressedStream)
-        CardImportExport.exportCardsWithGroupStates(cardsWithStates, gzipOut)
+        CardImportExport.exportCardsWithGroupStates(cardsWithStates, gzipOut, images = TempFileReader)
         gzipOut.close()
         val compressedSize = compressedStream.toByteArray().size
 

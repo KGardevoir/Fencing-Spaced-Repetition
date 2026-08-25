@@ -212,7 +212,7 @@ class CardImportExportV2Test {
         )
 
         val output = ByteArrayOutputStream()
-        val result = CardImportExport.exportCardsWithGroupStates(cardsWithStates, output)
+        val result = CardImportExport.exportCardsWithGroupStates(cardsWithStates, output, images = NoImages)
 
         assertTrue(result is ExportResult.Success)
         assertEquals(1, (result as ExportResult.Success).exportedCount)
@@ -259,7 +259,7 @@ class CardImportExportV2Test {
         )
 
         val output = ByteArrayOutputStream()
-        val result = CardImportExport.exportCardsWithGroupStates(cardsWithStates, output)
+        val result = CardImportExport.exportCardsWithGroupStates(cardsWithStates, output, images = NoImages)
 
         assertTrue(result is ExportResult.Success)
         assertEquals(2, (result as ExportResult.Success).exportedCount) // 1 global + 1 group-specific
@@ -307,7 +307,7 @@ class CardImportExportV2Test {
         )
 
         val output = ByteArrayOutputStream()
-        val result = CardImportExport.exportCardsWithGroupStates(cardsWithStates, output)
+        val result = CardImportExport.exportCardsWithGroupStates(cardsWithStates, output, images = NoImages)
 
         assertTrue(result is ExportResult.Success)
         assertEquals(4, (result as ExportResult.Success).exportedCount) // 1 global + 3 group-specific
@@ -369,7 +369,7 @@ class CardImportExportV2Test {
 
         // Export
         val output = ByteArrayOutputStream()
-        CardImportExport.exportCardsWithGroupStates(original, output)
+        CardImportExport.exportCardsWithGroupStates(original, output, images = NoImages)
 
         // Import
         val (parsed, errors) = CardImportExport.parseCards(ByteArrayInputStream(output.toByteArray()))
@@ -502,7 +502,7 @@ class CardImportExportV2Test {
         )
 
         val output = ByteArrayOutputStream()
-        val result = CardImportExport.exportCardsWithGroupStates(cardsWithStates, output)
+        val result = CardImportExport.exportCardsWithGroupStates(cardsWithStates, output, images = NoImages)
 
         assertTrue(result is ExportResult.Success)
         // Card1: 1 global + 1 group = 2
@@ -515,4 +515,14 @@ class CardImportExportV2Test {
         val dataLines = content.lines().filter { it.isNotBlank() && !it.startsWith("#") }
         assertEquals(5, dataLines.size)
     }
+
+    /**
+     * Reads no images.
+     *
+     * These tests export cards that have none, and the real reader needs a
+     * Context and confines itself to filesDir. Passed explicitly rather than
+     * defaulted: a default that quietly reads nothing is how images would go
+     * missing from a real export without anyone noticing.
+     */
+    private val NoImages = ImageReader { null }
 }
