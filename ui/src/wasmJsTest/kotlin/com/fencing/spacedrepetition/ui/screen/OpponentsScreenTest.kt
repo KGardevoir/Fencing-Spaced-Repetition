@@ -5,7 +5,6 @@ package com.fencing.spacedrepetition.ui.screen
 
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.runComposeUiTest
 import com.fencing.spacedrepetition.data.AppDatabase
@@ -16,6 +15,8 @@ import com.fencing.spacedrepetition.ui.theme.FencingSpacedRepetitionTheme
 import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeout
 
 /**
  * The first screen of the app, running end to end in a browser.
@@ -80,20 +81,25 @@ class OpponentsScreenTest {
 
         val id = repository.insertOpponent(Opponent(name = name, skillMultiplier = 1.25))
         try {
+            val viewModel = OpponentViewModel(repository)
             setContent {
                 FencingSpacedRepetitionTheme {
-                    OpponentsScreen(
-                        viewModel = OpponentViewModel(repository),
-                        onNavigateBack = {}
-                    )
+                    OpponentsScreen(viewModel = viewModel, onNavigateBack = {})
                 }
             }
 
-            // The list arrives over a Flow, so the first composition renders
-            // empty and the row appears a frame or two later.
-            waitUntil(timeoutMillis = 10_000) {
-                onAllNodesWithText(name).fetchSemanticsNodes().isNotEmpty()
+            // Awaited by suspending on the view model's own Flow, rather than
+            // by Compose's waitUntil. waitUntil is a synchronous loop, and on
+            // wasm a synchronous loop never yields to the event loop -- so the
+            // Web Worker's reply carrying this row could not be delivered
+            // while it spun, and it could only ever time out. Suspending here
+            // hands control back to the browser, which is what lets the reply
+            // arrive at all.
+            withTimeout(30_000) {
+                viewModel.opponents.first { opponents -> opponents.any { it.name == name } }
             }
+            awaitIdle()
+
             onNodeWithText(name).assertIsDisplayed()
         } finally {
             repository.getOpponentById(id)?.let { repository.deleteOpponent(it) }
