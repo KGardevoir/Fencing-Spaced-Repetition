@@ -1,11 +1,10 @@
-# Fencing Spaced Repetition - Export Format V3
-# This file demonstrates the V3 export format with base64-encoded images and GZIP compression
+# Fencing Spaced Repetition - Export Format V4
+# This file demonstrates the V4 export format with base64-encoded images and GZIP compression
 #
 # Format: TSV (Tab-Separated Values) with GZIP compression (.tsv.gz)
-# Columns: Question | Answer | ImagePaths(double-pipe-separated-base64) | Algorithm | StateContext | NextReview | LastReview |
+# Columns: Question | Answer | ImagePaths(double-pipe-separated-base64) | StateContext | NextReview | LastReview |
 #          FSRS_Stability | FSRS_Difficulty | FSRS_State | FSRS_Reps | FSRS_Lapses |
-#          FSRS_ScheduledDays | FSRS_ElapsedDays | SM2_EaseFactor | SM2_Interval |
-#          SM2_Repetitions | Groups(pipe-separated)
+#          FSRS_ScheduledDays | FSRS_ElapsedDays | Groups(pipe-separated)
 #
 # Notes:
 # - Images are base64-encoded and separated by "||" (double pipe)
@@ -15,20 +14,20 @@
 #
 # Example cards below (uncompressed for readability - actual exports are GZIP compressed):
 
-#FSR_EXPORT_V3
-#Question	Answer	ImagePaths(double-pipe-separated)	Algorithm	StateContext	NextReview	LastReview	FSRS_Stability	FSRS_Difficulty	FSRS_State	FSRS_Reps	FSRS_Lapses	FSRS_ScheduledDays	FSRS_ElapsedDays	SM2_EaseFactor	SM2_Interval	SM2_Repetitions	Groups(pipe-separated)
+#FSR_EXPORT_V4
+#Question	Answer	ImagePaths(double-pipe-separated)	StateContext	NextReview	LastReview	FSRS_Stability	FSRS_Difficulty	FSRS_State	FSRS_Reps	FSRS_Lapses	FSRS_ScheduledDays	FSRS_ElapsedDays	Groups(pipe-separated)
 
 # Card 1: Simple card without images
-What is parry four?	A defensive blade action deflecting an attack to the high outside line		FSRS	GLOBAL	1705334400000	1705248000000	4.5	3.2	REVIEW	5	0	7	3	2.5	0	0	Blade Actions|Defense
+What is parry four?	A defensive blade action deflecting an attack to the high outside line		GLOBAL	1705334400000	1705248000000	4.5	3.2	REVIEW	5	0	7	3	Blade Actions|Defense
 
 # Card 2: Card with one image (base64 truncated for readability)
-What does this stance look like?	This is the en garde position	iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==	FSRS	GLOBAL	1705420800000	1705334400000	6.8	2.9	REVIEW	8	1	10	5	2.5	0	0	Footwork|Fundamentals
+What does this stance look like?	This is the en garde position	iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==	GLOBAL	1705420800000	1705334400000	6.8	2.9	REVIEW	8	1	10	5	Footwork|Fundamentals
 
 # Card 3: Card with multiple images (base64 truncated for readability)
-Demonstrate the progression of a lunge	Step 1: Start position<br>Step 2: Extend arm<br>Step 3: Push off back leg<br>Step 4: Land in lunge	iVBORw0KGgoAAAANSUhEUgAAAAE...truncated...||iVBORw0KGgoAAAANSUhEUgAAAAE...truncated...||iVBORw0KGgoAAAANSUhEUgAAAAE...truncated...	FSRS	GLOBAL	1705507200000	1705420800000	8.2	2.5	REVIEW	12	0	14	7	2.5	0	0	Footwork|Advanced Techniques
+Demonstrate the progression of a lunge	Step 1: Start position<br>Step 2: Extend arm<br>Step 3: Push off back leg<br>Step 4: Land in lunge	iVBORw0KGgoAAAANSUhEUgAAAAE...truncated...||iVBORw0KGgoAAAANSUhEUgAAAAE...truncated...||iVBORw0KGgoAAAANSUhEUgAAAAE...truncated...	GLOBAL	1705507200000	1705420800000	8.2	2.5	REVIEW	12	0	14	7	Footwork|Advanced Techniques
 
 # Card 4: Card with group-specific learning state
-What is a riposte?	An offensive action made immediately after a successful parry		FSRS	Advanced Tactics	1705593600000	1705507200000	3.1	4.2	LEARNING	2	1	3	1	2.5	0	0	Advanced Tactics|Offensive Actions
+What is a riposte?	An offensive action made immediately after a successful parry		Advanced Tactics	1705593600000	1705507200000	3.1	4.2	LEARNING	2	1	3	1	Advanced Tactics|Offensive Actions
 
 # USAGE INSTRUCTIONS:
 #
@@ -46,4 +45,5 @@ What is a riposte?	An offensive action made immediately after a successful parry
 # - Base64 encoding uses NO_WRAP flag (no line breaks)
 # - GZIP compression typically reduces file size by 60-80%
 # - Images are stored as JPEG/PNG in internal storage after import
-# - File format is backwards compatible with V1/V2 (without images)
+# - V1, V2 and V3 files still import; V3 and older carry an Algorithm column
+#   and SM-2 columns, which are read past and discarded

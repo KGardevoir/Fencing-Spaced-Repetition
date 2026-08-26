@@ -397,7 +397,6 @@ fun App(
             val fsrsRetention by settingsViewModel.fsrsRetention.collectAsState()
             val practiceScheduleEstimate by cardViewModel.practiceScheduleEstimate.collectAsState()
             val historyWindowDays by cardViewModel.historyWindowDays.collectAsState()
-            val sm2IntervalModifier by settingsViewModel.sm2IntervalModifier.collectAsState()
             val fsrsEnableFuzzing by settingsViewModel.fsrsEnableFuzzing.collectAsState()
             val autoBackupEnabled by settingsViewModel.autoBackupEnabled.collectAsState()
             val autoBackupIntervalDays by settingsViewModel.autoBackupIntervalDays.collectAsState()
@@ -420,7 +419,6 @@ fun App(
                 fsrsRetention = fsrsRetention,
                 practiceScheduleEstimate = practiceScheduleEstimate,
                 historyWindowDays = historyWindowDays,
-                sm2IntervalModifier = sm2IntervalModifier,
                 fsrsEnableFuzzing = fsrsEnableFuzzing,
                 autoBackupEnabled = autoBackupEnabled,
                 autoBackupIntervalDays = autoBackupIntervalDays,
@@ -440,7 +438,6 @@ fun App(
                 onTogglePracticeDay = settingsViewModel::togglePracticeDay,
                 onSetFsrsRetention = settingsViewModel::setFsrsRetention,
                 onSetHistoryWindowDays = cardViewModel::setHistoryWindowDays,
-                onSetSm2IntervalModifier = settingsViewModel::setSm2IntervalModifier,
                 onSetFsrsEnableFuzzing = settingsViewModel::setFsrsEnableFuzzing,
                 onSetAutoBackupEnabled = settingsViewModel::setAutoBackupEnabled,
                 onSetAutoBackupIntervalDays = settingsViewModel::setAutoBackupIntervalDays,
@@ -502,8 +499,8 @@ private fun CardEditor(
             cardViewModel.recordGradeFromEdit(before, after, grade, groupId)
         },
         onUpdateLearningState = { cardViewModel.updateLearningState(it) },
-        onAddCard = { question, answer, groupIds, algorithm, imagePaths, onSuccess ->
-            cardViewModel.addCard(question, answer, groupIds, algorithm, imagePaths, onSuccess)
+        onAddCard = { question, answer, groupIds, imagePaths, onSuccess ->
+            cardViewModel.addCard(question, answer, groupIds, imagePaths, onSuccess)
         },
         onCreateGroup = { name, onCreated -> groupViewModel.addGroup(name, onSuccess = onCreated) },
         onNavigateBack = onNavigateBack
@@ -527,7 +524,6 @@ private fun GroupEditor(
     val globalPracticeDays by settingsViewModel.practiceDays.collectAsState()
     val globalMaximumInterval by settingsViewModel.maximumInterval.collectAsState()
     val globalFsrsRetention by settingsViewModel.fsrsRetention.collectAsState()
-    val globalSm2IntervalModifier by settingsViewModel.sm2IntervalModifier.collectAsState()
     val globalFsrsEnableFuzzing by settingsViewModel.fsrsEnableFuzzing.collectAsState()
     val practiceScheduleEstimate by cardViewModel.practiceScheduleEstimate.collectAsState()
     val historyWindowDays by cardViewModel.historyWindowDays.collectAsState()
@@ -541,7 +537,6 @@ private fun GroupEditor(
         globalPracticeDays = globalPracticeDays,
         globalMaximumInterval = globalMaximumInterval,
         globalFsrsRetention = globalFsrsRetention,
-        globalSm2IntervalModifier = globalSm2IntervalModifier,
         globalFsrsEnableFuzzing = globalFsrsEnableFuzzing,
         groupCardCount = groupCardCount,
         practiceScheduleEstimate = practiceScheduleEstimate,

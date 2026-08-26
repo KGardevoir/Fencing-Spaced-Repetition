@@ -34,7 +34,4 @@ interface SchedulingPreferences {
 
     /** Whether FSRS applies its interval fuzz. */
     val fsrsEnableFuzzing: Flow<Boolean>
-
-    /** SM-2 interval modifier, as a percentage. */
-    val sm2IntervalModifier: Flow<Int>
 }

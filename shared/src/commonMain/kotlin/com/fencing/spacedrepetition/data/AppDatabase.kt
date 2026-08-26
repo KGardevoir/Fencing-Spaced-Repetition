@@ -26,7 +26,7 @@ import com.fencing.spacedrepetition.util.Time
 
 @Database(
     entities = [Card::class, PracticeSession::class, ReviewLog::class, Group::class, CardGroupCrossRef::class, CardGroupLearningState::class, Opponent::class],
-    version = 11,
+    version = 12,
     exportSchema = true
 )
 @ColumnTypeConverters(Converters::class)
@@ -224,6 +224,136 @@ private val MIGRATION_10_11 = object : Migration(10, 11) {
 }
 
 /**
+ * Drops SM-2. The algorithm is gone, so the columns that held its per-card
+ * state go with it: `cards`.`algorithm` (FSRS is now the only scheduler),
+ * `cards`.`sm2*` and `card_group_learning_state`.`sm2*`, plus the per-group
+ * `sm2IntervalModifier` override.
+ *
+ * Recreate-and-copy rather than ALTER TABLE ... DROP COLUMN: minSdk is 24,
+ * whose bundled SQLite predates DROP COLUMN by a long way.
+ *
+ * Cards that were on SM-2 keep their `lastReview`/`nextReview`, so nothing
+ * comes due sooner than the user expects, but they carry no FSRS stability or
+ * difficulty -- SM-2 never wrote any. FSRS treats them as new at their next
+ * review and builds real state from there.
+ */
+private val MIGRATION_11_12 = object : Migration(11, 12) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("""
+            CREATE TABLE IF NOT EXISTS `cards_new` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `question` TEXT NOT NULL,
+                `answer` TEXT NOT NULL,
+                `category` TEXT NOT NULL DEFAULT '',
+                `tags` TEXT NOT NULL DEFAULT '',
+                `imagePaths` TEXT NOT NULL DEFAULT '',
+                `fsrsStability` REAL NOT NULL DEFAULT 0.0,
+                `fsrsDifficulty` REAL NOT NULL DEFAULT 0.0,
+                `fsrsElapsedDays` INTEGER NOT NULL DEFAULT 0,
+                `fsrsScheduledDays` INTEGER NOT NULL DEFAULT 0,
+                `fsrsReps` INTEGER NOT NULL DEFAULT 0,
+                `fsrsLapses` INTEGER NOT NULL DEFAULT 0,
+                `fsrsState` TEXT NOT NULL DEFAULT 'NEW',
+                `lastReview` INTEGER NOT NULL DEFAULT 0,
+                `nextReview` INTEGER NOT NULL DEFAULT 0,
+                `created` INTEGER NOT NULL DEFAULT 0,
+                `modified` INTEGER NOT NULL DEFAULT 0,
+                `isDisabled` INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        connection.execSQL("""
+            INSERT INTO `cards_new` (
+                `id`, `question`, `answer`, `category`, `tags`, `imagePaths`,
+                `fsrsStability`, `fsrsDifficulty`, `fsrsElapsedDays`, `fsrsScheduledDays`,
+                `fsrsReps`, `fsrsLapses`, `fsrsState`,
+                `lastReview`, `nextReview`, `created`, `modified`, `isDisabled`
+            )
+            SELECT
+                `id`, `question`, `answer`, `category`, `tags`, `imagePaths`,
+                `fsrsStability`, `fsrsDifficulty`, `fsrsElapsedDays`, `fsrsScheduledDays`,
+                `fsrsReps`, `fsrsLapses`, `fsrsState`,
+                `lastReview`, `nextReview`, `created`, `modified`, `isDisabled`
+            FROM `cards`
+        """)
+        connection.execSQL("DROP TABLE `cards`")
+        connection.execSQL("ALTER TABLE `cards_new` RENAME TO `cards`")
+
+        connection.execSQL("""
+            CREATE TABLE IF NOT EXISTS `card_group_learning_state_new` (
+                `cardId` INTEGER NOT NULL,
+                `groupId` INTEGER NOT NULL,
+                `fsrsStability` REAL NOT NULL DEFAULT 0.0,
+                `fsrsDifficulty` REAL NOT NULL DEFAULT 0.0,
+                `fsrsElapsedDays` INTEGER NOT NULL DEFAULT 0,
+                `fsrsScheduledDays` INTEGER NOT NULL DEFAULT 0,
+                `fsrsReps` INTEGER NOT NULL DEFAULT 0,
+                `fsrsLapses` INTEGER NOT NULL DEFAULT 0,
+                `fsrsState` TEXT NOT NULL DEFAULT 'NEW',
+                `lastReview` INTEGER NOT NULL DEFAULT 0,
+                `nextReview` INTEGER NOT NULL DEFAULT 0,
+                `modified` INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY(`cardId`, `groupId`),
+                FOREIGN KEY(`cardId`) REFERENCES `cards`(`id`) ON DELETE CASCADE,
+                FOREIGN KEY(`groupId`) REFERENCES `groups`(`id`) ON DELETE CASCADE
+            )
+        """)
+        connection.execSQL("""
+            INSERT INTO `card_group_learning_state_new` (
+                `cardId`, `groupId`,
+                `fsrsStability`, `fsrsDifficulty`, `fsrsElapsedDays`, `fsrsScheduledDays`,
+                `fsrsReps`, `fsrsLapses`, `fsrsState`,
+                `lastReview`, `nextReview`, `modified`
+            )
+            SELECT
+                `cardId`, `groupId`,
+                `fsrsStability`, `fsrsDifficulty`, `fsrsElapsedDays`, `fsrsScheduledDays`,
+                `fsrsReps`, `fsrsLapses`, `fsrsState`,
+                `lastReview`, `nextReview`, `modified`
+            FROM `card_group_learning_state`
+        """)
+        connection.execSQL("DROP TABLE `card_group_learning_state`")
+        connection.execSQL("ALTER TABLE `card_group_learning_state_new` RENAME TO `card_group_learning_state`")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_card_group_learning_state_groupId` ON `card_group_learning_state`(`groupId`)")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_card_group_learning_state_cardId` ON `card_group_learning_state`(`cardId`)")
+
+        // groups: drop the per-group SM-2 interval modifier override.
+        connection.execSQL("""
+            CREATE TABLE IF NOT EXISTS `groups_new` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `name` TEXT NOT NULL,
+                `description` TEXT NOT NULL DEFAULT '',
+                `independentLearning` INTEGER NOT NULL DEFAULT 0,
+                `created` INTEGER NOT NULL DEFAULT 0,
+                `cardsPerSession` INTEGER DEFAULT NULL,
+                `autoShowAnswer` INTEGER DEFAULT NULL,
+                `randomizeDueCards` INTEGER DEFAULT NULL,
+                `randomizeBucketHours` INTEGER DEFAULT NULL,
+                `practiceDays` TEXT DEFAULT NULL,
+                `maximumInterval` INTEGER DEFAULT NULL,
+                `fsrsRetention` INTEGER DEFAULT NULL,
+                `fsrsEnableFuzzing` INTEGER DEFAULT NULL
+            )
+        """)
+        connection.execSQL("""
+            INSERT INTO `groups_new` (
+                `id`, `name`, `description`, `independentLearning`, `created`,
+                `cardsPerSession`, `autoShowAnswer`, `randomizeDueCards`,
+                `randomizeBucketHours`, `practiceDays`, `maximumInterval`,
+                `fsrsRetention`, `fsrsEnableFuzzing`
+            )
+            SELECT
+                `id`, `name`, `description`, `independentLearning`, `created`,
+                `cardsPerSession`, `autoShowAnswer`, `randomizeDueCards`,
+                `randomizeBucketHours`, `practiceDays`, `maximumInterval`,
+                `fsrsRetention`, `fsrsEnableFuzzing`
+            FROM `groups`
+        """)
+        connection.execSQL("DROP TABLE `groups`")
+        connection.execSQL("ALTER TABLE `groups_new` RENAME TO `groups`")
+    }
+}
+
+/**
  * Every migration, oldest first. The SQL is identical on every platform, so
  * each platform's builder passes this same array and there is nothing here
  * for a target to override.
@@ -239,4 +369,5 @@ val ALL_MIGRATIONS: Array<Migration> = arrayOf(
     MIGRATION_8_9,
     MIGRATION_9_10,
     MIGRATION_10_11,
+    MIGRATION_11_12,
 )

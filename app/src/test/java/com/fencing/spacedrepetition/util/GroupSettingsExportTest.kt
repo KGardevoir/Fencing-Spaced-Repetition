@@ -3,7 +3,6 @@
 
 package com.fencing.spacedrepetition.util
 
-import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.Group
@@ -183,7 +182,7 @@ class GroupSettingsExportTest {
     fun `V3 export includes group settings metadata`() {
         val card = Card(
             id = 1, question = "Q1", answer = "A1",
-            algorithm = AlgorithmType.FSRS, created = 0, modified = 0
+            created = 0, modified = 0
         )
 
         val groups = listOf(
@@ -208,7 +207,7 @@ class GroupSettingsExportTest {
     fun `V3 export excludes groups without custom settings`() {
         val card = Card(
             id = 1, question = "Q1", answer = "A1",
-            algorithm = AlgorithmType.FSRS, created = 0, modified = 0
+            created = 0, modified = 0
         )
 
         val groups = listOf(
@@ -282,7 +281,6 @@ class GroupSettingsExportTest {
     fun `V3 export and import round-trip preserves group settings`() {
         val card = Card(
             id = 1, question = "Test Card", answer = "Test Answer",
-            algorithm = AlgorithmType.FSRS,
             fsrsStability = 5.0, fsrsDifficulty = 3.0, fsrsState = "REVIEW",
             fsrsReps = 4, fsrsLapses = 1,
             created = 0, modified = 0
@@ -343,7 +341,6 @@ class GroupSettingsExportTest {
     fun `V3 export with group-specific states and settings round-trip`() {
         val card = Card(
             id = 1, question = "Parry-Riposte", answer = "4-6",
-            algorithm = AlgorithmType.FSRS,
             fsrsStability = 2.0, fsrsState = "LEARNING",
             created = 0, modified = 0
         )
@@ -394,8 +391,8 @@ class GroupSettingsExportTest {
     // ==================== Retention settings export/import TESTS ====================
 
     @Test
-    fun `parseGroupSettingsLine - parses fsrsRetention and sm2IntervalModifier`() {
-        val line = "#GROUP_SETTINGS:RetentionGroup\tfsrsRetention=85\tsm2IntervalModifier=75"
+    fun `parseGroupSettingsLine - parses fsrsRetention`() {
+        val line = "#GROUP_SETTINGS:RetentionGroup\tfsrsRetention=85"
 
         val result = CardImportExport.parseGroupSettingsLine(line)
 
@@ -403,12 +400,11 @@ class GroupSettingsExportTest {
         val (name, settings) = result!!
         assertEquals("RetentionGroup", name)
         assertEquals("85", settings["fsrsRetention"])
-        assertEquals("75", settings["sm2IntervalModifier"])
     }
 
     @Test
     fun `parseGroupSettingsLine - parses retention alongside other settings`() {
-        val line = "#GROUP_SETTINGS:MyGroup\tcardsPerSession=5\tmaximumInterval=365\tfsrsRetention=90\tsm2IntervalModifier=100"
+        val line = "#GROUP_SETTINGS:MyGroup\tcardsPerSession=5\tmaximumInterval=365\tfsrsRetention=90"
 
         val result = CardImportExport.parseGroupSettingsLine(line)!!
         val (_, settings) = result
@@ -416,55 +412,44 @@ class GroupSettingsExportTest {
         assertEquals("5",   settings["cardsPerSession"])
         assertEquals("365", settings["maximumInterval"])
         assertEquals("90",  settings["fsrsRetention"])
-        assertEquals("100", settings["sm2IntervalModifier"])
     }
 
     @Test
-    fun `applyGroupSettings - applies fsrsRetention and sm2IntervalModifier`() {
+    fun `applyGroupSettings - applies fsrsRetention`() {
         val group = Group(id = 1, name = "Test")
-        val settings = mapOf(
-            "fsrsRetention" to "85",
-            "sm2IntervalModifier" to "75"
-        )
+        val settings = mapOf("fsrsRetention" to "85")
 
         val result = CardImportExport.applyGroupSettings(group, settings)
 
         assertEquals(85, result.fsrsRetention)
-        assertEquals(75, result.sm2IntervalModifier)
     }
 
     @Test
     fun `applyGroupSettings - invalid retention values become null`() {
         val group = Group(id = 1, name = "Test")
-        val settings = mapOf(
-            "fsrsRetention" to "notANumber",
-            "sm2IntervalModifier" to "abc"
-        )
+        val settings = mapOf("fsrsRetention" to "notANumber")
 
         val result = CardImportExport.applyGroupSettings(group, settings)
 
         assertNull(result.fsrsRetention)
-        assertNull(result.sm2IntervalModifier)
     }
 
     @Test
     fun `applyGroupSettings - empty map clears retention overrides`() {
-        val group = Group(id = 1, name = "Test", fsrsRetention = 85, sm2IntervalModifier = 75)
+        val group = Group(id = 1, name = "Test", fsrsRetention = 85)
 
         val result = CardImportExport.applyGroupSettings(group, emptyMap())
 
         assertNull(result.fsrsRetention)
-        assertNull(result.sm2IntervalModifier)
     }
 
     @Test
-    fun `V3 export includes fsrsRetention and sm2IntervalModifier in group settings line`() {
+    fun `V4 export includes fsrsRetention in group settings line`() {
         val card = Card(
             id = 1, question = "Q1", answer = "A1",
-            algorithm = AlgorithmType.FSRS,
             created = 0, modified = 0
         )
-        val group = Group(id = 1, name = "RetentionGroup", fsrsRetention = 85, sm2IntervalModifier = 75)
+        val group = Group(id = 1, name = "RetentionGroup", fsrsRetention = 85)
 
         val output = ByteArrayOutputStream()
         CardImportExport.exportCardsWithGroupStates(
@@ -477,14 +462,12 @@ class GroupSettingsExportTest {
         val content = output.toString(Charsets.UTF_8.name())
         assertTrue(content.contains("#GROUP_SETTINGS:RetentionGroup"))
         assertTrue(content.contains("fsrsRetention=85"))
-        assertTrue(content.contains("sm2IntervalModifier=75"))
     }
 
     @Test
-    fun `V3 export omits retention fields when they are null`() {
+    fun `V4 export omits retention fields when they are null`() {
         val card = Card(
             id = 1, question = "Q1", answer = "A1",
-            algorithm = AlgorithmType.FSRS,
             created = 0, modified = 0
         )
         // Group has cardsPerSession set (so the settings line is emitted) but no retention
@@ -501,20 +484,17 @@ class GroupSettingsExportTest {
         val content = output.toString(Charsets.UTF_8.name())
         assertTrue(content.contains("#GROUP_SETTINGS:NoRetentionGroup"))
         assertFalse(content.contains("fsrsRetention"))
-        assertFalse(content.contains("sm2IntervalModifier"))
     }
 
     @Test
-    fun `retention settings round-trip through V3 export and import`() {
+    fun `retention settings round-trip through V4 export and import`() {
         val card = Card(
             id = 1, question = "Fleche", answer = "Running attack",
-            algorithm = AlgorithmType.FSRS,
             created = 0, modified = 0
         )
         val group = Group(
             id = 1, name = "FencingDrills",
             fsrsRetention = 85,
-            sm2IntervalModifier = 75,
             cardsPerSession = 4
         )
 
@@ -534,14 +514,12 @@ class GroupSettingsExportTest {
         assertNotNull(parsedSettings["FencingDrills"])
         val drillSettings = parsedSettings["FencingDrills"]!!
         assertEquals("85", drillSettings["fsrsRetention"])
-        assertEquals("75", drillSettings["sm2IntervalModifier"])
         assertEquals("4",  drillSettings["cardsPerSession"])
 
         // Apply settings to a blank group and verify
         val baseGroup = Group(id = 1, name = "FencingDrills")
         val applied = CardImportExport.applyGroupSettings(baseGroup, drillSettings)
         assertEquals(85, applied.fsrsRetention)
-        assertEquals(75, applied.sm2IntervalModifier)
         assertEquals(4,  applied.cardsPerSession)
     }
 

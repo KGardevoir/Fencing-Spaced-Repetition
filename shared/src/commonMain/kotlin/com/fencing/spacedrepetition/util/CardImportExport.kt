@@ -11,7 +11,6 @@ package com.fencing.spacedrepetition.util
 
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
-import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.Opponent
@@ -46,6 +45,7 @@ object CardImportExport {
     private const val HEADER_MARKER_V1 = "#FSR_EXPORT_V1"
     private const val HEADER_MARKER_V2 = "#FSR_EXPORT_V2"
     private const val HEADER_MARKER_V3 = "#FSR_EXPORT_V3"
+    private const val HEADER_MARKER_V4 = "#FSR_EXPORT_V4"
     private const val GROUP_SETTINGS_PREFIX = "#GROUP_SETTINGS:"
     private const val OPPONENT_PREFIX = "#OPPONENT:"
     private const val REVIEW_HISTORY_START = "#REVIEW_HISTORY_START"
@@ -54,6 +54,10 @@ object CardImportExport {
     // Older parsers tolerate the extra columns (they look up by index and stop early).
     private const val REVIEW_HISTORY_HEADERS = "#CardQuestion\tReviewTime\tGrade\tAlgorithm\tStateBefore\tStateAfter\tScheduledDays\tElapsedDays\tGroupName\tNotes\tImagePaths\tOpponentName\tStabilityMultiplier"
 
+    // Column indices for the legacy V1/V2/V3 layouts. Still parsed, never
+    // written: exports are V4. The Algorithm and SM2_* columns they reserve
+    // are read past and discarded -- SM-2 is gone, and FSRS is the only
+    // scheduler an algorithm column could have named.
     // Column indices for V1 export format
     private const val COL_V1_QUESTION = 0
     private const val COL_V1_ANSWER = 1
@@ -111,27 +115,33 @@ object CardImportExport {
     private const val COL_V3_SM2_REPETITIONS = 16
     private const val COL_V3_GROUPS = 17
 
-    // Column headers for V1 export
-    private const val COLUMN_HEADERS_V1 = "#Question\tAnswer\tAlgorithm\tNextReview\tLastReview\t" +
-            "FSRS_Stability\tFSRS_Difficulty\tFSRS_State\tFSRS_Reps\tFSRS_Lapses\t" +
-            "FSRS_ScheduledDays\tFSRS_ElapsedDays\tSM2_EaseFactor\tSM2_Interval\t" +
-            "SM2_Repetitions\tGroups(pipe-separated)"
+    // Column indices for V4, the format every export writes. V3 minus the
+    // Algorithm and SM2_* columns, which SM-2's removal left with nothing to
+    // say. Dropping them shifts Groups, so it needs its own marker rather
+    // than a wider V3.
+    private const val COL_V4_QUESTION = 0
+    private const val COL_V4_ANSWER = 1
+    private const val COL_V4_IMAGE_PATHS = 2
+    private const val COL_V4_STATE_CONTEXT = 3
+    private const val COL_V4_NEXT_REVIEW = 4
+    private const val COL_V4_LAST_REVIEW = 5
+    private const val COL_V4_FSRS_STABILITY = 6
+    private const val COL_V4_FSRS_DIFFICULTY = 7
+    private const val COL_V4_FSRS_STATE = 8
+    private const val COL_V4_FSRS_REPS = 9
+    private const val COL_V4_FSRS_LAPSES = 10
+    private const val COL_V4_FSRS_SCHEDULED_DAYS = 11
+    private const val COL_V4_FSRS_ELAPSED_DAYS = 12
+    private const val COL_V4_GROUPS = 13
 
-    // Column headers for V2 export
-    private const val COLUMN_HEADERS_V2 = "#Question\tAnswer\tAlgorithm\tStateContext\tNextReview\tLastReview\t" +
+    // Column headers for V4 export
+    private const val COLUMN_HEADERS_V4 = "#Question\tAnswer\tImagePaths(double-pipe-separated)\tStateContext\tNextReview\tLastReview\t" +
             "FSRS_Stability\tFSRS_Difficulty\tFSRS_State\tFSRS_Reps\tFSRS_Lapses\t" +
-            "FSRS_ScheduledDays\tFSRS_ElapsedDays\tSM2_EaseFactor\tSM2_Interval\t" +
-            "SM2_Repetitions\tGroups(pipe-separated)"
-
-    // Column headers for V3 export (includes ImagePaths)
-    private const val COLUMN_HEADERS_V3 = "#Question\tAnswer\tImagePaths(double-pipe-separated)\tAlgorithm\tStateContext\tNextReview\tLastReview\t" +
-            "FSRS_Stability\tFSRS_Difficulty\tFSRS_State\tFSRS_Reps\tFSRS_Lapses\t" +
-            "FSRS_ScheduledDays\tFSRS_ElapsedDays\tSM2_EaseFactor\tSM2_Interval\t" +
-            "SM2_Repetitions\tGroups(pipe-separated)"
+            "FSRS_ScheduledDays\tFSRS_ElapsedDays\tGroups(pipe-separated)"
 
     /**
      * Parses a TSV input stream into a list of ParsedCard objects.
-     * Supports both simple (question\tanswer) and full export formats (V1, V2, and V3).
+     * Supports both simple (question\tanswer) and full export formats (V1 through V4).
      * Returns pair of (valid cards, error messages)
      */
     /** Parsed group settings from an import file */
@@ -168,6 +178,7 @@ object CardImportExport {
             // Detect format version
             val firstLine = lines.firstOrNull() ?: ""
             val formatVersion = when {
+                firstLine.startsWith(HEADER_MARKER_V4) -> 4
                 firstLine.startsWith(HEADER_MARKER_V3) -> 3
                 firstLine.startsWith(HEADER_MARKER_V2) -> 2
                 firstLine.startsWith(HEADER_MARKER_V1) -> 1
@@ -177,7 +188,7 @@ object CardImportExport {
             if (formatVersion == 0) {
                 return Pair(
                     emptyList(),
-                    listOf("Invalid file format: file must begin with $HEADER_MARKER_V1, $HEADER_MARKER_V2, or $HEADER_MARKER_V3")
+                    listOf("Invalid file format: file must begin with $HEADER_MARKER_V1, $HEADER_MARKER_V2, $HEADER_MARKER_V3, or $HEADER_MARKER_V4")
                 )
             }
 
@@ -211,6 +222,7 @@ object CardImportExport {
 
                 try {
                     val parsedCard = when (formatVersion) {
+                        4 -> parseV4FormatLine(trimmedLine, lineNumber)
                         3 -> parseV3FormatLine(trimmedLine, lineNumber)
                         2 -> parseV2FormatLine(trimmedLine, lineNumber)
                         1 -> parseV1FormatLine(trimmedLine, lineNumber)
@@ -267,13 +279,6 @@ object CardImportExport {
         }
 
         // Parse full format
-        val algorithmStr = parts.getOrNull(COL_V1_ALGORITHM)?.trim() ?: "FSRS"
-        val algorithm = try {
-            AlgorithmType.valueOf(algorithmStr)
-        } catch (e: Exception) {
-            AlgorithmType.FSRS
-        }
-
         val groupsStr = parts.getOrNull(COL_V1_GROUPS)?.trim() ?: ""
         val groupNames = if (groupsStr.isNotEmpty()) {
             groupsStr.split(GROUP_SEPARATOR).map { it.trim() }.filter { it.isNotEmpty() }
@@ -285,7 +290,6 @@ object CardImportExport {
             concept = concept,
             answer = answer,
             lineNumber = lineNumber,
-            algorithm = algorithm,
             stateContext = "GLOBAL",  // V1 format only has global state
             nextReview = parts.getOrNull(COL_V1_NEXT_REVIEW)?.toLongOrNull() ?: 0L,
             lastReview = parts.getOrNull(COL_V1_LAST_REVIEW)?.toLongOrNull() ?: 0L,
@@ -296,9 +300,6 @@ object CardImportExport {
             fsrsLapses = parts.getOrNull(COL_V1_FSRS_LAPSES)?.toIntOrNull() ?: 0,
             fsrsScheduledDays = parts.getOrNull(COL_V1_FSRS_SCHEDULED_DAYS)?.toIntOrNull() ?: 0,
             fsrsElapsedDays = parts.getOrNull(COL_V1_FSRS_ELAPSED_DAYS)?.toIntOrNull() ?: 0,
-            sm2EaseFactor = parts.getOrNull(COL_V1_SM2_EASE_FACTOR)?.toDoubleOrNull() ?: 2.5,
-            sm2Interval = parts.getOrNull(COL_V1_SM2_INTERVAL)?.toIntOrNull() ?: 0,
-            sm2Repetitions = parts.getOrNull(COL_V1_SM2_REPETITIONS)?.toIntOrNull() ?: 0,
             groupNames = groupNames
         )
     }
@@ -321,13 +322,6 @@ object CardImportExport {
         }
 
         // Parse V2 full format
-        val algorithmStr = parts.getOrNull(COL_V2_ALGORITHM)?.trim() ?: "FSRS"
-        val algorithm = try {
-            AlgorithmType.valueOf(algorithmStr)
-        } catch (e: Exception) {
-            AlgorithmType.FSRS
-        }
-
         val stateContext = parts.getOrNull(COL_V2_STATE_CONTEXT)?.trim() ?: "GLOBAL"
 
         val groupsStr = parts.getOrNull(COL_V2_GROUPS)?.trim() ?: ""
@@ -341,7 +335,6 @@ object CardImportExport {
             concept = concept,
             answer = answer,
             lineNumber = lineNumber,
-            algorithm = algorithm,
             stateContext = stateContext,
             nextReview = parts.getOrNull(COL_V2_NEXT_REVIEW)?.toLongOrNull() ?: 0L,
             lastReview = parts.getOrNull(COL_V2_LAST_REVIEW)?.toLongOrNull() ?: 0L,
@@ -352,9 +345,59 @@ object CardImportExport {
             fsrsLapses = parts.getOrNull(COL_V2_FSRS_LAPSES)?.toIntOrNull() ?: 0,
             fsrsScheduledDays = parts.getOrNull(COL_V2_FSRS_SCHEDULED_DAYS)?.toIntOrNull() ?: 0,
             fsrsElapsedDays = parts.getOrNull(COL_V2_FSRS_ELAPSED_DAYS)?.toIntOrNull() ?: 0,
-            sm2EaseFactor = parts.getOrNull(COL_V2_SM2_EASE_FACTOR)?.toDoubleOrNull() ?: 2.5,
-            sm2Interval = parts.getOrNull(COL_V2_SM2_INTERVAL)?.toIntOrNull() ?: 0,
-            sm2Repetitions = parts.getOrNull(COL_V2_SM2_REPETITIONS)?.toIntOrNull() ?: 0,
+            groupNames = groupNames
+        )
+    }
+
+    private fun parseV4FormatLine(line: String, lineNumber: Int): ParsedCard? {
+        val parts = line.split(DELIMITER)
+
+        if (parts.size < 2) {
+            throw IllegalArgumentException("Missing answer")
+        }
+
+        val concept = unescapeNewlines(parts.getOrNull(COL_V4_QUESTION)?.trim() ?: "")
+        val answer = unescapeNewlines(parts.getOrNull(COL_V4_ANSWER)?.trim() ?: "")
+
+        if (concept.isBlank()) throw IllegalArgumentException("Empty question")
+
+        // If only 2 columns, treat as simple format
+        if (parts.size == 2) {
+            return ParsedCard(concept = concept, answer = answer, lineNumber = lineNumber)
+        }
+
+        // Parse image data (base64 encoded)
+        val imageDataStr = parts.getOrNull(COL_V4_IMAGE_PATHS)?.trim() ?: ""
+        val imageData = if (imageDataStr.isNotEmpty()) {
+            imageDataStr.split(IMAGE_SEPARATOR).map { it.trim() }.filter { it.isNotEmpty() }
+        } else {
+            emptyList()
+        }
+
+        val stateContext = parts.getOrNull(COL_V4_STATE_CONTEXT)?.trim() ?: "GLOBAL"
+
+        val groupsStr = parts.getOrNull(COL_V4_GROUPS)?.trim() ?: ""
+        val groupNames = if (groupsStr.isNotEmpty()) {
+            groupsStr.split(GROUP_SEPARATOR).map { it.trim() }.filter { it.isNotEmpty() }
+        } else {
+            emptyList()
+        }
+
+        return ParsedCard(
+            concept = concept,
+            answer = answer,
+            lineNumber = lineNumber,
+            imageData = imageData,  // Store base64 data for later decoding
+            stateContext = stateContext,
+            nextReview = parts.getOrNull(COL_V4_NEXT_REVIEW)?.toLongOrNull() ?: 0L,
+            lastReview = parts.getOrNull(COL_V4_LAST_REVIEW)?.toLongOrNull() ?: 0L,
+            fsrsStability = parts.getOrNull(COL_V4_FSRS_STABILITY)?.toDoubleOrNull() ?: 0.0,
+            fsrsDifficulty = parts.getOrNull(COL_V4_FSRS_DIFFICULTY)?.toDoubleOrNull() ?: 0.0,
+            fsrsState = parts.getOrNull(COL_V4_FSRS_STATE)?.trim() ?: "NEW",
+            fsrsReps = parts.getOrNull(COL_V4_FSRS_REPS)?.toIntOrNull() ?: 0,
+            fsrsLapses = parts.getOrNull(COL_V4_FSRS_LAPSES)?.toIntOrNull() ?: 0,
+            fsrsScheduledDays = parts.getOrNull(COL_V4_FSRS_SCHEDULED_DAYS)?.toIntOrNull() ?: 0,
+            fsrsElapsedDays = parts.getOrNull(COL_V4_FSRS_ELAPSED_DAYS)?.toIntOrNull() ?: 0,
             groupNames = groupNames
         )
     }
@@ -385,13 +428,6 @@ object CardImportExport {
         }
 
         // Parse V3 full format
-        val algorithmStr = parts.getOrNull(COL_V3_ALGORITHM)?.trim() ?: "FSRS"
-        val algorithm = try {
-            AlgorithmType.valueOf(algorithmStr)
-        } catch (e: Exception) {
-            AlgorithmType.FSRS
-        }
-
         val stateContext = parts.getOrNull(COL_V3_STATE_CONTEXT)?.trim() ?: "GLOBAL"
 
         val groupsStr = parts.getOrNull(COL_V3_GROUPS)?.trim() ?: ""
@@ -406,7 +442,6 @@ object CardImportExport {
             answer = answer,
             lineNumber = lineNumber,
             imageData = imageData,  // Store base64 data for later decoding
-            algorithm = algorithm,
             stateContext = stateContext,
             nextReview = parts.getOrNull(COL_V3_NEXT_REVIEW)?.toLongOrNull() ?: 0L,
             lastReview = parts.getOrNull(COL_V3_LAST_REVIEW)?.toLongOrNull() ?: 0L,
@@ -417,15 +452,16 @@ object CardImportExport {
             fsrsLapses = parts.getOrNull(COL_V3_FSRS_LAPSES)?.toIntOrNull() ?: 0,
             fsrsScheduledDays = parts.getOrNull(COL_V3_FSRS_SCHEDULED_DAYS)?.toIntOrNull() ?: 0,
             fsrsElapsedDays = parts.getOrNull(COL_V3_FSRS_ELAPSED_DAYS)?.toIntOrNull() ?: 0,
-            sm2EaseFactor = parts.getOrNull(COL_V3_SM2_EASE_FACTOR)?.toDoubleOrNull() ?: 2.5,
-            sm2Interval = parts.getOrNull(COL_V3_SM2_INTERVAL)?.toIntOrNull() ?: 0,
-            sm2Repetitions = parts.getOrNull(COL_V3_SM2_REPETITIONS)?.toIntOrNull() ?: 0,
             groupNames = groupNames
         )
     }
 
     /**
-     * Exports cards with their groups to V1 format TSV (backward compatibility)
+     * Exports cards with their groups, without per-group learning states.
+     *
+     * Wrote V1 until SM-2 was removed; a Card no longer holds the Algorithm or
+     * SM2_* values that layout reserves columns for, so it writes V4 like every
+     * other export. V1 files still import.
      */
     fun exportCardsWithGroups(
         cardsWithGroups: List<CardWithGroupNames>,
@@ -433,12 +469,11 @@ object CardImportExport {
     ): ExportResult {
         return try {
             out.let { writer ->
-                // Write format marker (V1 for backward compatibility)
-                writer.write(HEADER_MARKER_V1)
+                writer.write(HEADER_MARKER_V4)
                 writer.newLine()
 
                 // Write column headers
-                writer.write(COLUMN_HEADERS_V1)
+                writer.write(COLUMN_HEADERS_V4)
                 writer.newLine()
 
                 cardsWithGroups.forEach { (card, groupNames) ->
@@ -447,7 +482,9 @@ object CardImportExport {
                         append(DELIMITER)
                         append(escapeNewlines(card.answer))
                         append(DELIMITER)
-                        append(card.algorithm.name)
+                        // No images in this export path; the column still holds its place.
+                        append(DELIMITER)
+                        append("GLOBAL")
                         append(DELIMITER)
                         append(card.nextReview)
                         append(DELIMITER)
@@ -467,12 +504,6 @@ object CardImportExport {
                         append(DELIMITER)
                         append(card.fsrsElapsedDays)
                         append(DELIMITER)
-                        append(card.sm2EaseFactor)
-                        append(DELIMITER)
-                        append(card.sm2Interval)
-                        append(DELIMITER)
-                        append(card.sm2Repetitions)
-                        append(DELIMITER)
                         append(groupNames.joinToString(GROUP_SEPARATOR))
                     }
                     writer.write(line)
@@ -486,7 +517,7 @@ object CardImportExport {
     }
 
     /**
-     * Exports cards with group-specific learning states to V3 format TSV.
+     * Exports cards with group-specific learning states to V4 format TSV.
      * Optionally includes a REVIEW_HISTORY section at the end.
      */
     fun exportCardsWithGroupStates(
@@ -503,8 +534,8 @@ object CardImportExport {
             var rowCount = 0
             val writer: Appendable = out
 
-            // Write format marker (V3)
-            writer.write(HEADER_MARKER_V3)
+            // Write format marker (V4)
+            writer.write(HEADER_MARKER_V4)
             writer.newLine()
 
             // Write group settings metadata
@@ -520,7 +551,7 @@ object CardImportExport {
             }
 
             // Write column headers
-            writer.write(COLUMN_HEADERS_V3)
+            writer.write(COLUMN_HEADERS_V4)
             writer.newLine()
 
             cardsWithStates.forEach { (card, groupNames, groupSpecificStates) ->
@@ -575,8 +606,6 @@ object CardImportExport {
             val encodedImages = card.imagePaths.mapNotNull { encodeImageToBase64(it, images) }
             append(encodedImages.joinToString(IMAGE_SEPARATOR))
             append(DELIMITER)
-            append(card.algorithm.name)
-            append(DELIMITER)
             append(stateContext)
             append(DELIMITER)
             append(card.nextReview)
@@ -597,12 +626,6 @@ object CardImportExport {
             append(DELIMITER)
             append(card.fsrsElapsedDays)
             append(DELIMITER)
-            append(card.sm2EaseFactor)
-            append(DELIMITER)
-            append(card.sm2Interval)
-            append(DELIMITER)
-            append(card.sm2Repetitions)
-            append(DELIMITER)
             append(groupNames.joinToString(GROUP_SEPARATOR))
         }
     }
@@ -621,8 +644,6 @@ object CardImportExport {
             // Encode images to base64
             val encodedImages = card.imagePaths.mapNotNull { encodeImageToBase64(it, images) }
             append(encodedImages.joinToString(IMAGE_SEPARATOR))
-            append(DELIMITER)
-            append(card.algorithm.name)
             append(DELIMITER)
             append(groupName)  // StateContext is the group name
             append(DELIMITER)
@@ -643,12 +664,6 @@ object CardImportExport {
             append(learningState.fsrsScheduledDays)
             append(DELIMITER)
             append(learningState.fsrsElapsedDays)
-            append(DELIMITER)
-            append(learningState.sm2EaseFactor)
-            append(DELIMITER)
-            append(learningState.sm2Interval)
-            append(DELIMITER)
-            append(learningState.sm2Repetitions)
             append(DELIMITER)
             append(groupName)  // Groups column - just the group name for group-specific rows
         }
@@ -676,7 +691,6 @@ object CardImportExport {
                 question = parsed.concept,
                 answer = parsed.answer,
                 imagePaths = parsed.imagePaths,
-                algorithm = parsed.algorithm ?: AlgorithmType.FSRS,
                 nextReview = parsed.nextReview ?: 0L,
                 lastReview = parsed.lastReview ?: 0L,
                 fsrsStability = parsed.fsrsStability ?: 0.0,
@@ -686,9 +700,6 @@ object CardImportExport {
                 fsrsLapses = parsed.fsrsLapses ?: 0,
                 fsrsScheduledDays = parsed.fsrsScheduledDays ?: 0,
                 fsrsElapsedDays = parsed.fsrsElapsedDays ?: 0,
-                sm2EaseFactor = parsed.sm2EaseFactor ?: 2.5,
-                sm2Interval = parsed.sm2Interval ?: 0,
-                sm2Repetitions = parsed.sm2Repetitions ?: 0,
                 created = now,
                 modified = now
             )
@@ -697,7 +708,6 @@ object CardImportExport {
                 question = parsed.concept,
                 answer = parsed.answer,
                 imagePaths = parsed.imagePaths,
-                algorithm = AlgorithmType.FSRS,
                 created = now,
                 modified = now
             )
@@ -736,7 +746,6 @@ object CardImportExport {
             group.practiceDays?.let { append("\tpracticeDays=$it") }
             group.maximumInterval?.let { append("\tmaximumInterval=$it") }
             group.fsrsRetention?.let { append("\tfsrsRetention=$it") }
-            group.sm2IntervalModifier?.let { append("\tsm2IntervalModifier=$it") }
         }
     }
 
@@ -811,8 +820,7 @@ object CardImportExport {
             randomizeBucketHours = settings["randomizeBucketHours"]?.toIntOrNull(),
             practiceDays = settings["practiceDays"],
             maximumInterval = settings["maximumInterval"]?.toIntOrNull(),
-            fsrsRetention = settings["fsrsRetention"]?.toIntOrNull(),
-            sm2IntervalModifier = settings["sm2IntervalModifier"]?.toIntOrNull()
+            fsrsRetention = settings["fsrsRetention"]?.toIntOrNull()
         )
     }
 

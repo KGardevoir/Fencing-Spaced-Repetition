@@ -3,7 +3,6 @@
 
 package com.fencing.spacedrepetition.util
 
-import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import org.junit.Assert.*
@@ -44,8 +43,7 @@ class ReviewHistoryImportExportTest {
     private fun makeCard(id: Long, question: String, answer: String = "Answer") = Card(
         id = id,
         question = question,
-        answer = answer,
-        algorithm = AlgorithmType.FSRS
+        answer = answer
     )
 
     // ==================== parseReviewHistory TESTS ====================

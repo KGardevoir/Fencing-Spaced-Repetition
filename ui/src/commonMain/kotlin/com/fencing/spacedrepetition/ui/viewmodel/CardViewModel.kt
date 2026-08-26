@@ -7,7 +7,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.algorithm.RetentionPlanner
 import com.fencing.spacedrepetition.algorithm.ScheduleEstimate
-import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.CardWithGroups
@@ -155,18 +154,8 @@ class CardViewModel(
             val sorted = when (sortOption) {
                 CardSortOption.DUE_DATE -> filtered.sortedBy { it.nextReview }
                 CardSortOption.NAME -> filtered.sortedBy { it.question.lowercase() }
-                CardSortOption.REVIEWS -> filtered.sortedBy {
-                    when (it.algorithm) {
-                        AlgorithmType.FSRS -> it.fsrsReps
-                        AlgorithmType.SM2 -> it.sm2Repetitions
-                    }
-                }
-                CardSortOption.DIFFICULTY -> filtered.sortedBy {
-                    when (it.algorithm) {
-                        AlgorithmType.FSRS -> it.fsrsDifficulty
-                        AlgorithmType.SM2 -> 2.5 - it.sm2EaseFactor
-                    }
-                }
+                CardSortOption.REVIEWS -> filtered.sortedBy { it.fsrsReps }
+                CardSortOption.DIFFICULTY -> filtered.sortedBy { it.fsrsDifficulty }
             }
 
             if (direction == SortDirection.DESCENDING) sorted.reversed() else sorted
@@ -241,7 +230,6 @@ class CardViewModel(
         question: String,
         answer: String,
         groupIds: List<Long>,
-        algorithm: AlgorithmType,
         imagePaths: List<String> = emptyList(),
         onSuccess: () -> Unit
     ) {
@@ -250,7 +238,6 @@ class CardViewModel(
                 val card = Card(
                     question = question,
                     answer = answer,
-                    algorithm = algorithm,
                     imagePaths = imagePaths
                 )
                 repository.insertCardWithGroups(card, groupIds)
@@ -473,12 +460,8 @@ class CardViewModel(
     /**
      * Imports a chosen archive: cards, their groups, those groups' settings,
      * and the review history and opponents if the file carries them.
-     *
-     * [algorithm] is only reached in the oldest format, which records a
-     * question and an answer and nothing else. Every version since carries
-     * each card's own algorithm.
      */
-    fun importCards(file: ImportFile, algorithm: AlgorithmType = AlgorithmType.FSRS) {
+    fun importCards(file: ImportFile) {
         viewModelScope.launch {
             _importExportState.value = ImportExportState.Loading
             try {
@@ -504,10 +487,9 @@ class CardViewModel(
                             parsedCards.map { it.groupNames },
                             groupIds
                         )
-                    // Question and answer, and the algorithm the user asked for.
+                    // Question and answer, and nothing else.
                     else -> repository.importCards(
-                        parsedCards.map { it.concept to it.answer },
-                        algorithm
+                        parsedCards.map { it.concept to it.answer }
                     )
                 }
 

@@ -28,7 +28,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.CardWithGroups
@@ -979,21 +978,13 @@ fun CardListItem(
                             )
 
                             // Display additional sort field info
-                            val reviews = when (card.algorithm) {
-                                AlgorithmType.FSRS -> card.fsrsReps
-                                AlgorithmType.SM2 -> card.sm2Repetitions
-                            }
                             Text(
-                                text = "• $reviews reviews",
+                                text = "• ${card.fsrsReps} reviews",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            val difficulty = when (card.algorithm) {
-                                AlgorithmType.FSRS -> card.fsrsDifficulty.toOneDecimal()
-                                AlgorithmType.SM2 -> (2.5 - card.sm2EaseFactor).toOneDecimal()
-                            }
                             Text(
-                                text = "• Difficulty: $difficulty",
+                                text = "• Difficulty: ${card.fsrsDifficulty.toOneDecimal()}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1026,16 +1017,6 @@ fun CardListItem(
                                     )
                                 }
                             }
-                            AssistChip(
-                                onClick = { },
-                                label = {
-                                    Text(
-                                        card.algorithm.name,
-                                        style = MaterialTheme.typography.labelSmall
-                                    )
-                                },
-                                modifier = Modifier.height(24.dp)
-                            )
                             if (card.isDisabled) {
                                 AssistChip(
                                     onClick = { },
@@ -1141,19 +1122,6 @@ fun CardListItem(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                // Algorithm chip
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    InfoChip(
-                        icon = Icons.Default.Psychology,
-                        label = card.algorithm.name
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
                 // Next review info
                 val nextReviewText = if (card.nextReview == 0L) {
                     "New card"
@@ -1202,25 +1170,6 @@ fun CardListItem(
             }
         }
     }
-}
-
-@Composable
-fun InfoChip(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String
-) {
-    AssistChip(
-        onClick = { },
-        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
-        leadingIcon = {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp)
-            )
-        },
-        modifier = Modifier.height(28.dp)
-    )
 }
 
 @Composable

@@ -173,9 +173,6 @@ class GroupRepository(
                             fsrsReps = card.fsrsReps,
                             fsrsLapses = card.fsrsLapses,
                             fsrsState = card.fsrsState,
-                            sm2EaseFactor = card.sm2EaseFactor,
-                            sm2Interval = card.sm2Interval,
-                            sm2Repetitions = card.sm2Repetitions,
                             lastReview = card.lastReview,
                             nextReview = card.nextReview
                         )

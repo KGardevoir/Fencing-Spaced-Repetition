@@ -22,7 +22,7 @@ This is an Android app (Kotlin + Jetpack Compose) for practicing martial arts an
 - Database: Room (SQLite)
 - Preferences: Android DataStore
 - UI: Jetpack Compose with Material Design 3
-- Algorithms: FSRS-6 and SM-2
+- Algorithms: FSRS-6
 
 ## Key Directories
 
