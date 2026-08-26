@@ -15,19 +15,28 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.documentfile.provider.DocumentFile
+import android.content.Context
 import com.fencing.spacedrepetition.BuildConfig
 import com.fencing.spacedrepetition.BuildInfo
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.ui.App
 import com.fencing.spacedrepetition.ui.FileTransfer
 import com.fencing.spacedrepetition.ui.screen.getFilenameFromUri
-import com.fencing.spacedrepetition.ui.viewmodel.AndroidCardViewModel
-import com.fencing.spacedrepetition.ui.viewmodel.AndroidGroupViewModel
+import com.fencing.spacedrepetition.ui.ExportFile
+import com.fencing.spacedrepetition.ui.ImportFile
+import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
+import com.fencing.spacedrepetition.util.CardImportExport
+import com.fencing.spacedrepetition.util.ExportResult
 import com.fencing.spacedrepetition.util.ParsedCard
+import com.fencing.spacedrepetition.util.createCompressedOutputStream
+import com.fencing.spacedrepetition.util.smartInputStream
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * The Android app, which is the shared app plus the things only Android can do.
@@ -39,9 +48,9 @@ import com.fencing.spacedrepetition.util.ParsedCard
  */
 @Composable
 fun AppNavigation(
-    cardViewModel: AndroidCardViewModel,
+    cardViewModel: CardViewModel,
     practiceViewModel: PracticeViewModel,
-    groupViewModel: AndroidGroupViewModel,
+    groupViewModel: GroupViewModel,
     settingsViewModel: SettingsViewModel,
     historyViewModel: HistoryViewModel,
     opponentViewModel: OpponentViewModel
@@ -95,14 +104,17 @@ fun AppNavigation(
  * arrives with nothing but a Uri, so the intent behind it has to be
  * remembered on this side. Single flight is safe: the picker is full-screen
  * system UI, so a second request cannot start while one is open.
+ *
+ * What happens to the chosen document is not here. A Uri becomes an
+ * [ImportFile] or an [ExportFile] and the view models -- shared with the
+ * browser build -- do the reading, parsing, formatting and writing.
  */
 @Composable
 private fun rememberAndroidFileTransfer(
-    cardViewModel: AndroidCardViewModel,
-    groupViewModel: AndroidGroupViewModel
+    cardViewModel: CardViewModel,
+    groupViewModel: GroupViewModel
 ): FileTransfer {
     val context = LocalContext.current
-    val resolver = context.contentResolver
 
     var archiveIncludesHistory by remember { mutableStateOf(false) }
     var archiveGroupIds by remember { mutableStateOf<List<Long>?>(null) }
@@ -115,18 +127,19 @@ private fun rememberAndroidFileTransfer(
     val archiveImport = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
-        uri?.let { cardViewModel.importCards(it, resolver) }
+        uri?.let { cardViewModel.importCards(importFile(context, it)) }
     }
 
     val archiveExport = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/gzip")
     ) { uri: Uri? ->
         uri?.let {
+            val destination = exportFile(context, it, compress = true)
             val groupIds = archiveGroupIds
             if (groupIds == null) {
-                cardViewModel.exportAllCards(it, resolver, archiveIncludesHistory)
+                cardViewModel.exportAllCards(destination, archiveIncludesHistory)
             } else {
-                cardViewModel.exportSelectedGroups(groupIds, it, resolver, archiveIncludesHistory)
+                cardViewModel.exportSelectedGroups(groupIds, destination, archiveIncludesHistory)
             }
         }
     }
@@ -134,21 +147,19 @@ private fun rememberAndroidFileTransfer(
     val csvImport = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
-        uri?.let {
-            val filename = getFilenameFromUri(context, it) ?: "import.csv"
-            cardViewModel.csvImportParseFile(it, resolver, filename)
-        }
+        uri?.let { cardViewModel.csvImportParseFile(importFile(context, it)) }
     }
 
     val csvExport = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/csv")
     ) { uri: Uri? ->
         uri?.let {
+            val destination = exportFile(context, it, compress = false)
             val groupIds = csvGroupIds
             if (groupIds == null) {
-                cardViewModel.exportAllCardsCsv(it, resolver)
+                cardViewModel.exportAllCardsCsv(destination)
             } else {
-                cardViewModel.exportSelectedGroupsCsv(groupIds, it, resolver)
+                cardViewModel.exportSelectedGroupsCsv(groupIds, destination)
             }
         }
     }
@@ -156,14 +167,22 @@ private fun rememberAndroidFileTransfer(
     val groupImport = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
-        uri?.let { groupForImport?.let { g -> groupViewModel.importCardsToGroup(g.id, uri, resolver) } }
+        uri?.let {
+            groupForImport?.let { g ->
+                groupViewModel.importCardsToGroup(g.id, importFile(context, uri))
+            }
+        }
         groupForImport = null
     }
 
     val groupExport = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/gzip")
     ) { uri: Uri? ->
-        uri?.let { groupForExport?.let { g -> groupViewModel.exportGroupCards(g.id, uri, resolver) } }
+        uri?.let {
+            groupForExport?.let { g ->
+                groupViewModel.exportGroupCards(g.id, exportFile(context, uri, compress = true))
+            }
+        }
         groupForExport = null
     }
 
@@ -172,8 +191,7 @@ private fun rememberAndroidFileTransfer(
     ) { uri: Uri? ->
         uri?.let {
             if (groupForCsvImport != null) {
-                val filename = getFilenameFromUri(context, uri) ?: "import.csv"
-                groupViewModel.csvImportParseFile(uri, resolver, filename)
+                groupViewModel.csvImportParseFile(importFile(context, uri))
             }
         }
         groupForCsvImport = null
@@ -182,57 +200,46 @@ private fun rememberAndroidFileTransfer(
     val groupCsvExport = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/csv")
     ) { uri: Uri? ->
-        uri?.let { groupForCsvExport?.let { g -> groupViewModel.exportGroupCardsCsv(g.id, uri, resolver) } }
+        uri?.let {
+            groupForCsvExport?.let { g ->
+                groupViewModel.exportGroupCardsCsv(g.id, exportFile(context, uri, compress = false))
+            }
+        }
         groupForCsvExport = null
     }
 
     return remember(cardViewModel, groupViewModel) {
         object : FileTransfer {
 
-            override fun importCards() = archiveImport.launch(
-                arrayOf(
-                    "application/gzip", "application/x-gzip", "text/plain",
-                    "text/tab-separated-values", "application/octet-stream", "*/*"
-                )
-            )
+            override fun importCards() = archiveImport.launch(ARCHIVE_TYPES)
 
             override fun exportAllCards(includeHistory: Boolean) {
                 archiveGroupIds = null
                 archiveIncludesHistory = includeHistory
-                archiveExport.launch("all_cards.tsv.gz")
+                archiveExport.launch(CardImportExport.generateAllCardsFilename())
             }
 
             override fun exportGroups(groupIds: List<Long>, includeHistory: Boolean) {
                 archiveGroupIds = groupIds
                 archiveIncludesHistory = includeHistory
-                archiveExport.launch("selected_groups_cards.tsv.gz")
+                archiveExport.launch(CardImportExport.generateSelectedGroupsFilename())
             }
 
-            override fun importCardsCsv() = csvImport.launch(
-                arrayOf(
-                    "text/csv", "text/comma-separated-values", "text/plain",
-                    "application/octet-stream", "*/*"
-                )
-            )
+            override fun importCardsCsv() = csvImport.launch(CSV_TYPES)
 
             override fun exportAllCardsCsv() {
                 csvGroupIds = null
-                csvExport.launch("all_cards.csv")
+                csvExport.launch(CardImportExport.generateAllCardsCsvFilename())
             }
 
             override fun exportGroupsCsv(groupIds: List<Long>) {
                 csvGroupIds = groupIds
-                csvExport.launch("selected_groups_cards.csv")
+                csvExport.launch(CardImportExport.generateSelectedGroupsCsvFilename())
             }
 
             override fun importIntoGroup(group: Group) {
                 groupForImport = group
-                groupImport.launch(
-                    arrayOf(
-                        "application/gzip", "application/x-gzip", "text/plain",
-                        "text/tab-separated-values", "application/octet-stream", "*/*"
-                    )
-                )
+                groupImport.launch(ARCHIVE_TYPES)
             }
 
             override fun exportGroup(group: Group) {
@@ -242,12 +249,7 @@ private fun rememberAndroidFileTransfer(
 
             override fun importCsvIntoGroup(group: Group) {
                 groupForCsvImport = group
-                groupCsvImport.launch(
-                    arrayOf(
-                        "text/csv", "text/comma-separated-values", "text/plain",
-                        "application/octet-stream", "*/*"
-                    )
-                )
+                groupCsvImport.launch(CSV_TYPES)
             }
 
             override fun exportGroupCsv(group: Group) {
@@ -273,3 +275,76 @@ private fun rememberAndroidFileTransfer(
         }
     }
 }
+
+// Both lists end in */*, and have to: an export of this app's is a .tsv.gz
+// and a document provider may report it as anything or as nothing, so a
+// picker that took the named types literally would grey out the very file the
+// user came to choose.
+private val ARCHIVE_TYPES = arrayOf(
+    "application/gzip", "application/x-gzip", "text/plain",
+    "text/tab-separated-values", "application/octet-stream", "*/*"
+)
+
+private val CSV_TYPES = arrayOf(
+    "text/csv", "text/comma-separated-values", "text/plain",
+    "application/octet-stream", "*/*"
+)
+
+/**
+ * A chosen document, read as text.
+ *
+ * Gzip is detected rather than assumed, by [CardImportExport.smartInputStream]
+ * reading the first two bytes: an export of this app's is compressed and a
+ * file someone wrote by hand is not, and both are offered by the same picker.
+ */
+private fun importFile(context: Context, uri: Uri): ImportFile = object : ImportFile {
+
+    override val name: String = getFilenameFromUri(context, uri) ?: "import"
+
+    override suspend fun text(): String? = withContext(Dispatchers.IO) {
+        try {
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                CardImportExport.smartInputStream(stream)
+                    .bufferedReader(Charsets.UTF_8)
+                    .readText()
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+}
+
+/**
+ * A chosen document, written to as the export produces it.
+ *
+ * The writer goes straight to the document -- through gzip, for an archive --
+ * so a collection with a hundred photographs in it is never held in memory as
+ * one string. That is the reason [ExportFile] takes the formatting rather
+ * than the finished text.
+ */
+private fun exportFile(context: Context, uri: Uri, compress: Boolean): ExportFile =
+    object : ExportFile {
+
+        override suspend fun write(content: (Appendable) -> ExportResult): ExportResult =
+            withContext(Dispatchers.IO) {
+                try {
+                    context.contentResolver.openOutputStream(uri)?.use { stream ->
+                        if (compress) {
+                            val gzip = CardImportExport.createCompressedOutputStream(stream)
+                            val writer = gzip.bufferedWriter(Charsets.UTF_8)
+                            val result = content(writer)
+                            // Flushed and finished by hand rather than with use:
+                            // the gzip trailer is written by close, and closing
+                            // the writer alone would leave the stream truncated.
+                            writer.flush()
+                            gzip.close()
+                            result
+                        } else {
+                            stream.bufferedWriter(Charsets.UTF_8).use { writer -> content(writer) }
+                        }
+                    } ?: ExportResult.Error("Failed to open file for writing")
+                } catch (e: Exception) {
+                    ExportResult.Error("Failed to write file: ${e.message}")
+                }
+            }
+    }

@@ -72,6 +72,14 @@ class LocalStoragePreferences : AppPreferences {
     private val lastBackupTimeState = MutableStateFlow(readLongOrNull("last_backup_time") ?: 0L)
     private val maxBackupsKeptState =
         MutableStateFlow(readInt("max_backups_kept", Defaults.DEFAULT_MAX_BACKUPS_KEPT))
+    private val backupReminderEnabledState = MutableStateFlow(
+        readBoolean("backup_reminder_enabled", Defaults.DEFAULT_BACKUP_REMINDER_ENABLED)
+    )
+    private val backupReminderIntervalDaysState = MutableStateFlow(
+        readInt("backup_reminder_interval_days", Defaults.DEFAULT_BACKUP_REMINDER_INTERVAL_DAYS)
+    )
+    private val backupReminderDismissedTimeState =
+        MutableStateFlow(readLongOrNull("backup_reminder_dismissed_time") ?: 0L)
 
     override val themeMode: Flow<ThemeMode> = themeModeState.asStateFlow()
     override val autoShowAnswer: Flow<Boolean> = autoShowAnswerState.asStateFlow()
@@ -90,6 +98,11 @@ class LocalStoragePreferences : AppPreferences {
     override val autoBackupIntervalDays: Flow<Int> = autoBackupIntervalDaysState.asStateFlow()
     override val lastBackupTime: Flow<Long> = lastBackupTimeState.asStateFlow()
     override val maxBackupsKept: Flow<Int> = maxBackupsKeptState.asStateFlow()
+    override val backupReminderEnabled: Flow<Boolean> = backupReminderEnabledState.asStateFlow()
+    override val backupReminderIntervalDays: Flow<Int> =
+        backupReminderIntervalDaysState.asStateFlow()
+    override val backupReminderDismissedTime: Flow<Long> =
+        backupReminderDismissedTimeState.asStateFlow()
 
     override suspend fun setThemeMode(mode: ThemeMode) =
         write("theme_mode", mode.name, themeModeState, mode)
@@ -159,6 +172,25 @@ class LocalStoragePreferences : AppPreferences {
         val valid = count.coerceIn(Defaults.MIN_MAX_BACKUPS_KEPT, Defaults.MAX_MAX_BACKUPS_KEPT)
         write("max_backups_kept", valid.toString(), maxBackupsKeptState, valid)
     }
+
+    override suspend fun setBackupReminderEnabled(enabled: Boolean) =
+        write("backup_reminder_enabled", enabled.toString(), backupReminderEnabledState, enabled)
+
+    override suspend fun setBackupReminderIntervalDays(days: Int) =
+        write(
+            "backup_reminder_interval_days",
+            days.toString(),
+            backupReminderIntervalDaysState,
+            days
+        )
+
+    override suspend fun setBackupReminderDismissedTime(timeMillis: Long) =
+        write(
+            "backup_reminder_dismissed_time",
+            timeMillis.toString(),
+            backupReminderDismissedTimeState,
+            timeMillis
+        )
 
     private fun <T> write(key: String, stored: String, state: MutableStateFlow<T>, value: T) {
         writeString(key, stored)

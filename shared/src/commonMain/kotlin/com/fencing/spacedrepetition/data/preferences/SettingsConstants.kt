@@ -52,6 +52,15 @@ object SettingsConstants {
     const val DEFAULT_AUTO_BACKUP_ENABLED = false
     const val DEFAULT_AUTO_BACKUP_INTERVAL_DAYS = 1
 
+    /**
+     * The reminder is on by default, unlike the automatic backup it stands in
+     * for where there is no automatic backup to have. A browser holds the
+     * whole collection in storage it is allowed to evict, and a reminder the
+     * user never turned on is the only warning they would get.
+     */
+    const val DEFAULT_BACKUP_REMINDER_ENABLED = true
+    const val DEFAULT_BACKUP_REMINDER_INTERVAL_DAYS = 7
+
     const val DEFAULT_MAX_BACKUPS_KEPT = 7
     const val MIN_MAX_BACKUPS_KEPT = 1
     const val MAX_MAX_BACKUPS_KEPT = 30
@@ -107,6 +116,19 @@ object SettingsConstants {
         1 to "Daily",
         3 to "Every 3 days",
         7 to "Weekly"
+    )
+
+    /**
+     * Preset values for how often to be reminded to back up (days to label).
+     *
+     * Longer than [BACKUP_INTERVAL_PRESETS] at every step, and deliberately:
+     * an automatic backup that runs daily costs the user nothing, and a
+     * reminder that appears daily costs them the reminder.
+     */
+    val BACKUP_REMINDER_INTERVAL_PRESETS = listOf(
+        7 to "Weekly",
+        14 to "Every 2 weeks",
+        30 to "Monthly"
     )
 
     /** Preset values for the number of backup files to keep before pruning older ones. */

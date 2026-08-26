@@ -22,14 +22,15 @@ import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
 import com.fencing.spacedrepetition.util.FileImageStore
+import com.fencing.spacedrepetition.util.ImageStore
 import com.fencing.spacedrepetition.ui.image.ImageCache
 import com.fencing.spacedrepetition.ui.image.LocalImageCache
 import com.fencing.spacedrepetition.ui.image.LocalImagePicker
 import com.fencing.spacedrepetition.ui.image.rememberAndroidImagePicker
 import com.fencing.spacedrepetition.ui.navigation.AppNavigation
 import com.fencing.spacedrepetition.ui.theme.FencingSpacedRepetitionTheme
-import com.fencing.spacedrepetition.ui.viewmodel.AndroidCardViewModel
-import com.fencing.spacedrepetition.ui.viewmodel.AndroidGroupViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
@@ -96,14 +97,14 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     // Create ViewModels with repositories
-                    val cardViewModel: AndroidCardViewModel = viewModel(
-                        factory = CardViewModelFactory(application, repository, groupRepository, opponentRepository)
+                    val cardViewModel: CardViewModel = viewModel(
+                        factory = CardViewModelFactory(repository, groupRepository, opponentRepository, imageStore)
                     )
                     val practiceViewModel: PracticeViewModel = viewModel(
                         factory = PracticeViewModelFactory(repository, opponentRepository)
                     )
-                    val groupViewModel: AndroidGroupViewModel = viewModel(
-                        factory = GroupViewModelFactory(application, groupRepository, repository)
+                    val groupViewModel: GroupViewModel = viewModel(
+                        factory = GroupViewModelFactory(groupRepository, repository, imageStore)
                     )
                     val historyViewModel: HistoryViewModel = viewModel(
                         factory = HistoryViewModelFactory(repository, opponentRepository)
@@ -129,15 +130,15 @@ class MainActivity : ComponentActivity() {
 
 // ViewModel Factories
 class CardViewModelFactory(
-    private val application: android.app.Application,
     private val repository: CardRepository,
     private val groupRepository: GroupRepository,
-    private val opponentRepository: OpponentRepository
+    private val opponentRepository: OpponentRepository,
+    private val imageStore: ImageStore
 ) : androidx.lifecycle.ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(AndroidCardViewModel::class.java)) {
-            return AndroidCardViewModel(application, repository, groupRepository, opponentRepository) as T
+        if (modelClass.isAssignableFrom(CardViewModel::class.java)) {
+            return CardViewModel(repository, groupRepository, opponentRepository, imageStore) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
@@ -157,14 +158,14 @@ class PracticeViewModelFactory(
 }
 
 class GroupViewModelFactory(
-    private val application: android.app.Application,
     private val groupRepository: GroupRepository,
-    private val cardRepository: CardRepository
+    private val cardRepository: CardRepository,
+    private val imageStore: ImageStore
 ) : androidx.lifecycle.ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(AndroidGroupViewModel::class.java)) {
-            return AndroidGroupViewModel(application, groupRepository, cardRepository) as T
+        if (modelClass.isAssignableFrom(GroupViewModel::class.java)) {
+            return GroupViewModel(groupRepository, cardRepository, imageStore) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
@@ -217,6 +218,9 @@ class OpponentViewModelFactory(
 class WorkManagerBackups(
     private val application: android.app.Application
 ) : com.fencing.spacedrepetition.ui.viewmodel.BackupScheduling {
+
+    /** WorkManager runs whether the app is open or not, which is the point of it. */
+    override val runsWhenClosed = true
 
     override suspend fun reschedule(enabled: Boolean, uri: String?, intervalDays: Int) {
         if (enabled && uri != null) {

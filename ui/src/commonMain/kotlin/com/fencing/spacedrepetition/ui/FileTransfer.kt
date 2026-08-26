@@ -4,25 +4,25 @@
 package com.fencing.spacedrepetition.ui
 
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.util.ExportResult
 import com.fencing.spacedrepetition.util.ParsedCard
 
 /**
  * Moving decks in and out of the app as files.
  *
- * Every method here ends in a file chooser and a stream, which on Android
- * means a Uri and a ContentResolver and in a browser means something else
- * entirely. The screens never name either: they say what the user asked for
+ * Every method here ends in a file chooser, which on Android means an
+ * activity result and a Uri and in a browser means a hidden file input or a
+ * download link. The screens never name either: they say what the user asked for
  * -- export these groups, import a CSV into this one -- and the platform
  * decides what that means.
+ *
+ * What each method does with the chosen file is not platform-specific and is
+ * not here: it hands the file to the card or group view model as an
+ * [ImportFile] or an [ExportFile], and the shared code does the rest.
  *
  * Progress is not reported through return values because none of this is
  * synchronous. It goes to the view models' importExportState, which the
  * screens already render.
- *
- * [Unavailable] is what the browser uses today. It is deliberately loud
- * rather than silent: import and export are the only part of the app the web
- * build cannot do yet, and a button that quietly does nothing is worse than
- * one that says why.
  */
 interface FileTransfer {
 
@@ -45,32 +45,40 @@ interface FileTransfer {
 }
 
 /**
- * Reports that file transfer is not available, through the same state the
- * screens already show errors in.
+ * A file the user chose to read.
+ *
+ * Text rather than a stream, because the two platforms have no stream in
+ * common and the import format is read whole anyway -- it is parsed by line,
+ * with a review-history section that is scanned twice.
+ *
+ * Decompression happens before this returns, on the side that knows how: an
+ * export written by this app is gzipped, one edited by hand is usually not,
+ * and both import. Which it is has to be read out of the file's first two
+ * bytes: the archive picker accepts every MIME type there is, so neither the
+ * name nor the type the chooser reports is a guide.
  */
-class UnavailableFileTransfer(
-    private val report: (String) -> Unit
-) : FileTransfer {
+interface ImportFile {
 
-    private val message =
-        "Import and export are not available in the browser yet. " +
-            "The Android app can read and write these files."
+    /** The name it was chosen under, which a CSV import derives a group name from. */
+    val name: String
 
-    override fun importCards() = report(message)
-    override fun exportAllCards(includeHistory: Boolean) = report(message)
-    override fun exportGroups(groupIds: List<Long>, includeHistory: Boolean) = report(message)
-    override fun importCardsCsv() = report(message)
-    override fun exportAllCardsCsv() = report(message)
-    override fun exportGroupsCsv(groupIds: List<Long>) = report(message)
-    override fun importIntoGroup(group: Group) = report(message)
-    override fun exportGroup(group: Group) = report(message)
-    override fun importCsvIntoGroup(group: Group) = report(message)
-    override fun exportGroupCsv(group: Group) = report(message)
-    override fun csvImportInto(parsed: List<ParsedCard>, errors: List<String>, groupId: Long) =
-        report(message)
-    override fun csvImportIntoNewGroup(
-        parsed: List<ParsedCard>,
-        errors: List<String>,
-        groupName: String
-    ) = report(message)
+    /** Its text, or null if the file could not be read. */
+    suspend fun text(): String?
+}
+
+/**
+ * A file the user asked the app to write.
+ *
+ * [write] is given the formatting to run rather than the finished text, so
+ * that a platform which can stream does: on Android the [Appendable] is a
+ * writer over the chosen document and an export of a large collection never
+ * exists in memory at once. A browser builds the string and then downloads
+ * it, because that is the only way a browser hands a file to anyone.
+ *
+ * The formatting reports its own [ExportResult] -- how many rows it wrote, or
+ * why it stopped -- and [write] returns that, or its own error if the file
+ * could not be opened at all.
+ */
+interface ExportFile {
+    suspend fun write(content: (Appendable) -> ExportResult): ExportResult
 }

@@ -35,6 +35,11 @@ class ThemePreferences(private val context: Context) : AppPreferences {
     private val AUTO_BACKUP_INTERVAL_DAYS_KEY = intPreferencesKey("auto_backup_interval_days")
     private val LAST_BACKUP_TIME_KEY = longPreferencesKey("last_backup_time")
     private val MAX_BACKUPS_KEPT_KEY = intPreferencesKey("max_backups_kept")
+    private val BACKUP_REMINDER_ENABLED_KEY = booleanPreferencesKey("backup_reminder_enabled")
+    private val BACKUP_REMINDER_INTERVAL_DAYS_KEY =
+        intPreferencesKey("backup_reminder_interval_days")
+    private val BACKUP_REMINDER_DISMISSED_TIME_KEY =
+        longPreferencesKey("backup_reminder_dismissed_time")
 
     companion object {
         // Every value below now lives in SettingsConstants, which the
@@ -164,6 +169,27 @@ class ThemePreferences(private val context: Context) : AppPreferences {
             preferences[MAX_BACKUPS_KEPT_KEY] ?: DEFAULT_MAX_BACKUPS_KEPT
         }
 
+    // Stored here as well as in the browser, though the Android settings
+    // screen does not offer them: the reminder is what a platform without
+    // WorkManager shows instead of the automatic backup, and AppPreferences
+    // is one interface for both.
+    override val backupReminderEnabled: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[BACKUP_REMINDER_ENABLED_KEY]
+                ?: SettingsConstants.DEFAULT_BACKUP_REMINDER_ENABLED
+        }
+
+    override val backupReminderIntervalDays: Flow<Int> = context.dataStore.data
+        .map { preferences ->
+            preferences[BACKUP_REMINDER_INTERVAL_DAYS_KEY]
+                ?: SettingsConstants.DEFAULT_BACKUP_REMINDER_INTERVAL_DAYS
+        }
+
+    override val backupReminderDismissedTime: Flow<Long> = context.dataStore.data
+        .map { preferences ->
+            preferences[BACKUP_REMINDER_DISMISSED_TIME_KEY] ?: 0L
+        }
+
     override suspend fun setThemeMode(mode: ThemeMode) {
         context.dataStore.edit { preferences ->
             preferences[THEME_KEY] = mode.name
@@ -278,6 +304,24 @@ class ThemePreferences(private val context: Context) : AppPreferences {
         val validCount = count.coerceIn(MIN_MAX_BACKUPS_KEPT, MAX_MAX_BACKUPS_KEPT)
         context.dataStore.edit { preferences ->
             preferences[MAX_BACKUPS_KEPT_KEY] = validCount
+        }
+    }
+
+    override suspend fun setBackupReminderEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[BACKUP_REMINDER_ENABLED_KEY] = enabled
+        }
+    }
+
+    override suspend fun setBackupReminderIntervalDays(days: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[BACKUP_REMINDER_INTERVAL_DAYS_KEY] = days
+        }
+    }
+
+    override suspend fun setBackupReminderDismissedTime(timeMillis: Long) {
+        context.dataStore.edit { preferences ->
+            preferences[BACKUP_REMINDER_DISMISSED_TIME_KEY] = timeMillis
         }
     }
 }

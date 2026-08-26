@@ -666,10 +666,32 @@ class CardImportExportTest {
 
     // ==================== FILENAME GENERATION ====================
 
+    // Every export is named "<when>_<what>", so these check the two halves
+    // separately: the stamp against a fixed instant, and the rest against the
+    // names the files have always had.
+    private val stamp = Regex("^\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}_")
+
+    private fun withoutStamp(filename: String): String {
+        assertTrue("no timestamp in $filename", stamp.containsMatchIn(filename))
+        return filename.replaceFirst(stamp, "")
+    }
+
+    @Test
+    fun `exportFilename - the time comes first, then what the file holds`() {
+        assertEquals(
+            "2023-11-14_22-13-20_all_cards.tsv.gz",
+            CardImportExport.exportFilename(
+                "all_cards.tsv.gz",
+                at = 1_700_000_000_000L,
+                utcOffsetSeconds = 0
+            )
+        )
+    }
+
     @Test
     fun `generateExportFilename - simple group name`() {
         val filename = CardImportExport.generateExportFilename("MyGroup")
-        assertEquals("MyGroup_cards.tsv.gz", filename)
+        assertEquals("MyGroup_cards.tsv.gz", withoutStamp(filename))
     }
 
     @Test
@@ -677,14 +699,14 @@ class CardImportExportTest {
         // "My Group! @#$%" sanitizes to "My_Group______" (space between My/Group + !, space, @, #, $, %)
         // then the function appends "_cards.tsv.gz", giving 7 underscores before "cards"
         val filename = CardImportExport.generateExportFilename("My Group! @#\$%")
-        assertEquals("My_Group_______cards.tsv.gz", filename)
+        assertEquals("My_Group_______cards.tsv.gz", withoutStamp(filename))
     }
 
     @Test
     fun `generateExportFilename - long group name is truncated`() {
         val longName = "A".repeat(100)
         val filename = CardImportExport.generateExportFilename(longName)
-        assertTrue(filename.length <= 63) // 50 chars + "_cards.tsv.gz"
+        assertTrue(withoutStamp(filename).length <= 63) // 50 chars + "_cards.tsv.gz"
     }
 
     // ==================== EDGE CASES ====================

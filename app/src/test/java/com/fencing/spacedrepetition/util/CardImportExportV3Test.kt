@@ -296,7 +296,10 @@ class CardImportExportV3Test {
     @Test
     fun `test filename generation includes gz extension`() {
         val filename = CardImportExport.generateExportFilename("My Test Group")
-        assertEquals("My_Test_Group_cards.tsv.gz", filename)
+        assertTrue("expected a timestamp in $filename",
+            filename.matches(Regex("\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}_.*")))
+        assertTrue("expected the group's name in $filename",
+            filename.endsWith("My_Test_Group_cards.tsv.gz"))
     }
 
     private operator fun String.times(n: Int): String {

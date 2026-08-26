@@ -30,6 +30,7 @@ import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
+import com.fencing.spacedrepetition.util.backupReminder
 import kotlinx.coroutines.flow.flowOf
 
 /**
@@ -76,6 +77,23 @@ fun App(
             val globalCardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
             val totalCardCount by cardViewModel.cardCount.collectAsState()
             val totalDueCount by cardViewModel.dueCardCount.collectAsState()
+            val reminderEnabled by settingsViewModel.backupReminderEnabled.collectAsState()
+            val reminderIntervalDays by settingsViewModel.backupReminderIntervalDays.collectAsState()
+            val lastBackupTime by settingsViewModel.lastBackupTime.collectAsState()
+            val reminderDismissedTime by
+                settingsViewModel.backupReminderDismissedTime.collectAsState()
+
+            // Only where nothing backs up on its own. Read at composition
+            // rather than on a timer: a reminder measured in days does not
+            // need to appear the moment it comes due, and the home screen is
+            // composed every time the user comes back to it.
+            val reminder = if (settingsViewModel.automaticBackups) null else backupReminder(
+                enabled = reminderEnabled,
+                cardCount = totalCardCount,
+                lastBackupTime = lastBackupTime,
+                dismissedTime = reminderDismissedTime,
+                intervalDays = reminderIntervalDays
+            )
 
             val selectedGroup = groups.find { it.id == savedGroupId } ?: groups.firstOrNull()
 
@@ -106,6 +124,9 @@ fun App(
                 totalDueCount = totalDueCount,
                 cardsToPractise = cardsToPractise,
                 dueCount = dueCount,
+                backupReminder = reminder,
+                onBackUpNow = settingsViewModel::runBackupNow,
+                onDismissBackupReminder = settingsViewModel::dismissBackupReminder,
                 onSelectGroup = { settingsViewModel.setSelectedGroupId(it.id) },
                 onStartPractice = {
                     practiceViewModel.startNewSession(cardsPerSession, selectedGroup?.id)
@@ -381,6 +402,9 @@ fun App(
             val autoBackupIntervalDays by settingsViewModel.autoBackupIntervalDays.collectAsState()
             val lastBackupTime by settingsViewModel.lastBackupTime.collectAsState()
             val maxBackupsKept by settingsViewModel.maxBackupsKept.collectAsState()
+            val backupReminderEnabled by settingsViewModel.backupReminderEnabled.collectAsState()
+            val backupReminderIntervalDays by
+                settingsViewModel.backupReminderIntervalDays.collectAsState()
 
             SettingsScreen(
                 totalCards = totalCards,
@@ -401,6 +425,9 @@ fun App(
                 autoBackupIntervalDays = autoBackupIntervalDays,
                 lastBackupTime = lastBackupTime,
                 maxBackupsKept = maxBackupsKept,
+                automaticBackupAvailable = settingsViewModel.automaticBackups,
+                backupReminderEnabled = backupReminderEnabled,
+                backupReminderIntervalDays = backupReminderIntervalDays,
                 backupFolderName = backupFolderName,
                 onPickBackupFolder = onPickBackupFolder,
                 onSetThemeMode = settingsViewModel::setThemeMode,
@@ -417,6 +444,8 @@ fun App(
                 onSetAutoBackupEnabled = settingsViewModel::setAutoBackupEnabled,
                 onSetAutoBackupIntervalDays = settingsViewModel::setAutoBackupIntervalDays,
                 onSetMaxBackupsKept = settingsViewModel::setMaxBackupsKept,
+                onSetBackupReminderEnabled = settingsViewModel::setBackupReminderEnabled,
+                onSetBackupReminderIntervalDays = settingsViewModel::setBackupReminderIntervalDays,
                 onRunBackupNow = settingsViewModel::runBackupNow,
                 onDeleteAllCards = { cardViewModel.deleteAllCards() },
                 onOpenLink = onOpenLink,

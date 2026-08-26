@@ -336,9 +336,10 @@ class CsvImportExportTest {
         assertFalse(header.contains("Images"))
     }
 
-    // Note: Tests for image encoding in CSV export require android.util.Base64
-    // which is not available in JVM unit tests. Image encoding is tested in V3 tests
-    // which share the same encodeImageToBase64/decodeImageFromBase64 infrastructure.
+    // Note: image encoding in CSV export is covered by the V3 tests, which
+    // share the same encodeImageToBase64. The other half -- storing what an
+    // import decodes -- is ImportExportImagesTest in :shared, where it can be
+    // run against a store on every platform.
 
     @Test
     fun `exportCardsToCsv - empty card list`() {
@@ -500,14 +501,37 @@ class CsvImportExportTest {
 
     // ==================== CSV EXPORT FILENAME TESTS ====================
 
+    // The name is "<when>_<what>"; these check the what, and
+    // CardImportExportTest checks the when against a fixed instant.
+    private fun withoutStamp(filename: String): String {
+        val stamp = Regex("^\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}_")
+        assertTrue("no timestamp in $filename", stamp.containsMatchIn(filename))
+        return filename.replaceFirst(stamp, "")
+    }
+
     @Test
     fun `generateCsvExportFilename - basic`() {
-        assertEquals("My_Group_cards.csv", CardImportExport.generateCsvExportFilename("My Group"))
+        assertEquals(
+            "My_Group_cards.csv",
+            withoutStamp(CardImportExport.generateCsvExportFilename("My Group"))
+        )
     }
 
     @Test
     fun `generateCsvExportFilename - special characters`() {
-        assertEquals("Test_Group_cards.csv", CardImportExport.generateCsvExportFilename("Test/Group"))
+        assertEquals(
+            "Test_Group_cards.csv",
+            withoutStamp(CardImportExport.generateCsvExportFilename("Test/Group"))
+        )
+    }
+
+    /** Our own exports carry a stamp, and importing one back should not keep it. */
+    @Test
+    fun `deriveGroupNameFromFilename - drops the export timestamp`() {
+        assertEquals(
+            "Parries",
+            CardImportExport.deriveGroupNameFromFilename("2026-08-26_14-05-09_parries_cards.csv")
+        )
     }
 
     /**

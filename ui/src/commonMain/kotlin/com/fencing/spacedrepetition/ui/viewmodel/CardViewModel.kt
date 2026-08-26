@@ -13,29 +13,44 @@ import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.CardWithGroups
 import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.Opponent
+import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
+import com.fencing.spacedrepetition.ui.ExportFile
+import com.fencing.spacedrepetition.ui.ImportFile
+import com.fencing.spacedrepetition.util.CardImportExport
+import com.fencing.spacedrepetition.util.CardWithGroupNames
+import com.fencing.spacedrepetition.util.CardWithGroupStates
+import com.fencing.spacedrepetition.util.ImageStore
+import com.fencing.spacedrepetition.util.ParsedCard
 import com.fencing.spacedrepetition.util.Time
-import kotlinx.coroutines.Dispatchers
+import com.fencing.spacedrepetition.util.parsedCardToCard
+import com.fencing.spacedrepetition.util.parsedReviewLogsToEntities
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /**
- * Everything about cards that does not involve a file.
+ * Everything about cards, including moving them in and out as files.
  *
- * open, and its repositories protected, because import and export are split
- * across the module boundary: their signatures are Uri and ContentResolver,
- * which exist only on Android, so that half subclasses this in :app. What is
- * here -- the list, the filters, sorting, selection, grading, learning state
- * -- needs nothing from a platform and now runs in a browser unchanged.
+ * Import and export used to be half of a subclass in :app, because their
+ * signatures named a Uri and a ContentResolver. They do not any more: a
+ * chosen file arrives as an [ImportFile] or an [ExportFile], which is as much
+ * as this needs to know about a file chooser, so the whole of the work --
+ * parsing, group creation, formatting, the review-history section -- is
+ * shared, and the browser runs the same code the phone does.
+ *
+ * [imageStore] is the other half of that. An import decodes inline base64
+ * images and stores them; an export reads them back. Both are asynchronous in
+ * a browser and neither is a file path any more.
  */
-open class CardViewModel(
-    protected val repository: CardRepository,
-    protected val groupRepository: GroupRepository,
-    protected val opponentRepository: OpponentRepository
+class CardViewModel(
+    private val repository: CardRepository,
+    private val groupRepository: GroupRepository,
+    private val opponentRepository: OpponentRepository,
+    private val imageStore: ImageStore
 ) : ViewModel() {
 
     val allCards: StateFlow<List<Card>> = repository.getAllCards()
@@ -440,25 +455,333 @@ open class CardViewModel(
         }
     }
 
-    // Import/Export state.
-    //
-    // protected, not private: the file-bound half of import and export lives
-    // in :app, because a Uri and a ContentResolver do, and that half reports
-    // its progress through this.
-    protected val _importExportState = MutableStateFlow<ImportExportState>(ImportExportState.Idle)
+    // Import and export state, which the card list and group list screens
+    // both render: a spinner, a dialog, or a message saying what happened.
+    private val _importExportState = MutableStateFlow<ImportExportState>(ImportExportState.Idle)
     val importExportState: StateFlow<ImportExportState> = _importExportState.asStateFlow()
 
     fun resetImportExportState() {
         _importExportState.value = ImportExportState.Idle
     }
 
+    // ========== Archive (TSV) import and export ==========
+
     /**
-     * Shows a message where import and export progress is shown.
+     * Imports a chosen archive: cards, their groups, those groups' settings,
+     * and the review history and opponents if the file carries them.
      *
-     * For a platform that cannot do a transfer at all: the browser reports
-     * that here rather than leaving a button that appears to do nothing.
+     * [algorithm] is only reached in the oldest format, which records a
+     * question and an answer and nothing else. Every version since carries
+     * each card's own algorithm.
      */
-    fun reportImportExportError(message: String) {
-        _importExportState.value = ImportExportState.Error(message)
+    fun importCards(file: ImportFile, algorithm: AlgorithmType = AlgorithmType.FSRS) {
+        viewModelScope.launch {
+            _importExportState.value = ImportExportState.Loading
+            try {
+                val contents = readArchive(file)
+                if (contents is ArchiveContents.Failed) {
+                    _importExportState.value = ImportExportState.Error(contents.message)
+                    return@launch
+                }
+                val (parsedCards, parseErrors) = contents as ArchiveContents.Cards
+
+                val groupIds = groupRepository.groupsForImport(parsedCards)
+
+                val importedCount = when {
+                    // V2/V3, where a card can hold one learning state per group.
+                    parsedCards.any { it.isGroupSpecificState } ->
+                        repository.importCardsWithGroupStates(parsedCards, groupIds) {
+                            CardImportExport.parsedCardToCard(it, imageStore)
+                        }
+                    // V1, which has full state but only one of it per card.
+                    parsedCards.any { it.hasFullState } ->
+                        repository.importFullCards(
+                            parsedCards.map { CardImportExport.parsedCardToCard(it, imageStore) },
+                            parsedCards.map { it.groupNames },
+                            groupIds
+                        )
+                    // Question and answer, and the algorithm the user asked for.
+                    else -> repository.importCards(
+                        parsedCards.map { it.concept to it.answer },
+                        algorithm
+                    )
+                }
+
+                importOpponentsAndHistory()
+
+                _importExportState.value = ImportExportState.ImportSuccess(
+                    importedCount = importedCount,
+                    skippedCount = parseErrors.size,
+                    errors = parseErrors
+                )
+            } catch (e: Exception) {
+                _importExportState.value = ImportExportState.Error("Import failed: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Restores the opponents and the review logs an archive carried.
+     *
+     * After the cards, and only after them: a log is linked to its card by
+     * question text, so the cards have to be in the database to be found.
+     * Opponents already known by name keep their local skill multiplier --
+     * someone else's opinion of an opponent does not overwrite yours.
+     */
+    private suspend fun importOpponentsAndHistory() {
+        val parsedOpponents = CardImportExport.lastParsedOpponents
+        val opponentIds: Map<String, Long> = if (parsedOpponents.isEmpty()) emptyMap() else {
+            opponentRepository.ensureOpponentsExist(
+                parsedOpponents.map { Triple(it.name, it.skillMultiplier, it.notes) }
+            )
+        }
+
+        val parsedHistory = CardImportExport.lastParsedReviewHistory
+        if (parsedHistory.isEmpty()) return
+
+        val questionToCardId = repository.getAllCardsSync().associate { it.question to it.id }
+        val reviewLogs = CardImportExport.parsedReviewLogsToEntities(
+            parsedHistory, questionToCardId, opponentIds, imageStore
+        )
+        if (reviewLogs.isNotEmpty()) repository.importReviewLogs(reviewLogs)
+    }
+
+    /** Exports every card, optionally with the review history and opponents. */
+    fun exportAllCards(file: ExportFile, includeHistory: Boolean = false) {
+        viewModelScope.launch {
+            _importExportState.value = ImportExportState.Loading
+            _importExportState.value = exportEverything(file, includeHistory)
+        }
+    }
+
+    /**
+     * Writes a backup -- everything, history included -- and returns whether
+     * it worked.
+     *
+     * Separate from [exportAllCards] because of where it is called from: the
+     * settings screen's "Back Up Now" and the home screen's reminder, neither
+     * of which renders importExportState. A success left sitting in that
+     * state would surface later as a dialog on the card list, over a file the
+     * user has already been handed. A failure is worth surfacing that way; a
+     * success is not.
+     *
+     * Suspending rather than launching, so the caller can record the backup
+     * only if there was one -- see BackupScheduling.runNow.
+     */
+    suspend fun backUp(file: ExportFile): Boolean {
+        val result = exportEverything(file, includeHistory = true)
+        if (result is ImportExportState.Error) {
+            _importExportState.value = result
+            return false
+        }
+        return true
+    }
+
+    /** Gathers the whole collection and writes it, reporting what happened. */
+    private suspend fun exportEverything(
+        file: ExportFile,
+        includeHistory: Boolean
+    ): ImportExportState = try {
+        val cardsWithStates = repository.getAllCardsWithGroupStates()
+        if (cardsWithStates.isEmpty()) {
+            ImportExportState.Error("No cards to export")
+        } else {
+            val exportedGroupNames = cardsWithStates.flatMap { it.groupNames }.toSet()
+            val groups = groupRepository.getAllGroupsSync()
+                .filter { it.name in exportedGroupNames }
+
+            val reviewLogs =
+                if (includeHistory) repository.getAllReviewLogsSync() else emptyList()
+            // Every opponent, because every log is included -- the narrowing
+            // the group export does has nothing to narrow to.
+            val opponents =
+                if (includeHistory) opponentRepository.getAllOpponentsSync() else emptyList()
+
+            writeArchive(file, cardsWithStates, groups, reviewLogs, opponents)
+        }
+    } catch (e: Exception) {
+        ImportExportState.Error("Export failed: ${e.message}")
+    }
+
+    /** Exports the cards of the chosen groups, and nothing else. */
+    fun exportSelectedGroups(
+        selectedGroupIds: List<Long>,
+        file: ExportFile,
+        includeHistory: Boolean = false
+    ) {
+        viewModelScope.launch {
+            _importExportState.value = ImportExportState.Loading
+            try {
+                val groups = groupRepository.getAllGroupsSync()
+                    .filter { it.id in selectedGroupIds }
+                if (groups.isEmpty()) {
+                    _importExportState.value = ImportExportState.Error("No groups selected")
+                    return@launch
+                }
+
+                val groupNames = groups.map { it.name }.toSet()
+                val cardsWithStates = repository.getAllCardsWithGroupStates()
+                    .filter { cardWithState -> cardWithState.groupNames.any { it in groupNames } }
+                if (cardsWithStates.isEmpty()) {
+                    _importExportState.value =
+                        ImportExportState.Error("No cards found in selected groups")
+                    return@launch
+                }
+
+                val exportedCardIds = cardsWithStates.map { it.card.id }.toSet()
+                val reviewLogs = if (includeHistory) {
+                    repository.getAllReviewLogsSync().filter { it.cardId in exportedCardIds }
+                } else emptyList()
+
+                // Only the opponents those logs name, so that exporting one
+                // group does not hand over the whole roster.
+                val referencedOpponentIds = reviewLogs.mapNotNull { it.opponentId }.toSet()
+                val opponents: List<Opponent> = if (referencedOpponentIds.isEmpty()) emptyList() else {
+                    opponentRepository.getAllOpponentsSync()
+                        .filter { it.id in referencedOpponentIds }
+                }
+
+                _importExportState.value =
+                    writeArchive(file, cardsWithStates, groups, reviewLogs, opponents)
+            } catch (e: Exception) {
+                _importExportState.value = ImportExportState.Error("Export failed: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * The write itself, which the two archive exports differ only in what
+     * they hand it.
+     *
+     * The images are read through a reader built for exactly these rows --
+     * see [ImageStore.readerFor] -- because the formatting is synchronous and
+     * a browser's storage is not.
+     */
+    private suspend fun writeArchive(
+        file: ExportFile,
+        cardsWithStates: List<CardWithGroupStates>,
+        groups: List<Group>,
+        reviewLogs: List<ReviewLog>,
+        opponents: List<Opponent>
+    ): ImportExportState {
+        val cardQuestions: Map<Long, String> = if (reviewLogs.isEmpty()) emptyMap() else {
+            cardsWithStates.associate { it.card.id to it.card.question }
+        }
+        val images = imageStore.exportReader(cardsWithStates.map { it.card }, reviewLogs)
+
+        return file.write { out ->
+            CardImportExport.exportCardsWithGroupStates(
+                cardsWithStates = cardsWithStates,
+                out = out,
+                images = images,
+                groupSettings = groups,
+                reviewLogs = reviewLogs,
+                cardQuestions = cardQuestions,
+                opponents = opponents,
+                opponentNamesById = opponents.associate { it.id to it.name }
+            )
+        }.asImportExportState()
+    }
+
+    // ========== CSV import and export ==========
+
+    /**
+     * Step one of a CSV import: parse the file and ask where the cards go.
+     *
+     * Two steps because a CSV has no groups in it. The parsed cards are held
+     * in the state until the user answers, so the file is read once.
+     */
+    fun csvImportParseFile(file: ImportFile) {
+        viewModelScope.launch {
+            _importExportState.value = ImportExportState.Loading
+            _importExportState.value = try {
+                readCsvForGroupSelection(file)
+            } catch (e: Exception) {
+                ImportExportState.Error("CSV import failed: ${e.message}")
+            }
+        }
+    }
+
+    /** Step two: the user has chosen a group, so write the cards into it. */
+    fun csvImportComplete(
+        parsedCards: List<ParsedCard>,
+        parseErrors: List<String>,
+        groupId: Long
+    ) {
+        viewModelScope.launch {
+            _importExportState.value = ImportExportState.Loading
+            try {
+                val importedCount =
+                    importCsvCards(parsedCards, groupId, repository, groupRepository, imageStore)
+                _importExportState.value = ImportExportState.ImportSuccess(
+                    importedCount = importedCount,
+                    skippedCount = parseErrors.size,
+                    errors = parseErrors
+                )
+            } catch (e: Exception) {
+                _importExportState.value = ImportExportState.Error("CSV import failed: ${e.message}")
+            }
+        }
+    }
+
+    /** Exports every card as CSV: question, answer, and any images. */
+    fun exportAllCardsCsv(file: ExportFile) {
+        viewModelScope.launch {
+            _importExportState.value = ImportExportState.Loading
+            try {
+                val cardsWithGroups = repository.getAllCardsWithGroupNames()
+                    .map { (card, groupNames) -> CardWithGroupNames(card, groupNames) }
+
+                if (cardsWithGroups.isEmpty()) {
+                    _importExportState.value = ImportExportState.Error("No cards to export")
+                    return@launch
+                }
+
+                _importExportState.value = writeCsv(file, cardsWithGroups)
+            } catch (e: Exception) {
+                _importExportState.value = ImportExportState.Error("CSV export failed: ${e.message}")
+            }
+        }
+    }
+
+    /** Exports the chosen groups' cards as CSV. */
+    fun exportSelectedGroupsCsv(selectedGroupIds: List<Long>, file: ExportFile) {
+        viewModelScope.launch {
+            _importExportState.value = ImportExportState.Loading
+            try {
+                val groupNames = groupRepository.getAllGroupsSync()
+                    .filter { it.id in selectedGroupIds }
+                    .map { it.name }
+                    .toSet()
+                if (groupNames.isEmpty()) {
+                    _importExportState.value = ImportExportState.Error("No groups selected")
+                    return@launch
+                }
+
+                val cardsWithGroups = repository.getAllCardsWithGroupNames()
+                    .map { (card, names) -> CardWithGroupNames(card, names) }
+                    .filter { cardWithGroups -> cardWithGroups.groupNames.any { it in groupNames } }
+
+                if (cardsWithGroups.isEmpty()) {
+                    _importExportState.value =
+                        ImportExportState.Error("No cards found in selected groups")
+                    return@launch
+                }
+
+                _importExportState.value = writeCsv(file, cardsWithGroups)
+            } catch (e: Exception) {
+                _importExportState.value = ImportExportState.Error("CSV export failed: ${e.message}")
+            }
+        }
+    }
+
+    private suspend fun writeCsv(
+        file: ExportFile,
+        cardsWithGroups: List<CardWithGroupNames>
+    ): ImportExportState {
+        val images = imageStore.exportReader(cardsWithGroups.map { it.card })
+        return file.write { out ->
+            CardImportExport.exportCardsToCsv(cardsWithGroups, out, images)
+        }.asImportExportState()
     }
 }

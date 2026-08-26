@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.data.preferences.AppPreferences
 import com.fencing.spacedrepetition.data.preferences.SettingsConstants
 import com.fencing.spacedrepetition.data.preferences.ThemeMode
+import com.fencing.spacedrepetition.util.Time
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -69,6 +70,31 @@ class SettingsViewModel(
 
     val maxBackupsKept: StateFlow<Int> = themePreferences.maxBackupsKept
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsConstants.DEFAULT_MAX_BACKUPS_KEPT)
+
+    val backupReminderEnabled: StateFlow<Boolean> = themePreferences.backupReminderEnabled
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            SettingsConstants.DEFAULT_BACKUP_REMINDER_ENABLED
+        )
+
+    val backupReminderIntervalDays: StateFlow<Int> = themePreferences.backupReminderIntervalDays
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            SettingsConstants.DEFAULT_BACKUP_REMINDER_INTERVAL_DAYS
+        )
+
+    val backupReminderDismissedTime: StateFlow<Long> = themePreferences.backupReminderDismissedTime
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
+
+    /**
+     * Whether this platform backs up on its own, which decides what the
+     * settings screen offers: the automatic backup, or the reminder that
+     * stands in for it. Not a flow -- it is a fact about the build, and it
+     * cannot change while the app is running.
+     */
+    val automaticBackups: Boolean get() = backups.runsWhenClosed
 
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch {
@@ -190,6 +216,30 @@ class SettingsViewModel(
 
     fun runBackupNow() {
         viewModelScope.launch { backups.runNow() }
+    }
+
+    fun setBackupReminderEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            themePreferences.setBackupReminderEnabled(enabled)
+        }
+    }
+
+    fun setBackupReminderIntervalDays(days: Int) {
+        viewModelScope.launch {
+            themePreferences.setBackupReminderIntervalDays(days)
+        }
+    }
+
+    /**
+     * Puts the reminder away until the interval comes round again.
+     *
+     * Stored rather than held in the composition: a dismissal that a reload
+     * undoes is not a dismissal, and a browser tab is reloaded often.
+     */
+    fun dismissBackupReminder() {
+        viewModelScope.launch {
+            themePreferences.setBackupReminderDismissedTime(Time.now())
+        }
     }
 
     fun setMaxBackupsKept(count: Int) {
