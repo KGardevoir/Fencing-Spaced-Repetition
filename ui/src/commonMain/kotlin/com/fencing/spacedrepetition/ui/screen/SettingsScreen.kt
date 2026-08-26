@@ -28,6 +28,13 @@ import com.fencing.spacedrepetition.ui.components.RetentionSelector
 import com.fencing.spacedrepetition.util.formatDateAtTime
 import kotlin.math.roundToInt
 
+/**
+ * Material's own opacity for disabled content, which its controls apply for
+ * themselves and its Text does not. Used to dim the labels beside a control
+ * that has been switched off by the platform rather than by the user.
+ */
+private const val DISABLED_ALPHA = 0.38f
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -49,6 +56,17 @@ fun SettingsScreen(
     autoBackupIntervalDays: Int,
     lastBackupTime: Long,
     maxBackupsKept: Int,
+    /**
+     * Whether this platform can back up on its own.
+     *
+     * False in a browser, where nothing wakes the page while it is closed.
+     * The automatic-backup controls are then shown greyed out rather than
+     * hidden -- the feature exists, this build cannot run it -- and the
+     * reminder below them takes over the job.
+     */
+    automaticBackupAvailable: Boolean,
+    backupReminderEnabled: Boolean,
+    backupReminderIntervalDays: Int,
     // Where backups go. The screen only ever shows this name and asks for a
     // new folder; picking one is the platform's business, not the screen's.
     backupFolderName: String?,
@@ -67,6 +85,8 @@ fun SettingsScreen(
     onSetAutoBackupEnabled: (Boolean) -> Unit,
     onSetAutoBackupIntervalDays: (Int) -> Unit,
     onSetMaxBackupsKept: (Int) -> Unit,
+    onSetBackupReminderEnabled: (Boolean) -> Unit,
+    onSetBackupReminderIntervalDays: (Int) -> Unit,
     onRunBackupNow: () -> Unit,
     onDeleteAllCards: () -> Unit,
     onOpenLink: (String) -> Unit,
@@ -88,6 +108,10 @@ fun SettingsScreen(
 
     val maxBackupsKeptPresets = SettingsConstants.MAX_BACKUPS_KEPT_PRESETS
     val currentMaxBackupsKeptIndex = SettingsConstants.findPresetIndex(maxBackupsKeptPresets, maxBackupsKept)
+
+    val reminderIntervalPresets = SettingsConstants.BACKUP_REMINDER_INTERVAL_PRESETS
+    val currentReminderIntervalIndex =
+        SettingsConstants.findPresetIndex(reminderIntervalPresets, backupReminderIntervalDays)
 
     Scaffold(
         topBar = {
@@ -507,7 +531,25 @@ fun SettingsScreen(
             HorizontalDivider()
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Backup section
+            // Backup section.
+            //
+            // On a platform that cannot back up while it is closed, the
+            // controls below are all still drawn, greyed out, and the
+            // reminder further down is what actually runs. Drawn rather than
+            // hidden because "your phone can do this" is worth knowing, and
+            // because a section that changes shape between builds is harder
+            // to explain than one that says which half is off.
+            val autoBackupTitleColor = if (automaticBackupAvailable) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                MaterialTheme.colorScheme.onSurface.copy(alpha = DISABLED_ALPHA)
+            }
+            val autoBackupDetailColor = if (automaticBackupAvailable) {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = DISABLED_ALPHA)
+            }
+
             Text(
                 "Automatic Backup",
                 style = MaterialTheme.typography.labelLarge,
@@ -518,7 +560,13 @@ fun SettingsScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onSetAutoBackupEnabled(!autoBackupEnabled) }
+                    .then(
+                        if (automaticBackupAvailable) {
+                            Modifier.clickable { onSetAutoBackupEnabled(!autoBackupEnabled) }
+                        } else {
+                            Modifier
+                        }
+                    )
                     .padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -526,17 +574,27 @@ fun SettingsScreen(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Back Up Automatically",
-                        style = MaterialTheme.typography.bodyLarge
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = autoBackupTitleColor
                     )
                     Text(
-                        text = "Periodically save a compressed copy of your cards, groups, and history to a folder you choose.",
+                        text = if (automaticBackupAvailable) {
+                            "Periodically save a compressed copy of your cards, groups, and history to a folder you choose."
+                        } else {
+                            "Not available in the browser: nothing wakes the page while it is closed, " +
+                                "so a backup can only be one you ask for. The reminder below asks you to."
+                        },
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = autoBackupDetailColor
                     )
                 }
                 Switch(
-                    checked = autoBackupEnabled,
-                    onCheckedChange = onSetAutoBackupEnabled
+                    // Off, not merely disabled, where nothing is scheduled: a
+                    // switch left showing on would be claiming a backup is
+                    // being taken.
+                    checked = autoBackupEnabled && automaticBackupAvailable,
+                    onCheckedChange = onSetAutoBackupEnabled,
+                    enabled = automaticBackupAvailable
                 )
             }
 
@@ -544,7 +602,8 @@ fun SettingsScreen(
 
             OutlinedButton(
                 onClick = onPickBackupFolder,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = automaticBackupAvailable
             ) {
                 Icon(
                     Icons.Default.Folder,
@@ -559,7 +618,7 @@ fun SettingsScreen(
                 Text(
                     text = "Folder: $backupFolderName",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = autoBackupDetailColor
                 )
             }
 
@@ -578,12 +637,17 @@ fun SettingsScreen(
                 ) {
                     Text(
                         text = "Backup Frequency",
-                        style = MaterialTheme.typography.bodyLarge
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = autoBackupTitleColor
                     )
                     Text(
                         text = backupIntervalPresets[currentBackupIntervalIndex].second,
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
+                        color = if (automaticBackupAvailable) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.primary.copy(alpha = DISABLED_ALPHA)
+                        }
                     )
                 }
                 Slider(
@@ -594,6 +658,7 @@ fun SettingsScreen(
                     },
                     valueRange = 0f..(backupIntervalPresets.size - 1).toFloat(),
                     steps = backupIntervalPresets.size - 2,
+                    enabled = automaticBackupAvailable,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -613,12 +678,17 @@ fun SettingsScreen(
                 ) {
                     Text(
                         text = "Backups to Keep",
-                        style = MaterialTheme.typography.bodyLarge
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = autoBackupTitleColor
                     )
                     Text(
                         text = maxBackupsKeptPresets[currentMaxBackupsKeptIndex].second,
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
+                        color = if (automaticBackupAvailable) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.primary.copy(alpha = DISABLED_ALPHA)
+                        }
                     )
                 }
                 Slider(
@@ -629,13 +699,88 @@ fun SettingsScreen(
                     },
                     valueRange = 0f..(maxBackupsKeptPresets.size - 1).toFloat(),
                     steps = maxBackupsKeptPresets.size - 2,
+                    enabled = automaticBackupAvailable,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
                     text = "Older backups beyond this count are automatically deleted.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = autoBackupDetailColor
                 )
+            }
+
+            // The reminder: what a platform without a scheduler offers
+            // instead. Same shape as the switch and slider above, because it
+            // is the same decision -- how often, and whether at all.
+            if (!automaticBackupAvailable) {
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    "Backup Reminder",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSetBackupReminderEnabled(!backupReminderEnabled) }
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Remind Me to Back Up",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Text(
+                            text = "Shows a note on the home screen when a backup is overdue. " +
+                                "Your cards live in this browser's storage, which the browser is " +
+                                "free to clear.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = backupReminderEnabled,
+                        onCheckedChange = onSetBackupReminderEnabled
+                    )
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Reminder Frequency",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Text(
+                            text = reminderIntervalPresets[currentReminderIntervalIndex].second,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Slider(
+                        value = currentReminderIntervalIndex.toFloat(),
+                        onValueChange = { newIndex ->
+                            val presetValue = reminderIntervalPresets[newIndex.roundToInt()].first
+                            onSetBackupReminderIntervalDays(presetValue)
+                        },
+                        valueRange = 0f..(reminderIntervalPresets.size - 1).toFloat(),
+                        steps = reminderIntervalPresets.size - 2,
+                        enabled = backupReminderEnabled,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -655,9 +800,12 @@ fun SettingsScreen(
             OutlinedButton(
                 onClick = onRunBackupNow,
                 modifier = Modifier.fillMaxWidth(),
-                enabled = backupFolderName != null
+                // A folder is Android's precondition; a browser has none,
+                // because the backup is a download rather than a file written
+                // somewhere the app chose.
+                enabled = !automaticBackupAvailable || backupFolderName != null
             ) {
-                Text("Back Up Now")
+                Text(if (automaticBackupAvailable) "Back Up Now" else "Download a Backup")
             }
 
             Spacer(modifier = Modifier.height(16.dp))

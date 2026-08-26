@@ -39,32 +39,32 @@ private class BrowserFileTransfer(
     override fun importCards() = choose(ARCHIVE) { cards.importCards(it) }
 
     override fun exportAllCards(includeHistory: Boolean) =
-        cards.exportAllCards(archive("all_cards.tsv.gz"), includeHistory)
+        cards.exportAllCards(archiveDownload("all_cards.tsv.gz"), includeHistory)
 
     override fun exportGroups(groupIds: List<Long>, includeHistory: Boolean) =
         cards.exportSelectedGroups(
             groupIds,
-            archive("selected_groups_cards.tsv.gz"),
+            archiveDownload("selected_groups_cards.tsv.gz"),
             includeHistory
         )
 
     override fun importCardsCsv() = choose(CSV) { cards.csvImportParseFile(it) }
 
-    override fun exportAllCardsCsv() = cards.exportAllCardsCsv(csv("all_cards.csv"))
+    override fun exportAllCardsCsv() = cards.exportAllCardsCsv(csvDownload("all_cards.csv"))
 
     override fun exportGroupsCsv(groupIds: List<Long>) =
-        cards.exportSelectedGroupsCsv(groupIds, csv("selected_groups_cards.csv"))
+        cards.exportSelectedGroupsCsv(groupIds, csvDownload("selected_groups_cards.csv"))
 
     override fun importIntoGroup(group: Group) =
         choose(ARCHIVE) { groups.importCardsToGroup(group.id, it) }
 
     override fun exportGroup(group: Group) =
-        groups.exportGroupCards(group.id, archive(groups.generateExportFilename(group.name)))
+        groups.exportGroupCards(group.id, archiveDownload(groups.generateExportFilename(group.name)))
 
     override fun importCsvIntoGroup(group: Group) = choose(CSV) { groups.csvImportParseFile(it) }
 
     override fun exportGroupCsv(group: Group) =
-        groups.exportGroupCardsCsv(group.id, csv(groups.generateCsvExportFilename(group.name)))
+        groups.exportGroupCardsCsv(group.id, csvDownload(groups.generateCsvExportFilename(group.name)))
 
     override fun csvImportInto(parsed: List<ParsedCard>, errors: List<String>, groupId: Long) =
         cards.csvImportComplete(parsed, errors, groupId)
@@ -135,8 +135,9 @@ private class BrowserExportFile(
     }
 }
 
-private fun archive(filename: String): ExportFile =
+/** internal, not private: a backup is one of these too -- see DownloadBackups. */
+internal fun archiveDownload(filename: String): ExportFile =
     BrowserExportFile(filename, "application/gzip", compress = true)
 
-private fun csv(filename: String): ExportFile =
+private fun csvDownload(filename: String): ExportFile =
     BrowserExportFile(filename, "text/csv", compress = false)

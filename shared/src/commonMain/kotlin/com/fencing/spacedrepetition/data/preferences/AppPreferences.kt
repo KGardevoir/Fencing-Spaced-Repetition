@@ -21,6 +21,10 @@ import kotlinx.coroutines.flow.Flow
  * the settings screen renders, and a screen that renders them has to be able
  * to read them on both platforms; what a platform *does* with them is a
  * separate question from whether it can store them.
+ *
+ * The reminder settings are the same idea from the other side: they are what
+ * a platform that cannot back up on its own offers instead, and they are
+ * stored everywhere for the same reason.
  */
 interface AppPreferences : SchedulingPreferences {
 
@@ -35,6 +39,9 @@ interface AppPreferences : SchedulingPreferences {
     val autoBackupIntervalDays: Flow<Int>
     val lastBackupTime: Flow<Long>
     val maxBackupsKept: Flow<Int>
+
+    val backupReminderEnabled: Flow<Boolean>
+    val backupReminderIntervalDays: Flow<Int>
 
     suspend fun setThemeMode(mode: ThemeMode)
     suspend fun setAutoShowAnswer(enabled: Boolean)
@@ -53,4 +60,6 @@ interface AppPreferences : SchedulingPreferences {
     suspend fun setAutoBackupIntervalDays(days: Int)
     suspend fun setLastBackupTime(timeMillis: Long)
     suspend fun setMaxBackupsKept(count: Int)
+    suspend fun setBackupReminderEnabled(enabled: Boolean)
+    suspend fun setBackupReminderIntervalDays(days: Int)
 }

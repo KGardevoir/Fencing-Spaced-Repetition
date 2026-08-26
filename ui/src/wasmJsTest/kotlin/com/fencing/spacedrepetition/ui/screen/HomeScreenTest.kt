@@ -12,6 +12,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.ui.theme.FencingSpacedRepetitionTheme
+import com.fencing.spacedrepetition.util.BackupReminder
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertSame
@@ -43,8 +44,10 @@ class HomeScreenTest {
 
     private fun home(
         cardsToPractise: Int = 12,
+        backupReminder: BackupReminder? = null,
         onSelectGroup: (Group) -> Unit = {},
         onStartPractice: () -> Unit = {},
+        onBackUpNow: () -> Unit = {},
         body: androidx.compose.ui.test.ComposeUiTest.() -> Unit
     ) = runComposeUiTest {
         setContent {
@@ -57,6 +60,8 @@ class HomeScreenTest {
                     totalDueCount = 9,
                     cardsToPractise = cardsToPractise,
                     dueCount = 5,
+                    backupReminder = backupReminder,
+                    onBackUpNow = onBackUpNow,
                     onSelectGroup = onSelectGroup,
                     onStartPractice = onStartPractice,
                     onNavigateToCards = {},
@@ -121,6 +126,35 @@ class HomeScreenTest {
             onNodeWithText("Sabre footwork").performClick()
             onNodeWithText("Epee distance").performClick()
             assertSame(epee, chosen, "expected Epee distance, got ${chosen?.name}")
+        }
+    }
+
+    // The backup reminder. It is the browser's substitute for a backup that
+    // runs on its own, so the screen has to be silent when there is nothing
+    // to say -- a nag that is always there is one nobody reads.
+    @Test
+    fun saysNothingAboutBackupsWhenNoneIsDue() = home(backupReminder = null) {
+        onNodeWithText("Time to back up").assertDoesNotExist()
+    }
+
+    @Test
+    fun asksForABackupWhenOneIsOverdue() = home(backupReminder = BackupReminder(9)) {
+        onNodeWithText("Time to back up").assertIsDisplayed()
+        onNodeWithText("Your last backup was 9 days ago.").assertIsDisplayed()
+    }
+
+    @Test
+    fun saysSoWhenThereHasNeverBeenABackup() = home(backupReminder = BackupReminder(null)) {
+        onNodeWithText("Your cards have never been backed up. They live in this " +
+            "browser's storage, which it is free to clear.").assertIsDisplayed()
+    }
+
+    @Test
+    fun pressingTheReminderAsksForABackup() = run {
+        var backups = 0
+        home(backupReminder = BackupReminder(9), onBackUpNow = { backups++ }) {
+            onNodeWithText("Download a Backup").performClick()
+            assertEquals(1, backups, "the backup was not requested exactly once")
         }
     }
 }

@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.util.BackupReminder
 
 /**
  * The home screen.
@@ -44,6 +45,11 @@ import com.fencing.spacedrepetition.data.model.Group
  * @param dueCount due cards on the same basis, shown next to the group name.
  * @param onStartPractice begins a session and navigates to it -- one callback
  *   because the button always did both.
+ * @param backupReminder the nudge to show above everything else, or null for
+ *   silence. Null on Android, always: it backs up on its own, and this is
+ *   what the browser has instead.
+ * @param onBackUpNow writes a backup, which in a browser means downloading
+ *   one. The reminder goes away when the backup is recorded.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,6 +61,8 @@ fun HomeScreen(
     totalDueCount: Int,
     cardsToPractise: Int,
     dueCount: Int,
+    backupReminder: BackupReminder?,
+    onBackUpNow: () -> Unit,
     onSelectGroup: (Group) -> Unit,
     onStartPractice: () -> Unit,
     onNavigateToCards: () -> Unit,
@@ -130,6 +138,14 @@ fun HomeScreen(
                         )
                     }
                 }
+            }
+
+            if (backupReminder != null) {
+                BackupReminderCard(
+                    reminder = backupReminder,
+                    onBackUpNow = onBackUpNow,
+                    onOpenSettings = onNavigateToSettings
+                )
             }
 
             // Stats cards
@@ -283,6 +299,73 @@ fun HomeScreen(
         )
     }
 
+}
+
+/**
+ * The nudge to back up, on the screen the user starts from.
+ *
+ * In the home screen rather than a notification, because a browser tab that
+ * is closed cannot notify anyone -- the reminder has to be somewhere they
+ * already look, and this is the first thing they see.
+ *
+ * It offers the backup itself rather than only saying it is due: a reminder
+ * whose remedy is three taps away in another screen is a reminder people
+ * learn to scroll past. There is no dismiss, deliberately -- it goes when
+ * there is a backup, or when it is switched off in Settings, and the card
+ * says so.
+ */
+@Composable
+private fun BackupReminderCard(
+    reminder: BackupReminder,
+    onBackUpNow: () -> Unit,
+    onOpenSettings: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.CloudDownload,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Time to back up",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                    Text(
+                        text = when (val days = reminder.daysSinceBackup) {
+                            null -> "Your cards have never been backed up. They live in this " +
+                                "browser's storage, which it is free to clear."
+                            1 -> "Your last backup was a day ago."
+                            else -> "Your last backup was $days days ago."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = onBackUpNow,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Download a Backup")
+                }
+                TextButton(onClick = onOpenSettings) {
+                    Text("Settings")
+                }
+            }
+        }
+    }
 }
 
 @Composable

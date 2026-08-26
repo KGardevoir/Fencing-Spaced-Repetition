@@ -550,30 +550,57 @@ class CardViewModel(
     fun exportAllCards(file: ExportFile, includeHistory: Boolean = false) {
         viewModelScope.launch {
             _importExportState.value = ImportExportState.Loading
-            try {
-                val cardsWithStates = repository.getAllCardsWithGroupStates()
-                if (cardsWithStates.isEmpty()) {
-                    _importExportState.value = ImportExportState.Error("No cards to export")
-                    return@launch
-                }
-
-                val exportedGroupNames = cardsWithStates.flatMap { it.groupNames }.toSet()
-                val groups = groupRepository.getAllGroupsSync()
-                    .filter { it.name in exportedGroupNames }
-
-                val reviewLogs =
-                    if (includeHistory) repository.getAllReviewLogsSync() else emptyList()
-                // Every opponent, because every log is included -- the
-                // narrowing the group export does has nothing to narrow to.
-                val opponents =
-                    if (includeHistory) opponentRepository.getAllOpponentsSync() else emptyList()
-
-                _importExportState.value =
-                    writeArchive(file, cardsWithStates, groups, reviewLogs, opponents)
-            } catch (e: Exception) {
-                _importExportState.value = ImportExportState.Error("Export failed: ${e.message}")
-            }
+            _importExportState.value = exportEverything(file, includeHistory)
         }
+    }
+
+    /**
+     * Writes a backup -- everything, history included -- and returns whether
+     * it worked.
+     *
+     * Separate from [exportAllCards] because of where it is called from: the
+     * settings screen's "Back Up Now" and the home screen's reminder, neither
+     * of which renders importExportState. A success left sitting in that
+     * state would surface later as a dialog on the card list, over a file the
+     * user has already been handed. A failure is worth surfacing that way; a
+     * success is not.
+     *
+     * Suspending rather than launching, so the caller can record the backup
+     * only if there was one -- see BackupScheduling.runNow.
+     */
+    suspend fun backUp(file: ExportFile): Boolean {
+        val result = exportEverything(file, includeHistory = true)
+        if (result is ImportExportState.Error) {
+            _importExportState.value = result
+            return false
+        }
+        return true
+    }
+
+    /** Gathers the whole collection and writes it, reporting what happened. */
+    private suspend fun exportEverything(
+        file: ExportFile,
+        includeHistory: Boolean
+    ): ImportExportState = try {
+        val cardsWithStates = repository.getAllCardsWithGroupStates()
+        if (cardsWithStates.isEmpty()) {
+            ImportExportState.Error("No cards to export")
+        } else {
+            val exportedGroupNames = cardsWithStates.flatMap { it.groupNames }.toSet()
+            val groups = groupRepository.getAllGroupsSync()
+                .filter { it.name in exportedGroupNames }
+
+            val reviewLogs =
+                if (includeHistory) repository.getAllReviewLogsSync() else emptyList()
+            // Every opponent, because every log is included -- the narrowing
+            // the group export does has nothing to narrow to.
+            val opponents =
+                if (includeHistory) opponentRepository.getAllOpponentsSync() else emptyList()
+
+            writeArchive(file, cardsWithStates, groups, reviewLogs, opponents)
+        }
+    } catch (e: Exception) {
+        ImportExportState.Error("Export failed: ${e.message}")
     }
 
     /** Exports the cards of the chosen groups, and nothing else. */

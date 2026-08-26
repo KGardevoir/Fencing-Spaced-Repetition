@@ -219,6 +219,9 @@ class WorkManagerBackups(
     private val application: android.app.Application
 ) : com.fencing.spacedrepetition.ui.viewmodel.BackupScheduling {
 
+    /** WorkManager runs whether the app is open or not, which is the point of it. */
+    override val runsWhenClosed = true
+
     override suspend fun reschedule(enabled: Boolean, uri: String?, intervalDays: Int) {
         if (enabled && uri != null) {
             BackupScheduler.schedule(application, intervalDays)

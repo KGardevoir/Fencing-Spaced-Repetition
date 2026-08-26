@@ -18,11 +18,31 @@ package com.fencing.spacedrepetition.ui.viewmodel
  */
 interface BackupScheduling {
 
+    /**
+     * Whether a backup can happen while the app is not open.
+     *
+     * The settings screen asks, because the answer decides what it can
+     * honestly offer: where this is false the automatic-backup controls are
+     * shown greyed out and a reminder takes their place, since a switch that
+     * schedules nothing is worse than one that says it cannot.
+     *
+     * False by default, alongside the do-nothing methods below: an
+     * implementation that schedules nothing must not claim otherwise.
+     */
+    val runsWhenClosed: Boolean get() = false
+
     suspend fun reschedule(enabled: Boolean, uri: String?, intervalDays: Int) {}
 
+    /**
+     * Backs up now, at the user's request.
+     *
+     * A platform with no scheduler can still have one of these -- in a
+     * browser it is an export the user is handed -- which is why it is not
+     * tied to [runsWhenClosed].
+     */
     suspend fun runNow() {}
 
 }
 
-/** What the browser uses: the settings are remembered, nothing is scheduled. */
+/** What a platform with neither a scheduler nor a backup of its own uses. */
 object NoBackups : BackupScheduling

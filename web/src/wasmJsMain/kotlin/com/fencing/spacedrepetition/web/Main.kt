@@ -18,6 +18,7 @@ import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
 import com.fencing.spacedrepetition.ui.App
+import com.fencing.spacedrepetition.ui.DownloadBackups
 import com.fencing.spacedrepetition.ui.browserFileTransfer
 import com.fencing.spacedrepetition.ui.image.ImageCache
 import com.fencing.spacedrepetition.ui.image.LocalImageCache
@@ -38,9 +39,9 @@ import kotlinx.coroutines.Dispatchers
  *
  * Everything below this file is shared with the Android build: the same
  * screens, the same view models, the same repositories, the same scheduling.
- * What is here is the four answers the browser has to give -- where the
- * database is, where settings are, where images are, and what a file chooser
- * is -- and then it gets out of the way.
+ * What is here is the answers the browser has to give -- where the database
+ * is, where settings are, where images are, what a file chooser is, and what
+ * "back up" means without a scheduler -- and then it gets out of the way.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
@@ -76,7 +77,12 @@ fun main() {
         }
         val historyViewModel = remember { HistoryViewModel(cardRepository, opponentRepository) }
         val opponentViewModel = remember { OpponentViewModel(opponentRepository) }
-        val settingsViewModel = remember { SettingsViewModel(preferences) }
+        // The browser's answer to "back up now" is a download, and it needs
+        // the card view model to produce one -- so the settings view model is
+        // created after it rather than beside the others.
+        val settingsViewModel = remember {
+            SettingsViewModel(preferences, DownloadBackups(cardViewModel, preferences))
+        }
 
         val themeMode by settingsViewModel.themeMode.collectAsState()
 

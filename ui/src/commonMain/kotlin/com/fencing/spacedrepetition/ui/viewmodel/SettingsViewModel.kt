@@ -70,6 +70,28 @@ class SettingsViewModel(
     val maxBackupsKept: StateFlow<Int> = themePreferences.maxBackupsKept
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsConstants.DEFAULT_MAX_BACKUPS_KEPT)
 
+    val backupReminderEnabled: StateFlow<Boolean> = themePreferences.backupReminderEnabled
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            SettingsConstants.DEFAULT_BACKUP_REMINDER_ENABLED
+        )
+
+    val backupReminderIntervalDays: StateFlow<Int> = themePreferences.backupReminderIntervalDays
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            SettingsConstants.DEFAULT_BACKUP_REMINDER_INTERVAL_DAYS
+        )
+
+    /**
+     * Whether this platform backs up on its own, which decides what the
+     * settings screen offers: the automatic backup, or the reminder that
+     * stands in for it. Not a flow -- it is a fact about the build, and it
+     * cannot change while the app is running.
+     */
+    val automaticBackups: Boolean get() = backups.runsWhenClosed
+
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch {
             themePreferences.setThemeMode(mode)
@@ -190,6 +212,18 @@ class SettingsViewModel(
 
     fun runBackupNow() {
         viewModelScope.launch { backups.runNow() }
+    }
+
+    fun setBackupReminderEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            themePreferences.setBackupReminderEnabled(enabled)
+        }
+    }
+
+    fun setBackupReminderIntervalDays(days: Int) {
+        viewModelScope.launch {
+            themePreferences.setBackupReminderIntervalDays(days)
+        }
     }
 
     fun setMaxBackupsKept(count: Int) {
