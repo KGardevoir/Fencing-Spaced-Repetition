@@ -43,6 +43,9 @@ interface AppPreferences : SchedulingPreferences {
     val backupReminderEnabled: Flow<Boolean>
     val backupReminderIntervalDays: Flow<Int>
 
+    /** When the reminder was last dismissed, or 0. See backupReminder. */
+    val backupReminderDismissedTime: Flow<Long>
+
     suspend fun setThemeMode(mode: ThemeMode)
     suspend fun setAutoShowAnswer(enabled: Boolean)
     suspend fun setCardsPerSession(count: Int)
@@ -62,4 +65,5 @@ interface AppPreferences : SchedulingPreferences {
     suspend fun setMaxBackupsKept(count: Int)
     suspend fun setBackupReminderEnabled(enabled: Boolean)
     suspend fun setBackupReminderIntervalDays(days: Int)
+    suspend fun setBackupReminderDismissedTime(timeMillis: Long)
 }

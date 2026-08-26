@@ -78,6 +78,8 @@ class LocalStoragePreferences : AppPreferences {
     private val backupReminderIntervalDaysState = MutableStateFlow(
         readInt("backup_reminder_interval_days", Defaults.DEFAULT_BACKUP_REMINDER_INTERVAL_DAYS)
     )
+    private val backupReminderDismissedTimeState =
+        MutableStateFlow(readLongOrNull("backup_reminder_dismissed_time") ?: 0L)
 
     override val themeMode: Flow<ThemeMode> = themeModeState.asStateFlow()
     override val autoShowAnswer: Flow<Boolean> = autoShowAnswerState.asStateFlow()
@@ -99,6 +101,8 @@ class LocalStoragePreferences : AppPreferences {
     override val backupReminderEnabled: Flow<Boolean> = backupReminderEnabledState.asStateFlow()
     override val backupReminderIntervalDays: Flow<Int> =
         backupReminderIntervalDaysState.asStateFlow()
+    override val backupReminderDismissedTime: Flow<Long> =
+        backupReminderDismissedTimeState.asStateFlow()
 
     override suspend fun setThemeMode(mode: ThemeMode) =
         write("theme_mode", mode.name, themeModeState, mode)
@@ -178,6 +182,14 @@ class LocalStoragePreferences : AppPreferences {
             days.toString(),
             backupReminderIntervalDaysState,
             days
+        )
+
+    override suspend fun setBackupReminderDismissedTime(timeMillis: Long) =
+        write(
+            "backup_reminder_dismissed_time",
+            timeMillis.toString(),
+            backupReminderDismissedTimeState,
+            timeMillis
         )
 
     private fun <T> write(key: String, stored: String, state: MutableStateFlow<T>, value: T) {

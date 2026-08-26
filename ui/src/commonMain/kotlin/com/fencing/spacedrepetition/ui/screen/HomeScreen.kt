@@ -50,6 +50,8 @@ import com.fencing.spacedrepetition.util.BackupReminder
  *   what the browser has instead.
  * @param onBackUpNow writes a backup, which in a browser means downloading
  *   one. The reminder goes away when the backup is recorded.
+ * @param onDismissBackupReminder puts the reminder away until it comes due
+ *   again. Turning it off for good is a switch in the settings.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,6 +65,7 @@ fun HomeScreen(
     dueCount: Int,
     backupReminder: BackupReminder?,
     onBackUpNow: () -> Unit,
+    onDismissBackupReminder: () -> Unit,
     onSelectGroup: (Group) -> Unit,
     onStartPractice: () -> Unit,
     onNavigateToCards: () -> Unit,
@@ -144,6 +147,7 @@ fun HomeScreen(
                 BackupReminderCard(
                     reminder = backupReminder,
                     onBackUpNow = onBackUpNow,
+                    onDismiss = onDismissBackupReminder,
                     onOpenSettings = onNavigateToSettings
                 )
             }
@@ -310,14 +314,17 @@ fun HomeScreen(
  *
  * It offers the backup itself rather than only saying it is due: a reminder
  * whose remedy is three taps away in another screen is a reminder people
- * learn to scroll past. There is no dismiss, deliberately -- it goes when
- * there is a backup, or when it is switched off in Settings, and the card
- * says so.
+ * learn to scroll past.
+ *
+ * Dismissing puts it away until the interval comes round again, rather than
+ * for good -- "not now" is the thing people actually mean, and the switch in
+ * Settings, which the card links to, is there for when they mean never.
  */
 @Composable
 private fun BackupReminderCard(
     reminder: BackupReminder,
     onBackUpNow: () -> Unit,
+    onDismiss: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
     Card(
@@ -349,6 +356,13 @@ private fun BackupReminderCard(
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+                    )
+                }
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Dismiss until it is due again",
+                        tint = MaterialTheme.colorScheme.onTertiaryContainer
                     )
                 }
             }

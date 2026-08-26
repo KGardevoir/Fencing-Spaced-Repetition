@@ -38,6 +38,8 @@ class ThemePreferences(private val context: Context) : AppPreferences {
     private val BACKUP_REMINDER_ENABLED_KEY = booleanPreferencesKey("backup_reminder_enabled")
     private val BACKUP_REMINDER_INTERVAL_DAYS_KEY =
         intPreferencesKey("backup_reminder_interval_days")
+    private val BACKUP_REMINDER_DISMISSED_TIME_KEY =
+        longPreferencesKey("backup_reminder_dismissed_time")
 
     companion object {
         // Every value below now lives in SettingsConstants, which the
@@ -183,6 +185,11 @@ class ThemePreferences(private val context: Context) : AppPreferences {
                 ?: SettingsConstants.DEFAULT_BACKUP_REMINDER_INTERVAL_DAYS
         }
 
+    override val backupReminderDismissedTime: Flow<Long> = context.dataStore.data
+        .map { preferences ->
+            preferences[BACKUP_REMINDER_DISMISSED_TIME_KEY] ?: 0L
+        }
+
     override suspend fun setThemeMode(mode: ThemeMode) {
         context.dataStore.edit { preferences ->
             preferences[THEME_KEY] = mode.name
@@ -309,6 +316,12 @@ class ThemePreferences(private val context: Context) : AppPreferences {
     override suspend fun setBackupReminderIntervalDays(days: Int) {
         context.dataStore.edit { preferences ->
             preferences[BACKUP_REMINDER_INTERVAL_DAYS_KEY] = days
+        }
+    }
+
+    override suspend fun setBackupReminderDismissedTime(timeMillis: Long) {
+        context.dataStore.edit { preferences ->
+            preferences[BACKUP_REMINDER_DISMISSED_TIME_KEY] = timeMillis
         }
     }
 }

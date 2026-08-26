@@ -7,6 +7,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
@@ -48,6 +49,7 @@ class HomeScreenTest {
         onSelectGroup: (Group) -> Unit = {},
         onStartPractice: () -> Unit = {},
         onBackUpNow: () -> Unit = {},
+        onDismissBackupReminder: () -> Unit = {},
         body: androidx.compose.ui.test.ComposeUiTest.() -> Unit
     ) = runComposeUiTest {
         setContent {
@@ -62,6 +64,7 @@ class HomeScreenTest {
                     dueCount = 5,
                     backupReminder = backupReminder,
                     onBackUpNow = onBackUpNow,
+                    onDismissBackupReminder = onDismissBackupReminder,
                     onSelectGroup = onSelectGroup,
                     onStartPractice = onStartPractice,
                     onNavigateToCards = {},
@@ -155,6 +158,17 @@ class HomeScreenTest {
         home(backupReminder = BackupReminder(9), onBackUpNow = { backups++ }) {
             onNodeWithText("Download a Backup").performClick()
             assertEquals(1, backups, "the backup was not requested exactly once")
+        }
+    }
+
+    // The reminder can be put away without backing up, which is the whole
+    // point of it being a card on a screen rather than a dialog in the way.
+    @Test
+    fun theReminderCanBeDismissed() = run {
+        var dismissals = 0
+        home(backupReminder = BackupReminder(9), onDismissBackupReminder = { dismissals++ }) {
+            onNodeWithContentDescription("Dismiss until it is due again").performClick()
+            assertEquals(1, dismissals, "the reminder was not dismissed exactly once")
         }
     }
 }

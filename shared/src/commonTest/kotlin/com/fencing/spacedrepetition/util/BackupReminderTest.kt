@@ -24,8 +24,9 @@ class BackupReminderTest {
         enabled: Boolean = true,
         cardCount: Int = 20,
         lastBackupTime: Long = now - 8 * day,
+        dismissedTime: Long = 0L,
         intervalDays: Int = 7
-    ) = backupReminder(enabled, cardCount, lastBackupTime, intervalDays, now)
+    ) = backupReminder(enabled, cardCount, lastBackupTime, dismissedTime, intervalDays, now)
 
     @Test
     fun remindsOnceTheIntervalHasPassed() {
@@ -65,6 +66,32 @@ class BackupReminderTest {
     @Test
     fun saysNothingForABackupStampedInTheFuture() {
         assertNull(reminder(lastBackupTime = now + 3 * day))
+    }
+
+    // Dismissing. "Not now" is worth one more interval of quiet -- less and
+    // the button does nothing, more and it has quietly become the switch in
+    // the settings, which is the thing to reach for if the answer is never.
+    @Test
+    fun saysNothingForAnIntervalAfterBeingDismissed() {
+        assertNull(reminder(dismissedTime = now - 2 * day))
+    }
+
+    @Test
+    fun comesBackOnceTheIntervalSinceTheDismissalHasPassed() {
+        assertEquals(
+            BackupReminder(daysSinceBackup = 30),
+            reminder(lastBackupTime = now - 30 * day, dismissedTime = now - 8 * day)
+        )
+    }
+
+    /** Dismissing quiets the never-backed-up case too, and only for as long. */
+    @Test
+    fun aDismissalAlsoQuietsACollectionThatHasNeverBeenBackedUp() {
+        assertNull(reminder(lastBackupTime = 0L, dismissedTime = now - 3 * day))
+        assertEquals(
+            BackupReminder(daysSinceBackup = null),
+            reminder(lastBackupTime = 0L, dismissedTime = now - 9 * day)
+        )
     }
 
     @Test

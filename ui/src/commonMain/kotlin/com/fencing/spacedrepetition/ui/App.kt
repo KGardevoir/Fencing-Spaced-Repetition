@@ -80,6 +80,8 @@ fun App(
             val reminderEnabled by settingsViewModel.backupReminderEnabled.collectAsState()
             val reminderIntervalDays by settingsViewModel.backupReminderIntervalDays.collectAsState()
             val lastBackupTime by settingsViewModel.lastBackupTime.collectAsState()
+            val reminderDismissedTime by
+                settingsViewModel.backupReminderDismissedTime.collectAsState()
 
             // Only where nothing backs up on its own. Read at composition
             // rather than on a timer: a reminder measured in days does not
@@ -89,6 +91,7 @@ fun App(
                 enabled = reminderEnabled,
                 cardCount = totalCardCount,
                 lastBackupTime = lastBackupTime,
+                dismissedTime = reminderDismissedTime,
                 intervalDays = reminderIntervalDays
             )
 
@@ -123,6 +126,7 @@ fun App(
                 dueCount = dueCount,
                 backupReminder = reminder,
                 onBackUpNow = settingsViewModel::runBackupNow,
+                onDismissBackupReminder = settingsViewModel::dismissBackupReminder,
                 onSelectGroup = { settingsViewModel.setSelectedGroupId(it.id) },
                 onStartPractice = {
                     practiceViewModel.startNewSession(cardsPerSession, selectedGroup?.id)
