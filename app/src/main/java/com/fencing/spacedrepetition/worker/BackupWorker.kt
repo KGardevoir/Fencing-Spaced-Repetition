@@ -20,9 +20,6 @@ import com.fencing.spacedrepetition.util.createCompressedOutputStream
 import com.fencing.spacedrepetition.util.exportCardsWithGroupStates
 import com.fencing.spacedrepetition.util.ExportResult
 import com.fencing.spacedrepetition.util.Time
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import kotlinx.coroutines.flow.first
 
 /**
@@ -35,8 +32,21 @@ class BackupWorker(
 ) : CoroutineWorker(appContext, params) {
 
     companion object {
-        private const val BACKUP_FILE_PREFIX = "fencing_backup_"
-        private val FILENAME_FORMAT = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
+        /**
+         * What a backup this worker wrote is called now, and what one written
+         * before the naming changed was called.
+         *
+         * Both are recognised so that pruning does not walk past a folder of
+         * older backups and leave them there for ever. Which of the two a
+         * file is says nothing about its age, so the pruning sorts by the
+         * time the file was written rather than by its name.
+         */
+        private const val BACKUP_FILE_SUFFIX = "_backup.tsv.gz"
+        private const val LEGACY_BACKUP_FILE_PREFIX = "fencing_backup_"
+
+        private fun isBackup(name: String?): Boolean =
+            name != null &&
+                (name.endsWith(BACKUP_FILE_SUFFIX) || name.startsWith(LEGACY_BACKUP_FILE_PREFIX))
     }
 
     override suspend fun doWork(): Result {
@@ -81,7 +91,7 @@ class BackupWorker(
         val opponents = opponentRepository.getAllOpponentsSync()
         val opponentNamesById = opponents.associate { it.id to it.name }
 
-        val filename = "$BACKUP_FILE_PREFIX${FILENAME_FORMAT.format(Date())}.tsv.gz"
+        val filename = CardImportExport.generateBackupFilename()
         val backupFile = backupDir.createFile("application/gzip", filename)
             ?: return Result.failure()
 
@@ -114,8 +124,8 @@ class BackupWorker(
 
     private fun pruneOldBackups(backupDir: DocumentFile, maxKeptBackups: Int) {
         val backups = backupDir.listFiles()
-            .filter { it.name?.startsWith(BACKUP_FILE_PREFIX) == true }
-            .sortedByDescending { it.name }
+            .filter { isBackup(it.name) }
+            .sortedByDescending { it.lastModified() }
 
         backups.drop(maxKeptBackups).forEach { it.delete() }
     }

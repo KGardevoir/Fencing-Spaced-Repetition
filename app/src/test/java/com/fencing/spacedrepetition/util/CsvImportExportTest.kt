@@ -501,14 +501,37 @@ class CsvImportExportTest {
 
     // ==================== CSV EXPORT FILENAME TESTS ====================
 
+    // The name is "<when>_<what>"; these check the what, and
+    // CardImportExportTest checks the when against a fixed instant.
+    private fun withoutStamp(filename: String): String {
+        val stamp = Regex("^\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}_")
+        assertTrue("no timestamp in $filename", stamp.containsMatchIn(filename))
+        return filename.replaceFirst(stamp, "")
+    }
+
     @Test
     fun `generateCsvExportFilename - basic`() {
-        assertEquals("My_Group_cards.csv", CardImportExport.generateCsvExportFilename("My Group"))
+        assertEquals(
+            "My_Group_cards.csv",
+            withoutStamp(CardImportExport.generateCsvExportFilename("My Group"))
+        )
     }
 
     @Test
     fun `generateCsvExportFilename - special characters`() {
-        assertEquals("Test_Group_cards.csv", CardImportExport.generateCsvExportFilename("Test/Group"))
+        assertEquals(
+            "Test_Group_cards.csv",
+            withoutStamp(CardImportExport.generateCsvExportFilename("Test/Group"))
+        )
+    }
+
+    /** Our own exports carry a stamp, and importing one back should not keep it. */
+    @Test
+    fun `deriveGroupNameFromFilename - drops the export timestamp`() {
+        assertEquals(
+            "Parries",
+            CardImportExport.deriveGroupNameFromFilename("2026-08-26_14-05-09_parries_cards.csv")
+        )
     }
 
     /**

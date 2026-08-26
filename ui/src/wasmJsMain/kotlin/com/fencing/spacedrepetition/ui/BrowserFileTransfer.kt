@@ -6,6 +6,7 @@ package com.fencing.spacedrepetition.ui
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
+import com.fencing.spacedrepetition.util.CardImportExport
 import com.fencing.spacedrepetition.util.ExportResult
 import com.fencing.spacedrepetition.util.ParsedCard
 import kotlinx.coroutines.CoroutineScope
@@ -38,33 +39,42 @@ private class BrowserFileTransfer(
 
     override fun importCards() = choose(ARCHIVE) { cards.importCards(it) }
 
-    override fun exportAllCards(includeHistory: Boolean) =
-        cards.exportAllCards(archiveDownload("all_cards.tsv.gz"), includeHistory)
+    override fun exportAllCards(includeHistory: Boolean) = cards.exportAllCards(
+        archiveDownload(CardImportExport.generateAllCardsFilename()),
+        includeHistory
+    )
 
     override fun exportGroups(groupIds: List<Long>, includeHistory: Boolean) =
         cards.exportSelectedGroups(
             groupIds,
-            archiveDownload("selected_groups_cards.tsv.gz"),
+            archiveDownload(CardImportExport.generateSelectedGroupsFilename()),
             includeHistory
         )
 
     override fun importCardsCsv() = choose(CSV) { cards.csvImportParseFile(it) }
 
-    override fun exportAllCardsCsv() = cards.exportAllCardsCsv(csvDownload("all_cards.csv"))
+    override fun exportAllCardsCsv() =
+        cards.exportAllCardsCsv(csvDownload(CardImportExport.generateAllCardsCsvFilename()))
 
-    override fun exportGroupsCsv(groupIds: List<Long>) =
-        cards.exportSelectedGroupsCsv(groupIds, csvDownload("selected_groups_cards.csv"))
+    override fun exportGroupsCsv(groupIds: List<Long>) = cards.exportSelectedGroupsCsv(
+        groupIds,
+        csvDownload(CardImportExport.generateSelectedGroupsCsvFilename())
+    )
 
     override fun importIntoGroup(group: Group) =
         choose(ARCHIVE) { groups.importCardsToGroup(group.id, it) }
 
-    override fun exportGroup(group: Group) =
-        groups.exportGroupCards(group.id, archiveDownload(groups.generateExportFilename(group.name)))
+    override fun exportGroup(group: Group) = groups.exportGroupCards(
+        group.id,
+        archiveDownload(groups.generateExportFilename(group.name))
+    )
 
     override fun importCsvIntoGroup(group: Group) = choose(CSV) { groups.csvImportParseFile(it) }
 
-    override fun exportGroupCsv(group: Group) =
-        groups.exportGroupCardsCsv(group.id, csvDownload(groups.generateCsvExportFilename(group.name)))
+    override fun exportGroupCsv(group: Group) = groups.exportGroupCardsCsv(
+        group.id,
+        csvDownload(groups.generateCsvExportFilename(group.name))
+    )
 
     override fun csvImportInto(parsed: List<ParsedCard>, errors: List<String>, groupId: Long) =
         cards.csvImportComplete(parsed, errors, groupId)

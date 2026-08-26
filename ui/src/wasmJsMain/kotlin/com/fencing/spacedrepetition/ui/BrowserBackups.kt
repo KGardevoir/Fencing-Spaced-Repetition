@@ -6,6 +6,7 @@ package com.fencing.spacedrepetition.ui
 import com.fencing.spacedrepetition.data.preferences.AppPreferences
 import com.fencing.spacedrepetition.ui.viewmodel.BackupScheduling
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
+import com.fencing.spacedrepetition.util.CardImportExport
 import com.fencing.spacedrepetition.util.Time
 
 /**
@@ -31,26 +32,8 @@ class DownloadBackups(
 ) : BackupScheduling {
 
     override suspend fun runNow() {
-        val filename = "$BACKUP_FILE_PREFIX${backupTimestamp()}.tsv.gz"
-        if (cards.backUp(archiveDownload(filename))) {
+        if (cards.backUp(archiveDownload(CardImportExport.generateBackupFilename()))) {
             preferences.setLastBackupTime(Time.now())
         }
     }
-
-    private companion object {
-        /** The same prefix the Android backup worker writes, so the two sort together. */
-        const val BACKUP_FILE_PREFIX = "fencing_backup_"
-    }
 }
-
-/**
- * yyyyMMdd_HHmmss, in UTC.
- *
- * UTC rather than the reader's own time, unlike the Android worker's: this
- * name is chosen in a browser that will happily hand the same collection to
- * two machines in two time zones, and a name that sorts by when it was made
- * is worth more here than one that matches the clock on the wall.
- */
-private fun backupTimestamp(): String = js(
-    "new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '_')"
-)

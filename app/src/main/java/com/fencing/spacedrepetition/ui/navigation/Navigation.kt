@@ -216,25 +216,25 @@ private fun rememberAndroidFileTransfer(
             override fun exportAllCards(includeHistory: Boolean) {
                 archiveGroupIds = null
                 archiveIncludesHistory = includeHistory
-                archiveExport.launch("all_cards.tsv.gz")
+                archiveExport.launch(CardImportExport.generateAllCardsFilename())
             }
 
             override fun exportGroups(groupIds: List<Long>, includeHistory: Boolean) {
                 archiveGroupIds = groupIds
                 archiveIncludesHistory = includeHistory
-                archiveExport.launch("selected_groups_cards.tsv.gz")
+                archiveExport.launch(CardImportExport.generateSelectedGroupsFilename())
             }
 
             override fun importCardsCsv() = csvImport.launch(CSV_TYPES)
 
             override fun exportAllCardsCsv() {
                 csvGroupIds = null
-                csvExport.launch("all_cards.csv")
+                csvExport.launch(CardImportExport.generateAllCardsCsvFilename())
             }
 
             override fun exportGroupsCsv(groupIds: List<Long>) {
                 csvGroupIds = groupIds
-                csvExport.launch("selected_groups_cards.csv")
+                csvExport.launch(CardImportExport.generateSelectedGroupsCsvFilename())
             }
 
             override fun importIntoGroup(group: Group) {

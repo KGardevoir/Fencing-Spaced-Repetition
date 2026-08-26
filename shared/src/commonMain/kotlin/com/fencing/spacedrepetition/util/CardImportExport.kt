@@ -817,13 +817,53 @@ object CardImportExport {
     }
 
     /**
-     * Generates a suggested filename for export
+     * What every file this app writes is called: when it was made, then what
+     * is in it -- "2026-08-26_14-05-09_all_cards.tsv.gz".
+     *
+     * The stamp leads so that a folder of exports sorts into the order they
+     * were taken, which is the order anyone looking for one thinks in. It is
+     * also what keeps a second export of the same thing from overwriting the
+     * first, or arriving as "all_cards (3).tsv.gz" in a downloads folder.
+     *
+     * [at] and [utcOffsetSeconds] are parameters rather than read here so the
+     * naming can be tested against a fixed instant.
      */
-    fun generateExportFilename(groupName: String): String {
-        val sanitized = groupName.replace(Regex("[^a-zA-Z0-9_\\-]"), "_")
-            .take(50)
-        return "${sanitized}_cards.tsv.gz"
-    }
+    fun exportFilename(
+        contents: String,
+        at: Long = Time.now(),
+        utcOffsetSeconds: Int = Time.utcOffsetSeconds()
+    ): String = "${fileTimestamp(at, utcOffsetSeconds)}_$contents"
+
+    /** The whole collection, as a compressed archive and as a CSV. */
+    fun generateAllCardsFilename(): String = exportFilename("all_cards.tsv.gz")
+
+    fun generateAllCardsCsvFilename(): String = exportFilename("all_cards.csv")
+
+    /** Several groups at once, chosen from the card list. */
+    fun generateSelectedGroupsFilename(): String = exportFilename("selected_groups_cards.tsv.gz")
+
+    fun generateSelectedGroupsCsvFilename(): String = exportFilename("selected_groups_cards.csv")
+
+    /**
+     * A backup: the whole collection with its history, taken on a schedule or
+     * asked for. Named like an export because that is what it is -- the file
+     * it produces is one any of the import paths will read back.
+     */
+    fun generateBackupFilename(): String = exportFilename("backup.tsv.gz")
+
+    /** One group's cards, as a compressed archive. */
+    fun generateExportFilename(groupName: String): String =
+        exportFilename("${sanitizeForFilename(groupName)}_cards.tsv.gz")
+
+    /**
+     * A group's name, reduced to what every filesystem will take.
+     *
+     * Fifty characters of it: long enough to tell two decks apart, short
+     * enough that the stamp and the suffix still fit inside the shortest
+     * filename limit these files might land under.
+     */
+    private fun sanitizeForFilename(groupName: String): String =
+        groupName.replace(Regex("[^a-zA-Z0-9_\\-]"), "_").take(50)
 
     /**
      * Base64 codec used for the V3 export format's inline images.
@@ -1184,22 +1224,27 @@ object CardImportExport {
         }
     }
 
+    /** One group's cards, as a CSV. */
+    fun generateCsvExportFilename(groupName: String): String =
+        exportFilename("${sanitizeForFilename(groupName)}_cards.csv")
+
     /**
-     * Generates a suggested filename for CSV export
+     * The stamp [exportFilename] puts at the front of every file, as a
+     * pattern for taking it off again.
      */
-    fun generateCsvExportFilename(groupName: String): String {
-        val sanitized = groupName.replace(Regex("[^a-zA-Z0-9_\\-]"), "_")
-            .take(50)
-        return "${sanitized}_cards.csv"
-    }
+    private val FILENAME_TIMESTAMP = Regex("^\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}_")
 
     /**
      * Derives a group name from a filename.
      * e.g. "parries_cards.csv" -> "parries cards", "My_Techniques.csv" -> "My Techniques"
+     *
+     * A leading timestamp comes off first: our own exports carry one, and a
+     * CSV of ours imported back would otherwise suggest a group called
+     * "2026 08 26 14 05 09 Parries".
      */
     fun deriveGroupNameFromFilename(filename: String): String {
         // Remove file extension(s) - loop until no more known extensions remain
-        var name = filename
+        var name = filename.replaceFirst(FILENAME_TIMESTAMP, "")
         val extensions = listOf(".csv", ".tsv", ".gz", ".txt")
         var changed = true
         while (changed) {
