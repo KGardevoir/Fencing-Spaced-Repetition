@@ -151,3 +151,78 @@ private fun saveAsDownload(
     })()
     """
 )
+
+/**
+ * Hands the user a file of bytes, the way [downloadText] hands them a file of
+ * text -- and with no compression step, because what goes through here is a
+ * zip, which is a container this app has already finished building.
+ *
+ * Returns null once the download has started, or why it could not.
+ */
+internal suspend fun downloadBytes(name: String, bytes: ByteArray, mime: String): String? =
+    saveBytesAsDownload(name, bytes.toUint8Array(), mime).await<JsString?>()?.toString()
+
+/**
+ * A byte at a time, as OpfsImageStore does it.
+ *
+ * There is no shared buffer between Wasm memory and a JS typed array to copy
+ * in one move, so this is the copy. It runs once per export, over bytes that
+ * have already been read out of storage individually.
+ *
+ * Kotlin's Byte is signed and a Uint8Array's elements are not, so everything
+ * above 0x7f crosses as a negative number and arrives right only because
+ * assigning to a typed array wraps it. A zip is full of such bytes -- CRCs,
+ * and the JPEGs themselves -- so internal rather than private: see
+ * BrowserBytesTest, which is where that is checked in an engine that has one.
+ */
+internal fun ByteArray.toUint8Array(): JsAny {
+    val array = newUint8Array(size)
+    for (i in indices) setUint8(array, i, this[i].toInt())
+    return array
+}
+
+private fun newUint8Array(size: Int): JsAny = js("new Uint8Array(size)")
+private fun setUint8(array: JsAny, index: Int, value: Int) { js("array[index] = value") }
+
+private fun saveBytesAsDownload(name: String, bytes: JsAny, mime: String): Promise<JsString?> = js(
+    """
+    (function () {
+        try {
+            var url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+            var link = document.createElement('a');
+            link.href = url;
+            link.download = name;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+            return Promise.resolve(null);
+        } catch (error) {
+            return Promise.resolve(String((error && error.message) || error));
+        }
+    })()
+    """
+)
+
+/**
+ * Downloads one image, under [name], typed by its extension.
+ *
+ * Public where the rest of this file is internal, because the thing that asks
+ * for it is the web module's ImageExporter and not this one's file transfer.
+ *
+ * The type matters more here than it does for a deck export: a browser names
+ * the saved file from it when the extension and the type disagree, and an
+ * image saved as .bin is one the user has to rename before anything opens it.
+ */
+suspend fun downloadImage(name: String, bytes: ByteArray): String? =
+    downloadBytes(name, bytes, imageMime(name.substringAfterLast('.', "")))
+
+private fun imageMime(extension: String): String = when (extension.lowercase()) {
+    "png" -> "image/png"
+    "webp" -> "image/webp"
+    "gif" -> "image/gif"
+    "bmp" -> "image/bmp"
+    "heic" -> "image/heic"
+    else -> "image/jpeg"
+}

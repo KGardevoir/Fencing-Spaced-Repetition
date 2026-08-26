@@ -250,6 +250,7 @@ fun App(
                 onImportCsv = transfer::importCardsCsv,
                 onExportAllCsv = transfer::exportAllCardsCsv,
                 onExportGroupsCsv = transfer::exportGroupsCsv,
+                onExportAllPhotos = transfer::exportAllPhotos,
                 onNavigateToAddCard = { navigator.go(Destination.AddCard(it)) },
                 onNavigateToEditCard = { navigator.go(Destination.EditCard(it)) },
                 onNavigateBack = { navigator.back() }

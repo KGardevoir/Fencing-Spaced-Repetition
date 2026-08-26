@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -35,7 +36,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import com.fencing.spacedrepetition.ui.image.ImageExporter
 import com.fencing.spacedrepetition.ui.image.ImageLoad
+import com.fencing.spacedrepetition.ui.image.LocalImageExporter
 import com.fencing.spacedrepetition.ui.image.rememberImageBitmap
 
 /**
@@ -68,7 +71,11 @@ fun CardImagesDisplay(
             CardImage(
                 imagePath = imagePath,
                 maxHeight = maxHeight,
-                onClick = { onImageClick?.invoke(imagePath) }
+                // Null when the caller has no handler, rather than a lambda
+                // that invokes a null one: [CardImage] opens the full-screen
+                // view only when its onClick is absent, so wrapping it would
+                // turn every tap into nothing at all.
+                onClick = onImageClick?.let { handler -> { handler(imagePath) } }
             )
         }
     }
@@ -110,8 +117,19 @@ fun CardImage(
     }
 }
 
+/**
+ * One image, filling the screen, with a way to take a copy out of the app.
+ *
+ * The export button is the only way a single photo leaves: the deck export
+ * carries them all, inlined in a format nothing else reads, and the photo
+ * archive carries them all as well. Someone who wants the one picture they
+ * are looking at has this. It is hidden where no [ImageExporter] was provided
+ * rather than shown and inert.
+ */
 @Composable
 fun ImageFullScreenDialog(imagePath: String, onDismiss: () -> Unit) {
+    val exporter = LocalImageExporter.current
+
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -126,6 +144,19 @@ fun ImageFullScreenDialog(imagePath: String, onDismiss: () -> Unit) {
                     contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxSize().padding(16.dp)
                 )
+
+                if (exporter != null) {
+                    IconButton(
+                        onClick = { exporter.export(imagePath) },
+                        modifier = Modifier.align(Alignment.TopStart).padding(16.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.FileDownload,
+                            contentDescription = "Export photo",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
 
                 IconButton(
                     onClick = onDismiss,

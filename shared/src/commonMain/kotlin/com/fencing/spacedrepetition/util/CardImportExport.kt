@@ -862,8 +862,11 @@ object CardImportExport {
      * enough that the stamp and the suffix still fit inside the shortest
      * filename limit these files might land under.
      */
-    private fun sanitizeForFilename(groupName: String): String =
+    internal fun sanitizeForFilename(groupName: String): String =
         groupName.replace(Regex("[^a-zA-Z0-9_\\-]"), "_").take(50)
+
+    /** The whole collection's photos, as an archive a photo viewer opens. */
+    fun generateAllPhotosFilename(): String = exportFilename("photos.zip")
 
     /**
      * Base64 codec used for the V3 export format's inline images.

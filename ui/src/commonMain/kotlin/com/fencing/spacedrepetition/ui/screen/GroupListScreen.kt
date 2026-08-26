@@ -247,6 +247,19 @@ fun GroupListScreen(
                 }
             )
         }
+        is ImportExportState.PhotoExportSuccess -> {
+            AlertDialog(
+                onDismissRequest = { onDismissImportExport() },
+                icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                title = { Text("Export Complete") },
+                text = { Text("Successfully exported ${state.exportedCount} photos.") },
+                confirmButton = {
+                    Button(onClick = { onDismissImportExport() }) {
+                        Text("OK")
+                    }
+                }
+            )
+        }
         is ImportExportState.Error -> {
             AlertDialog(
                 onDismissRequest = { onDismissImportExport() },
