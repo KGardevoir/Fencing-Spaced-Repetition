@@ -29,14 +29,13 @@ data class Group(
     val maximumInterval: Int? = null,
     // Retention overrides (null = use global default)
     val fsrsRetention: Int? = null,         // integer percent 70–97, e.g. 90 for 90 %
-    val sm2IntervalModifier: Int? = null,   // integer percent 50–200, e.g. 100 for no change
     val fsrsEnableFuzzing: Boolean? = null  // override FSRS interval fuzzing setting
 ) {
     /** Returns true if any per-group setting override is set */
     fun hasCustomSettings(): Boolean =
         cardsPerSession != null || autoShowAnswer != null || randomizeDueCards != null ||
         randomizeBucketHours != null || practiceDays != null || maximumInterval != null ||
-        fsrsRetention != null || sm2IntervalModifier != null || fsrsEnableFuzzing != null
+        fsrsRetention != null || fsrsEnableFuzzing != null
 
     /** Parse the practiceDays string to a Set<Int>, or null if not overridden */
     fun parsePracticeDays(): Set<Int>? {
@@ -104,11 +103,6 @@ data class CardGroupLearningState(
     val fsrsReps: Int = 0,
     val fsrsLapses: Int = 0,
     val fsrsState: String = "NEW", // NEW, LEARNING, REVIEW, RELEARNING
-
-    // SM-2 parameters
-    val sm2EaseFactor: Double = 2.5,
-    val sm2Interval: Int = 0,
-    val sm2Repetitions: Int = 0,
 
     // Common scheduling fields
     val lastReview: Long = 0L,

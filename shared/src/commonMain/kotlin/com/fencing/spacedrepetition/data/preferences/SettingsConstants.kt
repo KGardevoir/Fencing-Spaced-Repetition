@@ -43,10 +43,6 @@ object SettingsConstants {
 
     const val DEFAULT_FSRS_RETENTION = 90
 
-    const val DEFAULT_SM2_INTERVAL_MODIFIER = 100
-    const val MIN_SM2_INTERVAL_MODIFIER = 50
-    const val MAX_SM2_INTERVAL_MODIFIER = 200
-
     const val DEFAULT_FSRS_ENABLE_FUZZING = false
 
     const val DEFAULT_AUTO_BACKUP_ENABLED = false
@@ -96,19 +92,6 @@ object SettingsConstants {
     /** Day labels for practice day chips (ISO-8601: 1=Mon..7=Sun). */
     val DAY_LABELS = listOf(
         7 to "S", 1 to "M", 2 to "T", 3 to "W", 4 to "T", 5 to "F", 6 to "S"
-    )
-
-    /**
-     * Preset values for SM-2 interval modifier (integer percent → label).
-     * 100 % = default SM-2 behaviour; lower = more frequent reviews; higher = longer intervals.
-     */
-    val SM2_MODIFIER_PRESETS = listOf(
-        50  to "50%",
-        75  to "75%",
-        100 to "100%",
-        125 to "125%",
-        150 to "150%",
-        200 to "200%"
     )
 
     /** Preset values for automatic backup frequency (days to label). */

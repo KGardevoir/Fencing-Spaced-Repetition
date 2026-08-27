@@ -77,9 +77,8 @@ class DecimalsTest {
 
     @Test
     fun keepsTheSignWhenOnePlaceRoundsToZero() {
-        // 2.5 - easeFactor is the card list's SM-2 difficulty, and it goes
-        // slightly negative for an easy card. "%.1f" prints "-0.0" there, and
-        // taking the sign from the rounded result would print "0.0".
+        // "%.1f" prints "-0.0" for a small negative, and taking the sign from
+        // the rounded result would print "0.0" instead.
         assertEquals("-0.0", (-0.04).toOneDecimal())
         assertEquals("-0.5", (-0.5).toOneDecimal())
         assertEquals("-1.3", (-1.25).toOneDecimal())

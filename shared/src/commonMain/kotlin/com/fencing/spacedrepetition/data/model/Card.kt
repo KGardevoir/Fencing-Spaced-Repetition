@@ -19,9 +19,6 @@ data class Card(
     val tags: String = "", // Comma-separated tags
     val imagePaths: List<String> = emptyList(), // List of image file paths/URIs
 
-    // Algorithm selection
-    val algorithm: AlgorithmType = AlgorithmType.FSRS,
-
     // FSRS fields
     val fsrsStability: Double = 0.0,
     val fsrsDifficulty: Double = 0.0,
@@ -31,11 +28,6 @@ data class Card(
     val fsrsLapses: Int = 0,
     val fsrsState: String = "NEW", // NEW, LEARNING, REVIEW, RELEARNING
 
-    // SM-2 fields
-    val sm2EaseFactor: Double = 2.5,
-    val sm2Interval: Int = 0,
-    val sm2Repetitions: Int = 0,
-
     // Common fields
     val lastReview: Long = 0L,
     val nextReview: Long = 0L,
@@ -43,7 +35,3 @@ data class Card(
     val modified: Long = Time.now(),
     val isDisabled: Boolean = false
 )
-
-enum class AlgorithmType {
-    FSRS, SM2
-}

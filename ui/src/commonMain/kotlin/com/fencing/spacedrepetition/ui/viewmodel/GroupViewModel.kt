@@ -5,7 +5,6 @@ package com.fencing.spacedrepetition.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
@@ -192,8 +191,7 @@ class GroupViewModel(
      */
     fun importCardsToGroup(
         groupId: Long,
-        file: ImportFile,
-        algorithm: AlgorithmType = AlgorithmType.FSRS
+        file: ImportFile
     ) {
         viewModelScope.launch {
             _importExportState.value = ImportExportState.Loading
@@ -227,8 +225,7 @@ class GroupViewModel(
                         )
                     else -> cardRepository.importCardsToGroup(
                         parsedCards.map { it.concept to it.answer },
-                        groupId,
-                        algorithm
+                        groupId
                     )
                 }
 

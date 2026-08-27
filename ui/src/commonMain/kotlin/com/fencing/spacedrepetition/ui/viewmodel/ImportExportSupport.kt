@@ -10,7 +10,6 @@ package com.fencing.spacedrepetition.ui.viewmodel
 // Bringing the two into :ui was the moment to name the shared steps rather
 // than copy them across a module boundary a third time.
 
-import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.repository.CardRepository
@@ -135,8 +134,7 @@ internal suspend fun importCsvCards(
                 Card(
                     question = parsed.concept,
                     answer = parsed.answer,
-                    imagePaths = imageKeys,
-                    algorithm = AlgorithmType.FSRS
+                    imagePaths = imageKeys
                 )
             )
             groups.addCardToGroup(cardId, groupId)

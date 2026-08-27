@@ -24,7 +24,7 @@ HOW IT WORKS
 
 TWO PROVEN ALGORITHMS
 
-Choose between FSRS (Free Spaced Repetition Scheduler), a modern algorithm with stability and difficulty modeling, or SM-2 (SuperMemo 2), the classic algorithm behind decades of spaced repetition research. Mix and match across different cards.
+Scheduling uses FSRS (Free Spaced Repetition Scheduler), a modern algorithm with stability and difficulty modeling.
 
 ORGANIZE YOUR TRAINING
 
@@ -50,7 +50,7 @@ KEY FEATURES
 
 - Delayed-choice grading: practice first, grade afterwards
 - Configurable session size (1-6 cards per session)
-- FSRS and SM-2 spaced repetition algorithms
+- FSRS spaced repetition algorithm
 - Groups with optional independent learning states
 - Image attachments on cards
 - Categories and tags

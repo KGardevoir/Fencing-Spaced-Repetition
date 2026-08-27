@@ -3,7 +3,6 @@
 
 package com.fencing.spacedrepetition.util
 
-import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import org.junit.Assert.*
 import org.junit.Test
@@ -108,8 +107,7 @@ class CardImportExportV3Test {
                 id = 1,
                 question = "What is this?",
                 answer = "A test card",
-                imagePaths = listOf(tempFile1.absolutePath, tempFile2.absolutePath),
-                algorithm = AlgorithmType.FSRS
+                imagePaths = listOf(tempFile1.absolutePath, tempFile2.absolutePath)
             )
 
             val cardsWithStates = listOf(
@@ -135,7 +133,7 @@ class CardImportExportV3Test {
             gzipIn.close()
 
             // Should contain base64-encoded image data
-            assertTrue(content.contains("#FSR_EXPORT_V3"))
+            assertTrue(content.contains("#FSR_EXPORT_V4"))
             assertTrue(content.contains("What is this?"))
             assertTrue(content.contains("A test card"))
             // Should have two base64-encoded images separated by ||
@@ -161,7 +159,6 @@ class CardImportExportV3Test {
                 question = "Test Question",
                 answer = "Test Answer",
                 imagePaths = listOf(tempFile.absolutePath),
-                algorithm = AlgorithmType.FSRS,
                 fsrsStability = 5.0,
                 fsrsDifficulty = 3.5,
                 fsrsState = "REVIEW",
@@ -206,7 +203,6 @@ class CardImportExportV3Test {
             assertArrayEquals(createTestImageBytes(), decodedImage)
 
             // Verify state was preserved
-            assertEquals(AlgorithmType.FSRS, parsed.algorithm)
             assertEquals(5.0, parsed.fsrsStability!!, 0.001)
             assertEquals(3.5, parsed.fsrsDifficulty!!, 0.001)
             assertEquals("REVIEW", parsed.fsrsState)
@@ -223,8 +219,7 @@ class CardImportExportV3Test {
             id = 1,
             question = "No images",
             answer = "Just text",
-            imagePaths = emptyList(),
-            algorithm = AlgorithmType.SM2
+            imagePaths = emptyList()
         )
 
         val cardsWithStates = listOf(
@@ -250,7 +245,8 @@ class CardImportExportV3Test {
 
         assertTrue(content.contains("No images"))
         assertTrue(content.contains("Just text"))
-        assertTrue(content.contains("SM2"))
+        // V4 dropped the SM-2 columns.
+        assertFalse(content.contains("SM2"))
     }
 
     @Test
@@ -261,8 +257,7 @@ class CardImportExportV3Test {
             id = 1,
             question = "Large card",
             answer = largeAnswer,
-            imagePaths = emptyList(),
-            algorithm = AlgorithmType.FSRS
+            imagePaths = emptyList()
         )
 
         val cardsWithStates = listOf(

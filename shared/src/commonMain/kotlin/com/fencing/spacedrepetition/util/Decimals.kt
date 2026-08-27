@@ -26,10 +26,9 @@ fun Double.toTwoDecimals(): String = toFixed(places = 2, scale = 100)
 /**
  * Formats a number to exactly one decimal place -- the `"%.1f"` sites.
  *
- * The card list shows a difficulty this way, and for SM-2 it shows
- * `2.5 - easeFactor`, which goes negative for an easy card. That is why the
- * sign comes from the value and not from the rounded result: -0.04 rounds to
- * zero at one place, and "%.1f" still prints it as "-0.0".
+ * The sign comes from the value and not from the rounded result, so a small
+ * negative keeps its sign: -0.04 rounds to zero at one place, and "%.1f"
+ * still prints it as "-0.0".
  */
 fun Double.toOneDecimal(): String = toFixed(places = 1, scale = 10)
 

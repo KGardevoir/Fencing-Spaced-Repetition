@@ -3,7 +3,6 @@
 
 package com.fencing.spacedrepetition.util
 
-import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import org.junit.Assert.*
@@ -198,7 +197,6 @@ class CardImportExportV2Test {
             id = 1,
             question = "Test Question",
             answer = "Test Answer",
-            algorithm = AlgorithmType.FSRS,
             fsrsStability = 5.0,
             fsrsDifficulty = 0.3,
             fsrsState = "REVIEW",
@@ -218,7 +216,7 @@ class CardImportExportV2Test {
         assertEquals(1, (result as ExportResult.Success).exportedCount)
 
         val content = output.toString(Charsets.UTF_8.name())
-        assertTrue(content.startsWith("#FSR_EXPORT_V3"))
+        assertTrue(content.startsWith("#FSR_EXPORT_V4"))
         assertTrue(content.contains("\tGLOBAL\t"))
 
         // Should only have header + column names + 1 data row
@@ -232,7 +230,6 @@ class CardImportExportV2Test {
             id = 1,
             question = "Test Question",
             answer = "Test Answer",
-            algorithm = AlgorithmType.FSRS,
             fsrsStability = 5.0,
             fsrsDifficulty = 0.3,
             fsrsState = "REVIEW",
@@ -283,7 +280,6 @@ class CardImportExportV2Test {
             id = 1,
             question = "Test",
             answer = "Answer",
-            algorithm = AlgorithmType.FSRS,
             fsrsStability = 1.0,
             fsrsReps = 1,
             created = System.currentTimeMillis(),
@@ -325,7 +321,6 @@ class CardImportExportV2Test {
             id = 1,
             question = "Round trip V2 test",
             answer = "Answer with<br>newlines",
-            algorithm = AlgorithmType.FSRS,
             fsrsStability = 5.5,
             fsrsDifficulty = 0.35,
             fsrsState = "REVIEW",
@@ -333,9 +328,6 @@ class CardImportExportV2Test {
             fsrsLapses = 1,
             fsrsScheduledDays = 10,
             fsrsElapsedDays = 7,
-            sm2EaseFactor = 2.6,
-            sm2Interval = 14,
-            sm2Repetitions = 5,
             nextReview = 1700000000000,
             lastReview = 1699900000000,
             created = System.currentTimeMillis(),
@@ -352,9 +344,6 @@ class CardImportExportV2Test {
             fsrsLapses = 0,
             fsrsScheduledDays = 20,
             fsrsElapsedDays = 14,
-            sm2EaseFactor = 2.7,
-            sm2Interval = 21,
-            sm2Repetitions = 7,
             nextReview = 1700200000000,
             lastReview = 1700000000000
         )
@@ -381,7 +370,6 @@ class CardImportExportV2Test {
         val globalParsed = parsed.find { it.isGlobalState }!!
         assertEquals(originalCard.question, globalParsed.concept)
         assertEquals("Answer with\nnewlines", globalParsed.answer) // Newlines unescaped
-        assertEquals(originalCard.algorithm, globalParsed.algorithm)
         assertEquals(originalCard.fsrsStability, globalParsed.fsrsStability!!, 0.001)
         assertEquals(originalCard.fsrsDifficulty, globalParsed.fsrsDifficulty!!, 0.001)
         assertEquals(originalCard.fsrsState, globalParsed.fsrsState)
@@ -458,7 +446,7 @@ class CardImportExportV2Test {
     }
 
     @Test
-    fun `V2 format with SM2 algorithm`() {
+    fun `V2 rows naming SM-2 still import, SM-2 columns ignored`() {
         val input = """
             #FSR_EXPORT_V2
             #Headers...
@@ -469,28 +457,23 @@ class CardImportExportV2Test {
         val (cards, _) = CardImportExport.parseCards(input.byteInputStream())
 
         assertEquals(2, cards.size)
-        assertTrue(cards.all { it.algorithm == AlgorithmType.SM2 })
+        assertTrue(cards.all { it.hasFullState })
 
         val global = cards.find { it.isGlobalState }!!
         val groupSpecific = cards.find { it.isGroupSpecificState }!!
 
-        assertEquals(2.8, global.sm2EaseFactor!!, 0.001)
-        assertEquals(14, global.sm2Interval)
-        assertEquals(5, global.sm2Repetitions)
+        assertEquals("GLOBAL", global.stateContext)
+        assertEquals(1700000000000L, global.nextReview)
 
-        assertEquals(3.0, groupSpecific.sm2EaseFactor!!, 0.001)
-        assertEquals(21, groupSpecific.sm2Interval)
-        assertEquals(8, groupSpecific.sm2Repetitions)
+        assertEquals("Study", groupSpecific.stateContext)
+        assertEquals(1700100000000L, groupSpecific.nextReview)
     }
 
     @Test
     fun `Export multiple cards with varying independent learning states`() {
-        val card1 = Card(id = 1, question = "Q1", answer = "A1", algorithm = AlgorithmType.FSRS,
-            fsrsStability = 1.0, created = 0, modified = 0)
-        val card2 = Card(id = 2, question = "Q2", answer = "A2", algorithm = AlgorithmType.FSRS,
-            fsrsStability = 2.0, created = 0, modified = 0)
-        val card3 = Card(id = 3, question = "Q3", answer = "A3", algorithm = AlgorithmType.FSRS,
-            fsrsStability = 3.0, created = 0, modified = 0)
+        val card1 = Card(id = 1, question = "Q1", answer = "A1",            fsrsStability = 1.0, created = 0, modified = 0)
+        val card2 = Card(id = 2, question = "Q2", answer = "A2",            fsrsStability = 2.0, created = 0, modified = 0)
+        val card3 = Card(id = 3, question = "Q3", answer = "A3",            fsrsStability = 3.0, created = 0, modified = 0)
 
         val groupState1 = CardGroupLearningState(cardId = 1, groupId = 1, fsrsStability = 5.0)
         val groupState2 = CardGroupLearningState(cardId = 2, groupId = 1, fsrsStability = 6.0)

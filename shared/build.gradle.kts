@@ -155,6 +155,16 @@ kotlin {
             }
         }
 
+        val jvmTest by getting {
+            dependencies {
+                // A real SQLite engine for the migration tests, bundled rather
+                // than the platform's: these run on the JVM, which ships none.
+                // Same group and version as the sqlite artifact commonMain
+                // already depends on.
+                implementation("androidx.sqlite:sqlite-bundled:$sqliteVersion")
+            }
+        }
+
         val commonTest by getting {
             dependencies {
                 implementation(kotlin("test"))

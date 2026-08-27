@@ -3,7 +3,6 @@
 
 package com.fencing.spacedrepetition.util
 
-import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 
 // The data holders the import/export format is expressed in. They are plain
@@ -25,7 +24,6 @@ data class ParsedCard(
     val imagePaths: List<String> = emptyList(), // For export (file paths)
     val imageData: List<String> = emptyList(),  // For import (base64 encoded)
     // Full state (null if simple import)
-    val algorithm: AlgorithmType? = null,
     val stateContext: String? = null,  // "GLOBAL" or group name for group-specific state
     val nextReview: Long? = null,
     val lastReview: Long? = null,
@@ -36,12 +34,11 @@ data class ParsedCard(
     val fsrsLapses: Int? = null,
     val fsrsScheduledDays: Int? = null,
     val fsrsElapsedDays: Int? = null,
-    val sm2EaseFactor: Double? = null,
-    val sm2Interval: Int? = null,
-    val sm2Repetitions: Int? = null,
     val groupNames: List<String> = emptyList()
 ) {
-    val hasFullState: Boolean get() = algorithm != null
+    // Every full-format row carries a state context ("GLOBAL" or a group
+    // name); the two-column simple format carries none.
+    val hasFullState: Boolean get() = stateContext != null
     val isGlobalState: Boolean get() = stateContext == null || stateContext == "GLOBAL"
     val isGroupSpecificState: Boolean get() = !isGlobalState
 }

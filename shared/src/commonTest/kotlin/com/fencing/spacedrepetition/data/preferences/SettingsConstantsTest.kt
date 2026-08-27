@@ -90,43 +90,6 @@ class SettingsConstantsTest {
         assertTrue(SettingsConstants.CARDS_PER_SESSION_STEPS > 0)
     }
 
-    // ==================== Retention preset TESTS ====================
-
-    @Test
-    fun `sm2 modifier presets are sorted ascending`() {
-        val values = SettingsConstants.SM2_MODIFIER_PRESETS.map { it.first }
-        assertEquals(values, values.sorted())
-    }
-
-    @Test
-    fun `sm2 modifier presets contain default value 100`() {
-        val values = SettingsConstants.SM2_MODIFIER_PRESETS.map { it.first }
-        assertTrue(100 in values, "Default 100 % must appear in SM-2 modifier presets")
-    }
-
-    @Test
-    fun `findPresetIndex - exact match works with sm2 modifier presets`() {
-        val presets = SettingsConstants.SM2_MODIFIER_PRESETS
-        assertEquals(0, SettingsConstants.findPresetIndex(presets, 50))   // first
-        assertEquals(2, SettingsConstants.findPresetIndex(presets, 100))  // default
-        assertEquals(5, SettingsConstants.findPresetIndex(presets, 200))  // last
-    }
-
-    @Test
-    fun `findPresetIndex - value above max returns last index for sm2 modifier presets`() {
-        val presets = SettingsConstants.SM2_MODIFIER_PRESETS
-        val lastIndex = presets.size - 1
-        assertEquals(lastIndex, SettingsConstants.findPresetIndex(presets, 300))
-        assertEquals(lastIndex, SettingsConstants.findPresetIndex(presets, 1000))
-    }
-
-    @Test
-    fun `sm2 modifier preset labels end with percent sign`() {
-        SettingsConstants.SM2_MODIFIER_PRESETS.forEach { (_, label) ->
-            assertTrue(label.endsWith("%"), "Label '$label' should end with '%'")
-        }
-    }
-
     // ==================== Max backups kept preset TESTS ====================
 
     @Test

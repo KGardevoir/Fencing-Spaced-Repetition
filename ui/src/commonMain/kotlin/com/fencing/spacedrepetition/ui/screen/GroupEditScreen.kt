@@ -37,7 +37,6 @@ fun GroupEditScreen(
     globalPracticeDays: Set<Int>,
     globalMaximumInterval: Int,
     globalFsrsRetention: Int,
-    globalSm2IntervalModifier: Int,
     globalFsrsEnableFuzzing: Boolean,
     groupCardCount: Int,
     practiceScheduleEstimate: ScheduleEstimate?,
@@ -74,15 +73,12 @@ fun GroupEditScreen(
     var overrideFsrsRetention by remember { mutableStateOf(group.fsrsRetention != null) }
     var fsrsRetention by remember { mutableIntStateOf(group.fsrsRetention ?: globalFsrsRetention) }
 
-    var overrideSm2IntervalModifier by remember { mutableStateOf(group.sm2IntervalModifier != null) }
-    var sm2IntervalModifier by remember { mutableIntStateOf(group.sm2IntervalModifier ?: globalSm2IntervalModifier) }
 
     var overrideFsrsEnableFuzzing by remember { mutableStateOf(group.fsrsEnableFuzzing != null) }
     var fsrsEnableFuzzing by remember { mutableStateOf(group.fsrsEnableFuzzing ?: globalFsrsEnableFuzzing) }
 
     val intervalPresets = SettingsConstants.INTERVAL_PRESETS
     val bucketPresets = SettingsConstants.BUCKET_PRESETS
-    val sm2ModifierPresets = SettingsConstants.SM2_MODIFIER_PRESETS
 
     fun buildUpdatedGroup() = group.copy(
         name = name.trim(),
@@ -95,7 +91,6 @@ fun GroupEditScreen(
         practiceDays = if (overridePracticeDays) practiceDays.sorted().joinToString(",") else null,
         maximumInterval = if (overrideMaximumInterval) maximumInterval else null,
         fsrsRetention = if (overrideFsrsRetention) fsrsRetention else null,
-        sm2IntervalModifier = if (overrideSm2IntervalModifier) sm2IntervalModifier else null,
         fsrsEnableFuzzing = if (overrideFsrsEnableFuzzing) fsrsEnableFuzzing else null
     )
 
@@ -409,35 +404,6 @@ fun GroupEditScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 FsrsRetentionPreview(retentionPercent = fsrsRetention)
-            }
-
-            // SM-2 interval modifier override
-            SettingOverrideSection(
-                label = "SM-2 Interval Modifier",
-                overridden = overrideSm2IntervalModifier,
-                onOverrideChange = { overrideSm2IntervalModifier = it }
-            ) {
-                val currentModifierIndex = SettingsConstants.findPresetIndex(sm2ModifierPresets, sm2IntervalModifier)
-                Text(
-                    sm2ModifierPresets[currentModifierIndex].second,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Slider(
-                    value = currentModifierIndex.toFloat(),
-                    onValueChange = { newIndex ->
-                        sm2IntervalModifier = sm2ModifierPresets[newIndex.roundToInt()].first
-                    },
-                    valueRange = 0f..(sm2ModifierPresets.size - 1).toFloat(),
-                    steps = sm2ModifierPresets.size - 2,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = overrideSm2IntervalModifier
-                )
-                Text(
-                    "Scales SM-2 review intervals. 100\u00a0% = default; lower = more reviews; higher = fewer reviews.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
 
             // FSRS interval fuzzing override

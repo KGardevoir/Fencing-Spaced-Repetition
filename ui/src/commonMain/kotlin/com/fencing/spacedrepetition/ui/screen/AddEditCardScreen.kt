@@ -22,7 +22,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.Grade
@@ -65,7 +64,6 @@ fun AddEditCardScreen(
         question: String,
         answer: String,
         groupIds: List<Long>,
-        algorithm: AlgorithmType,
         imagePaths: List<String>,
         onSuccess: () -> Unit
     ) -> Unit,
@@ -76,7 +74,6 @@ fun AddEditCardScreen(
     var answerFieldValue by rememberSaveable(stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(cardToEdit?.answer ?: ""))
     }
-    var selectedAlgorithm by rememberSaveable { mutableStateOf(cardToEdit?.algorithm ?: AlgorithmType.FSRS) }
     var imagePaths by rememberSaveable { mutableStateOf<List<String>>(cardToEdit?.imagePaths?.toMutableList() ?: mutableListOf()) }
 
     var selectedGroupIds by remember(cardGroups, initialGroupId) {
@@ -108,10 +105,7 @@ fun AddEditCardScreen(
                     fsrsDifficulty = state.fsrsDifficulty.toString(),
                     fsrsReps = state.fsrsReps.toString(),
                     fsrsLapses = state.fsrsLapses.toString(),
-                    fsrsState = state.fsrsState,
-                    sm2EaseFactor = state.sm2EaseFactor.toString(),
-                    sm2Interval = state.sm2Interval.toString(),
-                    sm2Repetitions = state.sm2Repetitions.toString()
+                    fsrsState = state.fsrsState
                 )
             }
         )
@@ -123,9 +117,6 @@ fun AddEditCardScreen(
     var fsrsReps by rememberSaveable { mutableStateOf(cardToEdit?.fsrsReps?.toString() ?: "0") }
     var fsrsLapses by rememberSaveable { mutableStateOf(cardToEdit?.fsrsLapses?.toString() ?: "0") }
     var fsrsState by rememberSaveable { mutableStateOf(cardToEdit?.fsrsState ?: "NEW") }
-    var sm2EaseFactor by rememberSaveable { mutableStateOf(cardToEdit?.sm2EaseFactor?.toString() ?: "2.5") }
-    var sm2Interval by rememberSaveable { mutableStateOf(cardToEdit?.sm2Interval?.toString() ?: "0") }
-    var sm2Repetitions by rememberSaveable { mutableStateOf(cardToEdit?.sm2Repetitions?.toString() ?: "0") }
 
     // Additional state for review timing (updated by quick grading)
     var lastReview by rememberSaveable { mutableStateOf(cardToEdit?.lastReview ?: 0L) }
@@ -488,9 +479,6 @@ fun AddEditCardScreen(
                                                 fsrsState = updated.fsrsState
                                                 fsrsElapsedDays = updated.fsrsElapsedDays.toString()
                                                 fsrsScheduledDays = updated.fsrsScheduledDays.toString()
-                                                sm2EaseFactor = updated.sm2EaseFactor.toString()
-                                                sm2Interval = updated.sm2Interval.toString()
-                                                sm2Repetitions = updated.sm2Repetitions.toString()
                                                 lastReview = updated.lastReview
                                                 nextReview = updated.nextReview
                                                 appliedGrade = grade
@@ -548,10 +536,7 @@ fun AddEditCardScreen(
                                                             fsrsDifficulty = updated.fsrsDifficulty.toString(),
                                                             fsrsReps = updated.fsrsReps.toString(),
                                                             fsrsLapses = updated.fsrsLapses.toString(),
-                                                            fsrsState = updated.fsrsState,
-                                                            sm2EaseFactor = updated.sm2EaseFactor.toString(),
-                                                            sm2Interval = updated.sm2Interval.toString(),
-                                                            sm2Repetitions = updated.sm2Repetitions.toString()
+                                                            fsrsState = updated.fsrsState
                                                         ))
                                                         groupNextReviews = groupNextReviews + (group.id to updated.nextReview)
                                                         appliedGrade = grade
@@ -576,82 +561,6 @@ fun AddEditCardScreen(
                 }
             }
 
-            // Algorithm selection
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.Psychology,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Spaced Repetition Algorithm",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // FSRS option
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = selectedAlgorithm == AlgorithmType.FSRS,
-                            onClick = { selectedAlgorithm = AlgorithmType.FSRS; isDirty = true }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "FSRS (Recommended)",
-                                style = MaterialTheme.typography.titleSmall
-                            )
-                            Text(
-                                text = "Modern algorithm with better predictions",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // SM-2 option
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = selectedAlgorithm == AlgorithmType.SM2,
-                            onClick = { selectedAlgorithm = AlgorithmType.SM2; isDirty = true }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "SM-2 (Classic)",
-                                style = MaterialTheme.typography.titleSmall
-                            )
-                            Text(
-                                text = "Traditional SuperMemo algorithm",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
 
             // Advanced settings (learning state) - only show when editing
             if (isEditing && cardToEdit != null) {
@@ -720,139 +629,95 @@ fun AddEditCardScreen(
                             Spacer(modifier = Modifier.height(16.dp))
 
                             // FSRS Parameters
-                            if (selectedAlgorithm == AlgorithmType.FSRS) {
-                                Text(
-                                    "FSRS Parameters",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "FSRS Parameters",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
 
-                                // State dropdown
-                                var stateExpanded by remember { mutableStateOf(false) }
-                                ExposedDropdownMenuBox(
+                            // State dropdown
+                            var stateExpanded by remember { mutableStateOf(false) }
+                            ExposedDropdownMenuBox(
+                                expanded = stateExpanded,
+                                onExpandedChange = { stateExpanded = !stateExpanded }
+                            ) {
+                                OutlinedTextField(
+                                    value = fsrsState,
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("State") },
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = stateExpanded) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                                )
+                                ExposedDropdownMenu(
                                     expanded = stateExpanded,
-                                    onExpandedChange = { stateExpanded = !stateExpanded }
+                                    onDismissRequest = { stateExpanded = false }
                                 ) {
-                                    OutlinedTextField(
-                                        value = fsrsState,
-                                        onValueChange = {},
-                                        readOnly = true,
-                                        label = { Text("State") },
-                                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = stateExpanded) },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                                    )
-                                    ExposedDropdownMenu(
-                                        expanded = stateExpanded,
-                                        onDismissRequest = { stateExpanded = false }
-                                    ) {
-                                        listOf("NEW", "LEARNING", "REVIEW", "RELEARNING").forEach { state ->
-                                            DropdownMenuItem(
-                                                text = { Text(state) },
-                                                onClick = {
-                                                    fsrsState = state
-                                                    stateExpanded = false
-                                                    isDirty = true
-                                                }
-                                            )
-                                        }
+                                    listOf("NEW", "LEARNING", "REVIEW", "RELEARNING").forEach { state ->
+                                        DropdownMenuItem(
+                                            text = { Text(state) },
+                                            onClick = {
+                                                fsrsState = state
+                                                stateExpanded = false
+                                                isDirty = true
+                                            }
+                                        )
                                     }
                                 }
-
-                                Spacer(modifier = Modifier.height(8.dp))
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    OutlinedTextField(
-                                        value = fsrsStability,
-                                        onValueChange = { fsrsStability = it; isDirty = true },
-                                        label = { Text("Stability") },
-                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                        modifier = Modifier.weight(1f),
-                                        singleLine = true
-                                    )
-                                    OutlinedTextField(
-                                        value = fsrsDifficulty,
-                                        onValueChange = { fsrsDifficulty = it; isDirty = true },
-                                        label = { Text("Difficulty") },
-                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                        modifier = Modifier.weight(1f),
-                                        singleLine = true
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(8.dp))
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    OutlinedTextField(
-                                        value = fsrsReps,
-                                        onValueChange = { fsrsReps = it; isDirty = true },
-                                        label = { Text("Reps") },
-                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                        modifier = Modifier.weight(1f),
-                                        singleLine = true
-                                    )
-                                    OutlinedTextField(
-                                        value = fsrsLapses,
-                                        onValueChange = { fsrsLapses = it; isDirty = true },
-                                        label = { Text("Lapses") },
-                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                        modifier = Modifier.weight(1f),
-                                        singleLine = true
-                                    )
-                                }
                             }
 
-                            // SM-2 Parameters
-                            if (selectedAlgorithm == AlgorithmType.SM2) {
-                                Text(
-                                    "SM-2 Parameters",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
 
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
                                 OutlinedTextField(
-                                    value = sm2EaseFactor,
-                                    onValueChange = { sm2EaseFactor = it; isDirty = true },
-                                    label = { Text("Ease Factor") },
+                                    value = fsrsStability,
+                                    onValueChange = { fsrsStability = it; isDirty = true },
+                                    label = { Text("Stability") },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                    modifier = Modifier.fillMaxWidth(),
-                                    singleLine = true,
-                                    supportingText = { Text("Default: 2.5, Range: 1.3 - 4.0") }
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
                                 )
-
-                                Spacer(modifier = Modifier.height(8.dp))
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    OutlinedTextField(
-                                        value = sm2Interval,
-                                        onValueChange = { sm2Interval = it; isDirty = true },
-                                        label = { Text("Interval (days)") },
-                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                        modifier = Modifier.weight(1f),
-                                        singleLine = true
-                                    )
-                                    OutlinedTextField(
-                                        value = sm2Repetitions,
-                                        onValueChange = { sm2Repetitions = it; isDirty = true },
-                                        label = { Text("Repetitions") },
-                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                        modifier = Modifier.weight(1f),
-                                        singleLine = true
-                                    )
-                                }
+                                OutlinedTextField(
+                                    value = fsrsDifficulty,
+                                    onValueChange = { fsrsDifficulty = it; isDirty = true },
+                                    label = { Text("Difficulty") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
                             }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = fsrsReps,
+                                    onValueChange = { fsrsReps = it; isDirty = true },
+                                    label = { Text("Reps") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                                OutlinedTextField(
+                                    value = fsrsLapses,
+                                    onValueChange = { fsrsLapses = it; isDirty = true },
+                                    label = { Text("Lapses") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                            }
+
+
                         }
                     }
                 }
@@ -872,7 +737,6 @@ fun AddEditCardScreen(
                             groupName = group.name,
                             groupState = groupState,
                             editState = editState,
-                            selectedAlgorithm = selectedAlgorithm,
                             onStateChange = { newEdit ->
                                 independentLearningEdits = independentLearningEdits + (group.id to newEdit)
                                 isDirty = true
@@ -902,7 +766,6 @@ fun AddEditCardScreen(
                             val updatedCard = cardToEdit.copy(
                                 question = question,
                                 answer = answerFieldValue.text,
-                                algorithm = selectedAlgorithm,
                                 imagePaths = imagePaths,
                                 // FSRS state
                                 fsrsStability = fsrsStability.toDoubleOrNull() ?: cardToEdit.fsrsStability,
@@ -912,10 +775,6 @@ fun AddEditCardScreen(
                                 fsrsState = fsrsState,
                                 fsrsElapsedDays = fsrsElapsedDays.toIntOrNull() ?: cardToEdit.fsrsElapsedDays,
                                 fsrsScheduledDays = fsrsScheduledDays.toIntOrNull() ?: cardToEdit.fsrsScheduledDays,
-                                // SM2 state
-                                sm2EaseFactor = sm2EaseFactor.toDoubleOrNull() ?: cardToEdit.sm2EaseFactor,
-                                sm2Interval = sm2Interval.toIntOrNull() ?: cardToEdit.sm2Interval,
-                                sm2Repetitions = sm2Repetitions.toIntOrNull() ?: cardToEdit.sm2Repetitions,
                                 // Review timing
                                 lastReview = lastReview,
                                 nextReview = nextReview
@@ -938,10 +797,7 @@ fun AddEditCardScreen(
                                             fsrsDifficulty = edit.fsrsDifficulty.toDoubleOrNull() ?: existingState.fsrsDifficulty,
                                             fsrsReps = edit.fsrsReps.toIntOrNull() ?: existingState.fsrsReps,
                                             fsrsLapses = edit.fsrsLapses.toIntOrNull() ?: existingState.fsrsLapses,
-                                            fsrsState = edit.fsrsState,
-                                            sm2EaseFactor = edit.sm2EaseFactor.toDoubleOrNull() ?: existingState.sm2EaseFactor,
-                                            sm2Interval = edit.sm2Interval.toIntOrNull() ?: existingState.sm2Interval,
-                                            sm2Repetitions = edit.sm2Repetitions.toIntOrNull() ?: existingState.sm2Repetitions
+                                            fsrsState = edit.fsrsState
                                         )
                                         onUpdateLearningState(updatedState)
                                     }
@@ -954,7 +810,6 @@ fun AddEditCardScreen(
                                 question,
                                 answerFieldValue.text,
                                 selectedGroupIds.toList(),
-                                selectedAlgorithm,
                                 imagePaths
                             ) { isDirty = false; onNavigateBack() }
                         }
@@ -1108,9 +963,6 @@ fun AddEditCardScreen(
                                     fsrsReps = "0"
                                     fsrsLapses = "0"
                                     fsrsState = "NEW"
-                                    sm2EaseFactor = "2.5"
-                                    sm2Interval = "0"
-                                    sm2Repetitions = "0"
                                 }
                                 showResetDialog = false
                             },
@@ -1155,9 +1007,6 @@ fun AddEditCardScreen(
                                     fsrsReps = "0"
                                     fsrsLapses = "0"
                                     fsrsState = "NEW"
-                                    sm2EaseFactor = "2.5"
-                                    sm2Interval = "0"
-                                    sm2Repetitions = "0"
                                 }
                                 // Reset local edit states for all groups
                                 independentLearningGroups.forEach { group ->
@@ -1186,7 +1035,7 @@ fun AddEditCardScreen(
                 onDismissRequest = { showResetDialog = false },
                 icon = { Icon(Icons.Default.Refresh, contentDescription = null) },
                 title = { Text("Reset Learning State?") },
-                text = { Text("This will reset all learning progress for this card. The card will be treated as new and all FSRS/SM-2 data will be cleared.") },
+                text = { Text("This will reset all learning progress for this card. The card will be treated as new and all FSRS data will be cleared.") },
                 confirmButton = {
                     Button(
                         onClick = {
@@ -1197,9 +1046,6 @@ fun AddEditCardScreen(
                                 fsrsReps = "0"
                                 fsrsLapses = "0"
                                 fsrsState = "NEW"
-                                sm2EaseFactor = "2.5"
-                                sm2Interval = "0"
-                                sm2Repetitions = "0"
                             }
                             showResetDialog = false
                         },
@@ -1294,7 +1140,6 @@ fun IndependentLearningStateCard(
     groupName: String,
     groupState: CardGroupLearningState?,
     editState: IndependentLearningEdit?,
-    selectedAlgorithm: AlgorithmType,
     onStateChange: (IndependentLearningEdit) -> Unit,
     onReset: () -> Unit
 ) {
@@ -1307,10 +1152,7 @@ fun IndependentLearningStateCard(
         fsrsDifficulty = groupState?.fsrsDifficulty?.toString() ?: "0.0",
         fsrsReps = groupState?.fsrsReps?.toString() ?: "0",
         fsrsLapses = groupState?.fsrsLapses?.toString() ?: "0",
-        fsrsState = groupState?.fsrsState ?: "NEW",
-        sm2EaseFactor = groupState?.sm2EaseFactor?.toString() ?: "2.5",
-        sm2Interval = groupState?.sm2Interval?.toString() ?: "0",
-        sm2Repetitions = groupState?.sm2Repetitions?.toString() ?: "0"
+        fsrsState = groupState?.fsrsState ?: "NEW"
     )
 
     Card(
@@ -1383,145 +1225,99 @@ fun IndependentLearningStateCard(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // FSRS Parameters
-                if (selectedAlgorithm == AlgorithmType.FSRS) {
-                    Text(
-                        "FSRS Parameters",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
+                Text(
+                    "FSRS Parameters",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // State dropdown
+                var stateExpanded by remember { mutableStateOf(false) }
+                ExposedDropdownMenuBox(
+                    expanded = stateExpanded,
+                    onExpandedChange = { stateExpanded = !stateExpanded }
+                ) {
+                    OutlinedTextField(
+                        value = currentEdit.fsrsState,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("State") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = stateExpanded) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+                        textStyle = MaterialTheme.typography.bodySmall
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // State dropdown
-                    var stateExpanded by remember { mutableStateOf(false) }
-                    ExposedDropdownMenuBox(
+                    ExposedDropdownMenu(
                         expanded = stateExpanded,
-                        onExpandedChange = { stateExpanded = !stateExpanded }
+                        onDismissRequest = { stateExpanded = false }
                     ) {
-                        OutlinedTextField(
-                            value = currentEdit.fsrsState,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("State") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = stateExpanded) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
-                            textStyle = MaterialTheme.typography.bodySmall
-                        )
-                        ExposedDropdownMenu(
-                            expanded = stateExpanded,
-                            onDismissRequest = { stateExpanded = false }
-                        ) {
-                            listOf("NEW", "LEARNING", "REVIEW", "RELEARNING").forEach { state ->
-                                DropdownMenuItem(
-                                    text = { Text(state) },
-                                    onClick = {
-                                        onStateChange(currentEdit.copy(fsrsState = state))
-                                        stateExpanded = false
-                                    }
-                                )
-                            }
+                        listOf("NEW", "LEARNING", "REVIEW", "RELEARNING").forEach { state ->
+                            DropdownMenuItem(
+                                text = { Text(state) },
+                                onClick = {
+                                    onStateChange(currentEdit.copy(fsrsState = state))
+                                    stateExpanded = false
+                                }
+                            )
                         }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = currentEdit.fsrsStability,
-                            onValueChange = { onStateChange(currentEdit.copy(fsrsStability = it)) },
-                            label = { Text("Stability") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            textStyle = MaterialTheme.typography.bodySmall
-                        )
-                        OutlinedTextField(
-                            value = currentEdit.fsrsDifficulty,
-                            onValueChange = { onStateChange(currentEdit.copy(fsrsDifficulty = it)) },
-                            label = { Text("Difficulty") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            textStyle = MaterialTheme.typography.bodySmall
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = currentEdit.fsrsReps,
-                            onValueChange = { onStateChange(currentEdit.copy(fsrsReps = it)) },
-                            label = { Text("Reps") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            textStyle = MaterialTheme.typography.bodySmall
-                        )
-                        OutlinedTextField(
-                            value = currentEdit.fsrsLapses,
-                            onValueChange = { onStateChange(currentEdit.copy(fsrsLapses = it)) },
-                            label = { Text("Lapses") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            textStyle = MaterialTheme.typography.bodySmall
-                        )
                     }
                 }
 
-                // SM-2 Parameters
-                if (selectedAlgorithm == AlgorithmType.SM2) {
-                    Text(
-                        "SM-2 Parameters",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     OutlinedTextField(
-                        value = currentEdit.sm2EaseFactor,
-                        onValueChange = { onStateChange(currentEdit.copy(sm2EaseFactor = it)) },
-                        label = { Text("Ease Factor") },
+                        value = currentEdit.fsrsStability,
+                        onValueChange = { onStateChange(currentEdit.copy(fsrsStability = it)) },
+                        label = { Text("Stability") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.weight(1f),
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodySmall
                     )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = currentEdit.sm2Interval,
-                            onValueChange = { onStateChange(currentEdit.copy(sm2Interval = it)) },
-                            label = { Text("Interval") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            textStyle = MaterialTheme.typography.bodySmall
-                        )
-                        OutlinedTextField(
-                            value = currentEdit.sm2Repetitions,
-                            onValueChange = { onStateChange(currentEdit.copy(sm2Repetitions = it)) },
-                            label = { Text("Reps") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            textStyle = MaterialTheme.typography.bodySmall
-                        )
-                    }
+                    OutlinedTextField(
+                        value = currentEdit.fsrsDifficulty,
+                        onValueChange = { onStateChange(currentEdit.copy(fsrsDifficulty = it)) },
+                        label = { Text("Difficulty") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodySmall
+                    )
                 }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = currentEdit.fsrsReps,
+                        onValueChange = { onStateChange(currentEdit.copy(fsrsReps = it)) },
+                        label = { Text("Reps") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodySmall
+                    )
+                    OutlinedTextField(
+                        value = currentEdit.fsrsLapses,
+                        onValueChange = { onStateChange(currentEdit.copy(fsrsLapses = it)) },
+                        label = { Text("Lapses") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+
             }
         }
     }
@@ -1605,10 +1401,7 @@ data class IndependentLearningEdit(
     val fsrsDifficulty: String = "0.0",
     val fsrsReps: String = "0",
     val fsrsLapses: String = "0",
-    val fsrsState: String = "NEW",
-    val sm2EaseFactor: String = "2.5",
-    val sm2Interval: String = "0",
-    val sm2Repetitions: String = "0"
+    val fsrsState: String = "NEW"
 )
 
 /** Formats the next-review status for display. */

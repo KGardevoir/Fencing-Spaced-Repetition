@@ -3,7 +3,6 @@
 
 package com.fencing.spacedrepetition.util
 
-import com.fencing.spacedrepetition.data.model.AlgorithmType
 import com.fencing.spacedrepetition.data.model.Card
 import org.junit.Assert.*
 import org.junit.Test
@@ -237,7 +236,7 @@ class CsvImportExportTest {
 
         assertEquals(1, cards.size)
         assertFalse(cards[0].hasFullState)
-        assertNull(cards[0].algorithm)
+        assertNull(cards[0].stateContext)
     }
 
     @Test
@@ -257,8 +256,7 @@ class CsvImportExportTest {
             id = 1,
             question = "Parry 4",
             answer = "Blade defense to inside line",
-            imagePaths = emptyList(),
-            algorithm = AlgorithmType.FSRS
+            imagePaths = emptyList()
         )
 
         val cardsWithGroups = listOf(CardWithGroupNames(card, listOf("Foil")))
@@ -282,8 +280,7 @@ class CsvImportExportTest {
             id = 1,
             question = "Parry 4, 6, 7",
             answer = "Defense to inside, outside, and high line",
-            imagePaths = emptyList(),
-            algorithm = AlgorithmType.FSRS
+            imagePaths = emptyList()
         )
 
         val cardsWithGroups = listOf(CardWithGroupNames(card, emptyList()))
@@ -303,8 +300,7 @@ class CsvImportExportTest {
             id = 1,
             question = "Attack",
             answer = "Step 1: Extend\nStep 2: Lunge",
-            imagePaths = emptyList(),
-            algorithm = AlgorithmType.FSRS
+            imagePaths = emptyList()
         )
 
         val cardsWithGroups = listOf(CardWithGroupNames(card, emptyList()))
@@ -322,8 +318,7 @@ class CsvImportExportTest {
             id = 1,
             question = "Test",
             answer = "Desc",
-            imagePaths = emptyList(),
-            algorithm = AlgorithmType.FSRS
+            imagePaths = emptyList()
         )
 
         val cardsWithGroups = listOf(CardWithGroupNames(card, emptyList()))
@@ -356,11 +351,11 @@ class CsvImportExportTest {
     fun `round trip - basic export then import`() {
         val card1 = Card(
             id = 1, question = "Parry 4", answer = "Blade defense",
-            imagePaths = emptyList(), algorithm = AlgorithmType.FSRS
+            imagePaths = emptyList()
         )
         val card2 = Card(
             id = 2, question = "Riposte", answer = "Attack after parry",
-            imagePaths = emptyList(), algorithm = AlgorithmType.FSRS
+            imagePaths = emptyList()
         )
 
         // Export
@@ -389,8 +384,7 @@ class CsvImportExportTest {
             id = 1,
             question = "Complex, question",
             answer = "Line 1\nLine 2\nLine 3",
-            imagePaths = emptyList(),
-            algorithm = AlgorithmType.FSRS
+            imagePaths = emptyList()
         )
 
         val exportStream = ByteArrayOutputStream()
@@ -415,8 +409,7 @@ class CsvImportExportTest {
             id = 1,
             question = "He said \"hello\"",
             answer = "She replied \"goodbye\"",
-            imagePaths = emptyList(),
-            algorithm = AlgorithmType.FSRS
+            imagePaths = emptyList()
         )
 
         val exportStream = ByteArrayOutputStream()

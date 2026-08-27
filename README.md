@@ -12,10 +12,8 @@ An Android app for practicing martial arts and fencing techniques using delayed-
 - After finishing, grade every card at once: **Skip**, **Again**, **Hard**, **Good**, or **Easy**
 - The spaced repetition algorithm schedules your next review based on your grades
 
-### Dual Algorithm Support
+### Scheduling Algorithm
 - **FSRS (Free Spaced Repetition Scheduler)**: Modern algorithm using stability and difficulty parameters for sophisticated scheduling
-- **SM-2 (SuperMemo 2)**: Classic algorithm using ease factor and repetition count
-- Algorithm is selectable per card
 
 ### Groups and Organization
 - Create groups (decks) to organize cards by topic, technique, or training focus
@@ -72,8 +70,7 @@ An Android app for practicing martial arts and fencing techniques using delayed-
 ```
 app/src/main/java/com/fencing/spacedrepetition/
 ├── algorithm/              # Spaced repetition algorithms
-│   ├── FSRSAlgorithm.kt   # FSRS-4.5 implementation
-│   └── SM2Algorithm.kt    # SM-2 implementation
+│   └── FSRSAlgorithm.kt   # FSRS-4.5 implementation
 ├── data/
 │   ├── model/             # Room entities and data classes
 │   ├── dao/               # Database access objects
@@ -139,7 +136,7 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for complete deployment instructions, includi
 ## Database Schema
 
 ### Cards
-Question and description content, category, tags, image paths, algorithm type (FSRS or SM-2), algorithm-specific parameters, and review scheduling timestamps.
+Question and description content, category, tags, image paths, FSRS scheduling parameters, and review scheduling timestamps.
 
 ### Groups
 Named groups with optional independent learning mode. Cards are linked to groups via a many-to-many relationship. Group-specific learning states allow tracking separate progress per group.
@@ -201,7 +198,6 @@ Source files carry [SPDX](https://spdx.dev/) identifiers
 ## Credits
 
 - FSRS algorithm based on the open-source [FSRS project](https://github.com/open-spaced-repetition/fsrs4anki), used under the MIT License
-- SM-2 algorithm from [SuperMemo research](https://www.supermemo.com/en/archives1990-2015/english/ol/sm2)
 - Built with Jetpack Compose and Material Design 3
 - Designed for fencing and martial arts practice but adaptable to any sport or learning domain
 

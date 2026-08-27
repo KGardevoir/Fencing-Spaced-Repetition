@@ -59,8 +59,6 @@ class LocalStoragePreferences : AppPreferences {
         MutableStateFlow(readInt("randomize_bucket_hours", Defaults.DEFAULT_RANDOMIZE_BUCKET_HOURS))
     private val fsrsRetentionState =
         MutableStateFlow(readInt("fsrs_retention", Defaults.DEFAULT_FSRS_RETENTION))
-    private val sm2IntervalModifierState =
-        MutableStateFlow(readInt("sm2_interval_modifier", Defaults.DEFAULT_SM2_INTERVAL_MODIFIER))
     private val fsrsEnableFuzzingState =
         MutableStateFlow(readBoolean("fsrs_enable_fuzzing", Defaults.DEFAULT_FSRS_ENABLE_FUZZING))
     private val autoBackupEnabledState =
@@ -91,7 +89,6 @@ class LocalStoragePreferences : AppPreferences {
     override val practiceDays: Flow<Set<Int>> = practiceDaysState.asStateFlow()
     override val randomizeBucketHours: Flow<Int> = randomizeBucketHoursState.asStateFlow()
     override val fsrsRetention: Flow<Int> = fsrsRetentionState.asStateFlow()
-    override val sm2IntervalModifier: Flow<Int> = sm2IntervalModifierState.asStateFlow()
     override val fsrsEnableFuzzing: Flow<Boolean> = fsrsEnableFuzzingState.asStateFlow()
     override val autoBackupEnabled: Flow<Boolean> = autoBackupEnabledState.asStateFlow()
     override val autoBackupUri: Flow<String?> = autoBackupUriState.asStateFlow()
@@ -142,13 +139,6 @@ class LocalStoragePreferences : AppPreferences {
     override suspend fun setFsrsRetention(percent: Int) {
         val valid = percent.coerceIn(Defaults.MIN_FSRS_RETENTION, Defaults.MAX_FSRS_RETENTION)
         write("fsrs_retention", valid.toString(), fsrsRetentionState, valid)
-    }
-
-    override suspend fun setSm2IntervalModifier(percent: Int) {
-        val valid = percent.coerceIn(
-            Defaults.MIN_SM2_INTERVAL_MODIFIER, Defaults.MAX_SM2_INTERVAL_MODIFIER
-        )
-        write("sm2_interval_modifier", valid.toString(), sm2IntervalModifierState, valid)
     }
 
     override suspend fun setFsrsEnableFuzzing(enabled: Boolean) =

@@ -17,7 +17,9 @@ data class ReviewLog(
     val reviewTime: Long = Time.now(),
 
     val grade: Int, // 1-4 (AGAIN, HARD, GOOD, EASY)
-    val algorithm: String, // "FSRS" or "SM2"
+    // Scheduler that produced this review. Always "FSRS" for new logs; older
+    // rows may say "SM2", from before that algorithm was removed.
+    val algorithm: String,
 
     // State before review
     val stateBefore: String,

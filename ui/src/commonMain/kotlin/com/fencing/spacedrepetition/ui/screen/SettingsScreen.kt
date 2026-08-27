@@ -50,7 +50,6 @@ fun SettingsScreen(
     fsrsRetention: Int,
     practiceScheduleEstimate: ScheduleEstimate?,
     historyWindowDays: Int,
-    sm2IntervalModifier: Int,
     fsrsEnableFuzzing: Boolean,
     autoBackupEnabled: Boolean,
     autoBackupIntervalDays: Int,
@@ -80,7 +79,6 @@ fun SettingsScreen(
     onTogglePracticeDay: (Int) -> Unit,
     onSetFsrsRetention: (Int) -> Unit,
     onSetHistoryWindowDays: (Int) -> Unit,
-    onSetSm2IntervalModifier: (Int) -> Unit,
     onSetFsrsEnableFuzzing: (Boolean) -> Unit,
     onSetAutoBackupEnabled: (Boolean) -> Unit,
     onSetAutoBackupIntervalDays: (Int) -> Unit,
@@ -100,8 +98,6 @@ fun SettingsScreen(
     val intervalPresets = SettingsConstants.INTERVAL_PRESETS
     val currentPresetIndex = SettingsConstants.findPresetIndex(intervalPresets, maximumInterval)
 
-    val sm2ModifierPresets = SettingsConstants.SM2_MODIFIER_PRESETS
-    val currentSm2ModifierIndex = SettingsConstants.findPresetIndex(sm2ModifierPresets, sm2IntervalModifier)
 
     val backupIntervalPresets = SettingsConstants.BACKUP_INTERVAL_PRESETS
     val currentBackupIntervalIndex = SettingsConstants.findPresetIndex(backupIntervalPresets, autoBackupIntervalDays)
@@ -382,7 +378,7 @@ fun SettingsScreen(
 
             // Algorithm section
             Text(
-                "Algorithm (FSRS-6 / SM-2)",
+                "Algorithm (FSRS-6)",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -481,49 +477,6 @@ fun SettingsScreen(
                 Switch(
                     checked = fsrsEnableFuzzing,
                     onCheckedChange = onSetFsrsEnableFuzzing
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // SM-2 interval modifier
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "SM-2 Interval Modifier",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    Text(
-                        text = sm2ModifierPresets[currentSm2ModifierIndex].second,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                Slider(
-                    value = currentSm2ModifierIndex.toFloat(),
-                    onValueChange = { newIndex ->
-                        val presetValue = sm2ModifierPresets[newIndex.roundToInt()].first
-                        onSetSm2IntervalModifier(presetValue)
-                    },
-                    valueRange = 0f..(sm2ModifierPresets.size - 1).toFloat(),
-                    steps = sm2ModifierPresets.size - 2,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Text(
-                    text = "Scales all SM-2 review intervals (SM-2 only). " +
-                        "100\u00a0% = default behaviour. " +
-                        "Lower values (e.g.\u00a075\u00a0%) mean shorter intervals and more reviews; " +
-                        "higher values (e.g.\u00a0150\u00a0%) mean longer intervals and fewer reviews.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 

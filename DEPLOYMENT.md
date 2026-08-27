@@ -195,7 +195,6 @@ Martial Arts Practice is a flashcard app designed specifically for martial artis
 
 📚 Smart Spaced Repetition
 • Uses the scientifically-proven FSRS (Free Spaced Repetition Scheduler) algorithm
-• Also supports classic SM-2 algorithm
 • Cards appear at optimal intervals for maximum retention
 • Forget less, remember more
 
@@ -373,7 +372,7 @@ Write what's new in this version:
 🎉 Initial release!
 
 • Spaced repetition flashcards for martial arts
-• FSRS and SM-2 algorithms
+• FSRS algorithm
 • Card organization with groups
 • Import/export to CSV
 • Dark mode support

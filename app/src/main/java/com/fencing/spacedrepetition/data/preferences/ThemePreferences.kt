@@ -28,7 +28,6 @@ class ThemePreferences(private val context: Context) : AppPreferences {
     private val PRACTICE_DAYS_KEY = stringPreferencesKey("practice_days")
     private val RANDOMIZE_BUCKET_HOURS_KEY = intPreferencesKey("randomize_bucket_hours")
     private val FSRS_RETENTION_KEY = intPreferencesKey("fsrs_retention")
-    private val SM2_INTERVAL_MODIFIER_KEY = intPreferencesKey("sm2_interval_modifier")
     private val FSRS_ENABLE_FUZZING_KEY = booleanPreferencesKey("fsrs_enable_fuzzing")
     private val AUTO_BACKUP_ENABLED_KEY = booleanPreferencesKey("auto_backup_enabled")
     private val AUTO_BACKUP_URI_KEY = stringPreferencesKey("auto_backup_uri")
@@ -59,9 +58,6 @@ class ThemePreferences(private val context: Context) : AppPreferences {
         const val DEFAULT_FSRS_RETENTION = SettingsConstants.DEFAULT_FSRS_RETENTION
         const val MIN_FSRS_RETENTION = SettingsConstants.MIN_FSRS_RETENTION
         const val MAX_FSRS_RETENTION = SettingsConstants.MAX_FSRS_RETENTION
-        const val DEFAULT_SM2_INTERVAL_MODIFIER = SettingsConstants.DEFAULT_SM2_INTERVAL_MODIFIER
-        const val MIN_SM2_INTERVAL_MODIFIER = SettingsConstants.MIN_SM2_INTERVAL_MODIFIER
-        const val MAX_SM2_INTERVAL_MODIFIER = SettingsConstants.MAX_SM2_INTERVAL_MODIFIER
         const val DEFAULT_FSRS_ENABLE_FUZZING = SettingsConstants.DEFAULT_FSRS_ENABLE_FUZZING
         const val DEFAULT_AUTO_BACKUP_ENABLED = SettingsConstants.DEFAULT_AUTO_BACKUP_ENABLED
         const val DEFAULT_AUTO_BACKUP_INTERVAL_DAYS = SettingsConstants.DEFAULT_AUTO_BACKUP_INTERVAL_DAYS
@@ -132,11 +128,6 @@ class ThemePreferences(private val context: Context) : AppPreferences {
     override val fsrsRetention: Flow<Int> = context.dataStore.data
         .map { preferences ->
             preferences[FSRS_RETENTION_KEY] ?: DEFAULT_FSRS_RETENTION
-        }
-
-    override val sm2IntervalModifier: Flow<Int> = context.dataStore.data
-        .map { preferences ->
-            preferences[SM2_INTERVAL_MODIFIER_KEY] ?: DEFAULT_SM2_INTERVAL_MODIFIER
         }
 
     override val fsrsEnableFuzzing: Flow<Boolean> = context.dataStore.data
@@ -256,13 +247,6 @@ class ThemePreferences(private val context: Context) : AppPreferences {
         val valid = percent.coerceIn(MIN_FSRS_RETENTION, MAX_FSRS_RETENTION)
         context.dataStore.edit { preferences ->
             preferences[FSRS_RETENTION_KEY] = valid
-        }
-    }
-
-    override suspend fun setSm2IntervalModifier(percent: Int) {
-        val valid = percent.coerceIn(MIN_SM2_INTERVAL_MODIFIER, MAX_SM2_INTERVAL_MODIFIER)
-        context.dataStore.edit { preferences ->
-            preferences[SM2_INTERVAL_MODIFIER_KEY] = valid
         }
     }
 
