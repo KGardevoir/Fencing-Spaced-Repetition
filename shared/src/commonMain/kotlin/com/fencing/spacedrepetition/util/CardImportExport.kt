@@ -9,11 +9,11 @@ package com.fencing.spacedrepetition.util
 // touches no stream, file or Context -- the Android half of that lives beside
 // it in :app, as CardImportExportIo.kt.
 //
-// Exports are YAML. The document's own shape is in ArchiveYaml.kt and the
-// reader and writer under it in Yaml.kt; what is left here is the pipeline
-// around them, the CSV format, the filenames, and the tab-separated V1-V4
-// layouts, which are still read so that a backup taken before the change
-// still imports. Nothing writes a tab-separated file any more.
+// Exports are YAML. The document's shape is declared in ArchiveYaml.kt and
+// the YAML itself is kaml's; what is left here is the pipeline around them,
+// the CSV format, the filenames, and the tab-separated V1-V4 layouts, which
+// are still read so that a backup taken before the change still imports.
+// Nothing writes a tab-separated file any more.
 
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
@@ -52,6 +52,9 @@ object CardImportExport {
      * has given up.
      */
     private const val LEGACY_HEADER_PREFIX = "#FSR_EXPORT_V"
+
+    private const val KEY_GROUPS = "groups"
+    private const val KEY_OPPONENTS = "opponents"
 
     private const val DELIMITER = "\t"
     private const val NEWLINE_PLACEHOLDER = "<br>"
@@ -203,14 +206,12 @@ object CardImportExport {
      */
     private fun parseYamlCards(lines: List<String>): Pair<List<ParsedCard>, List<String>> {
         val document = try {
-            parseYaml(lines)
-        } catch (e: YamlException) {
-            return Pair(emptyList(), listOf(e.message ?: "Invalid YAML"))
+            ArchiveYaml.format.parseToYamlNode(lines.joinToString("\n"))
         } catch (e: Exception) {
-            return Pair(emptyList(), listOf("Failed to read file: ${e.message}"))
+            return Pair(emptyList(), listOf(yamlFailure(e)))
         }
 
-        if (document == null || !ArchiveYaml.isArchive(document)) {
+        if (!ArchiveYaml.isArchive(document)) {
             return Pair(
                 emptyList(),
                 listOf(
@@ -220,10 +221,51 @@ object CardImportExport {
             )
         }
 
-        lastParsedGroupSettings = ArchiveYaml.readGroupSettings(document)
-        lastParsedOpponents = ArchiveYaml.readOpponents(document)
-        lastParsedReviewHistory = ArchiveYaml.readReviewHistory(document)
-        return ArchiveYaml.readCards(document)
+        val errors = mutableListOf<String>()
+
+        lastParsedGroupSettings = ArchiveYaml
+            .decodeSection(document, KEY_GROUPS, ArchiveGroup.serializer(), errors)
+            .filter { it.name.isNotBlank() }
+            .associate { it.name.trim() to ArchiveYaml.groupSettings(it) }
+        lastParsedOpponents = ArchiveYaml
+            .decodeSection(document, KEY_OPPONENTS, ArchiveOpponent.serializer(), errors)
+            .map { ArchiveYaml.parsedOpponent(it) }
+            .filter { it.name.isNotEmpty() }
+        lastParsedReviewHistory = ArchiveYaml
+            .decodeSection(document, ArchiveYaml.KEY_REVIEW_HISTORY, ArchiveReviewLog.serializer(), errors)
+            .map { ArchiveYaml.parsedReviewLog(it) }
+            .filter { it.cardQuestion.isNotBlank() }
+
+        val cards = mutableListOf<ParsedCard>()
+        ArchiveYaml.cardEntries(document).forEach { entry ->
+            val decoded = ArchiveYaml
+                .decodeEntries(listOf(entry), ArchiveCard.serializer(), errors)
+                .singleOrNull() ?: return@forEach
+            if (decoded.questionText.isEmpty()) {
+                errors.add("Line ${entry.location.line}: Empty question")
+                return@forEach
+            }
+            cards.addAll(ArchiveYaml.parsedCards(decoded, entry.location.line))
+        }
+        return Pair(cards, errors)
+    }
+
+    /**
+     * What to say about a file the YAML parser would not read at all.
+     *
+     * kaml's own message names the line and the column and then draws a caret
+     * under the offending character, which is more use than anything this
+     * could add -- so it is passed through rather than replaced, with the
+     * pointer line dropped because the import dialog shows one line per
+     * error.
+     */
+    private fun yamlFailure(e: Exception): String {
+        val message = e.message ?: return "Failed to read file"
+        val lines = message.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        val where = lines.firstOrNull { it.startsWith("at line ") }
+            ?.removePrefix("at line ")
+            ?.substringBefore(",")
+        return if (where == null) lines.first() else "Line $where: ${lines.first()}"
     }
 
     /** Reads one of the tab-separated V1-V4 layouts. */
@@ -523,29 +565,45 @@ object CardImportExport {
     // ======================================================================
     // Export
     //
-    // Written a piece at a time rather than built as one document and handed
-    // over: a collection with a hundred photographs in it would otherwise
-    // exist in memory twice over, once as base64 and once as the finished
-    // file. Each card becomes a node, is written, and is let go -- which is
-    // the same working set the tab-separated format had, where each card was
-    // a line.
+    // The whole document is encoded in one go rather than a card at a time.
+    // Assembling it by hand would keep a large collection's photographs out
+    // of memory all at once, and was tried: indenting each card's encoding
+    // under "cards:" gets one card in four hundred wrong, because a literal
+    // block ending in a blank line does not survive being trimmed and
+    // re-indented. Letting kaml write the document is the correct answer and
+    // costs memory that every export path except the scheduled backup was
+    // already spending -- ImageStore.readerFor loads every picture up front.
     // ======================================================================
 
-    /** Opens a document: the comment anyone reads first, then the version. */
-    private fun writeArchiveHeader(out: Appendable) {
-        out.append(YAML_HEADER_COMMENT).append('\n')
-        ArchiveYaml.versionNode().writeYaml(out)
-    }
+    /**
+     * The two lines an export opens with, before the encoded document.
+     *
+     * Written here rather than encoded because neither can be: kaml emits no
+     * comments, and `version` is left out of the encoding by the same rule
+     * that leaves out every other field still holding its default. Putting
+     * the line in by hand is what keeps a file saying which version it is.
+     */
+    private fun archivePreamble(): String =
+        "$YAML_HEADER_COMMENT\n${ArchiveYaml.KEY_VERSION}: ${ArchiveYaml.VERSION}\n"
 
-    /** Writes `key:` and then each of [nodes] as an entry beneath it. */
-    private fun writeSection(out: Appendable, key: String, nodes: List<YamlMapping>) {
-        if (nodes.isEmpty()) return
-        out.append(key).append(":\n")
-        nodes.forEach { it.writeYamlSequenceItem(out, SEQUENCE_INDENT) }
+    /**
+     * Writes [document] out, preamble and all.
+     *
+     * An archive holding nothing at all encodes as `{}`, which is a flow
+     * mapping and cannot follow the `version:` line -- so an empty document
+     * is written as an empty card list instead, which is both valid and true.
+     */
+    private fun writeArchive(out: Appendable, document: ArchiveDocument) {
+        out.append(archivePreamble())
+        val body = ArchiveYaml.format
+            .encodeToString(ArchiveDocument.serializer(), document)
+            .trimEnd('\n')
+        if (body.isEmpty() || body == "{}") {
+            out.append(ArchiveYaml.KEY_CARDS).append(": []\n")
+        } else {
+            out.append(body).append('\n')
+        }
     }
-
-    /** Where the dash of a top-level list sits. */
-    private const val SEQUENCE_INDENT = 2
 
     /**
      * Exports cards with their groups, without per-group learning states and
@@ -560,12 +618,14 @@ object CardImportExport {
         out: Appendable
     ): ExportResult {
         return try {
-            writeArchiveHeader(out)
-            out.append(ArchiveYaml.KEY_CARDS).append(":\n")
-            cardsWithGroups.forEach { (card, groupNames) ->
-                ArchiveYaml.cardNodeWithoutImages(card, groupNames)
-                    .writeYamlSequenceItem(out, SEQUENCE_INDENT)
-            }
+            writeArchive(
+                out,
+                ArchiveDocument(
+                    cards = cardsWithGroups.map { (card, groupNames) ->
+                        ArchiveYaml.cardNodeWithoutImages(card, groupNames)
+                    }
+                )
+            )
             ExportResult.Success(cardsWithGroups.size)
         } catch (e: Exception) {
             ExportResult.Error("Failed to write file: ${e.message}")
@@ -593,48 +653,34 @@ object CardImportExport {
     ): ExportResult {
         return try {
             var rowCount = 0
-
-            writeArchiveHeader(out)
-
-            // Only the groups with settings of their own. A group with none
-            // is already described by the cards that name it.
-            writeSection(
-                out,
-                ArchiveYaml.KEY_GROUPS,
-                groupSettings.filter { it.hasCustomSettings() }.map { ArchiveYaml.groupNode(it) }
-            )
-
-            // The opponents, so the review logs below can name them and an
-            // import can find them again.
-            writeSection(
-                out,
-                ArchiveYaml.KEY_OPPONENTS,
-                opponents.map { ArchiveYaml.opponentNode(it) }
-            )
-
-            out.append(ArchiveYaml.KEY_CARDS).append(":\n")
-            cardsWithStates.forEach { (card, groupNames, groupSpecificStates) ->
-                ArchiveYaml.cardNode(card, groupNames, groupSpecificStates, images)
-                    .writeYamlSequenceItem(out, SEQUENCE_INDENT)
+            val cards = cardsWithStates.map { (card, groupNames, groupSpecificStates) ->
                 rowCount += 1 + groupSpecificStates.size
+                ArchiveYaml.cardNode(card, groupNames, groupSpecificStates, images)
             }
 
-            if (reviewLogs.isNotEmpty() && cardQuestions.isNotEmpty()) {
-                writeSection(
-                    out,
-                    ArchiveYaml.KEY_REVIEW_HISTORY,
-                    reviewLogs.mapNotNull { log ->
-                        val question = cardQuestions[log.cardId] ?: return@mapNotNull null
-                        ArchiveYaml.reviewLogNode(
-                            log,
-                            question,
-                            log.opponentId?.let { opponentNamesById[it] },
-                            images
-                        )
-                    }
+            val history = if (reviewLogs.isEmpty() || cardQuestions.isEmpty()) emptyList() else {
+                reviewLogs.mapNotNull { log ->
+                    val question = cardQuestions[log.cardId] ?: return@mapNotNull null
+                    ArchiveYaml.reviewLogNode(
+                        log, question, log.opponentId?.let { opponentNamesById[it] }, images
+                    )
+                }
+            }
+
+            writeArchive(
+                out,
+                ArchiveDocument(
+                    // Only the groups with settings of their own. A group
+                    // with none is already described by the cards that name it.
+                    groups = groupSettings.filter { it.hasCustomSettings() }
+                        .map { ArchiveYaml.groupNode(it) },
+                    // The opponents, so the review logs can name them and an
+                    // import can find them again.
+                    opponents = opponents.map { ArchiveYaml.opponentNode(it) },
+                    cards = cards,
+                    reviewHistory = history
                 )
-            }
-
+            )
             ExportResult.Success(rowCount)
         } catch (e: Exception) {
             ExportResult.Error("Failed to write file: ${e.message}")

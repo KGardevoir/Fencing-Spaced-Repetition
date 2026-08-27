@@ -276,6 +276,11 @@ class YamlArchiveTest {
         assertEquals("Fine", cards.single().concept)
     }
 
+    /**
+     * A card is decoded as one value, so a part of it that will not read
+     * costs the whole card -- one error, naming the property and the line,
+     * and the rest of the file still imports.
+     */
     @Test
     fun `a group state with no group name is one error`() {
         val (cards, errors) = CardImportExport.parseCards(
@@ -283,14 +288,16 @@ class YamlArchiveTest {
             cards:
               - question: Q
                 answer: A
-                state:
-                  reps: 1
                 groupStates:
                   - reps: 2
+              - question: Fine
+                answer: Yes
             """.trimIndent().lines()
         )
         assertEquals(1, cards.size)
+        assertEquals("Fine", cards.single().concept)
         assertEquals(1, errors.size)
+        assertTrue(errors[0], errors[0].startsWith("Line 2:"))
         assertTrue(errors[0], errors[0].contains("group"))
     }
 

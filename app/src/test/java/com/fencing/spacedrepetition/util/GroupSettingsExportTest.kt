@@ -200,7 +200,7 @@ class GroupSettingsExportTest {
         val content = output.toString(Charsets.UTF_8.name())
         assertTrue(
             content.contains(
-                "groups:\n  - name: CustomGroup\n    cardsPerSession: 5\n" +
+                "groups:\n  - name: \"CustomGroup\"\n    cardsPerSession: 5\n" +
                     "    maximumInterval: 365\n"
             )
         )
@@ -227,10 +227,10 @@ class GroupSettingsExportTest {
         )
 
         val content = output.toString(Charsets.UTF_8.name())
-        assertFalse(content.contains("- name: DefaultGroup"))
-        assertTrue(content.contains("- name: CustomGroup"))
+        assertFalse(content.contains("- name: \"DefaultGroup\""))
+        assertTrue(content.contains("- name: \"CustomGroup\""))
         // The group is still on the card that belongs to it.
-        assertTrue(content.contains("groups: [DefaultGroup, CustomGroup]"))
+        assertTrue(content.contains("groups:\n      - \"DefaultGroup\"\n      - \"CustomGroup\"\n"))
     }
 
     @Test
@@ -465,7 +465,7 @@ class GroupSettingsExportTest {
         )
 
         val content = output.toString(Charsets.UTF_8.name())
-        assertTrue(content.contains("groups:\n  - name: RetentionGroup\n    fsrsRetention: 85\n"))
+        assertTrue(content.contains("groups:\n  - name: \"RetentionGroup\"\n    fsrsRetention: 85\n"))
     }
 
     @Test
@@ -486,7 +486,7 @@ class GroupSettingsExportTest {
         )
 
         val content = output.toString(Charsets.UTF_8.name())
-        assertTrue(content.contains("groups:\n  - name: NoRetentionGroup\n    cardsPerSession: 5\n"))
+        assertTrue(content.contains("groups:\n  - name: \"NoRetentionGroup\"\n    cardsPerSession: 5\n"))
         assertFalse(content.contains("fsrsRetention"))
     }
 

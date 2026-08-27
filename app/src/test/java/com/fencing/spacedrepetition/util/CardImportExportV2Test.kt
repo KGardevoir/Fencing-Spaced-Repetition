@@ -263,9 +263,8 @@ class CardImportExportV2Test {
         // One card entry, carrying its own state and the group's.
         assertEquals(1, cardCount(content))
         assertEquals(1, groupStateCount(content))
-        assertTrue(content.contains("    state:\n      nextReview: 0"))
         assertTrue(content.contains("      stability: 5.0")) // Global stability
-        assertTrue(content.contains("    groupStates:\n      - group: IndependentGroup"))
+        assertTrue(content.contains("    groupStates:\n      - group: \"IndependentGroup\""))
         assertTrue(content.contains("        stability: 10.0")) // Group stability
     }
 

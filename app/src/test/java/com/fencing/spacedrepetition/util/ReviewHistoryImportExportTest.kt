@@ -263,10 +263,10 @@ class ReviewHistoryImportExportTest {
         )
         val content = output.toString(Charsets.UTF_8.name())
 
-        assertTrue(content.contains("  - card: Parry question\n"))
+        assertTrue(content.contains("  - card: \"Parry question\"\n"))
         assertTrue(content.contains("    reviewTime: 99999\n"))
         assertTrue(content.contains("    grade: 4\n"))
-        assertTrue(content.contains("    algorithm: SM2\n"))
+        assertTrue(content.contains("    algorithm: \"SM2\"\n"))
         assertTrue(content.contains("    stateBefore: \"S:1.0,D:5.0,ST:LEARNING\"\n"))
         assertTrue(content.contains("    stateAfter: \"S:2.0,D:5.0,ST:REVIEW\"\n"))
         assertTrue(content.contains("    scheduledDays: 7\n"))

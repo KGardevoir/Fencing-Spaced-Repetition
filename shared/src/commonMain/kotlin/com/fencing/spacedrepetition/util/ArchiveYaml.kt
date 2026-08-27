@@ -3,16 +3,12 @@
 
 package com.fencing.spacedrepetition.util
 
-// What an export means by the YAML it writes: which keys there are, what goes
-// under each of them, and how to read the whole thing back.
+// What an export means by the YAML it writes: the document declared as
+// classes, and the conversions between those classes and the entities on one
+// side and the ParsedCard records the import pipeline takes on the other.
 //
-// The general-purpose half -- how a mapping is written and how a document is
-// parsed -- is in Yaml.kt and knows nothing about cards. This file is the
-// other half, and knows nothing about streams or storage: it turns entities
-// into nodes and nodes back into the ParsedCard records the import pipeline
-// has always taken.
-//
-// The document:
+// The YAML itself is kaml's -- reading, writing, quoting, block scalars, the
+// lot. What is here is only the shape:
 //
 //     version: 5
 //     groups:                    # only those with settings of their own
@@ -20,15 +16,16 @@ package com.fencing.spacedrepetition.util
 //         cardsPerSession: 20
 //     opponents:
 //       - name: Alex
-//         skillMultiplier: 1.2
+//         skillMultiplier: 1.25
 //     cards:
 //       - question: Parry four
 //         answer: |-
 //           Blade to the inside line,
 //           point high.
 //         images: ["<base64>"]
-//         groups: [Footwork]
-//         state:
+//         groups:
+//           - Footwork
+//         state:                 # absent on a card nobody has practised
 //           nextReview: 1774000000000
 //           ...
 //         groupStates:           # only for groups that learn independently
@@ -44,12 +41,128 @@ package com.fencing.spacedrepetition.util
 // format it replaces wrote a whole row per state -- and with it another copy
 // of every photograph on that card, base64 and all. A card in four groups
 // that learn independently used to inline its pictures five times.
+//
+// Every field with a sensible default is left out when it holds that default,
+// so a card nobody has practised is three lines and a backup is a good deal
+// smaller than the shape above suggests. Nothing is lost by it: what is
+// missing reads back as the default it was.
 
+import com.charleskorn.kaml.Yaml
+import com.charleskorn.kaml.YamlConfiguration
+import com.charleskorn.kaml.YamlList
+import com.charleskorn.kaml.YamlMap
+import com.charleskorn.kaml.YamlNode
+import com.charleskorn.kaml.MultiLineStringStyle
+import com.charleskorn.kaml.SingleLineStringStyle
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.ReviewLog
+import kotlinx.serialization.DeserializationStrategy
+import kotlinx.serialization.Serializable
+
+// ==========================================================================
+// The document
+// ==========================================================================
+
+@Serializable
+internal data class ArchiveDocument(
+    /**
+     * Read, never written: the writer omits it because it equals the default,
+     * and the export puts the line in itself so that a file always says which
+     * version it is even when nothing else about it is unusual.
+     */
+    val version: Int = ArchiveYaml.VERSION,
+    val groups: List<ArchiveGroup> = emptyList(),
+    val opponents: List<ArchiveOpponent> = emptyList(),
+    val cards: List<ArchiveCard> = emptyList(),
+    val reviewHistory: List<ArchiveReviewLog> = emptyList()
+)
+
+@Serializable
+internal data class ArchiveGroup(
+    val name: String,
+    val cardsPerSession: Int? = null,
+    val autoShowAnswer: Boolean? = null,
+    val randomizeDueCards: Boolean? = null,
+    val randomizeBucketHours: Int? = null,
+    val practiceDays: String? = null,
+    val maximumInterval: Int? = null,
+    val fsrsRetention: Int? = null,
+    val fsrsEnableFuzzing: Boolean? = null
+)
+
+@Serializable
+internal data class ArchiveOpponent(
+    val name: String,
+    val skillMultiplier: Double = 1.0,
+    val notes: String = ""
+)
+
+@Serializable
+internal data class ArchiveCard(
+    val question: String? = null,
+    /** What a CSV of this app's calls the same column; accepted, never written. */
+    val concept: String? = null,
+    val answer: String? = null,
+    val description: String? = null,
+    val images: List<String> = emptyList(),
+    val groups: List<String> = emptyList(),
+    val state: ArchiveState? = null,
+    val groupStates: List<ArchiveGroupState> = emptyList()
+) {
+    val questionText: String get() = (question ?: concept).orEmpty().trim()
+    val answerText: String get() = (answer ?: description).orEmpty()
+}
+
+@Serializable
+internal data class ArchiveState(
+    val nextReview: Long = 0L,
+    val lastReview: Long = 0L,
+    val stability: Double = 0.0,
+    val difficulty: Double = 0.0,
+    val fsrsState: String = "NEW",
+    val reps: Int = 0,
+    val lapses: Int = 0,
+    val scheduledDays: Int = 0,
+    val elapsedDays: Int = 0
+)
+
+@Serializable
+internal data class ArchiveGroupState(
+    val group: String,
+    val nextReview: Long = 0L,
+    val lastReview: Long = 0L,
+    val stability: Double = 0.0,
+    val difficulty: Double = 0.0,
+    val fsrsState: String = "NEW",
+    val reps: Int = 0,
+    val lapses: Int = 0,
+    val scheduledDays: Int = 0,
+    val elapsedDays: Int = 0
+)
+
+@Serializable
+internal data class ArchiveReviewLog(
+    val card: String,
+    val reviewTime: Long,
+    val grade: Int,
+    val algorithm: String = "FSRS",
+    val stateBefore: String = "",
+    val stateAfter: String = "",
+    val scheduledDays: Int = 0,
+    val elapsedDays: Int = 0,
+    val group: String? = null,
+    val notes: String = "",
+    val opponent: String? = null,
+    val stabilityMultiplier: Double = 1.0,
+    val images: List<String> = emptyList()
+)
+
+// ==========================================================================
+// Reading and writing it
+// ==========================================================================
 
 internal object ArchiveYaml {
 
@@ -57,230 +170,161 @@ internal object ArchiveYaml {
      * The format version this app writes.
      *
      * Five rather than one because it continues the tab-separated format's
-     * count: V1 to V4 are the layouts still read by the legacy importer, and
-     * a file saying `version: 5` is unambiguous about which of the two shapes
-     * it is even without looking at the rest of it.
+     * count: V1 to V4 are the layouts still read by the legacy importer.
      */
     const val VERSION = 5
 
-    const val KEY_VERSION = "version"
-    const val KEY_GROUPS = "groups"
-    const val KEY_OPPONENTS = "opponents"
     const val KEY_CARDS = "cards"
+    const val KEY_VERSION = "version"
     const val KEY_REVIEW_HISTORY = "reviewHistory"
-
-    const val KEY_NAME = "name"
-    const val KEY_SKILL_MULTIPLIER = "skillMultiplier"
-    const val KEY_NOTES = "notes"
-
-    const val KEY_QUESTION = "question"
-    const val KEY_ANSWER = "answer"
-    const val KEY_IMAGES = "images"
-    const val KEY_STATE = "state"
-    const val KEY_GROUP_STATES = "groupStates"
-    const val KEY_GROUP = "group"
-
-    const val KEY_NEXT_REVIEW = "nextReview"
-    const val KEY_LAST_REVIEW = "lastReview"
-    const val KEY_STABILITY = "stability"
-    const val KEY_DIFFICULTY = "difficulty"
-    const val KEY_FSRS_STATE = "fsrsState"
-    const val KEY_REPS = "reps"
-    const val KEY_LAPSES = "lapses"
-    const val KEY_SCHEDULED_DAYS = "scheduledDays"
-    const val KEY_ELAPSED_DAYS = "elapsedDays"
-
-    const val KEY_CARD = "card"
-    const val KEY_REVIEW_TIME = "reviewTime"
-    const val KEY_GRADE = "grade"
-    const val KEY_ALGORITHM = "algorithm"
-    const val KEY_STATE_BEFORE = "stateBefore"
-    const val KEY_STATE_AFTER = "stateAfter"
-    const val KEY_OPPONENT = "opponent"
-    const val KEY_STABILITY_MULTIPLIER = "stabilityMultiplier"
-
-    /**
-     * The words a hand-written file is allowed to use instead.
-     *
-     * A CSV of this app's calls the two columns Concept and Description, and
-     * someone retyping one as YAML will use those words. Accepting them costs
-     * two lookups and saves an import that would otherwise fail with "Empty
-     * question" on every row.
-     */
-    private const val KEY_CONCEPT = "concept"
-    private const val KEY_DESCRIPTION = "description"
-
-    /** What a review log says it was scheduled by when the file does not. */
-    private const val DEFAULT_ALGORITHM = "FSRS"
 
     /** The state context a card's own state is filed under. */
     const val GLOBAL_STATE = "GLOBAL"
 
-    /** For the export path that carries no pictures. */
-    private val NoImages = ImageReader { null }
-
-    // ======================================================================
-    // Writing
-    // ======================================================================
-
-    fun versionNode(): YamlMapping =
-        YamlMapping(listOf(KEY_VERSION to yamlNumber(VERSION)))
-
-    fun groupNode(group: Group): YamlMapping {
-        val entries = mutableListOf<Pair<String, YamlNode>>(KEY_NAME to yamlText(group.name))
-        group.cardsPerSession?.let { entries.add("cardsPerSession" to yamlNumber(it)) }
-        group.autoShowAnswer?.let { entries.add("autoShowAnswer" to yamlBoolean(it)) }
-        group.randomizeDueCards?.let { entries.add("randomizeDueCards" to yamlBoolean(it)) }
-        group.randomizeBucketHours?.let { entries.add("randomizeBucketHours" to yamlNumber(it)) }
-        group.practiceDays?.let { entries.add("practiceDays" to yamlText(it)) }
-        group.maximumInterval?.let { entries.add("maximumInterval" to yamlNumber(it)) }
-        group.fsrsRetention?.let { entries.add("fsrsRetention" to yamlNumber(it)) }
-        group.fsrsEnableFuzzing?.let { entries.add("fsrsEnableFuzzing" to yamlBoolean(it)) }
-        return YamlMapping(entries)
-    }
-
-    fun opponentNode(opponent: Opponent): YamlMapping {
-        val entries = mutableListOf<Pair<String, YamlNode>>(
-            KEY_NAME to yamlText(opponent.name),
-            KEY_SKILL_MULTIPLIER to yamlNumber(opponent.skillMultiplier)
+    /**
+     * How the document is written and read.
+     *
+     * Every setting here is load-bearing:
+     *
+     *   encodeDefaults          leaves out what a field already holds, so a
+     *                           card nobody has practised is three lines
+     *   strictMode              a key this version does not know is ignored
+     *                           rather than fatal, so a file from a later
+     *                           version still imports what it can
+     *   breakScalarsAt          an inlined photograph is one base64 line;
+     *                           wrapping it would only make the file longer
+     *   singleLineStringStyle   every string quoted. PlainExceptAmbiguous
+     *                           reads better and is judged against YAML 1.2,
+     *                           where `off`, `12:30` and `2026-08-27` are all
+     *                           strings -- but a 1.1 reader, which is what
+     *                           PyYAML and Ruby's Psych still are, makes them
+     *                           a boolean, a number of seconds and a date. An
+     *                           answer of "no" or "12:30" is an ordinary card,
+     *                           so the quotes stay
+     *   multiLineStringStyle    `|-` for anything with a newline in it, so a
+     *                           long answer reads as the prose it is
+     *   sequenceBlockIndent     entries indented under their key rather than
+     *                           level with it
+     *   codePointLimit          snakeyaml refuses a document over 3 MB by
+     *                           default, which any export carrying two
+     *                           photographs already is
+     */
+    val format = Yaml(
+        configuration = YamlConfiguration(
+            encodeDefaults = false,
+            strictMode = false,
+            breakScalarsAt = Int.MAX_VALUE,
+            singleLineStringStyle = SingleLineStringStyle.DoubleQuoted,
+            multiLineStringStyle = MultiLineStringStyle.Literal,
+            sequenceBlockIndent = 2,
+            codePointLimit = Int.MAX_VALUE
         )
-        if (opponent.notes.isNotBlank()) entries.add(KEY_NOTES to yamlText(opponent.notes))
-        return YamlMapping(entries)
-    }
+    )
+
+    // ---------- entities to document ----------
+
+    fun groupNode(group: Group) = ArchiveGroup(
+        name = group.name,
+        cardsPerSession = group.cardsPerSession,
+        autoShowAnswer = group.autoShowAnswer,
+        randomizeDueCards = group.randomizeDueCards,
+        randomizeBucketHours = group.randomizeBucketHours,
+        practiceDays = group.practiceDays,
+        maximumInterval = group.maximumInterval,
+        fsrsRetention = group.fsrsRetention,
+        fsrsEnableFuzzing = group.fsrsEnableFuzzing
+    )
+
+    fun opponentNode(opponent: Opponent) = ArchiveOpponent(
+        name = opponent.name,
+        skillMultiplier = opponent.skillMultiplier,
+        notes = opponent.notes
+    )
 
     /**
      * One card, its pictures, the groups it is in, and every learning state
      * it holds.
      *
-     * [groupStates] is empty for the export that carries no per-group states,
-     * and [images] is [NoImages] for the one that carries no pictures -- see
-     * [cardNodeWithoutImages].
+     * The state block is left out when the card holds nothing but defaults --
+     * which is what a card nobody has practised holds -- because writing nine
+     * zeroes says no more than leaving them out does.
      */
     fun cardNode(
         card: Card,
         groupNames: List<String>,
         groupStates: Map<String, CardGroupLearningState>,
         images: ImageReader
-    ): YamlMapping {
-        val entries = mutableListOf<Pair<String, YamlNode>>(
-            KEY_QUESTION to yamlText(card.question),
-            KEY_ANSWER to yamlText(card.answer)
+    ): ArchiveCard {
+        val state = ArchiveState(
+            nextReview = card.nextReview,
+            lastReview = card.lastReview,
+            stability = card.fsrsStability,
+            difficulty = card.fsrsDifficulty,
+            fsrsState = card.fsrsState,
+            reps = card.fsrsReps,
+            lapses = card.fsrsLapses,
+            scheduledDays = card.fsrsScheduledDays,
+            elapsedDays = card.fsrsElapsedDays
         )
-        val encoded = card.imagePaths.mapNotNull { CardImportExport.encodeImageToBase64(it, images) }
-        if (encoded.isNotEmpty()) {
-            entries.add(KEY_IMAGES to YamlSequence(encoded.map { yamlText(it) }))
-        }
-        if (groupNames.isNotEmpty()) {
-            entries.add(KEY_GROUPS to YamlSequence(groupNames.map { yamlText(it) }, flow = true))
-        }
-        entries.add(
-            KEY_STATE to stateNode(
-                nextReview = card.nextReview,
-                lastReview = card.lastReview,
-                stability = card.fsrsStability,
-                difficulty = card.fsrsDifficulty,
-                fsrsState = card.fsrsState,
-                reps = card.fsrsReps,
-                lapses = card.fsrsLapses,
-                scheduledDays = card.fsrsScheduledDays,
-                elapsedDays = card.fsrsElapsedDays
-            )
-        )
-        if (groupStates.isNotEmpty()) {
-            entries.add(
-                KEY_GROUP_STATES to YamlSequence(
-                    groupStates.map { (name, state) -> groupStateNode(name, state) }
+        return ArchiveCard(
+            question = card.question,
+            answer = card.answer.ifEmpty { null },
+            images = card.imagePaths.mapNotNull { CardImportExport.encodeImageToBase64(it, images) },
+            groups = groupNames.filter { it.isNotBlank() },
+            state = state.takeIf { it != ArchiveState() },
+            groupStates = groupStates.map { (name, learning) ->
+                ArchiveGroupState(
+                    group = name,
+                    nextReview = learning.nextReview,
+                    lastReview = learning.lastReview,
+                    stability = learning.fsrsStability,
+                    difficulty = learning.fsrsDifficulty,
+                    fsrsState = learning.fsrsState,
+                    reps = learning.fsrsReps,
+                    lapses = learning.fsrsLapses,
+                    scheduledDays = learning.fsrsScheduledDays,
+                    elapsedDays = learning.fsrsElapsedDays
                 )
-            )
-        }
-        return YamlMapping(entries)
+            }
+        )
     }
 
     /** A card written without its pictures, for the export that omits them. */
-    fun cardNodeWithoutImages(card: Card, groupNames: List<String>): YamlMapping =
+    fun cardNodeWithoutImages(card: Card, groupNames: List<String>): ArchiveCard =
         cardNode(card.copy(imagePaths = emptyList()), groupNames, emptyMap(), NoImages)
 
-    private fun groupStateNode(
-        groupName: String,
-        state: CardGroupLearningState
-    ): YamlMapping = YamlMapping(
-        listOf<Pair<String, YamlNode>>(KEY_GROUP to yamlText(groupName)) +
-            stateNode(
-                nextReview = state.nextReview,
-                lastReview = state.lastReview,
-                stability = state.fsrsStability,
-                difficulty = state.fsrsDifficulty,
-                fsrsState = state.fsrsState,
-                reps = state.fsrsReps,
-                lapses = state.fsrsLapses,
-                scheduledDays = state.fsrsScheduledDays,
-                elapsedDays = state.fsrsElapsedDays
-            ).entries
-    )
-
-    private fun stateNode(
-        nextReview: Long,
-        lastReview: Long,
-        stability: Double,
-        difficulty: Double,
-        fsrsState: String,
-        reps: Int,
-        lapses: Int,
-        scheduledDays: Int,
-        elapsedDays: Int
-    ): YamlMapping = YamlMapping(
-        listOf(
-            KEY_NEXT_REVIEW to yamlNumber(nextReview),
-            KEY_LAST_REVIEW to yamlNumber(lastReview),
-            KEY_STABILITY to yamlNumber(stability),
-            KEY_DIFFICULTY to yamlNumber(difficulty),
-            KEY_FSRS_STATE to yamlText(fsrsState),
-            KEY_REPS to yamlNumber(reps),
-            KEY_LAPSES to yamlNumber(lapses),
-            KEY_SCHEDULED_DAYS to yamlNumber(scheduledDays),
-            KEY_ELAPSED_DAYS to yamlNumber(elapsedDays)
-        )
-    )
+    private val NoImages = ImageReader { null }
 
     /**
      * One review log, keyed by the question of the card it belongs to.
      *
-     * By question and not by id, as it always has been: ids are this
-     * device's, and an export is read on another one.
+     * By question and not by id, as it always has been: ids are this device's,
+     * and an export is read on another one.
      */
     fun reviewLogNode(
         log: ReviewLog,
         question: String,
         opponentName: String?,
         images: ImageReader
-    ): YamlMapping {
-        val entries = mutableListOf<Pair<String, YamlNode>>(
-            KEY_CARD to yamlText(question),
-            KEY_REVIEW_TIME to yamlNumber(log.reviewTime),
-            KEY_GRADE to yamlNumber(log.grade),
-            KEY_ALGORITHM to yamlText(log.algorithm),
-            KEY_STATE_BEFORE to yamlText(log.stateBefore),
-            KEY_STATE_AFTER to yamlText(log.stateAfter),
-            KEY_SCHEDULED_DAYS to yamlNumber(log.scheduledDays),
-            KEY_ELAPSED_DAYS to yamlNumber(log.elapsedDays)
-        )
-        log.groupName?.let { entries.add(KEY_GROUP to yamlText(it)) }
-        if (log.notes.isNotBlank()) entries.add(KEY_NOTES to yamlText(log.notes))
-        opponentName?.let { entries.add(KEY_OPPONENT to yamlText(it)) }
-        entries.add(KEY_STABILITY_MULTIPLIER to yamlNumber(log.stabilityMultiplier))
-
-        val encoded = log.imagePaths.split(",")
+    ) = ArchiveReviewLog(
+        card = question,
+        reviewTime = log.reviewTime,
+        grade = log.grade,
+        algorithm = log.algorithm,
+        stateBefore = log.stateBefore,
+        stateAfter = log.stateAfter,
+        scheduledDays = log.scheduledDays,
+        elapsedDays = log.elapsedDays,
+        group = log.groupName,
+        notes = log.notes,
+        opponent = opponentName,
+        stabilityMultiplier = log.stabilityMultiplier,
+        images = log.imagePaths.split(",")
             .filter { it.isNotBlank() }
             .mapNotNull { CardImportExport.encodeImageToBase64(it, images) }
-        if (encoded.isNotEmpty()) {
-            entries.add(KEY_IMAGES to YamlSequence(encoded.map { yamlText(it) }))
-        }
-        return YamlMapping(entries)
-    }
+    )
 
-    // ======================================================================
-    // Reading
-    // ======================================================================
+    // ---------- document to the import pipeline ----------
 
     /**
      * Whether a parsed document is one of ours.
@@ -290,75 +334,94 @@ internal object ArchiveYaml {
      * error than importing nothing and calling the file empty.
      */
     fun isArchive(document: YamlNode): Boolean = when (document) {
-        is YamlSequence -> true
-        is YamlMapping ->
-            document[KEY_CARDS] != null ||
-                document[KEY_VERSION] != null ||
-                document[KEY_REVIEW_HISTORY] != null
+        is YamlList -> true
+        is YamlMap ->
+            document.get<YamlNode>(KEY_CARDS) != null ||
+                document.get<YamlNode>(KEY_VERSION) != null ||
+                document.get<YamlNode>(KEY_REVIEW_HISTORY) != null
         else -> false
     }
 
-    /** The card list, wherever it is: under `cards:`, or the document itself. */
-    private fun cardNodes(document: YamlNode): List<YamlNode> = when (document) {
-        is YamlSequence -> document.items
-        is YamlMapping -> document[KEY_CARDS].itemsOrEmpty()
+    /** The card entries, wherever they are: under `cards:`, or the document itself. */
+    fun cardEntries(document: YamlNode): List<YamlNode> = when (document) {
+        is YamlList -> document.items
+        is YamlMap -> document.get<YamlList>(KEY_CARDS)?.items.orEmpty()
         else -> emptyList()
     }
 
-    private fun section(document: YamlNode, key: String): List<YamlMapping> =
-        (document as? YamlMapping)?.get(key).mappingsOrEmpty()
-
-    fun readGroupSettings(document: YamlNode): Map<String, Map<String, String>> {
-        val settings = LinkedHashMap<String, Map<String, String>>()
-        section(document, KEY_GROUPS).forEach { node ->
-            val name = node.text(KEY_NAME)?.trim().orEmpty()
-            if (name.isEmpty()) return@forEach
-            val values = LinkedHashMap<String, String>()
-            node.entries.forEach { (key, value) ->
-                if (key != KEY_NAME) value.textOrNull()?.let { values[key] = it }
-            }
-            settings[name] = values
+    /**
+     * Decodes the entries of one section, keeping a bad entry from taking the
+     * rest of the file with it.
+     *
+     * kaml would refuse the whole document over a single malformed card,
+     * which is the wrong answer for a file someone has edited by hand: the
+     * other three hundred cards are still perfectly good. Decoding an entry
+     * at a time costs a node walk and turns that into one line of the error
+     * list, which is what the import screen already knows how to show.
+     */
+    fun <T> decodeEntries(
+        entries: List<YamlNode>,
+        serializer: DeserializationStrategy<T>,
+        errors: MutableList<String>
+    ): List<T> = entries.mapNotNull { entry ->
+        try {
+            format.decodeFromYamlNode(serializer, entry)
+        } catch (e: Exception) {
+            errors.add("Line ${entry.location.line}: ${reason(e)}")
+            null
         }
-        return settings
     }
 
-    fun readOpponents(document: YamlNode): List<CardImportExport.ParsedOpponent> =
-        section(document, KEY_OPPONENTS).mapNotNull { node ->
-            val name = node.text(KEY_NAME)?.trim().orEmpty()
-            if (name.isEmpty()) return@mapNotNull null
-            CardImportExport.ParsedOpponent(
-                name = name,
-                skillMultiplier = node.double(KEY_SKILL_MULTIPLIER) ?: 1.0,
-                notes = node.text(KEY_NOTES).orEmpty()
-            )
-        }
+    fun <T> decodeSection(
+        document: YamlNode,
+        key: String,
+        serializer: DeserializationStrategy<T>,
+        errors: MutableList<String>
+    ): List<T> = decodeEntries(
+        (document as? YamlMap)?.get<YamlList>(key)?.items.orEmpty(),
+        serializer,
+        errors
+    )
 
-    fun readReviewHistory(document: YamlNode): List<CardImportExport.ParsedReviewLog> =
-        section(document, KEY_REVIEW_HISTORY).mapNotNull { node ->
-            val question = node.text(KEY_CARD)?.takeIf { it.isNotBlank() }
-                ?: return@mapNotNull null
-            val reviewTime = node.long(KEY_REVIEW_TIME) ?: return@mapNotNull null
-            val grade = node.int(KEY_GRADE) ?: return@mapNotNull null
-            CardImportExport.ParsedReviewLog(
-                cardQuestion = question,
-                reviewTime = reviewTime,
-                grade = grade,
-                algorithm = node.text(KEY_ALGORITHM)?.takeIf { it.isNotBlank() }
-                    ?: DEFAULT_ALGORITHM,
-                stateBefore = node.text(KEY_STATE_BEFORE).orEmpty(),
-                stateAfter = node.text(KEY_STATE_AFTER).orEmpty(),
-                scheduledDays = node.int(KEY_SCHEDULED_DAYS) ?: 0,
-                elapsedDays = node.int(KEY_ELAPSED_DAYS) ?: 0,
-                groupName = node.text(KEY_GROUP)?.takeIf { it.isNotBlank() },
-                notes = node.text(KEY_NOTES).orEmpty(),
-                imageData = node.textList(KEY_IMAGES),
-                opponentName = node.text(KEY_OPPONENT)?.takeIf { it.isNotBlank() },
-                stabilityMultiplier = node.double(KEY_STABILITY_MULTIPLIER) ?: 1.0
-            )
-        }
+    /** kaml's messages carry the location on a second line; the caller adds its own. */
+    private fun reason(e: Exception): String =
+        (e.message ?: "could not be read").lines().first().trim()
+
+    fun groupSettings(group: ArchiveGroup): Map<String, String> = buildMap {
+        group.cardsPerSession?.let { put("cardsPerSession", it.toString()) }
+        group.autoShowAnswer?.let { put("autoShowAnswer", it.toString()) }
+        group.randomizeDueCards?.let { put("randomizeDueCards", it.toString()) }
+        group.randomizeBucketHours?.let { put("randomizeBucketHours", it.toString()) }
+        group.practiceDays?.let { put("practiceDays", it) }
+        group.maximumInterval?.let { put("maximumInterval", it.toString()) }
+        group.fsrsRetention?.let { put("fsrsRetention", it.toString()) }
+        group.fsrsEnableFuzzing?.let { put("fsrsEnableFuzzing", it.toString()) }
+    }
+
+    fun parsedOpponent(opponent: ArchiveOpponent) = CardImportExport.ParsedOpponent(
+        name = opponent.name.trim(),
+        skillMultiplier = opponent.skillMultiplier,
+        notes = opponent.notes
+    )
+
+    fun parsedReviewLog(log: ArchiveReviewLog) = CardImportExport.ParsedReviewLog(
+        cardQuestion = log.card,
+        reviewTime = log.reviewTime,
+        grade = log.grade,
+        algorithm = log.algorithm.ifBlank { "FSRS" },
+        stateBefore = log.stateBefore,
+        stateAfter = log.stateAfter,
+        scheduledDays = log.scheduledDays,
+        elapsedDays = log.elapsedDays,
+        groupName = log.group?.takeIf { it.isNotBlank() },
+        notes = log.notes,
+        imageData = log.images,
+        opponentName = log.opponent?.takeIf { it.isNotBlank() },
+        stabilityMultiplier = log.stabilityMultiplier
+    )
 
     /**
-     * The cards, flattened into the one-record-per-state shape the import
+     * One card, flattened into the one-record-per-state shape the import
      * pipeline reads.
      *
      * The document nests -- a card holds its states -- and the repositories
@@ -371,67 +434,52 @@ internal object ArchiveYaml {
      * for their scheduling and nothing else, which is why the format never
      * had to repeat them.
      */
-    fun readCards(document: YamlNode): Pair<List<ParsedCard>, List<String>> {
-        val cards = mutableListOf<ParsedCard>()
-        val errors = mutableListOf<String>()
-
-        cardNodes(document).forEach { node ->
-            if (node !is YamlMapping) {
-                errors.add("Line ${node.line}: a card must be a list of \"key: value\" lines")
-                return@forEach
-            }
-            val question = (node.text(KEY_QUESTION) ?: node.text(KEY_CONCEPT))?.trim().orEmpty()
-            if (question.isEmpty()) {
-                errors.add("Line ${node.line}: Empty question")
-                return@forEach
-            }
-            val answer = (node.text(KEY_ANSWER) ?: node.text(KEY_DESCRIPTION)).orEmpty()
-            val imageData = node.textList(KEY_IMAGES)
-            val groupNames = node.textList(KEY_GROUPS)
-            val state = node[KEY_STATE] as? YamlMapping
-
-            cards.add(
-                when {
-                    state != null -> parsedCard(
-                        question, answer, node.line, imageData, groupNames, GLOBAL_STATE, state
-                    )
-                    // No state, but groups to be put in: the record still
-                    // needs a state context, or the importer takes the file
-                    // for a bare question-and-answer list and drops the
-                    // groups. Every scheduling field stays null, which is
-                    // what a card nobody has practised yet looks like.
-                    groupNames.isNotEmpty() -> ParsedCard(
-                        concept = question,
-                        answer = answer,
-                        lineNumber = node.line,
-                        imageData = imageData,
-                        stateContext = GLOBAL_STATE,
-                        groupNames = groupNames
-                    )
-                    else -> ParsedCard(
-                        concept = question,
-                        answer = answer,
-                        lineNumber = node.line,
-                        imageData = imageData
-                    )
-                }
+    fun parsedCards(card: ArchiveCard, lineNumber: Int): List<ParsedCard> {
+        val question = card.questionText
+        val answer = card.answerText
+        // A blank group name is not a group. Left in, an import would create
+        // one called "" and quietly file cards under it.
+        val groups = card.groups.filter { it.isNotBlank() }
+        val own = when {
+            card.state != null ->
+                parsedCard(question, answer, lineNumber, card.images, groups, GLOBAL_STATE, card.state)
+            // No state, but groups to be put in: the record still needs a
+            // state context, or the importer takes the file for a bare
+            // question-and-answer list and drops the groups. Every
+            // scheduling field stays null, which is what a card nobody has
+            // practised looks like.
+            groups.isNotEmpty() -> ParsedCard(
+                concept = question,
+                answer = answer,
+                lineNumber = lineNumber,
+                imageData = card.images,
+                stateContext = GLOBAL_STATE,
+                groupNames = groups
             )
-
-            node[KEY_GROUP_STATES].mappingsOrEmpty().forEach { groupState ->
-                val groupName = groupState.text(KEY_GROUP)?.trim().orEmpty()
-                if (groupName.isEmpty()) {
-                    errors.add("Line ${groupState.line}: a group state needs a \"group:\" name")
-                    return@forEach
-                }
-                cards.add(
-                    parsedCard(
-                        question, answer, groupState.line, emptyList(),
-                        listOf(groupName), groupName, groupState
-                    )
-                )
-            }
+            else -> ParsedCard(
+                concept = question,
+                answer = answer,
+                lineNumber = lineNumber,
+                imageData = card.images
+            )
         }
-        return Pair(cards, errors)
+        return listOf(own) + card.groupStates.filter { it.group.isNotBlank() }.map { groupState ->
+            parsedCard(
+                question, answer, lineNumber, emptyList(), listOf(groupState.group),
+                groupState.group,
+                ArchiveState(
+                    nextReview = groupState.nextReview,
+                    lastReview = groupState.lastReview,
+                    stability = groupState.stability,
+                    difficulty = groupState.difficulty,
+                    fsrsState = groupState.fsrsState,
+                    reps = groupState.reps,
+                    lapses = groupState.lapses,
+                    scheduledDays = groupState.scheduledDays,
+                    elapsedDays = groupState.elapsedDays
+                )
+            )
+        }
     }
 
     private fun parsedCard(
@@ -441,22 +489,22 @@ internal object ArchiveYaml {
         imageData: List<String>,
         groupNames: List<String>,
         stateContext: String,
-        state: YamlMapping
-    ): ParsedCard = ParsedCard(
+        state: ArchiveState
+    ) = ParsedCard(
         concept = question,
         answer = answer,
         lineNumber = lineNumber,
         imageData = imageData,
         stateContext = stateContext,
-        nextReview = state.long(KEY_NEXT_REVIEW) ?: 0L,
-        lastReview = state.long(KEY_LAST_REVIEW) ?: 0L,
-        fsrsStability = state.double(KEY_STABILITY) ?: 0.0,
-        fsrsDifficulty = state.double(KEY_DIFFICULTY) ?: 0.0,
-        fsrsState = state.text(KEY_FSRS_STATE)?.takeIf { it.isNotBlank() } ?: "NEW",
-        fsrsReps = state.int(KEY_REPS) ?: 0,
-        fsrsLapses = state.int(KEY_LAPSES) ?: 0,
-        fsrsScheduledDays = state.int(KEY_SCHEDULED_DAYS) ?: 0,
-        fsrsElapsedDays = state.int(KEY_ELAPSED_DAYS) ?: 0,
+        nextReview = state.nextReview,
+        lastReview = state.lastReview,
+        fsrsStability = state.stability,
+        fsrsDifficulty = state.difficulty,
+        fsrsState = state.fsrsState,
+        fsrsReps = state.reps,
+        fsrsLapses = state.lapses,
+        fsrsScheduledDays = state.scheduledDays,
+        fsrsElapsedDays = state.elapsedDays,
         groupNames = groupNames
     )
 }

@@ -139,7 +139,7 @@ class CardImportExportV3Test {
 
             // Both images, one per entry under the card's "images:" key.
             val expected = java.util.Base64.getEncoder().encodeToString(createTestImageBytes())
-            assertTrue(content.contains("    images:\n      - $expected\n      - $expected\n"))
+            assertTrue(content.contains("    images:\n      - \"$expected\"\n      - \"$expected\"\n"))
         } finally {
             tempFile1.delete()
             tempFile2.delete()

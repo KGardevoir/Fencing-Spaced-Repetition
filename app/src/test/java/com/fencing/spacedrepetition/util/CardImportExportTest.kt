@@ -361,13 +361,14 @@ class CardImportExportTest {
 
         val output = outputStream.toString(Charsets.UTF_8.name())
         assertTrue(output.startsWith("# Fencing Spaced Repetition export\nversion: 5\n"))
-        // Quoted, because a plain scalar starting with anything but a letter
-        // -- or holding a "?" -- is where YAML gets ambiguous.
+        // Every string is quoted: "4", "no" and "12:30" are all ordinary
+        // answers, and a YAML 1.1 reader takes an unquoted one for a number,
+        // a boolean and a time respectively.
         assertTrue(output.contains("cards:\n  - question: \"What is 2+2?\"\n"))
         assertTrue(output.contains("answer: \"4\""))
-        assertTrue(output.contains("groups: [Math, Basic]"))
+        assertTrue(output.contains("groups:\n      - \"Math\"\n      - \"Basic\"\n"))
         assertTrue(output.contains("stability: 5.5"))
-        assertTrue(output.contains("fsrsState: REVIEW"))
+        assertTrue(output.contains("fsrsState: \"REVIEW\""))
         // Nothing tab-separated is written any more.
         assertFalse(output.contains("#FSR_EXPORT"))
         assertFalse(output.contains("\t"))
@@ -434,7 +435,7 @@ class CardImportExportTest {
 
         val output = outputStream.toString(Charsets.UTF_8.name())
         assertTrue(output.startsWith("# Fencing Spaced Repetition export\nversion: 5\n"))
-        assertTrue(output.contains("- question: Q1"))
+        assertTrue(output.contains("- question: \"Q1\""))
         assertTrue(output.contains("state:"))
         // A card with no independent group keeps no per-group states.
         assertFalse(output.contains("groupStates:"))
@@ -486,10 +487,10 @@ class CardImportExportTest {
 
         // One card, carrying its own state and the group's.
         assertEquals(1, Regex("^  - question:", RegexOption.MULTILINE).findAll(output).count())
-        assertTrue(output.contains("groups: [Math, IndependentGroup]"))
+        assertTrue(output.contains("groups:\n      - \"Math\"\n      - \"IndependentGroup\"\n"))
         assertTrue(output.contains("    state:\n      nextReview: 1700000000000"))
         assertTrue(output.contains("      stability: 5.0"))
-        assertTrue(output.contains("    groupStates:\n      - group: IndependentGroup"))
+        assertTrue(output.contains("    groupStates:\n      - group: \"IndependentGroup\""))
         assertTrue(output.contains("        stability: 8.0"))
 
         // And reads back as the two rows the importer expects.
