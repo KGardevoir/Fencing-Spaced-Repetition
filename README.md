@@ -28,13 +28,17 @@ An Android app for practicing martial arts and fencing techniques using delayed-
 - Edit cards inline during practice sessions
 
 ### Import and Export
-- Export cards as tab-separated (TSV) files with optional GZIP compression
-- Three export formats with increasing detail:
-  - **V1**: Card content + full learning state
-  - **V2**: V1 + group-specific learning states
-  - **V3**: V2 + base64-encoded images
-- Import auto-detects format and merges with existing cards
-- Simple two-column (question/answer) import also supported
+- Export the whole collection as a YAML document, gzipped (`*.yaml.gz`)
+- One export carries everything: card content, images (inline base64), group
+  membership, per-group settings, every learning state, opponents, and
+  optionally the full review history
+- Readable and editable by hand -- a minimal deck is just a `cards:` list of
+  `question`/`answer` pairs
+- Import auto-detects the format and merges with existing cards; the
+  tab-separated exports written by earlier versions (`#FSR_EXPORT_V1` through
+  `V4`) still import
+- CSV (Concept, Description, Images) remains available for exchanging decks
+  with spreadsheets and other tools
 
 ### Configurable Scheduling
 - **Practices per week** (1--7): adjusts review intervals to match your training frequency so cards come due on days you actually practice

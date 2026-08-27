@@ -176,10 +176,10 @@ class GroupSettingsExportTest {
         assertEquals(3, result.cardsPerSession)
     }
 
-    // ==================== Group settings in V3 export/import TESTS ====================
+    // ==================== Group settings in the export ====================
 
     @Test
-    fun `V3 export includes group settings metadata`() {
+    fun `export includes group settings`() {
         val card = Card(
             id = 1, question = "Q1", answer = "A1",
             created = 0, modified = 0
@@ -198,13 +198,16 @@ class GroupSettingsExportTest {
         )
 
         val content = output.toString(Charsets.UTF_8.name())
-        assertTrue(content.contains("#GROUP_SETTINGS:CustomGroup"))
-        assertTrue(content.contains("cardsPerSession=5"))
-        assertTrue(content.contains("maximumInterval=365"))
+        assertTrue(
+            content.contains(
+                "groups:\n  - name: CustomGroup\n    cardsPerSession: 5\n" +
+                    "    maximumInterval: 365\n"
+            )
+        )
     }
 
     @Test
-    fun `V3 export excludes groups without custom settings`() {
+    fun `export excludes groups without custom settings`() {
         val card = Card(
             id = 1, question = "Q1", answer = "A1",
             created = 0, modified = 0
@@ -224,8 +227,10 @@ class GroupSettingsExportTest {
         )
 
         val content = output.toString(Charsets.UTF_8.name())
-        assertFalse(content.contains("#GROUP_SETTINGS:DefaultGroup"))
-        assertTrue(content.contains("#GROUP_SETTINGS:CustomGroup"))
+        assertFalse(content.contains("- name: DefaultGroup"))
+        assertTrue(content.contains("- name: CustomGroup"))
+        // The group is still on the card that belongs to it.
+        assertTrue(content.contains("groups: [DefaultGroup, CustomGroup]"))
     }
 
     @Test
@@ -278,7 +283,7 @@ class GroupSettingsExportTest {
     }
 
     @Test
-    fun `V3 export and import round-trip preserves group settings`() {
+    fun `export and import round-trip preserves group settings`() {
         val card = Card(
             id = 1, question = "Test Card", answer = "Test Answer",
             fsrsStability = 5.0, fsrsDifficulty = 3.0, fsrsState = "REVIEW",
@@ -338,7 +343,7 @@ class GroupSettingsExportTest {
     }
 
     @Test
-    fun `V3 export with group-specific states and settings round-trip`() {
+    fun `export with group-specific states and settings round-trip`() {
         val card = Card(
             id = 1, question = "Parry-Riposte", answer = "4-6",
             fsrsStability = 2.0, fsrsState = "LEARNING",
@@ -444,7 +449,7 @@ class GroupSettingsExportTest {
     }
 
     @Test
-    fun `V4 export includes fsrsRetention in group settings line`() {
+    fun `export includes fsrsRetention in group settings`() {
         val card = Card(
             id = 1, question = "Q1", answer = "A1",
             created = 0, modified = 0
@@ -460,12 +465,11 @@ class GroupSettingsExportTest {
         )
 
         val content = output.toString(Charsets.UTF_8.name())
-        assertTrue(content.contains("#GROUP_SETTINGS:RetentionGroup"))
-        assertTrue(content.contains("fsrsRetention=85"))
+        assertTrue(content.contains("groups:\n  - name: RetentionGroup\n    fsrsRetention: 85\n"))
     }
 
     @Test
-    fun `V4 export omits retention fields when they are null`() {
+    fun `export omits retention fields when they are null`() {
         val card = Card(
             id = 1, question = "Q1", answer = "A1",
             created = 0, modified = 0
@@ -482,12 +486,12 @@ class GroupSettingsExportTest {
         )
 
         val content = output.toString(Charsets.UTF_8.name())
-        assertTrue(content.contains("#GROUP_SETTINGS:NoRetentionGroup"))
+        assertTrue(content.contains("groups:\n  - name: NoRetentionGroup\n    cardsPerSession: 5\n"))
         assertFalse(content.contains("fsrsRetention"))
     }
 
     @Test
-    fun `retention settings round-trip through V4 export and import`() {
+    fun `retention settings round-trip through an export and an import`() {
         val card = Card(
             id = 1, question = "Fleche", answer = "Running attack",
             created = 0, modified = 0

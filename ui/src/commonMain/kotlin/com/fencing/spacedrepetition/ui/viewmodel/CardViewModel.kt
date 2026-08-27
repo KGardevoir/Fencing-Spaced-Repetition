@@ -455,7 +455,7 @@ class CardViewModel(
         _importExportState.value = ImportExportState.Idle
     }
 
-    // ========== Archive (TSV) import and export ==========
+    // ========== Archive (YAML) import and export ==========
 
     /**
      * Imports a chosen archive: cards, their groups, those groups' settings,

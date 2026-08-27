@@ -34,19 +34,22 @@ class BackupWorker(
     companion object {
         /**
          * What a backup this worker wrote is called now, and what one written
-         * before the naming changed was called.
+         * under either of the two earlier naming schemes was called.
          *
-         * Both are recognised so that pruning does not walk past a folder of
-         * older backups and leave them there for ever. Which of the two a
-         * file is says nothing about its age, so the pruning sorts by the
-         * time the file was written rather than by its name.
+         * All three are recognised so that pruning does not walk past a
+         * folder of older backups and leave them there for ever. Which scheme
+         * a file follows says nothing about its age, so the pruning sorts by
+         * the time the file was written rather than by its name.
          */
-        private const val BACKUP_FILE_SUFFIX = "_backup.tsv.gz"
+        private val BACKUP_FILE_SUFFIX = "_backup" + CardImportExport.ARCHIVE_EXTENSION
+        private const val TSV_BACKUP_FILE_SUFFIX = "_backup.tsv.gz"
         private const val LEGACY_BACKUP_FILE_PREFIX = "fencing_backup_"
 
         private fun isBackup(name: String?): Boolean =
             name != null &&
-                (name.endsWith(BACKUP_FILE_SUFFIX) || name.startsWith(LEGACY_BACKUP_FILE_PREFIX))
+                (name.endsWith(BACKUP_FILE_SUFFIX) ||
+                    name.endsWith(TSV_BACKUP_FILE_SUFFIX) ||
+                    name.startsWith(LEGACY_BACKUP_FILE_PREFIX))
     }
 
     override suspend fun doWork(): Result {

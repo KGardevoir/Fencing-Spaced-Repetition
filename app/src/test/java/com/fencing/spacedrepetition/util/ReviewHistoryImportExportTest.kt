@@ -210,7 +210,7 @@ class ReviewHistoryImportExportTest {
     // ==================== exportCardsWithGroupStates with review history TESTS ====================
 
     @Test
-    fun `exportCardsWithGroupStates - includes REVIEW_HISTORY section when logs provided`() {
+    fun `exportCardsWithGroupStates - includes a reviewHistory section when logs provided`() {
         val card = makeCard(1L, "What is a lunge?")
         val cardsWithStates = listOf(CardWithGroupStates(card, emptyList(), emptyMap()))
         val reviewLogs = listOf(makeReviewLog(cardId = 1L))
@@ -225,13 +225,11 @@ class ReviewHistoryImportExportTest {
         )
         val content = output.toString(Charsets.UTF_8.name())
 
-        assertTrue(content.contains("#REVIEW_HISTORY_START"))
-        assertTrue(content.contains("#REVIEW_HISTORY_END"))
-        assertTrue(content.contains("What is a lunge?"))
+        assertTrue(content.contains("reviewHistory:\n  - card: \"What is a lunge?\"\n"))
     }
 
     @Test
-    fun `exportCardsWithGroupStates - omits REVIEW_HISTORY section when no logs`() {
+    fun `exportCardsWithGroupStates - omits the reviewHistory section when no logs`() {
         val card = makeCard(1L, "What is a lunge?")
         val cardsWithStates = listOf(CardWithGroupStates(card, emptyList(), emptyMap()))
 
@@ -239,7 +237,7 @@ class ReviewHistoryImportExportTest {
         CardImportExport.exportCardsWithGroupStates(cardsWithStates, output, images = NoImages)
         val content = output.toString(Charsets.UTF_8.name())
 
-        assertFalse(content.contains("#REVIEW_HISTORY_START"))
+        assertFalse(content.contains("reviewHistory:"))
     }
 
     @Test
@@ -265,18 +263,20 @@ class ReviewHistoryImportExportTest {
         )
         val content = output.toString(Charsets.UTF_8.name())
 
-        assertTrue(content.contains("Parry question"))
-        assertTrue(content.contains("99999"))
-        assertTrue(content.contains("4"))
-        assertTrue(content.contains("SM2"))
-        assertTrue(content.contains("7"))
-        assertTrue(content.contains("3"))
+        assertTrue(content.contains("  - card: Parry question\n"))
+        assertTrue(content.contains("    reviewTime: 99999\n"))
+        assertTrue(content.contains("    grade: 4\n"))
+        assertTrue(content.contains("    algorithm: SM2\n"))
+        assertTrue(content.contains("    stateBefore: \"S:1.0,D:5.0,ST:LEARNING\"\n"))
+        assertTrue(content.contains("    stateAfter: \"S:2.0,D:5.0,ST:REVIEW\"\n"))
+        assertTrue(content.contains("    scheduledDays: 7\n"))
+        assertTrue(content.contains("    elapsedDays: 3\n"))
     }
 
     // ==================== round-trip TESTS ====================
 
     @Test
-    fun `round-trip - parseCards populates lastParsedReviewHistory from V3 export`() {
+    fun `round-trip - parseCards populates lastParsedReviewHistory from an export`() {
         val card = makeCard(1L, "What is a feint?")
         val cardsWithStates = listOf(CardWithGroupStates(card, emptyList(), emptyMap()))
         val log = makeReviewLog(cardId = 1L, grade = 2, reviewTime = 12345L)
@@ -430,17 +430,13 @@ class ReviewHistoryImportExportTest {
             images = NoImages
         )
         val content = output.toString(Charsets.UTF_8.name())
-        assertTrue(content.contains("#REVIEW_HISTORY_START"))
+        assertTrue(content.contains("reviewHistory:\n"))
 
-        val lines = content.lines()
-        val historyStart = lines.indexOfFirst { it.trim() == "#REVIEW_HISTORY_START" }
-        val historyEnd = lines.indexOfFirst { it.trim() == "#REVIEW_HISTORY_END" }
-        val dataLines = lines.subList(historyStart + 1, historyEnd)
-            .filter { it.isNotBlank() && !it.startsWith("#") }
-        assertEquals(1, dataLines.size)
-        val parts = dataLines[0].split("\t")
-        assertEquals("0", parts[2])         // grade = SKIP
-        assertEquals(parts[4], parts[5])    // stateBefore == stateAfter
+        // One entry, and a skip is a grade of zero that left the card alone.
+        assertEquals(1, Regex("^  - card:", RegexOption.MULTILINE).findAll(content).count())
+        assertTrue(content.contains("    grade: 0\n"))
+        assertTrue(content.contains("    stateBefore: \"S:4.5,D:3.2,ST:REVIEW\"\n"))
+        assertTrue(content.contains("    stateAfter: \"S:4.5,D:3.2,ST:REVIEW\"\n"))
     }
 
     @Test

@@ -24,7 +24,7 @@ class CardImportExportTest {
     // ==================== HEADER VALIDATION TESTS ====================
 
     @Test
-    fun `parseCards - rejects file without recognized FSR_EXPORT header`() {
+    fun `parseCards - rejects a file that is neither format`() {
         val input = "Question 1\tAnswer 1\nQuestion 2\tAnswer 2"
         val (cards, errors) = CardImportExport.parseCards(input.byteInputStream())
 
@@ -34,7 +34,7 @@ class CardImportExportTest {
     }
 
     @Test
-    fun `parseCards - rejects file starting with comment instead of header`() {
+    fun `parseCards - rejects a comment followed by tab-separated lines`() {
         val input = "# This is not a valid header\nQuestion 1\tAnswer 1"
         val (cards, errors) = CardImportExport.parseCards(input.byteInputStream())
 
@@ -334,7 +334,7 @@ class CardImportExportTest {
     // ==================== EXPORT TESTS ====================
 
     @Test
-    fun `exportCardsWithGroups - V4 format export`() {
+    fun `exportCardsWithGroups - writes a YAML document`() {
         val card = Card(
             id = 1,
             question = "What is 2+2?",
@@ -360,16 +360,21 @@ class CardImportExportTest {
         assertEquals(1, (result as ExportResult.Success).exportedCount)
 
         val output = outputStream.toString(Charsets.UTF_8.name())
-        assertTrue(output.startsWith("#FSR_EXPORT_V4"))
-        assertTrue(output.contains("What is 2+2?"))
-        assertTrue(output.contains("Math|Basic"))
-        assertTrue(output.contains("5.5"))
-        // The SM-2 columns are gone from the layout.
-        assertFalse(output.contains("SM2_"))
+        assertTrue(output.startsWith("# Fencing Spaced Repetition export\nversion: 5\n"))
+        // Quoted, because a plain scalar starting with anything but a letter
+        // -- or holding a "?" -- is where YAML gets ambiguous.
+        assertTrue(output.contains("cards:\n  - question: \"What is 2+2?\"\n"))
+        assertTrue(output.contains("answer: \"4\""))
+        assertTrue(output.contains("groups: [Math, Basic]"))
+        assertTrue(output.contains("stability: 5.5"))
+        assertTrue(output.contains("fsrsState: REVIEW"))
+        // Nothing tab-separated is written any more.
+        assertFalse(output.contains("#FSR_EXPORT"))
+        assertFalse(output.contains("\t"))
     }
 
     @Test
-    fun `exportCardsWithGroups - handles newlines in content`() {
+    fun `exportCardsWithGroups - newlines survive as a literal block`() {
         val card = Card(
             id = 1,
             question = "Question with\nnewline",
@@ -383,13 +388,23 @@ class CardImportExportTest {
         CardImportExport.exportCardsWithGroups(cardsWithGroups, outputStream)
 
         val output = outputStream.toString(Charsets.UTF_8.name())
-        assertTrue(output.contains("Question with<br>newline"))
-        assertTrue(output.contains("Answer with<br>multiple<br>lines"))
-        assertFalse(output.contains("\n\n")) // No double newlines from content
+        // A newline is a newline now: the <br> placeholder went out with the
+        // tab-separated format that had nowhere else to put one.
+        assertFalse(output.contains("<br>"))
+        assertTrue(output.contains("question: |-\n      Question with\n      newline\n"))
+        assertTrue(
+            output.contains("answer: |-\n      Answer with\n      multiple\n      lines\n")
+        )
+
+        // And comes back the way it went in.
+        val (parsed, errors) = CardImportExport.parseCards(output.byteInputStream())
+        assertEquals(0, errors.size)
+        assertEquals("Question with\nnewline", parsed[0].concept)
+        assertEquals("Answer with\nmultiple\nlines", parsed[0].answer)
     }
 
     @Test
-    fun `exportCardsWithGroupStates - V2 format export with global state only`() {
+    fun `exportCardsWithGroupStates - global state only`() {
         val card = Card(
             id = 1,
             question = "Q1",
@@ -418,13 +433,15 @@ class CardImportExportTest {
         assertEquals(1, (result as ExportResult.Success).exportedCount)
 
         val output = outputStream.toString(Charsets.UTF_8.name())
-        assertTrue(output.startsWith("#FSR_EXPORT_V4"))
-        assertTrue(output.contains("Q1"))
-        assertTrue(output.contains("GLOBAL"))
+        assertTrue(output.startsWith("# Fencing Spaced Repetition export\nversion: 5\n"))
+        assertTrue(output.contains("- question: Q1"))
+        assertTrue(output.contains("state:"))
+        // A card with no independent group keeps no per-group states.
+        assertFalse(output.contains("groupStates:"))
     }
 
     @Test
-    fun `exportCardsWithGroupStates - V2 format export with independent learning`() {
+    fun `exportCardsWithGroupStates - independent learning`() {
         val card = Card(
             id = 1,
             question = "Q1",
@@ -466,29 +483,27 @@ class CardImportExportTest {
         assertEquals(2, (result as ExportResult.Success).exportedCount) // 1 global + 1 group-specific
 
         val output = outputStream.toString(Charsets.UTF_8.name())
-        val lines = output.lines()
 
-        // Should have header, column names, and 2 data rows
-        assertTrue(lines[0].startsWith("#FSR_EXPORT_V4"))
-        assertTrue(lines[1].startsWith("#Question"))
+        // One card, carrying its own state and the group's.
+        assertEquals(1, Regex("^  - question:", RegexOption.MULTILINE).findAll(output).count())
+        assertTrue(output.contains("groups: [Math, IndependentGroup]"))
+        assertTrue(output.contains("    state:\n      nextReview: 1700000000000"))
+        assertTrue(output.contains("      stability: 5.0"))
+        assertTrue(output.contains("    groupStates:\n      - group: IndependentGroup"))
+        assertTrue(output.contains("        stability: 8.0"))
 
-        // Find lines with actual data (skip empty lines)
-        val dataLines = lines.filter { it.isNotBlank() && !it.startsWith("#") }
-        assertEquals(2, dataLines.size)
-
-        // First data line should be GLOBAL
-        assertTrue(dataLines[0].contains("\tGLOBAL\t"))
-        assertTrue(dataLines[0].contains("5.0")) // Global stability
-
-        // Second data line should be group-specific
-        assertTrue(dataLines[1].contains("\tIndependentGroup\t"))
-        assertTrue(dataLines[1].contains("8.0")) // Group-specific stability
+        // And reads back as the two rows the importer expects.
+        val (parsed, errors) = CardImportExport.parseCards(output.byteInputStream())
+        assertEquals(0, errors.size)
+        assertEquals(2, parsed.size)
+        assertEquals(5.0, parsed.first { it.isGlobalState }.fsrsStability!!, 0.001)
+        assertEquals(8.0, parsed.first { it.isGroupSpecificState }.fsrsStability!!, 0.001)
     }
 
     // ==================== ROUND-TRIP TESTS ====================
 
     @Test
-    fun `round-trip - V1 format export and import`() {
+    fun `round-trip - cards with their groups, exported and imported`() {
         val originalCard = Card(
             id = 1,
             question = "Round trip question",
@@ -536,7 +551,7 @@ class CardImportExportTest {
     }
 
     @Test
-    fun `round-trip - V2 format with independent learning`() {
+    fun `round-trip - independent learning states`() {
         val originalCard = Card(
             id = 1,
             question = "Independent learning question",
@@ -563,7 +578,7 @@ class CardImportExportTest {
             lastReview = 1700000000000
         )
 
-        // Export V2
+        // Export
         val outputStream = ByteArrayOutputStream()
         CardImportExport.exportCardsWithGroupStates(
             listOf(CardWithGroupStates(
@@ -575,7 +590,7 @@ class CardImportExportTest {
             images = NoImages
         )
 
-        // Import V2
+        // Import
         val (parsedCards, errors) = CardImportExport.parseCards(
             ByteArrayInputStream(outputStream.toByteArray())
         )
@@ -658,9 +673,9 @@ class CardImportExportTest {
     @Test
     fun `exportFilename - the time comes first, then what the file holds`() {
         assertEquals(
-            "2023-11-14_22-13-20_all_cards.tsv.gz",
+            "2023-11-14_22-13-20_all_cards.yaml.gz",
             CardImportExport.exportFilename(
-                "all_cards.tsv.gz",
+                "all_cards.yaml.gz",
                 at = 1_700_000_000_000L,
                 utcOffsetSeconds = 0
             )
@@ -670,22 +685,22 @@ class CardImportExportTest {
     @Test
     fun `generateExportFilename - simple group name`() {
         val filename = CardImportExport.generateExportFilename("MyGroup")
-        assertEquals("MyGroup_cards.tsv.gz", withoutStamp(filename))
+        assertEquals("MyGroup_cards.yaml.gz", withoutStamp(filename))
     }
 
     @Test
     fun `generateExportFilename - group name with special characters`() {
         // "My Group! @#$%" sanitizes to "My_Group______" (space between My/Group + !, space, @, #, $, %)
-        // then the function appends "_cards.tsv.gz", giving 7 underscores before "cards"
+        // then the function appends "_cards.yaml.gz", giving 7 underscores before "cards"
         val filename = CardImportExport.generateExportFilename("My Group! @#\$%")
-        assertEquals("My_Group_______cards.tsv.gz", withoutStamp(filename))
+        assertEquals("My_Group_______cards.yaml.gz", withoutStamp(filename))
     }
 
     @Test
     fun `generateExportFilename - long group name is truncated`() {
         val longName = "A".repeat(100)
         val filename = CardImportExport.generateExportFilename(longName)
-        assertTrue(withoutStamp(filename).length <= 63) // 50 chars + "_cards.tsv.gz"
+        assertTrue(withoutStamp(filename).length <= 64) // 50 chars + "_cards.yaml.gz"
     }
 
     // ==================== EDGE CASES ====================

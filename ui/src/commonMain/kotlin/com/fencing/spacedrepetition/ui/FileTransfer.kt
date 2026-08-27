@@ -37,10 +37,10 @@ interface FileTransfer {
     /**
      * Saves every card and review photo as one archive.
      *
-     * Photos already leave inside an export -- the V3 format inlines them as
-     * base64 -- but only in a file that nothing except this app reads. This is
-     * the same pictures in a form a photo viewer opens, which is what someone
-     * asking to get their photos out means.
+     * Photos already leave inside an export, inlined as base64 -- but only
+     * in a file that nothing except this app reads. This is the same pictures
+     * in a form a photo viewer opens, which is what someone asking to get
+     * their photos out means.
      */
     fun exportAllPhotos()
 
@@ -58,8 +58,8 @@ interface FileTransfer {
  * A file the user chose to read.
  *
  * Text rather than a stream, because the two platforms have no stream in
- * common and the import format is read whole anyway -- it is parsed by line,
- * with a review-history section that is scanned twice.
+ * common and the import format is read whole anyway -- a YAML document is
+ * parsed as one thing, and so was the tab-separated format it replaced.
  *
  * Decompression happens before this returns, on the side that knows how: an
  * export written by this app is gzipped, one edited by hand is usually not,
