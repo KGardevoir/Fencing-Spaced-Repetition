@@ -232,6 +232,20 @@ private val MIGRATION_10_11 = object : Migration(10, 11) {
  * Recreate-and-copy rather than ALTER TABLE ... DROP COLUMN: minSdk is 24,
  * whose bundled SQLite predates DROP COLUMN by a long way.
  *
+ * The order below is load-bearing, and the reason is worth stating plainly.
+ * `card_group_cross_ref` and `card_group_learning_state` hold ON DELETE
+ * CASCADE foreign keys into `cards` and `groups`. With `PRAGMA foreign_keys`
+ * on, SQLite runs an implicit DELETE before a DROP TABLE, and that DELETE
+ * fires those cascades -- so dropping `cards` while either child still exists
+ * silently deletes every group membership and every independent-learning
+ * state in the collection. `PRAGMA defer_foreign_keys` does not help; it
+ * defers the check, not the cascade action.
+ *
+ * So the children are copied aside and dropped first, the two parents are
+ * rebuilt with no child pointing at them, and the children are then recreated
+ * and refilled. Nothing here depends on how the connection has `foreign_keys`
+ * set, which is the point: it is correct either way.
+ *
  * Cards that were on SM-2 keep their `lastReview`/`nextReview`, so nothing
  * comes due sooner than the user expects, but they carry no FSRS stability or
  * difficulty -- SM-2 never wrote any. FSRS treats them as new at their next
@@ -239,6 +253,28 @@ private val MIGRATION_10_11 = object : Migration(10, 11) {
  */
 private val MIGRATION_11_12 = object : Migration(11, 12) {
     override suspend fun migrate(connection: SQLiteConnection) {
+        // 1. Copy the two child tables aside. A plain CREATE TABLE ... AS
+        //    SELECT carries no foreign keys, so nothing can cascade into these.
+        connection.execSQL("""
+            CREATE TABLE `cross_ref_backup_11_12` AS
+            SELECT `cardId`, `groupId` FROM `card_group_cross_ref`
+        """)
+        connection.execSQL("""
+            CREATE TABLE `learning_state_backup_11_12` AS
+            SELECT
+                `cardId`, `groupId`,
+                `fsrsStability`, `fsrsDifficulty`, `fsrsElapsedDays`, `fsrsScheduledDays`,
+                `fsrsReps`, `fsrsLapses`, `fsrsState`,
+                `lastReview`, `nextReview`, `modified`
+            FROM `card_group_learning_state`
+        """)
+
+        // 2. Drop the children. Neither has dependents, so neither drop can
+        //    cascade anywhere.
+        connection.execSQL("DROP TABLE `card_group_cross_ref`")
+        connection.execSQL("DROP TABLE `card_group_learning_state`")
+
+        // 3. Rebuild `cards` without `algorithm` and the sm2 columns.
         connection.execSQL("""
             CREATE TABLE IF NOT EXISTS `cards_new` (
                 `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -278,45 +314,7 @@ private val MIGRATION_11_12 = object : Migration(11, 12) {
         connection.execSQL("DROP TABLE `cards`")
         connection.execSQL("ALTER TABLE `cards_new` RENAME TO `cards`")
 
-        connection.execSQL("""
-            CREATE TABLE IF NOT EXISTS `card_group_learning_state_new` (
-                `cardId` INTEGER NOT NULL,
-                `groupId` INTEGER NOT NULL,
-                `fsrsStability` REAL NOT NULL DEFAULT 0.0,
-                `fsrsDifficulty` REAL NOT NULL DEFAULT 0.0,
-                `fsrsElapsedDays` INTEGER NOT NULL DEFAULT 0,
-                `fsrsScheduledDays` INTEGER NOT NULL DEFAULT 0,
-                `fsrsReps` INTEGER NOT NULL DEFAULT 0,
-                `fsrsLapses` INTEGER NOT NULL DEFAULT 0,
-                `fsrsState` TEXT NOT NULL DEFAULT 'NEW',
-                `lastReview` INTEGER NOT NULL DEFAULT 0,
-                `nextReview` INTEGER NOT NULL DEFAULT 0,
-                `modified` INTEGER NOT NULL DEFAULT 0,
-                PRIMARY KEY(`cardId`, `groupId`),
-                FOREIGN KEY(`cardId`) REFERENCES `cards`(`id`) ON DELETE CASCADE,
-                FOREIGN KEY(`groupId`) REFERENCES `groups`(`id`) ON DELETE CASCADE
-            )
-        """)
-        connection.execSQL("""
-            INSERT INTO `card_group_learning_state_new` (
-                `cardId`, `groupId`,
-                `fsrsStability`, `fsrsDifficulty`, `fsrsElapsedDays`, `fsrsScheduledDays`,
-                `fsrsReps`, `fsrsLapses`, `fsrsState`,
-                `lastReview`, `nextReview`, `modified`
-            )
-            SELECT
-                `cardId`, `groupId`,
-                `fsrsStability`, `fsrsDifficulty`, `fsrsElapsedDays`, `fsrsScheduledDays`,
-                `fsrsReps`, `fsrsLapses`, `fsrsState`,
-                `lastReview`, `nextReview`, `modified`
-            FROM `card_group_learning_state`
-        """)
-        connection.execSQL("DROP TABLE `card_group_learning_state`")
-        connection.execSQL("ALTER TABLE `card_group_learning_state_new` RENAME TO `card_group_learning_state`")
-        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_card_group_learning_state_groupId` ON `card_group_learning_state`(`groupId`)")
-        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_card_group_learning_state_cardId` ON `card_group_learning_state`(`cardId`)")
-
-        // groups: drop the per-group SM-2 interval modifier override.
+        // 4. Rebuild `groups` without the per-group SM-2 interval modifier.
         connection.execSQL("""
             CREATE TABLE IF NOT EXISTS `groups_new` (
                 `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -350,6 +348,71 @@ private val MIGRATION_11_12 = object : Migration(11, 12) {
         """)
         connection.execSQL("DROP TABLE `groups`")
         connection.execSQL("ALTER TABLE `groups_new` RENAME TO `groups`")
+
+        // 5. Recreate the children against the rebuilt parents.
+        connection.execSQL("""
+            CREATE TABLE IF NOT EXISTS `card_group_cross_ref` (
+                `cardId` INTEGER NOT NULL,
+                `groupId` INTEGER NOT NULL,
+                PRIMARY KEY(`cardId`, `groupId`),
+                FOREIGN KEY(`cardId`) REFERENCES `cards`(`id`) ON DELETE CASCADE,
+                FOREIGN KEY(`groupId`) REFERENCES `groups`(`id`) ON DELETE CASCADE
+            )
+        """)
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_card_group_cross_ref_groupId` ON `card_group_cross_ref`(`groupId`)")
+        connection.execSQL("""
+            CREATE TABLE IF NOT EXISTS `card_group_learning_state` (
+                `cardId` INTEGER NOT NULL,
+                `groupId` INTEGER NOT NULL,
+                `fsrsStability` REAL NOT NULL DEFAULT 0.0,
+                `fsrsDifficulty` REAL NOT NULL DEFAULT 0.0,
+                `fsrsElapsedDays` INTEGER NOT NULL DEFAULT 0,
+                `fsrsScheduledDays` INTEGER NOT NULL DEFAULT 0,
+                `fsrsReps` INTEGER NOT NULL DEFAULT 0,
+                `fsrsLapses` INTEGER NOT NULL DEFAULT 0,
+                `fsrsState` TEXT NOT NULL DEFAULT 'NEW',
+                `lastReview` INTEGER NOT NULL DEFAULT 0,
+                `nextReview` INTEGER NOT NULL DEFAULT 0,
+                `modified` INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY(`cardId`, `groupId`),
+                FOREIGN KEY(`cardId`) REFERENCES `cards`(`id`) ON DELETE CASCADE,
+                FOREIGN KEY(`groupId`) REFERENCES `groups`(`id`) ON DELETE CASCADE
+            )
+        """)
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_card_group_learning_state_groupId` ON `card_group_learning_state`(`groupId`)")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_card_group_learning_state_cardId` ON `card_group_learning_state`(`cardId`)")
+
+        // 6. Refill them.
+        //
+        //    The WHERE clauses drop rows whose card or group no longer exists.
+        //    Such a row is unreachable already, and with foreign keys on it
+        //    would abort the whole migration rather than being skipped -- so
+        //    a collection that had drifted would fail to open at all.
+        connection.execSQL("""
+            INSERT INTO `card_group_cross_ref` (`cardId`, `groupId`)
+            SELECT `cardId`, `groupId` FROM `cross_ref_backup_11_12`
+            WHERE `cardId` IN (SELECT `id` FROM `cards`)
+              AND `groupId` IN (SELECT `id` FROM `groups`)
+        """)
+        connection.execSQL("""
+            INSERT INTO `card_group_learning_state` (
+                `cardId`, `groupId`,
+                `fsrsStability`, `fsrsDifficulty`, `fsrsElapsedDays`, `fsrsScheduledDays`,
+                `fsrsReps`, `fsrsLapses`, `fsrsState`,
+                `lastReview`, `nextReview`, `modified`
+            )
+            SELECT
+                `cardId`, `groupId`,
+                `fsrsStability`, `fsrsDifficulty`, `fsrsElapsedDays`, `fsrsScheduledDays`,
+                `fsrsReps`, `fsrsLapses`, `fsrsState`,
+                `lastReview`, `nextReview`, `modified`
+            FROM `learning_state_backup_11_12`
+            WHERE `cardId` IN (SELECT `id` FROM `cards`)
+              AND `groupId` IN (SELECT `id` FROM `groups`)
+        """)
+
+        connection.execSQL("DROP TABLE `cross_ref_backup_11_12`")
+        connection.execSQL("DROP TABLE `learning_state_backup_11_12`")
     }
 }
 
