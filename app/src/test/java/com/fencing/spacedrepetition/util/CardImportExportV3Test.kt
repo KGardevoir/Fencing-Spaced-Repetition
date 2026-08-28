@@ -133,14 +133,13 @@ class CardImportExportV3Test {
             gzipIn.close()
 
             // Should contain base64-encoded image data
-            assertTrue(content.contains("#FSR_EXPORT_V4"))
+            assertTrue(content.startsWith("# Fencing Spaced Repetition export\nversion: 5\n"))
             assertTrue(content.contains("What is this?"))
             assertTrue(content.contains("A test card"))
-            // Should have two base64-encoded images separated by ||
-            val lines = content.lines().filter { it.isNotBlank() && !it.startsWith("#") }
-            assertTrue(lines.isNotEmpty())
-            val imagePart = lines[0].split("\t")[2] // Third column is images
-            assertTrue(imagePart.contains("||")) // Multiple images
+
+            // Both images, one per entry under the card's "images:" key.
+            val expected = java.util.Base64.getEncoder().encodeToString(createTestImageBytes())
+            assertTrue(content.contains("    images:\n      - \"$expected\"\n      - \"$expected\"\n"))
         } finally {
             tempFile1.delete()
             tempFile2.delete()
@@ -294,7 +293,7 @@ class CardImportExportV3Test {
         assertTrue("expected a timestamp in $filename",
             filename.matches(Regex("\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}_.*")))
         assertTrue("expected the group's name in $filename",
-            filename.endsWith("My_Test_Group_cards.tsv.gz"))
+            filename.endsWith("My_Test_Group_cards.yaml.gz"))
     }
 
     private operator fun String.times(n: Int): String {

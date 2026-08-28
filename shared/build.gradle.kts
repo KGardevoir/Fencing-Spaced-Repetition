@@ -6,9 +6,11 @@ plugins {
     id("org.jetbrains.kotlin.multiplatform")
     id("com.android.library")
     id("com.google.devtools.ksp")
+    id("org.jetbrains.kotlin.plugin.serialization")
 }
 
 val roomVersion = "3.0.1"
+val kamlVersion = "0.104.0"
 val sqliteVersion = "2.7.0"
 val browserVersion = "0.5.0"
 val coroutinesVersion = "1.10.2"
@@ -103,6 +105,16 @@ kotlin {
                 // it, so it is declared.
                 api("androidx.sqlite:sqlite:$sqliteVersion")
 
+                // The import/export format. kaml is YAML over
+                // kotlinx.serialization and publishes for all three targets
+                // here, wasmJs included -- which is the whole reason it can
+                // live in this module rather than being reimplemented per
+                // platform. It brings kotlinx-serialization-core,
+                // snakeyaml-engine-kmp, okio and urlencoder-lib with it.
+                //
+                // implementation, not api: the document classes are internal
+                // and no consumer of :shared names a kaml type.
+                implementation("com.charleskorn.kaml:kaml:$kamlVersion")
             }
         }
         // The Android and JVM targets share an implementation for everything

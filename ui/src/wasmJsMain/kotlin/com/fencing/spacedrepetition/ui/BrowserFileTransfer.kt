@@ -110,7 +110,7 @@ private class BrowserFileTransfer(
 
     private companion object {
         /**
-         * No filter for archives: an export of this app's is a `.tsv.gz`,
+         * No filter for archives: an export of this app's is a `.yaml.gz`,
          * which no two systems agree on a type for, and the Android picker is
          * open to everything for the same reason. A CSV is the one thing they
          * do agree on, so that one is hinted at.

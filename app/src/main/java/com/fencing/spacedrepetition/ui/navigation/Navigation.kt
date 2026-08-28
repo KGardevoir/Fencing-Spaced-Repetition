@@ -286,12 +286,17 @@ private fun rememberAndroidFileTransfer(
     }
 }
 
-// Both lists end in */*, and have to: an export of this app's is a .tsv.gz
+// Both lists end in */*, and have to: an export of this app's is a .yaml.gz
 // and a document provider may report it as anything or as nothing, so a
 // picker that took the named types literally would grey out the very file the
 // user came to choose.
+//
+// The tab-separated types are still named because a backup taken before the
+// format moved to YAML still imports, and a provider that does report a type
+// will report that one for it.
 private val ARCHIVE_TYPES = arrayOf(
     "application/gzip", "application/x-gzip", "text/plain",
+    "application/yaml", "text/yaml", "text/x-yaml",
     "text/tab-separated-values", "application/octet-stream", "*/*"
 )
 

@@ -3,11 +3,17 @@
 
 package com.fencing.spacedrepetition.util
 
-// The whole of the import/export format: parsing, formatting, the V1/V2/V3
-// and CSV layouts, and the review-history section. It reads List<String> and
-// writes Appendable, reaches images through ImageReader, and touches no
-// stream, file or Context -- the Android half of that lives beside it in
-// :app, as CardImportExportIo.kt.
+// The whole of the import/export format: what an export writes, what an
+// import will read, and the CSV interchange alongside them. It reads
+// List<String> and writes Appendable, reaches images through ImageReader, and
+// touches no stream, file or Context -- the Android half of that lives beside
+// it in :app, as CardImportExportIo.kt.
+//
+// Exports are YAML. The document's shape is declared in ArchiveYaml.kt and
+// the YAML itself is kaml's; what is left here is the pipeline around them,
+// the CSV format, the filenames, and the tab-separated V1-V4 layouts, which
+// are still read so that a backup taken before the change still imports.
+// Nothing writes a tab-separated file any more.
 
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
@@ -27,16 +33,28 @@ sealed class ExportResult {
 }
 
 object CardImportExport {
-    // The export bodies were written against a BufferedWriter and are left
-    // that way: these three give Appendable the same three calls, so moving
-    // from a stream to a sink changed the four signatures and nothing else.
-    // append is the only real operation; a plain Appendable has no buffer, so
-    // flush has nothing to do.
-    private fun Appendable.write(text: String) { append(text) }
 
-    private fun Appendable.newLine() { append('\n') }
+    /**
+     * The line an export opens with.
+     *
+     * A YAML comment, so it costs the parser nothing, and the first thing
+     * anyone who opens the file in a text editor reads.
+     */
+    private const val YAML_HEADER_COMMENT = "# Fencing Spaced Repetition export"
 
-    private fun Appendable.flush() {}
+    /**
+     * What every tab-separated export began with, and the one thing that
+     * tells the old format from the new one.
+     *
+     * It is a YAML comment too, so a legacy file handed to the YAML parser
+     * would come back as an empty document rather than as an error. That is
+     * why the check happens before the parser is reached rather than after it
+     * has given up.
+     */
+    private const val LEGACY_HEADER_PREFIX = "#FSR_EXPORT_V"
+
+    private const val KEY_GROUPS = "groups"
+    private const val KEY_OPPONENTS = "opponents"
 
     private const val DELIMITER = "\t"
     private const val NEWLINE_PLACEHOLDER = "<br>"
@@ -50,14 +68,11 @@ object CardImportExport {
     private const val OPPONENT_PREFIX = "#OPPONENT:"
     private const val REVIEW_HISTORY_START = "#REVIEW_HISTORY_START"
     private const val REVIEW_HISTORY_END = "#REVIEW_HISTORY_END"
-    // Review-history columns. v3.1 added OpponentName + StabilityMultiplier at the end.
-    // Older parsers tolerate the extra columns (they look up by index and stop early).
-    private const val REVIEW_HISTORY_HEADERS = "#CardQuestion\tReviewTime\tGrade\tAlgorithm\tStateBefore\tStateAfter\tScheduledDays\tElapsedDays\tGroupName\tNotes\tImagePaths\tOpponentName\tStabilityMultiplier"
 
-    // Column indices for the legacy V1/V2/V3 layouts. Still parsed, never
-    // written: exports are V4. The Algorithm and SM2_* columns they reserve
-    // are read past and discarded -- SM-2 is gone, and FSRS is the only
-    // scheduler an algorithm column could have named.
+    // Column indices for the tab-separated V1-V4 layouts. Read, never
+    // written: an export is YAML. The Algorithm and SM2_* columns the older
+    // ones reserve are read past and discarded -- SM-2 is gone, and FSRS is
+    // the only scheduler an algorithm column could have named.
     // Column indices for V1 export format
     private const val COL_V1_QUESTION = 0
     private const val COL_V1_ANSWER = 1
@@ -115,10 +130,10 @@ object CardImportExport {
     private const val COL_V3_SM2_REPETITIONS = 16
     private const val COL_V3_GROUPS = 17
 
-    // Column indices for V4, the format every export writes. V3 minus the
+    // Column indices for V4, the last of the tab-separated layouts and the
+    // one every export wrote until the format moved to YAML. V3 minus the
     // Algorithm and SM2_* columns, which SM-2's removal left with nothing to
-    // say. Dropping them shifts Groups, so it needs its own marker rather
-    // than a wider V3.
+    // say.
     private const val COL_V4_QUESTION = 0
     private const val COL_V4_ANSWER = 1
     private const val COL_V4_IMAGE_PATHS = 2
@@ -134,16 +149,6 @@ object CardImportExport {
     private const val COL_V4_FSRS_ELAPSED_DAYS = 12
     private const val COL_V4_GROUPS = 13
 
-    // Column headers for V4 export
-    private const val COLUMN_HEADERS_V4 = "#Question\tAnswer\tImagePaths(double-pipe-separated)\tStateContext\tNextReview\tLastReview\t" +
-            "FSRS_Stability\tFSRS_Difficulty\tFSRS_State\tFSRS_Reps\tFSRS_Lapses\t" +
-            "FSRS_ScheduledDays\tFSRS_ElapsedDays\tGroups(pipe-separated)"
-
-    /**
-     * Parses a TSV input stream into a list of ParsedCard objects.
-     * Supports both simple (question\tanswer) and full export formats (V1 through V4).
-     * Returns pair of (valid cards, error messages)
-     */
     /** Parsed group settings from an import file */
     var lastParsedGroupSettings: Map<String, Map<String, String>> = emptyMap()
         private set
@@ -156,14 +161,115 @@ object CardImportExport {
     var lastParsedOpponents: List<ParsedOpponent> = emptyList()
         private set
 
-    /** Opponent record parsed from an export's `#OPPONENT:` lines. */
+    /** An opponent an import found, in either format. */
     data class ParsedOpponent(
         val name: String,
         val skillMultiplier: Double,
         val notes: String
     )
 
+    /**
+     * Reads a chosen export, whichever of the two formats it is in.
+     *
+     * The cards come back as the return value and everything else an archive
+     * carries -- the group settings, the opponents, the review history -- in
+     * the three `lastParsed` properties above, which is how the view models
+     * have always collected them.
+     *
+     * Which format a file is in is decided by its first line with anything on
+     * it: a tab-separated export opens with `#FSR_EXPORT_V` and a YAML one
+     * does not. Nothing writes the tab-separated form any more, but a backup
+     * folder is full of files that do, and they still import.
+     */
     fun parseCards(lines: List<String>): Pair<List<ParsedCard>, List<String>> {
+        lastParsedGroupSettings = emptyMap()
+        lastParsedOpponents = emptyList()
+        lastParsedReviewHistory = emptyList()
+
+        val firstContentLine = lines.firstOrNull { it.isNotBlank() }?.trim()
+            ?: return Pair(emptyList(), emptyList())
+
+        return if (firstContentLine.startsWith(LEGACY_HEADER_PREFIX)) {
+            parseLegacyCards(lines)
+        } else {
+            parseYamlCards(lines)
+        }
+    }
+
+    /**
+     * Reads a YAML export.
+     *
+     * A file that is valid YAML but says nothing about cards is rejected
+     * rather than reported as empty: someone who picked the wrong file is
+     * better told that than told their deck had nothing in it. The message
+     * names both formats, because at this point either would have been fine.
+     */
+    private fun parseYamlCards(lines: List<String>): Pair<List<ParsedCard>, List<String>> {
+        val document = try {
+            ArchiveYaml.format.parseToYamlNode(lines.joinToString("\n"))
+        } catch (e: Exception) {
+            return Pair(emptyList(), listOf(yamlFailure(e)))
+        }
+
+        if (!ArchiveYaml.isArchive(document)) {
+            return Pair(
+                emptyList(),
+                listOf(
+                    "Invalid file format: expected a YAML export with a \"cards:\" list, " +
+                        "or a tab-separated export beginning with $HEADER_MARKER_V4"
+                )
+            )
+        }
+
+        val errors = mutableListOf<String>()
+
+        lastParsedGroupSettings = ArchiveYaml
+            .decodeSection(document, KEY_GROUPS, ArchiveGroup.serializer(), errors)
+            .filter { it.name.isNotBlank() }
+            .associate { it.name.trim() to ArchiveYaml.groupSettings(it) }
+        lastParsedOpponents = ArchiveYaml
+            .decodeSection(document, KEY_OPPONENTS, ArchiveOpponent.serializer(), errors)
+            .map { ArchiveYaml.parsedOpponent(it) }
+            .filter { it.name.isNotEmpty() }
+        lastParsedReviewHistory = ArchiveYaml
+            .decodeSection(document, ArchiveYaml.KEY_REVIEW_HISTORY, ArchiveReviewLog.serializer(), errors)
+            .map { ArchiveYaml.parsedReviewLog(it) }
+            .filter { it.cardQuestion.isNotBlank() }
+
+        val cards = mutableListOf<ParsedCard>()
+        ArchiveYaml.cardEntries(document).forEach { entry ->
+            val decoded = ArchiveYaml
+                .decodeEntries(listOf(entry), ArchiveCard.serializer(), errors)
+                .singleOrNull() ?: return@forEach
+            if (decoded.questionText.isEmpty()) {
+                errors.add("Line ${entry.location.line}: Empty question")
+                return@forEach
+            }
+            cards.addAll(ArchiveYaml.parsedCards(decoded, entry.location.line))
+        }
+        return Pair(cards, errors)
+    }
+
+    /**
+     * What to say about a file the YAML parser would not read at all.
+     *
+     * kaml's own message names the line and the column and then draws a caret
+     * under the offending character, which is more use than anything this
+     * could add -- so it is passed through rather than replaced, with the
+     * pointer line dropped because the import dialog shows one line per
+     * error.
+     */
+    private fun yamlFailure(e: Exception): String {
+        val message = e.message ?: return "Failed to read file"
+        val lines = message.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        val where = lines.firstOrNull { it.startsWith("at line ") }
+            ?.removePrefix("at line ")
+            ?.substringBefore(",")
+        return if (where == null) lines.first() else "Line $where: ${lines.first()}"
+    }
+
+    /** Reads one of the tab-separated V1-V4 layouts. */
+    private fun parseLegacyCards(lines: List<String>): Pair<List<ParsedCard>, List<String>> {
         val cards = mutableListOf<ParsedCard>()
         val errors = mutableListOf<String>()
         val groupSettings = mutableMapOf<String, Map<String, String>>()
@@ -456,60 +562,70 @@ object CardImportExport {
         )
     }
 
+    // ======================================================================
+    // Export
+    //
+    // The whole document is encoded in one go rather than a card at a time.
+    // Assembling it by hand would keep a large collection's photographs out
+    // of memory all at once, and was tried: indenting each card's encoding
+    // under "cards:" gets one card in four hundred wrong, because a literal
+    // block ending in a blank line does not survive being trimmed and
+    // re-indented. Letting kaml write the document is the correct answer and
+    // costs memory that every export path except the scheduled backup was
+    // already spending -- ImageStore.readerFor loads every picture up front.
+    // ======================================================================
+
     /**
-     * Exports cards with their groups, without per-group learning states.
+     * The two lines an export opens with, before the encoded document.
      *
-     * Wrote V1 until SM-2 was removed; a Card no longer holds the Algorithm or
-     * SM2_* values that layout reserves columns for, so it writes V4 like every
-     * other export. V1 files still import.
+     * Written here rather than encoded because neither can be: kaml emits no
+     * comments, and `version` is left out of the encoding by the same rule
+     * that leaves out every other field still holding its default. Putting
+     * the line in by hand is what keeps a file saying which version it is.
+     */
+    private fun archivePreamble(): String =
+        "$YAML_HEADER_COMMENT\n${ArchiveYaml.KEY_VERSION}: ${ArchiveYaml.VERSION}\n"
+
+    /**
+     * Writes [document] out, preamble and all.
+     *
+     * An archive holding nothing at all encodes as `{}`, which is a flow
+     * mapping and cannot follow the `version:` line -- so an empty document
+     * is written as an empty card list instead, which is both valid and true.
+     */
+    private fun writeArchive(out: Appendable, document: ArchiveDocument) {
+        out.append(archivePreamble())
+        val body = ArchiveYaml.format
+            .encodeToString(ArchiveDocument.serializer(), document)
+            .trimEnd('\n')
+        if (body.isEmpty() || body == "{}") {
+            out.append(ArchiveYaml.KEY_CARDS).append(": []\n")
+        } else {
+            out.append(body).append('\n')
+        }
+    }
+
+    /**
+     * Exports cards with their groups, without per-group learning states and
+     * without their pictures.
+     *
+     * The narrow export: what a card is and how it is scheduled, for the
+     * paths that have no image reader to hand. [exportCardsWithGroupStates]
+     * is the whole thing.
      */
     fun exportCardsWithGroups(
         cardsWithGroups: List<CardWithGroupNames>,
         out: Appendable
     ): ExportResult {
         return try {
-            out.let { writer ->
-                writer.write(HEADER_MARKER_V4)
-                writer.newLine()
-
-                // Write column headers
-                writer.write(COLUMN_HEADERS_V4)
-                writer.newLine()
-
-                cardsWithGroups.forEach { (card, groupNames) ->
-                    val line = buildString {
-                        append(escapeNewlines(card.question))
-                        append(DELIMITER)
-                        append(escapeNewlines(card.answer))
-                        append(DELIMITER)
-                        // No images in this export path; the column still holds its place.
-                        append(DELIMITER)
-                        append("GLOBAL")
-                        append(DELIMITER)
-                        append(card.nextReview)
-                        append(DELIMITER)
-                        append(card.lastReview)
-                        append(DELIMITER)
-                        append(card.fsrsStability)
-                        append(DELIMITER)
-                        append(card.fsrsDifficulty)
-                        append(DELIMITER)
-                        append(card.fsrsState)
-                        append(DELIMITER)
-                        append(card.fsrsReps)
-                        append(DELIMITER)
-                        append(card.fsrsLapses)
-                        append(DELIMITER)
-                        append(card.fsrsScheduledDays)
-                        append(DELIMITER)
-                        append(card.fsrsElapsedDays)
-                        append(DELIMITER)
-                        append(groupNames.joinToString(GROUP_SEPARATOR))
+            writeArchive(
+                out,
+                ArchiveDocument(
+                    cards = cardsWithGroups.map { (card, groupNames) ->
+                        ArchiveYaml.cardNodeWithoutImages(card, groupNames)
                     }
-                    writer.write(line)
-                    writer.newLine()
-                }
-            }
+                )
+            )
             ExportResult.Success(cardsWithGroups.size)
         } catch (e: Exception) {
             ExportResult.Error("Failed to write file: ${e.message}")
@@ -517,8 +633,13 @@ object CardImportExport {
     }
 
     /**
-     * Exports cards with group-specific learning states to V4 format TSV.
-     * Optionally includes a REVIEW_HISTORY section at the end.
+     * Exports everything an archive holds: the cards with their pictures and
+     * every learning state they keep, the settings of the groups they are in,
+     * the opponents, and -- when it is asked for -- the review history.
+     *
+     * The count reported back is rows rather than cards, as it always has
+     * been: a card's own state and one per group that learns it
+     * independently.
      */
     fun exportCardsWithGroupStates(
         cardsWithStates: List<CardWithGroupStates>,
@@ -532,146 +653,41 @@ object CardImportExport {
     ): ExportResult {
         return try {
             var rowCount = 0
-            val writer: Appendable = out
-
-            // Write format marker (V4)
-            writer.write(HEADER_MARKER_V4)
-            writer.newLine()
-
-            // Write group settings metadata
-            groupSettings.filter { it.hasCustomSettings() }.forEach { group ->
-                writer.write(buildGroupSettingsLine(group))
-                writer.newLine()
+            val cards = cardsWithStates.map { (card, groupNames, groupSpecificStates) ->
+                rowCount += 1 + groupSpecificStates.size
+                ArchiveYaml.cardNode(card, groupNames, groupSpecificStates, images)
             }
 
-            // Write opponents metadata so review logs can reference them by name on import.
-            opponents.forEach { opponent ->
-                writer.write(buildOpponentLine(opponent))
-                writer.newLine()
-            }
-
-            // Write column headers
-            writer.write(COLUMN_HEADERS_V4)
-            writer.newLine()
-
-            cardsWithStates.forEach { (card, groupNames, groupSpecificStates) ->
-                // Write global state row
-                writer.write(buildCardStateLine(card, groupNames, "GLOBAL", images))
-                writer.newLine()
-                rowCount++
-
-                // Write group-specific state rows
-                groupSpecificStates.forEach { (groupName, learningState) ->
-                    writer.write(buildGroupStateLine(card, groupName, learningState, images))
-                    writer.newLine()
-                    rowCount++
+            val history = if (reviewLogs.isEmpty() || cardQuestions.isEmpty()) emptyList() else {
+                reviewLogs.mapNotNull { log ->
+                    val question = cardQuestions[log.cardId] ?: return@mapNotNull null
+                    ArchiveYaml.reviewLogNode(
+                        log, question, log.opponentId?.let { opponentNamesById[it] }, images
+                    )
                 }
             }
 
-            // Optionally append review history section
-            if (reviewLogs.isNotEmpty() && cardQuestions.isNotEmpty()) {
-                writer.write(REVIEW_HISTORY_START)
-                writer.newLine()
-                writer.write(REVIEW_HISTORY_HEADERS)
-                writer.newLine()
-                reviewLogs.forEach { log ->
-                    val question = cardQuestions[log.cardId] ?: return@forEach
-                    val opponentName = log.opponentId?.let { opponentNamesById[it] }
-                    writer.write(buildReviewLogLine(log, question, opponentName, images))
-                    writer.newLine()
-                }
-                writer.write(REVIEW_HISTORY_END)
-                writer.newLine()
-            }
-
-            writer.flush()
+            writeArchive(
+                out,
+                ArchiveDocument(
+                    // Only the groups with settings of their own. A group
+                    // with none is already described by the cards that name it.
+                    groups = groupSettings.filter { it.hasCustomSettings() }
+                        .map { ArchiveYaml.groupNode(it) },
+                    // The opponents, so the review logs can name them and an
+                    // import can find them again.
+                    opponents = opponents.map { ArchiveYaml.opponentNode(it) },
+                    cards = cards,
+                    reviewHistory = history
+                )
+            )
             ExportResult.Success(rowCount)
         } catch (e: Exception) {
             ExportResult.Error("Failed to write file: ${e.message}")
         }
     }
 
-    private fun buildCardStateLine(
-        card: Card,
-        groupNames: List<String>,
-        stateContext: String,
-        images: ImageReader
-    ): String {
-        return buildString {
-            append(escapeNewlines(card.question))
-            append(DELIMITER)
-            append(escapeNewlines(card.answer))
-            append(DELIMITER)
-            // Encode images to base64
-            val encodedImages = card.imagePaths.mapNotNull { encodeImageToBase64(it, images) }
-            append(encodedImages.joinToString(IMAGE_SEPARATOR))
-            append(DELIMITER)
-            append(stateContext)
-            append(DELIMITER)
-            append(card.nextReview)
-            append(DELIMITER)
-            append(card.lastReview)
-            append(DELIMITER)
-            append(card.fsrsStability)
-            append(DELIMITER)
-            append(card.fsrsDifficulty)
-            append(DELIMITER)
-            append(card.fsrsState)
-            append(DELIMITER)
-            append(card.fsrsReps)
-            append(DELIMITER)
-            append(card.fsrsLapses)
-            append(DELIMITER)
-            append(card.fsrsScheduledDays)
-            append(DELIMITER)
-            append(card.fsrsElapsedDays)
-            append(DELIMITER)
-            append(groupNames.joinToString(GROUP_SEPARATOR))
-        }
-    }
-
-    private fun buildGroupStateLine(
-        card: Card,
-        groupName: String,
-        learningState: com.fencing.spacedrepetition.data.model.CardGroupLearningState,
-        images: ImageReader
-    ): String {
-        return buildString {
-            append(escapeNewlines(card.question))
-            append(DELIMITER)
-            append(escapeNewlines(card.answer))
-            append(DELIMITER)
-            // Encode images to base64
-            val encodedImages = card.imagePaths.mapNotNull { encodeImageToBase64(it, images) }
-            append(encodedImages.joinToString(IMAGE_SEPARATOR))
-            append(DELIMITER)
-            append(groupName)  // StateContext is the group name
-            append(DELIMITER)
-            append(learningState.nextReview)
-            append(DELIMITER)
-            append(learningState.lastReview)
-            append(DELIMITER)
-            append(learningState.fsrsStability)
-            append(DELIMITER)
-            append(learningState.fsrsDifficulty)
-            append(DELIMITER)
-            append(learningState.fsrsState)
-            append(DELIMITER)
-            append(learningState.fsrsReps)
-            append(DELIMITER)
-            append(learningState.fsrsLapses)
-            append(DELIMITER)
-            append(learningState.fsrsScheduledDays)
-            append(DELIMITER)
-            append(learningState.fsrsElapsedDays)
-            append(DELIMITER)
-            append(groupName)  // Groups column - just the group name for group-specific rows
-        }
-    }
-
-    /**
-     * Simple export for backward compatibility (question\tanswer only)
-     */
+    /** Cards with no groups and no pictures -- [exportCardsWithGroups] of one list. */
     fun exportCards(cards: List<Card>, out: Appendable): ExportResult {
         return exportCardsWithGroups(
             cards.map { CardWithGroupNames(it, emptyList()) },
@@ -716,42 +732,23 @@ object CardImportExport {
 
 
     /**
-     * Escapes newlines for export (replaces \n with <br>)
-     */
-    private fun escapeNewlines(text: String): String {
-        return text.replace("\r\n", NEWLINE_PLACEHOLDER)
-            .replace("\n", NEWLINE_PLACEHOLDER)
-            .replace("\r", "")
-    }
-
-    /**
-     * Unescapes newlines after import (replaces <br> with \n)
+     * Unescapes the newlines a tab-separated export escaped (`<br>` back to a
+     * newline).
+     *
+     * Import only. YAML holds a newline as a newline -- a multi-line answer
+     * is written as a `|-` block, or quoted with the breaks spelled out --
+     * so the placeholder went out with the format that needed it.
      */
     private fun unescapeNewlines(text: String): String {
         return text.replace(NEWLINE_PLACEHOLDER, "\n")
     }
 
     /**
-     * Builds a group settings metadata line for export.
-     * Format: #GROUP_SETTINGS:name\tkey=value\tkey=value\t...
-     */
-    private fun buildGroupSettingsLine(group: Group): String {
-        return buildString {
-            append(GROUP_SETTINGS_PREFIX)
-            append(escapeNewlines(group.name))
-            group.cardsPerSession?.let { append("\tcardsPerSession=$it") }
-            group.autoShowAnswer?.let { append("\tautoShowAnswer=$it") }
-            group.randomizeDueCards?.let { append("\trandomizeDueCards=$it") }
-            group.randomizeBucketHours?.let { append("\trandomizeBucketHours=$it") }
-            group.practiceDays?.let { append("\tpracticeDays=$it") }
-            group.maximumInterval?.let { append("\tmaximumInterval=$it") }
-            group.fsrsRetention?.let { append("\tfsrsRetention=$it") }
-        }
-    }
-
-    /**
-     * Parses a group settings line from import.
-     * Returns pair of (group name, settings map) or null if not a settings line.
+     * Reads a tab-separated export's `#GROUP_SETTINGS:` line.
+     *
+     * Returns the group's name and its settings, or null if the line is not
+     * one. The settings map is the same one [applyGroupSettings] takes, and
+     * the same one the YAML reader builds from a `groups:` entry.
      */
     fun parseGroupSettingsLine(line: String): Pair<String, Map<String, String>>? {
         if (!line.startsWith(GROUP_SETTINGS_PREFIX)) return null
@@ -770,22 +767,8 @@ object CardImportExport {
     }
 
     /**
-     * Builds an opponent metadata line for export.
-     * Format: #OPPONENT:<escaped name>\tskillMultiplier=X.XX\tnotes=<escaped notes>
-     */
-    private fun buildOpponentLine(opponent: Opponent): String {
-        return buildString {
-            append(OPPONENT_PREFIX)
-            append(escapeNewlines(opponent.name))
-            append("\tskillMultiplier=").append(opponent.skillMultiplier)
-            if (opponent.notes.isNotBlank()) {
-                append("\tnotes=").append(escapeNewlines(opponent.notes))
-            }
-        }
-    }
-
-    /**
-     * Parses an opponent metadata line. Returns null if not a well-formed opponent line.
+     * Reads a tab-separated export's `#OPPONENT:` line, or null if the line
+     * is not one.
      */
     fun parseOpponentLine(line: String): ParsedOpponent? {
         if (!line.startsWith(OPPONENT_PREFIX)) return null
@@ -810,7 +793,13 @@ object CardImportExport {
     }
 
     /**
-     * Applies parsed settings map to a Group entity.
+     * Applies parsed settings to a Group entity.
+     *
+     * A setting the file does not mention is cleared rather than left alone:
+     * an export carries every override a group has, so its absence means the
+     * group does not have one. fsrsEnableFuzzing is in the list now that the
+     * format writes it -- the tab-separated one never did, which left it the
+     * one override an export quietly dropped.
      */
     fun applyGroupSettings(group: Group, settings: Map<String, String>): Group {
         return group.copy(
@@ -820,18 +809,19 @@ object CardImportExport {
             randomizeBucketHours = settings["randomizeBucketHours"]?.toIntOrNull(),
             practiceDays = settings["practiceDays"],
             maximumInterval = settings["maximumInterval"]?.toIntOrNull(),
-            fsrsRetention = settings["fsrsRetention"]?.toIntOrNull()
+            fsrsRetention = settings["fsrsRetention"]?.toIntOrNull(),
+            fsrsEnableFuzzing = settings["fsrsEnableFuzzing"]?.toBooleanStrictOrNull()
         )
     }
 
     /**
      * What every file this app writes is called: when it was made, then what
-     * is in it -- "2026-08-26_14-05-09_all_cards.tsv.gz".
+     * is in it -- "2026-08-26_14-05-09_all_cards.yaml.gz".
      *
      * The stamp leads so that a folder of exports sorts into the order they
      * were taken, which is the order anyone looking for one thinks in. It is
      * also what keeps a second export of the same thing from overwriting the
-     * first, or arriving as "all_cards (3).tsv.gz" in a downloads folder.
+     * first, or arriving as "all_cards (3).yaml.gz" in a downloads folder.
      *
      * [at] and [utcOffsetSeconds] are parameters rather than read here so the
      * naming can be tested against a fixed instant.
@@ -842,13 +832,26 @@ object CardImportExport {
         utcOffsetSeconds: Int = Time.utcOffsetSeconds()
     ): String = "${fileTimestamp(at, utcOffsetSeconds)}_$contents"
 
+    /**
+     * What an archive is called from the dot onwards.
+     *
+     * ".yaml.gz" rather than ".tsv.gz" since the format moved: the name is
+     * the only thing that says what is inside a file before it is opened, and
+     * one saying tsv over a YAML document would be a lie that outlives this
+     * change. Files written under the old name still import -- the format is
+     * detected from the first line and never from the name -- and the backup
+     * worker still recognises them when it prunes.
+     */
+    const val ARCHIVE_EXTENSION = ".yaml.gz"
+
     /** The whole collection, as a compressed archive and as a CSV. */
-    fun generateAllCardsFilename(): String = exportFilename("all_cards.tsv.gz")
+    fun generateAllCardsFilename(): String = exportFilename("all_cards$ARCHIVE_EXTENSION")
 
     fun generateAllCardsCsvFilename(): String = exportFilename("all_cards.csv")
 
     /** Several groups at once, chosen from the card list. */
-    fun generateSelectedGroupsFilename(): String = exportFilename("selected_groups_cards.tsv.gz")
+    fun generateSelectedGroupsFilename(): String =
+        exportFilename("selected_groups_cards$ARCHIVE_EXTENSION")
 
     fun generateSelectedGroupsCsvFilename(): String = exportFilename("selected_groups_cards.csv")
 
@@ -857,11 +860,11 @@ object CardImportExport {
      * asked for. Named like an export because that is what it is -- the file
      * it produces is one any of the import paths will read back.
      */
-    fun generateBackupFilename(): String = exportFilename("backup.tsv.gz")
+    fun generateBackupFilename(): String = exportFilename("backup$ARCHIVE_EXTENSION")
 
     /** One group's cards, as a compressed archive. */
     fun generateExportFilename(groupName: String): String =
-        exportFilename("${sanitizeForFilename(groupName)}_cards.tsv.gz")
+        exportFilename("${sanitizeForFilename(groupName)}_cards$ARCHIVE_EXTENSION")
 
     /**
      * A group's name, reduced to what every filesystem will take.
@@ -877,7 +880,7 @@ object CardImportExport {
     fun generateAllPhotosFilename(): String = exportFilename("photos.zip")
 
     /**
-     * Base64 codec used for the V3 export format's inline images.
+     * Base64 codec for the images an export inlines.
      *
      * [Base64.encode] is byte-for-byte identical to `java.util.Base64`'s basic
      * encoder, so files written before and after this change interoperate.
@@ -921,80 +924,13 @@ object CardImportExport {
 
 
 
-    // ========== Review History Export/Import ==========
+    // ========== Review history ==========
 
     /**
-     * Appends a REVIEW_HISTORY section to an already-open writer.
-     * Each log entry is keyed by cardQuestion so it can be re-linked on import.
-     * @param reviewLogs list of review logs to export
-     * @param cardQuestions map of cardId -> question text
-     */
-    fun appendReviewHistory(
-        reviewLogs: List<ReviewLog>,
-        cardQuestions: Map<Long, String>,
-        out: Appendable,
-        images: ImageReader,
-        opponentNamesById: Map<Long, String> = emptyMap()
-    ) {
-        out.let { writer ->
-            writer.write(REVIEW_HISTORY_START)
-            writer.newLine()
-            writer.write(REVIEW_HISTORY_HEADERS)
-            writer.newLine()
-            reviewLogs.forEach { log ->
-                val question = cardQuestions[log.cardId] ?: return@forEach
-                val opponentName = log.opponentId?.let { opponentNamesById[it] }
-                writer.write(buildReviewLogLine(log, question, opponentName, images))
-                writer.newLine()
-            }
-            writer.write(REVIEW_HISTORY_END)
-            writer.newLine()
-            writer.flush()
-        }
-    }
-
-    private fun buildReviewLogLine(
-        log: ReviewLog,
-        question: String,
-        opponentName: String?,
-        images: ImageReader
-    ): String {
-        return buildString {
-            append(escapeNewlines(question))
-            append(DELIMITER)
-            append(log.reviewTime)
-            append(DELIMITER)
-            append(log.grade)
-            append(DELIMITER)
-            append(log.algorithm)
-            append(DELIMITER)
-            append(escapeNewlines(log.stateBefore))
-            append(DELIMITER)
-            append(escapeNewlines(log.stateAfter))
-            append(DELIMITER)
-            append(log.scheduledDays)
-            append(DELIMITER)
-            append(log.elapsedDays)
-            append(DELIMITER)
-            append(log.groupName ?: "")
-            append(DELIMITER)
-            append(escapeNewlines(log.notes))
-            append(DELIMITER)
-            // Encode review-log images as base64, pipe-separated
-            val encodedImages = log.imagePaths.split(",")
-                .filter { it.isNotBlank() }
-                .mapNotNull { encodeImageToBase64(it, images) }
-            append(encodedImages.joinToString("|"))
-            append(DELIMITER)
-            append(opponentName?.let { escapeNewlines(it) } ?: "")
-            append(DELIMITER)
-            append(log.stabilityMultiplier)
-        }
-    }
-
-    /**
-     * Parsed review log from the REVIEW_HISTORY section of an export file.
-     * Uses cardQuestion instead of cardId (IDs differ between devices).
+     * One entry of an export's review history.
+     *
+     * Keyed by cardQuestion rather than by cardId, in both formats: ids are
+     * the device's own and an export is read on another one.
      */
     data class ParsedReviewLog(
         val cardQuestion: String,
@@ -1202,32 +1138,30 @@ object CardImportExport {
                 card.imagePaths.isNotEmpty()
             }
 
-            out.let { writer ->
-                // Write header row
-                val headerParts = mutableListOf(CSV_HEADER_CONCEPT, CSV_HEADER_DESCRIPTION)
+            // Write header row
+            val headerParts = mutableListOf(CSV_HEADER_CONCEPT, CSV_HEADER_DESCRIPTION)
+            if (anyCardHasImages) {
+                headerParts.add(CSV_HEADER_IMAGES)
+            }
+            out.append(headerParts.joinToString(CSV_DELIMITER) { escapeCsvField(it) })
+            out.append('\n')
+
+            // Write data rows
+            cardsWithGroups.forEach { (card, _) ->
+                val fields = mutableListOf(
+                    escapeCsvField(card.question),
+                    escapeCsvField(card.answer)
+                )
+
                 if (anyCardHasImages) {
-                    headerParts.add(CSV_HEADER_IMAGES)
+                    // Encode all images and join with pipe separator
+                    val encodedImages = card.imagePaths.mapNotNull { encodeImageToBase64(it, images) }
+                    val imagesField = encodedImages.joinToString(CSV_IMAGE_SEPARATOR)
+                    fields.add(escapeCsvField(imagesField))
                 }
-                writer.write(headerParts.joinToString(CSV_DELIMITER) { escapeCsvField(it) })
-                writer.newLine()
 
-                // Write data rows
-                cardsWithGroups.forEach { (card, _) ->
-                    val fields = mutableListOf(
-                        escapeCsvField(card.question),
-                        escapeCsvField(card.answer)
-                    )
-
-                    if (anyCardHasImages) {
-                        // Encode all images and join with pipe separator
-                        val encodedImages = card.imagePaths.mapNotNull { encodeImageToBase64(it, images) }
-                        val imagesField = encodedImages.joinToString(CSV_IMAGE_SEPARATOR)
-                        fields.add(escapeCsvField(imagesField))
-                    }
-
-                    writer.write(fields.joinToString(CSV_DELIMITER))
-                    writer.newLine()
-                }
+                out.append(fields.joinToString(CSV_DELIMITER))
+                out.append('\n')
             }
             ExportResult.Success(cardsWithGroups.size)
         } catch (e: Exception) {
@@ -1256,7 +1190,7 @@ object CardImportExport {
     fun deriveGroupNameFromFilename(filename: String): String {
         // Remove file extension(s) - loop until no more known extensions remain
         var name = filename.replaceFirst(FILENAME_TIMESTAMP, "")
-        val extensions = listOf(".csv", ".tsv", ".gz", ".txt")
+        val extensions = listOf(".csv", ".tsv", ".yaml", ".yml", ".gz", ".txt")
         var changed = true
         while (changed) {
             changed = false

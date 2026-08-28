@@ -14,6 +14,11 @@ plugins {
     id("org.jetbrains.kotlin.android") version "2.4.10" apply false
     id("org.jetbrains.kotlin.multiplatform") version "2.4.10" apply false
     id("org.jetbrains.kotlin.plugin.compose") version "2.4.10" apply false
+    // kotlinx.serialization's compiler plugin, which generates the encoders
+    // for the export document's classes. Versioned with Kotlin, like the
+    // Compose compiler plugin above -- it is part of the compiler, not a
+    // library, so the two move together.
+    id("org.jetbrains.kotlin.plugin.serialization") version "2.4.10" apply false
     // Compose Multiplatform. Distinct from the line above: that one is
     // Kotlin's Compose compiler plugin and moves with Kotlin, this one is the
     // multiplatform runtime and its own Gradle plugin.

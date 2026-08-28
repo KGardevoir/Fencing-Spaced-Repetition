@@ -45,8 +45,8 @@ fun GroupListScreen(
     onSetSortOption: (GroupSortOption) -> Unit,
     onDeleteGroup: (Group) -> Unit,
     onDismissImportExport: () -> Unit,
-    onImportTsv: (Group) -> Unit,
-    onExportTsv: (Group) -> Unit,
+    onImportArchive: (Group) -> Unit,
+    onExportArchive: (Group) -> Unit,
     onImportCsv: (Group) -> Unit,
     onExportCsv: (Group) -> Unit,
     pendingCsvTargetGroup: Group? = null,
@@ -155,8 +155,8 @@ fun GroupListScreen(
                         dueCardCount = dueCardCountFor(group.id),
                         onEdit = { onNavigateToEdit(group.id) },
                         onDelete = { showDeleteDialog = group },
-                        onImport = { onImportTsv(group) },
-                        onExport = { onExportTsv(group) },
+                        onImport = { onImportArchive(group) },
+                        onExport = { onExportArchive(group) },
                         onCsvImport = { onImportCsv(group) },
                         onCsvExport = { onExportCsv(group) }
                     )

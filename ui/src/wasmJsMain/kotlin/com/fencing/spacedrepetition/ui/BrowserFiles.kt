@@ -30,7 +30,7 @@ import kotlin.js.Promise
  *
  * [accept] is a hint, not a guard -- pass an empty string for no hint at all,
  * which is what an archive import does. An export of this app's is a
- * `.tsv.gz`, a type no two systems name the same way, and the Android picker
+ * `.yaml.gz`, a type no two systems name the same way, and the Android picker
  * accepts every type for the same reason.
  *
  * A fresh input per pick, and a cancel detected by the window regaining focus

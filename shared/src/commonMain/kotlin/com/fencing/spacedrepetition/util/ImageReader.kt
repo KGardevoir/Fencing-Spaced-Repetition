@@ -6,7 +6,7 @@ package com.fencing.spacedrepetition.util
 /**
  * Reads a stored image back as bytes.
  *
- * The V3 export format inlines images as base64, so exporting has to read them
+ * An export inlines images as base64, so exporting has to read them
  * from wherever the platform put them. On Android that is a file path under
  * filesDir; in a browser it will not be a file at all. This is the whole of
  * that dependency -- one function, no writing, because export never writes an

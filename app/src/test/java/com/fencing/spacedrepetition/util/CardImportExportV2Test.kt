@@ -216,12 +216,9 @@ class CardImportExportV2Test {
         assertEquals(1, (result as ExportResult.Success).exportedCount)
 
         val content = output.toString(Charsets.UTF_8.name())
-        assertTrue(content.startsWith("#FSR_EXPORT_V4"))
-        assertTrue(content.contains("\tGLOBAL\t"))
-
-        // Should only have header + column names + 1 data row
-        val dataLines = content.lines().filter { it.isNotBlank() && !it.startsWith("#") }
-        assertEquals(1, dataLines.size)
+        assertTrue(content.startsWith("# Fencing Spaced Repetition export\nversion: 5\n"))
+        assertEquals(1, cardCount(content))
+        assertEquals(0, groupStateCount(content))
     }
 
     @Test
@@ -262,16 +259,13 @@ class CardImportExportV2Test {
         assertEquals(2, (result as ExportResult.Success).exportedCount) // 1 global + 1 group-specific
 
         val content = output.toString(Charsets.UTF_8.name())
-        val dataLines = content.lines().filter { it.isNotBlank() && !it.startsWith("#") }
-        assertEquals(2, dataLines.size)
 
-        // First line should be global
-        assertTrue(dataLines[0].contains("\tGLOBAL\t"))
-        assertTrue(dataLines[0].contains("5.0")) // Global stability
-
-        // Second line should be group-specific
-        assertTrue(dataLines[1].contains("\tIndependentGroup\t"))
-        assertTrue(dataLines[1].contains("10.0")) // Group stability
+        // One card entry, carrying its own state and the group's.
+        assertEquals(1, cardCount(content))
+        assertEquals(1, groupStateCount(content))
+        assertTrue(content.contains("      stability: 5.0")) // Global stability
+        assertTrue(content.contains("    groupStates:\n      - group: \"IndependentGroup\""))
+        assertTrue(content.contains("        stability: 10.0")) // Group stability
     }
 
     @Test
@@ -309,8 +303,8 @@ class CardImportExportV2Test {
         assertEquals(4, (result as ExportResult.Success).exportedCount) // 1 global + 3 group-specific
 
         val content = output.toString(Charsets.UTF_8.name())
-        val dataLines = content.lines().filter { it.isNotBlank() && !it.startsWith("#") }
-        assertEquals(4, dataLines.size)
+        assertEquals(1, cardCount(content))
+        assertEquals(3, groupStateCount(content))
     }
 
     // ==================== ROUND-TRIP FORMAT TESTS ====================
@@ -320,7 +314,7 @@ class CardImportExportV2Test {
         val originalCard = Card(
             id = 1,
             question = "Round trip V2 test",
-            answer = "Answer with<br>newlines",
+            answer = "Answer with\nnewlines",
             fsrsStability = 5.5,
             fsrsDifficulty = 0.35,
             fsrsState = "REVIEW",
@@ -369,7 +363,7 @@ class CardImportExportV2Test {
         // Verify global state
         val globalParsed = parsed.find { it.isGlobalState }!!
         assertEquals(originalCard.question, globalParsed.concept)
-        assertEquals("Answer with\nnewlines", globalParsed.answer) // Newlines unescaped
+        assertEquals("Answer with\nnewlines", globalParsed.answer) // Newlines survive
         assertEquals(originalCard.fsrsStability, globalParsed.fsrsStability!!, 0.001)
         assertEquals(originalCard.fsrsDifficulty, globalParsed.fsrsDifficulty!!, 0.001)
         assertEquals(originalCard.fsrsState, globalParsed.fsrsState)
@@ -495,9 +489,17 @@ class CardImportExportV2Test {
         assertEquals(5, (result as ExportResult.Success).exportedCount)
 
         val content = output.toString(Charsets.UTF_8.name())
-        val dataLines = content.lines().filter { it.isNotBlank() && !it.startsWith("#") }
-        assertEquals(5, dataLines.size)
+        assertEquals(3, cardCount(content))
+        assertEquals(2, groupStateCount(content))
     }
+
+    /** How many card entries a YAML export wrote. */
+    private fun cardCount(content: String): Int =
+        Regex("^  - question:", RegexOption.MULTILINE).findAll(content).count()
+
+    /** How many per-group learning states it wrote, across every card. */
+    private fun groupStateCount(content: String): Int =
+        Regex("^      - group:", RegexOption.MULTILINE).findAll(content).count()
 
     /**
      * Reads no images.

@@ -26,7 +26,7 @@ import kotlin.test.assertNull
  */
 class BrowserFilesTest {
 
-    private val export = "#FSR_EXPORT_V3\nQuestion\tAnswer\n"
+    private val export = "version: 5\ncards:\n  - question: Q\n    answer: A\n"
 
     @Test
     fun readsPlainText() = runTest {
@@ -41,7 +41,7 @@ class BrowserFilesTest {
     /** Text that is not gzipped is not fed to the decompressor. */
     @Test
     fun readsTextThatDoesNotBeginWithTheGzipMarker() = runTest {
-        assertEquals("Question\tAnswer", blobText(plainBlob("Question\tAnswer")))
+        assertEquals("cards: []", blobText(plainBlob("cards: []")))
     }
 
     /** Characters outside ASCII survive the round trip, as UTF-8 either way. */
