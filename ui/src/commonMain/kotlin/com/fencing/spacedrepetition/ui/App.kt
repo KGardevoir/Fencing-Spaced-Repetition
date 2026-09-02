@@ -445,7 +445,6 @@ fun App(
                 onSetBackupReminderEnabled = settingsViewModel::setBackupReminderEnabled,
                 onSetBackupReminderIntervalDays = settingsViewModel::setBackupReminderIntervalDays,
                 onRunBackupNow = settingsViewModel::runBackupNow,
-                onDeleteAllCards = { cardViewModel.deleteAllCards() },
                 onOpenLink = onOpenLink,
                 onNavigateBack = { navigator.back() }
             )

@@ -43,9 +43,6 @@ interface ReviewLogDao {
     @Query("DELETE FROM review_logs WHERE cardId = :cardId")
     suspend fun deleteReviewLogsByCard(cardId: Long)
 
-    @Query("DELETE FROM review_logs")
-    suspend fun deleteAllReviewLogs()
-
     @Query("SELECT COUNT(*) FROM review_logs")
     fun getReviewLogCount(): Flow<Int>
 
