@@ -34,16 +34,21 @@ This guide walks you through deploying the Martial Arts Practice app to the Goog
 
 ### Step 1: Update Version Information
 
-Edit `app/build.gradle.kts`:
+Edit `gradle.properties`:
 
-```kotlin
-defaultConfig {
-    applicationId = "com.fencing.spacedrepetition"
-    versionCode = 1  // Increment for each release (1, 2, 3, ...)
-    versionName = "1.0.0"  // User-visible version (1.0.0, 1.0.1, 1.1.0, ...)
-    // ...
-}
+```properties
+# User-visible version (1.0.0, 1.0.1, 1.1.0, ...)
+appVersionName=1.0.0
+# Increment for each release (1, 2, 3, ...)
+appVersionCode=1
 ```
+
+(Keep the comments on their own lines: a `#` partway through a properties line
+is part of the value, not a comment.)
+
+Both builds read these: `app/build.gradle.kts` stamps them into the APK's
+manifest, and `web/build.gradle.kts` generates them into the browser bundle's
+About section, so a release does not have to be numbered twice.
 
 **Version Strategy:**
 - `versionCode`: Integer that increases with each release (1, 2, 3...)

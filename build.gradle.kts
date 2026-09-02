@@ -45,3 +45,34 @@ subprojects {
         }
     }
 }
+
+// The commit this build came from, resolved once for the whole build.
+//
+// It used to live in :app, which was fine while :app was the only module that
+// showed a version. :web shows the same About section now, and asking git the
+// same question twice per build -- in two places free to answer it
+// differently -- is worse than answering it here and handing the result down.
+//
+// providers.exec rather than a ProcessBuilder: it keeps stderr out of the
+// value, and it is the form the configuration cache accepts. The version this
+// replaced merged the two streams, so a build outside a git checkout reported
+// "fatal: not a git repository" as its commit.
+//
+// "unknown" for anything that is not a checkout -- a released source archive,
+// a machine without git. The About section says so rather than inventing a
+// commit, which is the whole point of showing one.
+val gitCommit: String = try {
+    val git = providers.exec {
+        commandLine("git", "rev-parse", "--short", "HEAD")
+        workingDir = rootDir
+        isIgnoreExitValue = true
+    }
+    if (git.result.get().exitValue == 0) {
+        git.standardOutput.asText.get().trim().takeIf { it.isNotEmpty() } ?: "unknown"
+    } else {
+        "unknown"
+    }
+} catch (e: Exception) {
+    "unknown"
+}
+extra["gitCommit"] = gitCommit
