@@ -53,26 +53,45 @@ subprojects {
 // same question twice per build -- in two places free to answer it
 // differently -- is worse than answering it here and handing the result down.
 //
-// providers.exec rather than a ProcessBuilder: it keeps stderr out of the
-// value, and it is the form the configuration cache accepts. The version this
-// replaced merged the two streams, so a build outside a git checkout reported
-// "fatal: not a git repository" as its commit.
+// BUILD_GIT_COMMIT wins over HEAD when it is set, because on a pull request
+// HEAD is not a commit worth reporting: GitHub checks out its own merge of
+// the branch into the base, and that SHA is on no branch, is in nobody's
+// clone, and is deleted when the pull request closes. An artifact stamped
+// with it names a commit that cannot be looked up -- which is how this was
+// noticed. The workflows pass the pull request's head instead; only they know
+// it, since GitHub puts it in the event payload and not in the checkout.
+//
+// providers.exec for the fallback rather than a ProcessBuilder: it keeps
+// stderr out of the value, and it is the form the configuration cache
+// accepts. The version this replaced merged the two streams, so a build
+// outside a git checkout reported "fatal: not a git repository" as its
+// commit.
 //
 // "unknown" for anything that is not a checkout -- a released source archive,
 // a machine without git. The About section says so rather than inventing a
 // commit, which is the whole point of showing one.
-val gitCommit: String = try {
-    val git = providers.exec {
-        commandLine("git", "rev-parse", "--short", "HEAD")
-        workingDir = rootDir
-        isIgnoreExitValue = true
-    }
-    if (git.result.get().exitValue == 0) {
-        git.standardOutput.asText.get().trim().takeIf { it.isNotEmpty() } ?: "unknown"
-    } else {
+val gitCommit: String = run {
+    // Abbreviated to what git's own --short prints for a repository this
+    // size, because that is the form the fallback below produces and the
+    // About section is sized for.
+    val shortLength = 7
+
+    val supplied = providers.environmentVariable("BUILD_GIT_COMMIT").orNull?.trim()
+    if (!supplied.isNullOrEmpty()) return@run supplied.take(shortLength)
+
+    try {
+        val git = providers.exec {
+            commandLine("git", "rev-parse", "--short", "HEAD")
+            workingDir = rootDir
+            isIgnoreExitValue = true
+        }
+        if (git.result.get().exitValue == 0) {
+            git.standardOutput.asText.get().trim().takeIf { it.isNotEmpty() } ?: "unknown"
+        } else {
+            "unknown"
+        }
+    } catch (e: Exception) {
         "unknown"
     }
-} catch (e: Exception) {
-    "unknown"
 }
 extra["gitCommit"] = gitCommit

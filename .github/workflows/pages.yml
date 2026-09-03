@@ -27,6 +27,18 @@ permissions:
   pages: write
   id-token: write
 
+# What the build stamps into its About section.
+#
+# Not HEAD: on a pull request the checkout is GitHub's own merge of the branch
+# into the base, and that SHA is on no branch, is in nobody's clone, and is
+# deleted when the pull request closes -- an artifact stamped with it names a
+# commit that cannot be looked up. The pull request's head is the commit the
+# code actually came from, and it is only in the event payload, not in the
+# checkout. Every other trigger checks out github.sha itself, so the fallback
+# is exact rather than approximate.
+env:
+  BUILD_GIT_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+
 jobs:
   build:
     name: Build Web Bundle
