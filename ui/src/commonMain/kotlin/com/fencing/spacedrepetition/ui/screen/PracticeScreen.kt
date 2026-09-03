@@ -19,7 +19,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
@@ -41,7 +43,7 @@ import com.fencing.spacedrepetition.ui.image.LARGE_IMAGE_BYTES
 import com.fencing.spacedrepetition.ui.image.LocalImagePicker
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeUiState
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun PracticeScreen(
     uiState: PracticeUiState,
@@ -56,6 +58,12 @@ fun PracticeScreen(
     onNavigateBack: () -> Unit
 ) {
     var showEditDialog by remember { mutableStateOf(false) }
+
+    // Back has to be this screen's own back, not the app's: leaving a
+    // practice session also ends it, and App's root handler would pop the
+    // screen and leave the session running behind it. Same call as the arrow
+    // in the top bar, for the same reason GradingScreen has one.
+    BackHandler(onBack = onNavigateBack)
 
     // Edit dialog
     if (showEditDialog && sessionCards.isNotEmpty() && currentCardIndex < sessionCards.size) {
