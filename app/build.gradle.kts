@@ -7,15 +7,12 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-val gitCommit: String = try {
-    val process = ProcessBuilder("git", "rev-parse", "--short", "HEAD")
-        .directory(rootDir)
-        .redirectErrorStream(true)
-        .start()
-    process.inputStream.bufferedReader().readLine()?.trim() ?: "unknown"
-} catch (e: Exception) {
-    "unknown"
-}
+// What the About section reports about this build. The commit comes from the
+// root build file and the version from gradle.properties, both so that :web
+// -- which shows the same section -- reports exactly the same thing.
+val gitCommit = rootProject.extra["gitCommit"] as String
+val appVersionName = providers.gradleProperty("appVersionName").get()
+val appVersionCode = providers.gradleProperty("appVersionCode").get().toInt()
 
 android {
     namespace = "com.fencing.spacedrepetition"
@@ -25,8 +22,8 @@ android {
         applicationId = "com.fencing.spacedrepetition"
         minSdk = 24
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.1"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

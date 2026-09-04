@@ -8,6 +8,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.backhandler.BackHandler
 import com.fencing.spacedrepetition.BuildInfo
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.Group
@@ -47,6 +49,7 @@ import kotlinx.coroutines.flow.flowOf
  * place in the app where a Flow becomes a value, so a screen can be looked at
  * and understood without knowing where its data comes from.
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun App(
     cardViewModel: CardViewModel,
@@ -69,6 +72,24 @@ fun App(
     onPickBackupFolder: () -> Unit,
     navigator: Navigator = rememberNavigator()
 ) {
+    // The platform's back gesture, doing what the screen's own back arrow
+    // does. Without this it leaves the app from wherever you happen to be,
+    // which on Android is the whole app closing four screens deep.
+    //
+    // Outermost on purpose. BackHandler hands the event to the innermost
+    // enabled handler and propagates outward from there, so the screens that
+    // guard something -- unsaved edits, a selection, a practice session --
+    // still answer first, and this only runs when none of them wanted it.
+    //
+    // Disabled at the root rather than made a no-op, so that back on Home
+    // still leaves the app instead of appearing to have stopped working.
+    //
+    // Android only, in practice. Compose's back event on the web comes from
+    // the Escape key and nothing else -- the browser's own Back button is
+    // never routed here, because Compose does not touch session history. See
+    // BackNavigationEventInput in compose-ui, which is the whole of it.
+    BackHandler(enabled = navigator.canGoBack) { navigator.back() }
+
     when (val destination = navigator.current) {
 
         Destination.Home -> {
@@ -445,7 +466,6 @@ fun App(
                 onSetBackupReminderEnabled = settingsViewModel::setBackupReminderEnabled,
                 onSetBackupReminderIntervalDays = settingsViewModel::setBackupReminderIntervalDays,
                 onRunBackupNow = settingsViewModel::runBackupNow,
-                onDeleteAllCards = { cardViewModel.deleteAllCards() },
                 onOpenLink = onOpenLink,
                 onNavigateBack = { navigator.back() }
             )

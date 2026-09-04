@@ -98,8 +98,11 @@ fun GroupEditScreen(
     var showUnsavedChangesDialog by rememberSaveable { mutableStateOf(false) }
 
     // Compose Multiplatform's own BackHandler, not the one from
-    // androidx.activity: same signature, and it is a real back gesture on
-    // Android and the browser's back navigation on the web.
+    // androidx.activity: same signature, and a real back gesture on Android.
+    // Not the browser's Back button on the web, despite the symmetry -- there
+    // Compose raises a back event for the Escape key alone and never touches
+    // session history, so this guards the keyboard and the arrow above, and
+    // browser Back still leaves the page.
     BackHandler(enabled = isDirty) {
         showUnsavedChangesDialog = true
     }

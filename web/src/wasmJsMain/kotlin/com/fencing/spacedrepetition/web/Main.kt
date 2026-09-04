@@ -117,17 +117,15 @@ fun main() {
 }
 
 /**
+ * What this bundle says it is, in the About section.
+ *
  * There is no BuildConfig on the web -- it is generated per Android
- * application module -- so the build's identity is what the bundle can know
- * about itself. Version and commit would have to be fed in at build time to
- * be real, and claiming a number nobody set would be worse than saying so.
+ * application module -- so :web generates the equivalent instead, and
+ * GENERATED_BUILD_INFO is that file. The version is the one :app ships, read
+ * from the same gradle.properties, so a browser and a phone running the same
+ * commit report the same version rather than two unrelated answers.
  */
-private fun webBuildInfo(): BuildInfo = BuildInfo(
-    versionName = "web",
-    versionCode = 0,
-    buildType = "release",
-    gitCommit = "unknown"
-)
+private fun webBuildInfo(): BuildInfo = GENERATED_BUILD_INFO
 
 private fun openInNewTab(url: String) {
     js("window.open(url, '_blank', 'noopener')")

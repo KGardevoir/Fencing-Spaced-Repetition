@@ -9,10 +9,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -86,12 +84,9 @@ fun SettingsScreen(
     onSetBackupReminderEnabled: (Boolean) -> Unit,
     onSetBackupReminderIntervalDays: (Int) -> Unit,
     onRunBackupNow: () -> Unit,
-    onDeleteAllCards: () -> Unit,
     onOpenLink: (String) -> Unit,
     onNavigateBack: () -> Unit
 ) {
-    var showDeleteAllDialog by remember { mutableStateOf(false) }
-
     val bucketPresets = SettingsConstants.BUCKET_PRESETS
     val currentBucketIndex = SettingsConstants.findPresetIndex(bucketPresets, randomizeBucketHours)
 
@@ -866,86 +861,6 @@ fun SettingsScreen(
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            HorizontalDivider()
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Danger Zone section
-            Text(
-                "Danger Zone",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.error
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Button(
-                onClick = { showDeleteAllDialog = true },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error
-                ),
-                enabled = totalCards > 0
-            ) {
-                Icon(
-                    Icons.Default.DeleteForever,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = "Delete All Cards",
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Permanently remove all cards, review history, and group assignments",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
-    }
-
-    // Delete All Cards confirmation dialog
-    if (showDeleteAllDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteAllDialog = false },
-            icon = {
-                Icon(
-                    Icons.Default.Warning,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error
-                )
-            },
-            title = { Text("Delete All Cards?") },
-            text = {
-                Text(
-                    "This will permanently delete all $totalCards cards, " +
-                        "their review history, and all group assignments. " +
-                        "This action cannot be undone."
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onDeleteAllCards()
-                        showDeleteAllDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("Delete All")
-                }
-            },
-            dismissButton = {
-                OutlinedButton(onClick = { showDeleteAllDialog = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
     }
 }

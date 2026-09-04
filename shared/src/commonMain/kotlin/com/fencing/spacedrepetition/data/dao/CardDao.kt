@@ -53,9 +53,6 @@ interface CardDao {
     @Query("DELETE FROM cards WHERE id = :cardId")
     suspend fun deleteCardById(cardId: Long)
 
-    @Query("DELETE FROM cards")
-    suspend fun deleteAllCards()
-
     @Query("SELECT COUNT(*) FROM cards")
     fun getCardCount(): Flow<Int>
 
