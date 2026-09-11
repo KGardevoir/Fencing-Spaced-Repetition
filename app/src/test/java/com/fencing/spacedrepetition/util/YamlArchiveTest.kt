@@ -104,7 +104,7 @@ class YamlArchiveTest {
         )
         val log = reviewLog(
             cardId = 1, grade = 2, notes = "Late:\nhand dropped", groupName = "Foot work",
-            opponentId = 3, stabilityMultiplier = 1.25
+            opponentId = 3, fightDifficulty = 4, stabilityMultiplier = 1.5625
         )
 
         val out = StringBuilder()
@@ -162,7 +162,10 @@ class YamlArchiveTest {
         assertEquals("Late:\nhand dropped", history.notes)
         assertEquals("Foot work", history.groupName)
         assertEquals("Alex", history.opponentName)
-        assertEquals(1.25, history.stabilityMultiplier, 0.0001)
+        // The fight's own rating, and the multiplier it earned together with
+        // the opponent's 1.25: 1.25 x 1.25.
+        assertEquals(4, history.fightDifficulty)
+        assertEquals(1.5625, history.stabilityMultiplier, 0.0001)
     }
 
     /**
@@ -396,12 +399,14 @@ class YamlArchiveTest {
         notes: String = "",
         groupName: String? = null,
         opponentId: Long? = null,
+        fightDifficulty: Int? = null,
         stabilityMultiplier: Double = 1.0
     ) = ReviewLog(
         id = 0, cardId = cardId, sessionId = null, reviewTime = 1_700_000_000_000L,
         grade = grade, algorithm = "FSRS", stateBefore = "S:1.0", stateAfter = "S:2.0",
         scheduledDays = 2, elapsedDays = 1, groupName = groupName, notes = notes,
-        imagePaths = "", opponentId = opponentId, stabilityMultiplier = stabilityMultiplier
+        imagePaths = "", opponentId = opponentId, fightDifficulty = fightDifficulty,
+        stabilityMultiplier = stabilityMultiplier
     )
 
     /** Reads no images: these cards have none unless the test says otherwise. */

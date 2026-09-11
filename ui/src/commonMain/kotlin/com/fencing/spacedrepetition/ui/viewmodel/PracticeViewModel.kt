@@ -51,6 +51,10 @@ class PracticeViewModel(
     private val _sessionOpponentId = MutableStateFlow<Long?>(null)
     val sessionOpponentId: StateFlow<Long?> = _sessionOpponentId.asStateFlow()
 
+    /** How hard the fight was, 1-5, for this session; all cards default to this. */
+    private val _sessionFightDifficulty = MutableStateFlow<Int?>(null)
+    val sessionFightDifficulty: StateFlow<Int?> = _sessionFightDifficulty.asStateFlow()
+
     /** Review logs created during this session, available after grading for adding notes. */
     private val _sessionReviewLogs = MutableStateFlow<List<ReviewLog>>(emptyList())
     val sessionReviewLogs: StateFlow<List<ReviewLog>> = _sessionReviewLogs.asStateFlow()
@@ -95,6 +99,7 @@ class PracticeViewModel(
         _sessionReviewLogs.value = emptyList()
         _currentCardIndex.value = 0
         _sessionOpponentId.value = null
+        _sessionFightDifficulty.value = null
         _uiState.value = PracticeUiState.Loading
 
         sessionJob = viewModelScope.launch {
@@ -132,9 +137,11 @@ class PracticeViewModel(
                 val newSessionId = repository.createPracticeSession(cardsForSession.map { it.id })
                 if (token != sessionToken) return@launch
 
-                // Initialize session cards; no default opponent until user picks one
+                // Initialize session cards; no default opponent or fight rating
+                // until the user picks one
                 sessionId = newSessionId
                 _sessionOpponentId.value = null
+                _sessionFightDifficulty.value = null
                 _sessionCards.value = cardsForSession.map { SessionCard(it, null) }
                 _currentCardIndex.value = 0
                 _uiState.value = PracticeUiState.Practicing
@@ -207,6 +214,17 @@ class PracticeViewModel(
     /** Override the opponent for a single card without changing the session default. */
     fun updateOpponent(cardIndex: Int, opponentId: Long?) {
         mutateCard(cardIndex) { it.copy(opponentId = opponentId) }
+    }
+
+    /** Set the session-level fight difficulty and apply it to every card in the session. */
+    fun setSessionFightDifficulty(rating: Int?) {
+        _sessionFightDifficulty.value = rating
+        _sessionCards.update { cards -> cards.map { it.copy(fightDifficulty = rating) } }
+    }
+
+    /** Override the fight difficulty for a single card without changing the session default. */
+    fun updateFightDifficulty(cardIndex: Int, rating: Int?) {
+        mutateCard(cardIndex) { it.copy(fightDifficulty = rating) }
     }
 
     /** Update an opponent's skill multiplier. The change is persisted to the database
@@ -285,15 +303,24 @@ class PracticeViewModel(
         viewModelScope.launch {
             try {
                 val cardsWithGrades = cards.mapNotNull { sessionCard ->
-                    sessionCard.grade?.let { grade -> Triple(sessionCard.card, grade, sessionCard.opponentId) }
+                    sessionCard.grade?.let { grade ->
+                        CardRepository.GradedCard(
+                            card = sessionCard.card,
+                            grade = grade,
+                            opponentId = sessionCard.opponentId,
+                            fightDifficulty = sessionCard.fightDifficulty
+                        )
+                    }
                 }
 
                 // Only call review methods if there are cards to review
                 if (cardsWithGrades.isNotEmpty()) {
                     // If practicing within a group, use group-aware review method
                     if (groupId != null) {
-                        cardsWithGrades.forEach { (card, grade, opponentId) ->
-                            repository.reviewCardWithGroup(card, grade, groupId, sid, opponentId)
+                        cardsWithGrades.forEach { (card, grade, opponentId, fightDifficulty) ->
+                            repository.reviewCardWithGroup(
+                                card, grade, groupId, sid, opponentId, fightDifficulty
+                            )
                         }
                     } else {
                         repository.reviewMultipleCards(cardsWithGrades, sid)
@@ -365,6 +392,7 @@ class PracticeViewModel(
         _sessionReviewLogs.value = emptyList()
         _currentCardIndex.value = 0
         _sessionOpponentId.value = null
+        _sessionFightDifficulty.value = null
         sessionId = null
         selectedGroupId = null
         sessionStartTime = 0L

@@ -176,13 +176,14 @@ class CardRepository(
         cardAfter: Card,
         grade: Grade,
         groupId: Long? = null,
-        opponentId: Long? = null
+        opponentId: Long? = null,
+        fightDifficulty: Int? = null
     ) {
         val now = Time.now()
         val elapsedDays = if (cardBefore.lastReview == 0L) 0 else
             ((now - cardBefore.lastReview) / (1000 * 60 * 60 * 24)).toInt()
         val groupName = groupId?.let { groupDao.getGroupById(it)?.name }
-        val stabilityMultiplier = resolveStabilityMultiplier(opponentId)
+        val stabilityMultiplier = resolveStabilityMultiplier(opponentId, fightDifficulty)
         reviewLogDao.insertReviewLog(ReviewLog(
             cardId = cardBefore.id,
             sessionId = null,
@@ -195,17 +196,24 @@ class CardRepository(
             elapsedDays = elapsedDays,
             groupName = groupName ?: GROUP_NAME_CARD_EDIT,
             opponentId = opponentId,
+            fightDifficulty = fightDifficulty,
             stabilityMultiplier = stabilityMultiplier
         ))
     }
 
     /**
-     * Looks up the stability multiplier for an opponent, defaulting to 1.0 (neutral)
-     * when the opponent is null or can no longer be found.
+     * The stability multiplier a review earns: the opponent's skill level and the
+     * difficulty of the fight, multiplied together.
+     *
+     * Either half defaults to 1.0 (neutral) -- no opponent, an opponent that has
+     * since been deleted, or an unrated fight -- so a review with neither is
+     * scheduled exactly as it was before opponents existed.
      */
-    private suspend fun resolveStabilityMultiplier(opponentId: Long?): Double {
-        if (opponentId == null) return 1.0
-        return opponentDao.getOpponentById(opponentId)?.skillMultiplier ?: 1.0
+    private suspend fun resolveStabilityMultiplier(opponentId: Long?, fightDifficulty: Int? = null): Double {
+        val opponentMultiplier =
+            if (opponentId == null) 1.0
+            else opponentDao.getOpponentById(opponentId)?.skillMultiplier ?: 1.0
+        return FightDifficulty.combinedMultiplier(opponentMultiplier, fightDifficulty)
     }
 
     // Group-aware card operations
@@ -517,14 +525,15 @@ class CardRepository(
         grade: Grade,
         sessionId: Long? = null,
         groupId: Long? = null,
-        opponentId: Long? = null
+        opponentId: Long? = null,
+        fightDifficulty: Int? = null
     ): Card {
         val now = Time.now()
         val elapsedDays = if (card.lastReview == 0L) 0 else
             ((now - card.lastReview) / (1000 * 60 * 60 * 24)).toInt()
 
         val groupName = groupId?.let { groupDao.getGroupById(it)?.name }
-        val stabilityMultiplier = resolveStabilityMultiplier(opponentId)
+        val stabilityMultiplier = resolveStabilityMultiplier(opponentId, fightDifficulty)
 
         if (grade == Grade.SKIP) {
             val stateBefore = serializeCardState(card)
@@ -540,6 +549,7 @@ class CardRepository(
                 elapsedDays = elapsedDays,
                 groupName = groupName,
                 opponentId = opponentId,
+                fightDifficulty = fightDifficulty,
                 stabilityMultiplier = stabilityMultiplier
             ))
             return card
@@ -560,6 +570,7 @@ class CardRepository(
             elapsedDays = elapsedDays,
             groupName = groupName,
             opponentId = opponentId,
+            fightDifficulty = fightDifficulty,
             stabilityMultiplier = stabilityMultiplier
         )
 
@@ -574,13 +585,15 @@ class CardRepository(
         grade: Grade,
         groupId: Long,
         sessionId: Long? = null,
-        opponentId: Long? = null
+        opponentId: Long? = null,
+        fightDifficulty: Int? = null
     ): Card {
-        val group = groupDao.getGroupById(groupId) ?: return reviewCard(card, grade, sessionId, groupId, opponentId)
+        val group = groupDao.getGroupById(groupId)
+            ?: return reviewCard(card, grade, sessionId, groupId, opponentId, fightDifficulty)
 
         if (!group.independentLearning) {
             // Use global learning state but apply group settings
-            return reviewCard(card, grade, sessionId, groupId, opponentId)
+            return reviewCard(card, grade, sessionId, groupId, opponentId, fightDifficulty)
         }
 
         // Use group-specific learning state
@@ -596,7 +609,7 @@ class CardRepository(
         val elapsedDays = if (learningState.lastReview == 0L) 0 else
             ((now - learningState.lastReview) / (1000 * 60 * 60 * 24)).toInt()
 
-        val stabilityMultiplier = resolveStabilityMultiplier(opponentId)
+        val stabilityMultiplier = resolveStabilityMultiplier(opponentId, fightDifficulty)
 
         if (grade == Grade.SKIP) {
             val stateBefore = serializeLearningState(learningState)
@@ -612,6 +625,7 @@ class CardRepository(
                 elapsedDays = elapsedDays,
                 groupName = group.name,
                 opponentId = opponentId,
+                fightDifficulty = fightDifficulty,
                 stabilityMultiplier = stabilityMultiplier
             ))
             return card
@@ -632,6 +646,7 @@ class CardRepository(
             elapsedDays = elapsedDays,
             groupName = group.name,
             opponentId = opponentId,
+            fightDifficulty = fightDifficulty,
             stabilityMultiplier = stabilityMultiplier
         )
 
@@ -653,26 +668,39 @@ class CardRepository(
     }
 
     /** Compute the result of grading [card] without persisting anything to the database. */
-    suspend fun computeReview(card: Card, grade: Grade, groupId: Long? = null, opponentId: Long? = null): Card {
+    suspend fun computeReview(
+        card: Card,
+        grade: Grade,
+        groupId: Long? = null,
+        opponentId: Long? = null,
+        fightDifficulty: Int? = null
+    ): Card {
         val now = Time.now()
         val elapsedDays = if (card.lastReview == 0L) 0 else
             ((now - card.lastReview) / (1000 * 60 * 60 * 24)).toInt()
-        val stabilityMultiplier = resolveStabilityMultiplier(opponentId)
+        val stabilityMultiplier = resolveStabilityMultiplier(opponentId, fightDifficulty)
         return reviewWithFSRS(card, grade, now, elapsedDays, groupId, stabilityMultiplier)
     }
 
     /** Compute the result of grading [card] in a specific group without persisting. */
-    suspend fun computeReviewWithGroup(card: Card, grade: Grade, groupId: Long, opponentId: Long? = null): Card {
-        val group = groupDao.getGroupById(groupId) ?: return computeReview(card, grade, groupId, opponentId)
+    suspend fun computeReviewWithGroup(
+        card: Card,
+        grade: Grade,
+        groupId: Long,
+        opponentId: Long? = null,
+        fightDifficulty: Int? = null
+    ): Card {
+        val group = groupDao.getGroupById(groupId)
+            ?: return computeReview(card, grade, groupId, opponentId, fightDifficulty)
         if (!group.independentLearning) {
-            return computeReview(card, grade, groupId, opponentId)
+            return computeReview(card, grade, groupId, opponentId, fightDifficulty)
         }
         val now = Time.now()
         val learningState = groupDao.getLearningState(card.id, groupId)
             ?: CardGroupLearningState(card.id, groupId)
         val elapsedDays = if (learningState.lastReview == 0L) 0 else
             ((now - learningState.lastReview) / (1000 * 60 * 60 * 24)).toInt()
-        val stabilityMultiplier = resolveStabilityMultiplier(opponentId)
+        val stabilityMultiplier = resolveStabilityMultiplier(opponentId, fightDifficulty)
         val updatedState = reviewLearningStateWithFSRS(learningState, grade, now, elapsedDays, groupId, stabilityMultiplier)
         return card.copy(
             fsrsStability = updatedState.fsrsStability,
@@ -688,22 +716,30 @@ class CardRepository(
     }
 
     /**
-     * Batch-review a list of cards, each with its own optional opponent. Callers that
-     * don't track opponents can pass the two-tuple overload below.
+     * One graded card of a batch: what it was graded, and the context the grade
+     * was earned in -- who it was practised against, and how hard the fight was.
      */
+    data class GradedCard(
+        val card: Card,
+        val grade: Grade,
+        val opponentId: Long? = null,
+        val fightDifficulty: Int? = null
+    )
+
+    /** Batch-review a list of cards, each with its own opponent and fight difficulty. */
     suspend fun reviewMultipleCards(
-        cardsWithGrades: List<Triple<Card, Grade, Long?>>,
+        cardsWithGrades: List<GradedCard>,
         sessionId: Long? = null
     ) {
         val now = Time.now()
         val reviewLogs = mutableListOf<ReviewLog>()
         val updatedCards = mutableListOf<Card>()
 
-        cardsWithGrades.forEach { (card, grade, opponentId) ->
+        cardsWithGrades.forEach { (card, grade, opponentId, fightDifficulty) ->
             val elapsedDays = if (card.lastReview == 0L) 0 else
                 ((now - card.lastReview) / (1000 * 60 * 60 * 24)).toInt()
 
-            val stabilityMultiplier = resolveStabilityMultiplier(opponentId)
+            val stabilityMultiplier = resolveStabilityMultiplier(opponentId, fightDifficulty)
 
             if (grade == Grade.SKIP) {
                 val stateBefore = serializeCardState(card)
@@ -718,6 +754,7 @@ class CardRepository(
                     scheduledDays = card.fsrsScheduledDays,
                     elapsedDays = elapsedDays,
                     opponentId = opponentId,
+                    fightDifficulty = fightDifficulty,
                     stabilityMultiplier = stabilityMultiplier
                 ))
                 return@forEach
@@ -737,6 +774,7 @@ class CardRepository(
                     scheduledDays = updatedCard.fsrsScheduledDays,
                     elapsedDays = elapsedDays,
                     opponentId = opponentId,
+                    fightDifficulty = fightDifficulty,
                     stabilityMultiplier = stabilityMultiplier
                 )
             )

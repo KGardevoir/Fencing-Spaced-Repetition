@@ -130,6 +130,17 @@ class HistoryViewModel(
         }
     }
 
+    /**
+     * Re-rate how hard a past fight was. Metadata-only, like reassigning the
+     * opponent: the review has already been scheduled, so the multiplier it was
+     * scheduled with stands.
+     */
+    fun updateReviewLogFightDifficulty(reviewLog: ReviewLog, rating: Int?) {
+        viewModelScope.launch {
+            repository.updateReviewLog(reviewLog.copy(fightDifficulty = rating))
+        }
+    }
+
     /** Create a new opponent inline from the history editor. Returns the new id, or -1 on conflict. */
     suspend fun createOpponent(name: String, skillMultiplier: Double): Long =
         opponentRepository.insertOpponent(Opponent(name = name, skillMultiplier = skillMultiplier))

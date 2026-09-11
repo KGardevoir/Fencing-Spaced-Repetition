@@ -43,7 +43,12 @@ data class ReviewLog(
     // Soft reference: not a FK, so deleting an opponent leaves historical logs intact.
     val opponentId: Long? = null,
 
-    // Stability-gain multiplier applied by the opponent's skill level (1.0 = neutral).
+    // How hard the fight itself was, 1-5 (null = unrated). Scales the stability
+    // gain alongside the opponent's skill level; see FightDifficulty.
+    val fightDifficulty: Int? = null,
+
+    // Stability-gain multiplier actually applied to this review (1.0 = neutral):
+    // the opponent's skill multiplier times the fight difficulty's multiplier.
     // Recorded on the log so past reviews stay faithful even if the opponent's
     // skill multiplier is later edited.
     val stabilityMultiplier: Double = 1.0

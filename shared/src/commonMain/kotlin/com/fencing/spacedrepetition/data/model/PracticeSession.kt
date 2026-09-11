@@ -33,7 +33,9 @@ data class SessionCard(
     val notes: String = "",
     val noteImagePaths: List<String> = emptyList(),
     /** Opponent selected during grading (null = solo / unspecified). */
-    val opponentId: Long? = null
+    val opponentId: Long? = null,
+    /** How hard the fight was, 1-5, selected during grading (null = unrated). */
+    val fightDifficulty: Int? = null
 )
 
 enum class Grade(val value: Int, val label: String) {

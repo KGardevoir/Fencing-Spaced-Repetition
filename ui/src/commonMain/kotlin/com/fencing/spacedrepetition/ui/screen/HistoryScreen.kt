@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.fencing.spacedrepetition.data.model.FightDifficulty
 import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.PracticeSession
@@ -32,6 +33,7 @@ import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
 import com.fencing.spacedrepetition.ui.components.MarkdownKeyboardToolbar
 import com.fencing.spacedrepetition.ui.components.MarkdownText
 import com.fencing.spacedrepetition.ui.components.MarkdownToolbarState
+import com.fencing.spacedrepetition.ui.components.FightDifficultyPicker
 import com.fencing.spacedrepetition.ui.components.OpponentPicker
 import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
 import com.fencing.spacedrepetition.ui.components.LargeImageNotice
@@ -59,6 +61,7 @@ fun HistoryScreen(
     onSetOpponentFilter: (Long?) -> Unit,
     onUpdateReviewLogNotes: (ReviewLog, String, List<String>) -> Unit,
     onUpdateReviewLogOpponent: (ReviewLog, Long?) -> Unit,
+    onUpdateReviewLogFightDifficulty: (ReviewLog, Int?) -> Unit,
     onCreateOpponent: suspend (String, Double) -> Long,
     onNavigateBack: () -> Unit
 ) {
@@ -167,6 +170,7 @@ fun HistoryScreen(
                                 opponents = opponents,
                                 onUpdateReviewLogNotes = onUpdateReviewLogNotes,
                                 onUpdateReviewLogOpponent = onUpdateReviewLogOpponent,
+                                onUpdateReviewLogFightDifficulty = onUpdateReviewLogFightDifficulty,
                                 onCreateOpponent = onCreateOpponent,
                                 toolbarState = markdownToolbarState
                             )
@@ -175,6 +179,7 @@ fun HistoryScreen(
                                 opponents = opponents,
                                 onUpdateReviewLogNotes = onUpdateReviewLogNotes,
                                 onUpdateReviewLogOpponent = onUpdateReviewLogOpponent,
+                                onUpdateReviewLogFightDifficulty = onUpdateReviewLogFightDifficulty,
                                 onCreateOpponent = onCreateOpponent,
                                 toolbarState = markdownToolbarState
                             )
@@ -307,6 +312,7 @@ fun SessionHistoryCard(
     opponents: List<Opponent>,
     onUpdateReviewLogNotes: (ReviewLog, String, List<String>) -> Unit,
     onUpdateReviewLogOpponent: (ReviewLog, Long?) -> Unit,
+    onUpdateReviewLogFightDifficulty: (ReviewLog, Int?) -> Unit,
     onCreateOpponent: suspend (String, Double) -> Long,
     toolbarState: MarkdownToolbarState? = null
 ) {
@@ -426,6 +432,7 @@ fun SessionHistoryCard(
                                 opponents = opponents,
                                 onUpdateReviewLogNotes = onUpdateReviewLogNotes,
                                 onUpdateReviewLogOpponent = onUpdateReviewLogOpponent,
+                                onUpdateReviewLogFightDifficulty = onUpdateReviewLogFightDifficulty,
                                 onCreateOpponent = onCreateOpponent,
                                 toolbarState = toolbarState
                             )
@@ -444,6 +451,7 @@ private fun QuickGradeCard(
     opponents: List<Opponent>,
     onUpdateReviewLogNotes: (ReviewLog, String, List<String>) -> Unit,
     onUpdateReviewLogOpponent: (ReviewLog, Long?) -> Unit,
+    onUpdateReviewLogFightDifficulty: (ReviewLog, Int?) -> Unit,
     onCreateOpponent: suspend (String, Double) -> Long,
     toolbarState: MarkdownToolbarState? = null
 ) {
@@ -479,6 +487,7 @@ private fun QuickGradeCard(
     }
 
     val opponentLabel = opponentLabel(log.opponentId, opponents)
+    val fightLabel = fightDifficultyLabel(log.fightDifficulty)
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -513,6 +522,7 @@ private fun QuickGradeCard(
                             append("Quick Grade")
                             if (groupLabel != null) append(" · $groupLabel")
                             if (opponentLabel != null) append(" · vs ").append(opponentLabel)
+                            if (fightLabel != null) append(" · ").append(fightLabel)
                             append(" · ")
                             append(formatDateAndTime(log.reviewTime))
                         },
@@ -564,6 +574,9 @@ private fun QuickGradeCard(
                     onOpponentChange = { opponentId ->
                         onUpdateReviewLogOpponent(log, opponentId)
                     },
+                    onFightDifficultyChange = { rating ->
+                        onUpdateReviewLogFightDifficulty(log, rating)
+                    },
                     onCreateOpponent = onCreateOpponent,
                     toolbarState = toolbarState
                 )
@@ -594,6 +607,10 @@ private fun GradeChipIfNonZero(
     }
 }
 
+/** Resolve a display string for a fight rating — null when the fight was left unrated. */
+private fun fightDifficultyLabel(rating: Int?): String? =
+    FightDifficulty.fromRating(rating)?.let { "fight ${it.rating}/5 (${it.label})" }
+
 /** Resolve a display string for an opponentId — null when there's nothing to show. */
 private fun opponentLabel(opponentId: Long?, opponents: List<Opponent>): String? {
     if (opponentId == null) return null
@@ -607,6 +624,7 @@ private fun ReviewLogRow(
     opponents: List<Opponent>,
     onUpdateReviewLogNotes: (ReviewLog, String, List<String>) -> Unit,
     onUpdateReviewLogOpponent: (ReviewLog, Long?) -> Unit,
+    onUpdateReviewLogFightDifficulty: (ReviewLog, Int?) -> Unit,
     onCreateOpponent: suspend (String, Double) -> Long,
     toolbarState: MarkdownToolbarState? = null
 ) {
@@ -642,6 +660,7 @@ private fun ReviewLogRow(
     }
 
     val opponentLabel = opponentLabel(log.opponentId, opponents)
+    val fightLabel = fightDifficultyLabel(log.fightDifficulty)
 
     Column {
         Row(
@@ -675,6 +694,10 @@ private fun ReviewLogRow(
                     if (opponentLabel != null) {
                         if (isNotEmpty()) append(" · ")
                         append("vs ").append(opponentLabel)
+                    }
+                    if (fightLabel != null) {
+                        if (isNotEmpty()) append(" · ")
+                        append(fightLabel)
                     }
                 }
                 if (metaText.isNotEmpty()) {
@@ -736,6 +759,9 @@ private fun ReviewLogRow(
                 onOpponentChange = { opponentId ->
                     onUpdateReviewLogOpponent(log, opponentId)
                 },
+                onFightDifficultyChange = { rating ->
+                    onUpdateReviewLogFightDifficulty(log, rating)
+                },
                 onCreateOpponent = onCreateOpponent,
                 toolbarState = toolbarState
             )
@@ -753,6 +779,7 @@ private fun HistoryNoteEditor(
     opponents: List<Opponent>,
     onSave: (String, List<String>) -> Unit,
     onOpponentChange: (Long?) -> Unit,
+    onFightDifficultyChange: (Int?) -> Unit,
     onCreateOpponent: suspend (String, Double) -> Long,
     toolbarState: MarkdownToolbarState? = null
 ) {
@@ -781,6 +808,13 @@ private fun HistoryNoteEditor(
             opponents = opponents,
             onOpponentSelected = onOpponentChange,
             onCreate = onCreateOpponent
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        FightDifficultyPicker(
+            selected = reviewLog.fightDifficulty,
+            onSelected = onFightDifficultyChange
         )
 
         Spacer(modifier = Modifier.height(8.dp))

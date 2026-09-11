@@ -15,6 +15,20 @@ An Android app for practicing martial arts and fencing techniques using delayed-
 ### Scheduling Algorithm
 - **FSRS (Free Spaced Repetition Scheduler)**: Modern algorithm using stability and difficulty parameters for sophisticated scheduling
 
+### Opponents and Fight Difficulty
+- Record who you practised against: each opponent carries a skill multiplier
+  that scales how much stability a successful review earns (1.0 is neutral,
+  above is a harder opponent, below an easier one)
+- Rate the fight itself from **1** to **5** -- 1 = 0.5x, 2 = 0.75x, 3 = 1.0x
+  (neutral), 4 = 1.25x, 5 = 1.5x -- for everything the opponent's rating does
+  not capture: tempo, fatigue, a pool bout versus a relaxed drill
+- The two multiply: a 1.25 opponent in a rating-5 fight earns 1.25 x 1.5 =
+  1.875 of the neutral stability gain
+- Both can be set once for the whole session or per card while grading, and
+  either can be left unset, which is neutral
+- The history screen shows the opponent and rating on every review, and both
+  can be corrected afterwards
+
 ### Groups and Organization
 - Create groups (decks) to organize cards by topic, technique, or training focus
 - **Independent learning states**: optionally track separate progress for the same card across different groups

@@ -30,6 +30,7 @@ import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
 import com.fencing.spacedrepetition.ui.components.MarkdownKeyboardToolbar
 import com.fencing.spacedrepetition.ui.components.MarkdownText
 import com.fencing.spacedrepetition.ui.components.MarkdownToolbarState
+import com.fencing.spacedrepetition.ui.components.FightDifficultyPicker
 import com.fencing.spacedrepetition.ui.components.OpponentPicker
 import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
 import com.fencing.spacedrepetition.ui.components.LargeImageNotice
@@ -44,12 +45,15 @@ fun GradingScreen(
     sessionCards: List<SessionCard>,
     opponents: List<Opponent>,
     sessionOpponentId: Long?,
+    sessionFightDifficulty: Int?,
     onSetSessionOpponent: (Long?) -> Unit,
+    onSetSessionFightDifficulty: (Int?) -> Unit,
     onCreateOpponent: suspend (String, Double) -> Long,
     onUpdateOpponentDifficulty: (Long, Double) -> Unit,
     onUpdateGrade: (Int, Grade) -> Unit,
     onUpdateNotes: (Int, String, List<String>) -> Unit,
     onUpdateOpponent: (Int, Long?) -> Unit,
+    onUpdateFightDifficulty: (Int, Int?) -> Unit,
     onSubmitGrades: () -> Unit,
     onComplete: () -> Unit,
     onNavigateBack: () -> Unit
@@ -168,6 +172,15 @@ fun GradingScreen(
                                 label = "Opponent (all cards)"
                             )
 
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Session-level fight difficulty — also applies to all cards
+                            FightDifficultyPicker(
+                                selected = sessionFightDifficulty,
+                                onSelected = onSetSessionFightDifficulty,
+                                label = "Fight difficulty (all cards)"
+                            )
+
                             Spacer(modifier = Modifier.height(16.dp))
 
                             // Cards list
@@ -188,6 +201,9 @@ fun GradingScreen(
                                         },
                                         onOpponentSelected = { opponentId ->
                                             onUpdateOpponent(index, opponentId)
+                                        },
+                                        onFightDifficultySelected = { rating ->
+                                            onUpdateFightDifficulty(index, rating)
                                         },
                                         onCreateOpponent = { name, mult ->
                                             onCreateOpponent(name, mult)
@@ -275,6 +291,7 @@ fun GradingCardItem(
     onGradeSelected: (Grade) -> Unit,
     onNotesChanged: (String, List<String>) -> Unit,
     onOpponentSelected: (Long?) -> Unit = {},
+    onFightDifficultySelected: (Int?) -> Unit = {},
     onCreateOpponent: suspend (String, Double) -> Long = { _, _ -> -1L },
     onOpponentDifficultyChanged: ((Long, Double) -> Unit)? = null,
     toolbarState: MarkdownToolbarState? = null
@@ -398,6 +415,13 @@ fun GradingCardItem(
                 onOpponentSelected = onOpponentSelected,
                 onCreate = onCreateOpponent,
                 onUpdateDifficulty = onOpponentDifficultyChanged
+            )
+
+            // Fight difficulty (multiplies with the opponent's skill level)
+            Spacer(modifier = Modifier.height(12.dp))
+            FightDifficultyPicker(
+                selected = sessionCard.fightDifficulty,
+                onSelected = onFightDifficultySelected
             )
 
             // Notes section

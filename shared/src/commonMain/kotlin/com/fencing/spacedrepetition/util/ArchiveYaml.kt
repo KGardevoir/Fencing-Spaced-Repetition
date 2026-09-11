@@ -156,6 +156,7 @@ internal data class ArchiveReviewLog(
     val group: String? = null,
     val notes: String = "",
     val opponent: String? = null,
+    val fightDifficulty: Int? = null,
     val stabilityMultiplier: Double = 1.0,
     val images: List<String> = emptyList()
 )
@@ -318,6 +319,7 @@ internal object ArchiveYaml {
         group = log.groupName,
         notes = log.notes,
         opponent = opponentName,
+        fightDifficulty = log.fightDifficulty,
         stabilityMultiplier = log.stabilityMultiplier,
         images = log.imagePaths.split(",")
             .filter { it.isNotBlank() }
@@ -417,6 +419,7 @@ internal object ArchiveYaml {
         notes = log.notes,
         imageData = log.images,
         opponentName = log.opponent?.takeIf { it.isNotBlank() },
+        fightDifficulty = log.fightDifficulty,
         stabilityMultiplier = log.stabilityMultiplier
     )
 

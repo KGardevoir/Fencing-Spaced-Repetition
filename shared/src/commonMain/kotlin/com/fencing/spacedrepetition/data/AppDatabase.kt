@@ -26,7 +26,7 @@ import com.fencing.spacedrepetition.util.Time
 
 @Database(
     entities = [Card::class, PracticeSession::class, ReviewLog::class, Group::class, CardGroupCrossRef::class, CardGroupLearningState::class, Opponent::class],
-    version = 12,
+    version = 13,
     exportSchema = true
 )
 @ColumnTypeConverters(Converters::class)
@@ -417,6 +417,19 @@ private val MIGRATION_11_12 = object : Migration(11, 12) {
 }
 
 /**
+ * Adds the difficulty of the fight a review was earned in: a 1-5 rating, NULL
+ * for every review recorded before it existed and for any left unrated. It
+ * scales the stability gain alongside the opponent's skill multiplier, which
+ * `stabilityMultiplier` already records the product of -- so historical rows,
+ * whose multiplier was the opponent's alone, stay exactly as they were.
+ */
+private val MIGRATION_12_13 = object : Migration(12, 13) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `review_logs` ADD COLUMN `fightDifficulty` INTEGER DEFAULT NULL")
+    }
+}
+
+/**
  * Every migration, oldest first. The SQL is identical on every platform, so
  * each platform's builder passes this same array and there is nothing here
  * for a target to override.
@@ -433,4 +446,5 @@ val ALL_MIGRATIONS: Array<Migration> = arrayOf(
     MIGRATION_9_10,
     MIGRATION_10_11,
     MIGRATION_11_12,
+    MIGRATION_12_13,
 )

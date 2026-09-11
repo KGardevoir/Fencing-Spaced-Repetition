@@ -23,7 +23,8 @@ class ReviewHistoryImportExportTest {
         elapsedDays: Int = 0,
         groupName: String? = null,
         notes: String = "",
-        imagePaths: String = ""
+        imagePaths: String = "",
+        fightDifficulty: Int? = null
     ) = ReviewLog(
         id = 0,
         cardId = cardId,
@@ -37,7 +38,8 @@ class ReviewHistoryImportExportTest {
         elapsedDays = elapsedDays,
         groupName = groupName,
         notes = notes,
-        imagePaths = imagePaths
+        imagePaths = imagePaths,
+        fightDifficulty = fightDifficulty
     )
 
     private fun makeCard(id: Long, question: String, answer: String = "Answer") = Card(
@@ -756,4 +758,68 @@ class ReviewHistoryImportExportTest {
      * missing from a real export without anyone noticing.
      */
     private val NoImages = ImageReader { null }
+
+    // ==================== fight difficulty TESTS ====================
+
+    @Test
+    fun `round-trip - a fight rating survives export and import`() {
+        val cardId = 7L
+        val question = "Counter-parry six"
+        val log = makeReviewLog(cardId = cardId, fightDifficulty = 5)
+
+        val output = ByteArrayOutputStream()
+        CardImportExport.exportCardsWithGroupStates(
+            listOf(CardWithGroupStates(makeCard(cardId, question), emptyList(), emptyMap())),
+            output,
+            reviewLogs = listOf(log),
+            cardQuestions = mapOf(cardId to question),
+            images = NoImages
+        )
+        CardImportExport.parseCards(ByteArrayInputStream(output.toByteArray()))
+
+        val entities = CardImportExport.parsedReviewLogsToEntities(
+            CardImportExport.lastParsedReviewHistory,
+            mapOf(question to cardId)
+        )
+        assertEquals(5, entities.single().fightDifficulty)
+    }
+
+    @Test
+    fun `round-trip - an unrated fight comes back unrated`() {
+        val cardId = 8L
+        val question = "Disengage"
+        val log = makeReviewLog(cardId = cardId)
+
+        val output = ByteArrayOutputStream()
+        CardImportExport.exportCardsWithGroupStates(
+            listOf(CardWithGroupStates(makeCard(cardId, question), emptyList(), emptyMap())),
+            output,
+            reviewLogs = listOf(log),
+            cardQuestions = mapOf(cardId to question),
+            images = NoImages
+        )
+        CardImportExport.parseCards(ByteArrayInputStream(output.toByteArray()))
+
+        val entities = CardImportExport.parsedReviewLogsToEntities(
+            CardImportExport.lastParsedReviewHistory,
+            mapOf(question to cardId)
+        )
+        assertNull(entities.single().fightDifficulty)
+    }
+
+    @Test
+    fun `a history written before fight difficulty existed reads back unrated`() {
+        // The tab-separated format, which has no column for it.
+        val lines = listOf(
+            "#REVIEW_HISTORY_START",
+            "Parry four\t1000\t3\tFSRS\tNEW\tLEARNING\t1\t0\t\t\t\tAlex\t1.25",
+            "#REVIEW_HISTORY_END"
+        )
+
+        val result = CardImportExport.parseReviewHistory(lines)
+
+        assertEquals(1, result.size)
+        assertNull(result[0].fightDifficulty)
+        assertEquals(1.25, result[0].stabilityMultiplier, 0.0001)
+    }
 }

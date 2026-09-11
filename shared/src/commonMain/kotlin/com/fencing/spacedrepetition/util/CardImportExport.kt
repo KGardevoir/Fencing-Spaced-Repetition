@@ -945,6 +945,8 @@ object CardImportExport {
         val notes: String = "",
         val imageData: List<String> = emptyList(), // base64-encoded images
         val opponentName: String? = null,
+        /** How hard the fight was, 1-5 (null = unrated). See FightDifficulty. */
+        val fightDifficulty: Int? = null,
         val stabilityMultiplier: Double = 1.0
     )
 
@@ -979,6 +981,7 @@ object CardImportExport {
                     ?.let { unescapeNewlines(it) }
                     ?.takeIf { it.isNotBlank() }
                 val stabilityMultiplier = parts.getOrNull(12)?.toDoubleOrNull() ?: 1.0
+                val fightDifficulty = parts.getOrNull(13)?.toIntOrNull()?.takeIf { it in 1..5 }
                 ParsedReviewLog(
                     cardQuestion = unescapeNewlines(parts[0]),
                     reviewTime = parts[1].toLong(),
@@ -992,6 +995,7 @@ object CardImportExport {
                     notes = parts.getOrNull(9)?.let { unescapeNewlines(it) } ?: "",
                     imageData = imageData,
                     opponentName = opponentName,
+                    fightDifficulty = fightDifficulty,
                     stabilityMultiplier = stabilityMultiplier
                 )
             } catch (e: Exception) {
@@ -1029,6 +1033,7 @@ object CardImportExport {
                 groupName = p.groupName,
                 notes = p.notes,
                 opponentId = p.opponentName?.let { opponentNameToId[it] },
+                fightDifficulty = p.fightDifficulty,
                 stabilityMultiplier = p.stabilityMultiplier
             )
         }
