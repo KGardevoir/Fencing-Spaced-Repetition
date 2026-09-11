@@ -33,7 +33,6 @@ import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
 import com.fencing.spacedrepetition.ui.components.MarkdownKeyboardToolbar
 import com.fencing.spacedrepetition.ui.components.MarkdownText
 import com.fencing.spacedrepetition.ui.components.MarkdownToolbarState
-import com.fencing.spacedrepetition.ui.components.FightDifficultyPicker
 import com.fencing.spacedrepetition.ui.components.OpponentPicker
 import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
 import com.fencing.spacedrepetition.ui.components.LargeImageNotice
@@ -62,7 +61,6 @@ fun HistoryScreen(
     onSetOpponentFilter: (Long?) -> Unit,
     onUpdateReviewLogNotes: (ReviewLog, String, List<String>) -> Unit,
     onUpdateReviewLogOpponent: (ReviewLog, Long?) -> Unit,
-    onUpdateReviewLogFightDifficulty: (ReviewLog, Int?) -> Unit,
     onCreateOpponent: suspend (String, Double) -> Long,
     onNavigateBack: () -> Unit
 ) {
@@ -171,7 +169,6 @@ fun HistoryScreen(
                                 opponents = opponents,
                                 onUpdateReviewLogNotes = onUpdateReviewLogNotes,
                                 onUpdateReviewLogOpponent = onUpdateReviewLogOpponent,
-                                onUpdateReviewLogFightDifficulty = onUpdateReviewLogFightDifficulty,
                                 onCreateOpponent = onCreateOpponent,
                                 toolbarState = markdownToolbarState
                             )
@@ -180,7 +177,6 @@ fun HistoryScreen(
                                 opponents = opponents,
                                 onUpdateReviewLogNotes = onUpdateReviewLogNotes,
                                 onUpdateReviewLogOpponent = onUpdateReviewLogOpponent,
-                                onUpdateReviewLogFightDifficulty = onUpdateReviewLogFightDifficulty,
                                 onCreateOpponent = onCreateOpponent,
                                 toolbarState = markdownToolbarState
                             )
@@ -313,7 +309,6 @@ fun SessionHistoryCard(
     opponents: List<Opponent>,
     onUpdateReviewLogNotes: (ReviewLog, String, List<String>) -> Unit,
     onUpdateReviewLogOpponent: (ReviewLog, Long?) -> Unit,
-    onUpdateReviewLogFightDifficulty: (ReviewLog, Int?) -> Unit,
     onCreateOpponent: suspend (String, Double) -> Long,
     toolbarState: MarkdownToolbarState? = null
 ) {
@@ -465,7 +460,6 @@ fun SessionHistoryCard(
                                 opponents = opponents,
                                 onUpdateReviewLogNotes = onUpdateReviewLogNotes,
                                 onUpdateReviewLogOpponent = onUpdateReviewLogOpponent,
-                                onUpdateReviewLogFightDifficulty = onUpdateReviewLogFightDifficulty,
                                 onCreateOpponent = onCreateOpponent,
                                 toolbarState = toolbarState
                             )
@@ -484,7 +478,6 @@ private fun QuickGradeCard(
     opponents: List<Opponent>,
     onUpdateReviewLogNotes: (ReviewLog, String, List<String>) -> Unit,
     onUpdateReviewLogOpponent: (ReviewLog, Long?) -> Unit,
-    onUpdateReviewLogFightDifficulty: (ReviewLog, Int?) -> Unit,
     onCreateOpponent: suspend (String, Double) -> Long,
     toolbarState: MarkdownToolbarState? = null
 ) {
@@ -609,9 +602,6 @@ private fun QuickGradeCard(
                     onOpponentChange = { opponentId ->
                         onUpdateReviewLogOpponent(log, opponentId)
                     },
-                    onFightDifficultyChange = { rating ->
-                        onUpdateReviewLogFightDifficulty(log, rating)
-                    },
                     onCreateOpponent = onCreateOpponent,
                     toolbarState = toolbarState
                 )
@@ -653,9 +643,9 @@ private fun fightDifficultyLabel(rating: Int?): String? =
  * The stability multiplier this review was actually scheduled with — null when
  * it was the neutral 1.0 and so had no effect worth a line of its own.
  *
- * Shown as recorded rather than recomputed from the opponent and rating beside
- * it: those two can be corrected afterwards, and correcting them deliberately
- * does not reschedule anything. What went into the scheduling is this number.
+ * Shown as recorded rather than recomputed from the opponent beside it: an
+ * opponent can be reassigned afterwards, and reassigning one deliberately does
+ * not reschedule anything. What went into the scheduling is this number.
  */
 private fun stabilityMultiplierLabel(stabilityMultiplier: Double): String? =
     if (stabilityMultiplier == 1.0) null else "gain ×${stabilityMultiplier.toTwoDecimals()}"
@@ -673,7 +663,6 @@ private fun ReviewLogRow(
     opponents: List<Opponent>,
     onUpdateReviewLogNotes: (ReviewLog, String, List<String>) -> Unit,
     onUpdateReviewLogOpponent: (ReviewLog, Long?) -> Unit,
-    onUpdateReviewLogFightDifficulty: (ReviewLog, Int?) -> Unit,
     onCreateOpponent: suspend (String, Double) -> Long,
     toolbarState: MarkdownToolbarState? = null
 ) {
@@ -813,9 +802,6 @@ private fun ReviewLogRow(
                 onOpponentChange = { opponentId ->
                     onUpdateReviewLogOpponent(log, opponentId)
                 },
-                onFightDifficultyChange = { rating ->
-                    onUpdateReviewLogFightDifficulty(log, rating)
-                },
                 onCreateOpponent = onCreateOpponent,
                 toolbarState = toolbarState
             )
@@ -824,29 +810,46 @@ private fun ReviewLogRow(
 }
 
 /**
- * What the review was actually scheduled with.
+ * The fight this review was graded against, and the stability gain it earned.
  *
- * The opponent and the fight rating above it can both be corrected after the
- * fact, and neither reschedules the card -- so this says, in as many words,
- * which multiplier the scheduling used and that changing the two does not
- * change it. Without the line a corrected entry reads as though the card had
- * been scheduled on the corrected numbers.
+ * Read-only, and deliberately so. The rating is half of the multiplier the card
+ * was already scheduled with; letting it be changed here would leave an entry
+ * whose rating and recorded gain contradict each other, with the schedule
+ * following neither. A fight that was rated wrongly is corrected by grading the
+ * card again, not by editing what happened.
+ *
+ * The split below is exact for the same reason: with the rating fixed, the
+ * fight's share of the recorded multiplier is fixed too, so the opponent's
+ * share is what is left of it -- as applied at review time, whatever the
+ * opponent's skill multiplier has been edited to since.
  */
 @Composable
-private fun AppliedMultiplierNote(stabilityMultiplier: Double) {
-    val applied = stabilityMultiplier.toTwoDecimals()
-    Text(
-        text = if (stabilityMultiplier == 1.0) {
-            "Scheduled with the neutral stability gain (×1.00). " +
-                "Re-rating this fight records the rating; it does not reschedule the card."
-        } else {
-            "Scheduled with a stability gain of ×$applied, from the opponent and the fight " +
-                "rating as they stood at review time. Re-rating records the rating; it does " +
-                "not reschedule the card."
-        },
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
+private fun RecordedFightSummary(reviewLog: ReviewLog) {
+    val difficulty = FightDifficulty.fromRating(reviewLog.fightDifficulty)
+    val applied = reviewLog.stabilityMultiplier
+    val opponentShare = applied / FightDifficulty.multiplierFor(reviewLog.fightDifficulty)
+
+    Column {
+        Text(
+            text = difficulty?.let {
+                "Fight: ${it.rating}/5 ${it.label} (×${it.multiplier.toTwoDecimals()})"
+            } ?: "Fight: not rated",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = buildString {
+                append("Scheduled with a stability gain of ×").append(applied.toTwoDecimals())
+                if (difficulty != null) {
+                    append(" — opponent ×").append(opponentShare.toTwoDecimals())
+                    append(" × fight ×").append(difficulty.multiplier.toTwoDecimals())
+                }
+                append(". Recorded at review time; grade the card again to reschedule it.")
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }
 
 /**
@@ -859,7 +862,6 @@ private fun HistoryNoteEditor(
     opponents: List<Opponent>,
     onSave: (String, List<String>) -> Unit,
     onOpponentChange: (Long?) -> Unit,
-    onFightDifficultyChange: (Int?) -> Unit,
     onCreateOpponent: suspend (String, Double) -> Long,
     toolbarState: MarkdownToolbarState? = null
 ) {
@@ -892,14 +894,7 @@ private fun HistoryNoteEditor(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        FightDifficultyPicker(
-            selected = reviewLog.fightDifficulty,
-            onSelected = onFightDifficultyChange
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        AppliedMultiplierNote(reviewLog.stabilityMultiplier)
+        RecordedFightSummary(reviewLog)
 
         Spacer(modifier = Modifier.height(8.dp))
 

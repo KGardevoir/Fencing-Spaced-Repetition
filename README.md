@@ -27,9 +27,12 @@ An Android app for practicing martial arts and fencing techniques using delayed-
 - Both can be set once for the whole session or per card while grading, and
   either can be left unset, which is neutral
 - Every review records the rating it was graded with and the stability gain it
-  earned; the history screen shows both on each entry, summarises the session's
-  ratings on its card, and can correct the opponent or rating afterwards (a
-  correction is metadata -- it does not reschedule a card already scheduled)
+  earned; the history screen shows both on each entry and summarises the
+  session's ratings on its card
+- A recorded rating is read-only: it is half of the multiplier the card was
+  already scheduled with, so editing it afterwards would leave an entry that
+  disagrees with its own schedule. A fight rated wrongly is put right by
+  grading the card again
 
 ### Groups and Organization
 - Create groups (decks) to organize cards by topic, technique, or training focus

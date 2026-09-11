@@ -386,7 +386,6 @@ fun App(
                 onSetOpponentFilter = historyViewModel::setOpponentFilter,
                 onUpdateReviewLogNotes = historyViewModel::updateReviewLogNotes,
                 onUpdateReviewLogOpponent = historyViewModel::updateReviewLogOpponent,
-                onUpdateReviewLogFightDifficulty = historyViewModel::updateReviewLogFightDifficulty,
                 onCreateOpponent = historyViewModel::createOpponent,
                 onNavigateBack = { navigator.back() }
             )
