@@ -26,8 +26,10 @@ An Android app for practicing martial arts and fencing techniques using delayed-
   1.875 of the neutral stability gain
 - Both can be set once for the whole session or per card while grading, and
   either can be left unset, which is neutral
-- The history screen shows the opponent and rating on every review, and both
-  can be corrected afterwards
+- Every review records the rating it was graded with and the stability gain it
+  earned; the history screen shows both on each entry, summarises the session's
+  ratings on its card, and can correct the opponent or rating afterwards (a
+  correction is metadata -- it does not reschedule a card already scheduled)
 
 ### Groups and Organization
 - Create groups (decks) to organize cards by topic, technique, or training focus

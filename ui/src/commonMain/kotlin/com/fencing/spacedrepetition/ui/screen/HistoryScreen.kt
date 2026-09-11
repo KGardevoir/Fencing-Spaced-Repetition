@@ -45,6 +45,7 @@ import com.fencing.spacedrepetition.ui.viewmodel.ReviewLogWithCard
 import com.fencing.spacedrepetition.util.formatDate
 import com.fencing.spacedrepetition.util.formatDateAndTime
 import com.fencing.spacedrepetition.util.formatTimeOfDay
+import com.fencing.spacedrepetition.util.toTwoDecimals
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -332,6 +333,15 @@ fun SessionHistoryCard(
             .mapNotNull { id -> opponents.find { it.id == id }?.name }
     }
 
+    // The fight ratings this session's reviews were recorded with. Usually one,
+    // since the rating is normally set for the whole session, but a card graded
+    // against a different fight shows up here rather than being averaged away.
+    val sessionFightRatings = remember(reviewLogs) {
+        reviewLogs.mapNotNull { FightDifficulty.fromRating(it.reviewLog.fightDifficulty) }
+            .distinct()
+            .sortedBy { it.rating }
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -403,6 +413,29 @@ fun SessionHistoryCard(
                     )
                     Text(
                         text = sessionOpponents.joinToString(", "),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            // Fight difficulty summary chip
+            if (sessionFightRatings.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Sports,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = sessionFightRatings.joinToString(", ") { it.summary() },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -488,6 +521,7 @@ private fun QuickGradeCard(
 
     val opponentLabel = opponentLabel(log.opponentId, opponents)
     val fightLabel = fightDifficultyLabel(log.fightDifficulty)
+    val multiplierLabel = stabilityMultiplierLabel(log.stabilityMultiplier)
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -523,6 +557,7 @@ private fun QuickGradeCard(
                             if (groupLabel != null) append(" · $groupLabel")
                             if (opponentLabel != null) append(" · vs ").append(opponentLabel)
                             if (fightLabel != null) append(" · ").append(fightLabel)
+                            if (multiplierLabel != null) append(" · ").append(multiplierLabel)
                             append(" · ")
                             append(formatDateAndTime(log.reviewTime))
                         },
@@ -607,9 +642,23 @@ private fun GradeChipIfNonZero(
     }
 }
 
+/** How a fight rating reads wherever the history shows one. */
+private fun FightDifficulty.summary(): String = "fight $rating/5 $label"
+
 /** Resolve a display string for a fight rating — null when the fight was left unrated. */
 private fun fightDifficultyLabel(rating: Int?): String? =
-    FightDifficulty.fromRating(rating)?.let { "fight ${it.rating}/5 (${it.label})" }
+    FightDifficulty.fromRating(rating)?.summary()
+
+/**
+ * The stability multiplier this review was actually scheduled with — null when
+ * it was the neutral 1.0 and so had no effect worth a line of its own.
+ *
+ * Shown as recorded rather than recomputed from the opponent and rating beside
+ * it: those two can be corrected afterwards, and correcting them deliberately
+ * does not reschedule anything. What went into the scheduling is this number.
+ */
+private fun stabilityMultiplierLabel(stabilityMultiplier: Double): String? =
+    if (stabilityMultiplier == 1.0) null else "gain ×${stabilityMultiplier.toTwoDecimals()}"
 
 /** Resolve a display string for an opponentId — null when there's nothing to show. */
 private fun opponentLabel(opponentId: Long?, opponents: List<Opponent>): String? {
@@ -661,6 +710,7 @@ private fun ReviewLogRow(
 
     val opponentLabel = opponentLabel(log.opponentId, opponents)
     val fightLabel = fightDifficultyLabel(log.fightDifficulty)
+    val multiplierLabel = stabilityMultiplierLabel(log.stabilityMultiplier)
 
     Column {
         Row(
@@ -698,6 +748,10 @@ private fun ReviewLogRow(
                     if (fightLabel != null) {
                         if (isNotEmpty()) append(" · ")
                         append(fightLabel)
+                    }
+                    if (multiplierLabel != null) {
+                        if (isNotEmpty()) append(" · ")
+                        append(multiplierLabel)
                     }
                 }
                 if (metaText.isNotEmpty()) {
@@ -770,6 +824,32 @@ private fun ReviewLogRow(
 }
 
 /**
+ * What the review was actually scheduled with.
+ *
+ * The opponent and the fight rating above it can both be corrected after the
+ * fact, and neither reschedules the card -- so this says, in as many words,
+ * which multiplier the scheduling used and that changing the two does not
+ * change it. Without the line a corrected entry reads as though the card had
+ * been scheduled on the corrected numbers.
+ */
+@Composable
+private fun AppliedMultiplierNote(stabilityMultiplier: Double) {
+    val applied = stabilityMultiplier.toTwoDecimals()
+    Text(
+        text = if (stabilityMultiplier == 1.0) {
+            "Scheduled with the neutral stability gain (×1.00). " +
+                "Re-rating this fight records the rating; it does not reschedule the card."
+        } else {
+            "Scheduled with a stability gain of ×$applied, from the opponent and the fight " +
+                "rating as they stood at review time. Re-rating records the rating; it does " +
+                "not reschedule the card."
+        },
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}
+
+/**
  * Inline note editor for a review log entry. Supports markdown notes, image attachments,
  * and reassigning the opponent (metadata-only — does not recompute scheduling).
  */
@@ -816,6 +896,10 @@ private fun HistoryNoteEditor(
             selected = reviewLog.fightDifficulty,
             onSelected = onFightDifficultyChange
         )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        AppliedMultiplierNote(reviewLog.stabilityMultiplier)
 
         Spacer(modifier = Modifier.height(8.dp))
 
