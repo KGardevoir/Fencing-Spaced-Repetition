@@ -25,17 +25,18 @@ data class PracticeSession(
 )
 
 /**
- * Represents a card and its grade during a practice session
+ * A card and its grade during a practice session.
+ *
+ * Carries nothing about the opponent or how hard the fight was. Those describe
+ * the fight, and the session is the fight: they are held once for the session
+ * and recorded against every review it produces. A copy per card could disagree
+ * with the session it belongs to, so there is not one.
  */
 data class SessionCard(
     val card: Card,
     val grade: Grade? = null,
     val notes: String = "",
-    val noteImagePaths: List<String> = emptyList(),
-    /** Opponent selected during grading (null = solo / unspecified). */
-    val opponentId: Long? = null,
-    /** How hard the fight was, 1-5, selected during grading (null = unrated). */
-    val fightDifficulty: Int? = null
+    val noteImagePaths: List<String> = emptyList()
 )
 
 enum class Grade(val value: Int, val label: String) {

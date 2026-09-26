@@ -185,10 +185,10 @@ class PracticeViewModel(
      * Replace one card in the session list, atomically.
      *
      * [MutableStateFlow.update] rather than read-copy-write: grading, note
-     * taking, the opponent pickers and the card editor all change the same
-     * list, and the editor does it either side of a database write. A
-     * read-copy-write there publishes a snapshot taken before that write
-     * started, silently dropping any grade or note entered while it ran.
+     * taking and the card editor all change the same list, and the editor does
+     * it either side of a database write. A read-copy-write there publishes a
+     * snapshot taken before that write started, silently dropping any grade or
+     * note entered while it ran.
      */
     private fun mutateCard(cardIndex: Int, transform: (SessionCard) -> SessionCard) {
         _sessionCards.update { cards ->
@@ -205,26 +205,20 @@ class PracticeViewModel(
         mutateCard(cardIndex) { it.copy(notes = notes, noteImagePaths = imagePaths) }
     }
 
-    /** Set the session-level opponent and apply it to every card in the session. */
+    /**
+     * Who the session was fought against.
+     *
+     * One value for the whole session, not one per card: the opponent is a
+     * property of the fight, and the session is the fight. Every review it
+     * produces records this one.
+     */
     fun setSessionOpponent(opponentId: Long?) {
         _sessionOpponentId.value = opponentId
-        _sessionCards.update { cards -> cards.map { it.copy(opponentId = opponentId) } }
     }
 
-    /** Override the opponent for a single card without changing the session default. */
-    fun updateOpponent(cardIndex: Int, opponentId: Long?) {
-        mutateCard(cardIndex) { it.copy(opponentId = opponentId) }
-    }
-
-    /** Set the session-level fight difficulty and apply it to every card in the session. */
+    /** How hard the session's fight was, on the same footing as its opponent. */
     fun setSessionFightDifficulty(rating: Int?) {
         _sessionFightDifficulty.value = rating
-        _sessionCards.update { cards -> cards.map { it.copy(fightDifficulty = rating) } }
-    }
-
-    /** Override the fight difficulty for a single card without changing the session default. */
-    fun updateFightDifficulty(cardIndex: Int, rating: Int?) {
-        mutateCard(cardIndex) { it.copy(fightDifficulty = rating) }
     }
 
     /** Update an opponent's skill multiplier. The change is persisted to the database
@@ -233,15 +227,6 @@ class PracticeViewModel(
         viewModelScope.launch {
             val opponent = opponentRepository.getOpponentById(opponentId) ?: return@launch
             opponentRepository.updateOpponent(opponent.copy(skillMultiplier = newMultiplier))
-        }
-    }
-
-    /** Apply an opponent to every card that doesn't yet have one selected. */
-    fun applyDefaultOpponent(opponentId: Long?) {
-        _sessionCards.update { cards ->
-            cards.map { card ->
-                if (card.opponentId == null) card.copy(opponentId = opponentId) else card
-            }
         }
     }
 
@@ -298,32 +283,33 @@ class PracticeViewModel(
         val token = sessionToken
         val groupId = selectedGroupId
         val sid = sessionId
+
+        // Read with the card list, and for the same reason: these describe the
+        // fight the user has just confirmed, and every card in it is graded
+        // against that one fight.
+        val opponentId = _sessionOpponentId.value
+        val fightDifficulty = _sessionFightDifficulty.value
         _uiState.value = PracticeUiState.Submitting
 
         viewModelScope.launch {
             try {
                 val cardsWithGrades = cards.mapNotNull { sessionCard ->
-                    sessionCard.grade?.let { grade ->
-                        CardRepository.GradedCard(
-                            card = sessionCard.card,
-                            grade = grade,
-                            opponentId = sessionCard.opponentId,
-                            fightDifficulty = sessionCard.fightDifficulty
-                        )
-                    }
+                    sessionCard.grade?.let { grade -> sessionCard.card to grade }
                 }
 
                 // Only call review methods if there are cards to review
                 if (cardsWithGrades.isNotEmpty()) {
                     // If practicing within a group, use group-aware review method
                     if (groupId != null) {
-                        cardsWithGrades.forEach { (card, grade, opponentId, fightDifficulty) ->
+                        cardsWithGrades.forEach { (card, grade) ->
                             repository.reviewCardWithGroup(
                                 card, grade, groupId, sid, opponentId, fightDifficulty
                             )
                         }
                     } else {
-                        repository.reviewMultipleCards(cardsWithGrades, sid)
+                        repository.reviewMultipleCards(
+                            cardsWithGrades, sid, opponentId, fightDifficulty
+                        )
                     }
                 }
 

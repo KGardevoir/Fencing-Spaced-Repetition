@@ -52,8 +52,6 @@ fun GradingScreen(
     onUpdateOpponentDifficulty: (Long, Double) -> Unit,
     onUpdateGrade: (Int, Grade) -> Unit,
     onUpdateNotes: (Int, String, List<String>) -> Unit,
-    onUpdateOpponent: (Int, Long?) -> Unit,
-    onUpdateFightDifficulty: (Int, Int?) -> Unit,
     onSubmitGrades: () -> Unit,
     onComplete: () -> Unit,
     onNavigateBack: () -> Unit
@@ -192,24 +190,11 @@ fun GradingScreen(
                                     GradingCardItem(
                                         sessionCard = sessionCard,
                                         cardNumber = index + 1,
-                                        opponents = opponents,
                                         onGradeSelected = { grade ->
                                             onUpdateGrade(index, grade)
                                         },
                                         onNotesChanged = { notes, images ->
                                             onUpdateNotes(index, notes, images)
-                                        },
-                                        onOpponentSelected = { opponentId ->
-                                            onUpdateOpponent(index, opponentId)
-                                        },
-                                        onFightDifficultySelected = { rating ->
-                                            onUpdateFightDifficulty(index, rating)
-                                        },
-                                        onCreateOpponent = { name, mult ->
-                                            onCreateOpponent(name, mult)
-                                        },
-                                        onOpponentDifficultyChanged = { opponentId, newMult ->
-                                            onUpdateOpponentDifficulty(opponentId, newMult)
                                         },
                                         toolbarState = markdownToolbarState
                                     )
@@ -287,13 +272,8 @@ fun GradingScreen(
 fun GradingCardItem(
     sessionCard: SessionCard,
     cardNumber: Int,
-    opponents: List<Opponent> = emptyList(),
     onGradeSelected: (Grade) -> Unit,
     onNotesChanged: (String, List<String>) -> Unit,
-    onOpponentSelected: (Long?) -> Unit = {},
-    onFightDifficultySelected: (Int?) -> Unit = {},
-    onCreateOpponent: suspend (String, Double) -> Long = { _, _ -> -1L },
-    onOpponentDifficultyChanged: ((Long, Double) -> Unit)? = null,
     toolbarState: MarkdownToolbarState? = null
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -407,22 +387,8 @@ fun GradingCardItem(
                 }
             }
 
-            // Opponent picker (scales FSRS stability gain by skill level)
-            Spacer(modifier = Modifier.height(12.dp))
-            OpponentPicker(
-                selectedOpponentId = sessionCard.opponentId,
-                opponents = opponents,
-                onOpponentSelected = onOpponentSelected,
-                onCreate = onCreateOpponent,
-                onUpdateDifficulty = onOpponentDifficultyChanged
-            )
-
-            // Fight difficulty (multiplies with the opponent's skill level)
-            Spacer(modifier = Modifier.height(12.dp))
-            FightDifficultyPicker(
-                selected = sessionCard.fightDifficulty,
-                onSelected = onFightDifficultySelected
-            )
+            // No opponent or fight rating here: both belong to the fight, which
+            // is the session, and are chosen once above the card list.
 
             // Notes section
             Spacer(modifier = Modifier.height(8.dp))

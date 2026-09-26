@@ -203,8 +203,6 @@ fun App(
                 onUpdateOpponentDifficulty = practiceViewModel::updateOpponentDifficulty,
                 onUpdateGrade = practiceViewModel::updateGrade,
                 onUpdateNotes = practiceViewModel::updateNotes,
-                onUpdateOpponent = practiceViewModel::updateOpponent,
-                onUpdateFightDifficulty = practiceViewModel::updateFightDifficulty,
                 onSubmitGrades = practiceViewModel::submitGrades,
                 onComplete = {
                     practiceViewModel.resetSession()

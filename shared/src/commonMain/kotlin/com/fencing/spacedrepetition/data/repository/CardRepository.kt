@@ -716,30 +716,27 @@ class CardRepository(
     }
 
     /**
-     * One graded card of a batch: what it was graded, and the context the grade
-     * was earned in -- who it was practised against, and how hard the fight was.
+     * Batch-review the cards of one fight.
+     *
+     * The opponent and the fight's difficulty are arguments to the batch rather
+     * than to each card in it, because that is what they describe: one fight,
+     * whose every card is graded against it. The multiplier they earn is
+     * therefore resolved once here, not per card.
      */
-    data class GradedCard(
-        val card: Card,
-        val grade: Grade,
-        val opponentId: Long? = null,
-        val fightDifficulty: Int? = null
-    )
-
-    /** Batch-review a list of cards, each with its own opponent and fight difficulty. */
     suspend fun reviewMultipleCards(
-        cardsWithGrades: List<GradedCard>,
-        sessionId: Long? = null
+        cardsWithGrades: List<Pair<Card, Grade>>,
+        sessionId: Long? = null,
+        opponentId: Long? = null,
+        fightDifficulty: Int? = null
     ) {
         val now = Time.now()
         val reviewLogs = mutableListOf<ReviewLog>()
         val updatedCards = mutableListOf<Card>()
+        val stabilityMultiplier = resolveStabilityMultiplier(opponentId, fightDifficulty)
 
-        cardsWithGrades.forEach { (card, grade, opponentId, fightDifficulty) ->
+        cardsWithGrades.forEach { (card, grade) ->
             val elapsedDays = if (card.lastReview == 0L) 0 else
                 ((now - card.lastReview) / (1000 * 60 * 60 * 24)).toInt()
-
-            val stabilityMultiplier = resolveStabilityMultiplier(opponentId, fightDifficulty)
 
             if (grade == Grade.SKIP) {
                 val stateBefore = serializeCardState(card)
