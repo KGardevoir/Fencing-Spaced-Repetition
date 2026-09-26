@@ -31,10 +31,17 @@ package com.fencing.spacedrepetition.util
 //         groupStates:           # only for groups that learn independently
 //           - group: Footwork
 //             ...
+//     sessions:                  # the fights the review history belongs to
+//       - startTime: 1773990000000
+//         endTime: 1773999000000
+//         notes: |-
+//           Kept dropping the point on the riposte.
+//         images: ["<base64>"]
 //     reviewHistory:
 //       - card: Parry four
 //         reviewTime: 1774000000000
 //         grade: 3
+//         session: 1773990000000 # the startTime of its session, if it had one
 //         ...
 //
 // A card is written once and carries its states, where the tab-separated
@@ -58,6 +65,7 @@ import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupLearningState
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.Opponent
+import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.Serializable
@@ -77,7 +85,24 @@ internal data class ArchiveDocument(
     val groups: List<ArchiveGroup> = emptyList(),
     val opponents: List<ArchiveOpponent> = emptyList(),
     val cards: List<ArchiveCard> = emptyList(),
+    val sessions: List<ArchiveSession> = emptyList(),
     val reviewHistory: List<ArchiveReviewLog> = emptyList()
+)
+
+/**
+ * A practice session: one fight, and what was noted about it.
+ *
+ * Keyed by when it started rather than by id, for the reason a card is keyed by
+ * its question: ids are this device's, and an export is read on another one.
+ * Its cards and grades are not written out -- the review history already says
+ * which cards were graded in it and how, and an import rebuilds them from that.
+ */
+@Serializable
+internal data class ArchiveSession(
+    val startTime: Long,
+    val endTime: Long? = null,
+    val notes: String = "",
+    val images: List<String> = emptyList()
 )
 
 @Serializable
@@ -158,7 +183,9 @@ internal data class ArchiveReviewLog(
     val opponent: String? = null,
     val fightDifficulty: Int? = null,
     val stabilityMultiplier: Double = 1.0,
-    val images: List<String> = emptyList()
+    val images: List<String> = emptyList(),
+    /** The startTime of the session this review was part of; absent for a quick grade. */
+    val session: Long? = null
 )
 
 // ==========================================================================
@@ -178,6 +205,7 @@ internal object ArchiveYaml {
     const val KEY_CARDS = "cards"
     const val KEY_VERSION = "version"
     const val KEY_REVIEW_HISTORY = "reviewHistory"
+    const val KEY_SESSIONS = "sessions"
 
     /** The state context a card's own state is filed under. */
     const val GLOBAL_STATE = "GLOBAL"
@@ -306,7 +334,8 @@ internal object ArchiveYaml {
         log: ReviewLog,
         question: String,
         opponentName: String?,
-        images: ImageReader
+        images: ImageReader,
+        sessionStart: Long? = null
     ) = ArchiveReviewLog(
         card = question,
         reviewTime = log.reviewTime,
@@ -322,6 +351,17 @@ internal object ArchiveYaml {
         fightDifficulty = log.fightDifficulty,
         stabilityMultiplier = log.stabilityMultiplier,
         images = log.imagePaths.split(",")
+            .filter { it.isNotBlank() }
+            .mapNotNull { CardImportExport.encodeImageToBase64(it, images) },
+        session = sessionStart
+    )
+
+    /** One session, with its notes and their pictures inlined. */
+    fun sessionNode(session: PracticeSession, images: ImageReader) = ArchiveSession(
+        startTime = session.startTime,
+        endTime = session.endTime,
+        notes = session.notes,
+        images = session.imagePaths.split(",")
             .filter { it.isNotBlank() }
             .mapNotNull { CardImportExport.encodeImageToBase64(it, images) }
     )
@@ -420,7 +460,15 @@ internal object ArchiveYaml {
         imageData = log.images,
         opponentName = log.opponent?.takeIf { it.isNotBlank() },
         fightDifficulty = log.fightDifficulty,
-        stabilityMultiplier = log.stabilityMultiplier
+        stabilityMultiplier = log.stabilityMultiplier,
+        sessionStart = log.session
+    )
+
+    fun parsedSession(session: ArchiveSession) = CardImportExport.ParsedSession(
+        startTime = session.startTime,
+        endTime = session.endTime,
+        notes = session.notes,
+        imageData = session.images
     )
 
     /**

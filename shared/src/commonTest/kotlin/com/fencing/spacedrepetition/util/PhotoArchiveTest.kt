@@ -4,6 +4,7 @@
 package com.fencing.spacedrepetition.util
 
 import com.fencing.spacedrepetition.data.model.Card
+import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -132,6 +133,40 @@ class PhotoArchiveTest {
         )
 
         assertEquals(bytesFor("a.jpg").toList(), entries.single().bytes.toList())
+    }
+
+    @Test
+    fun namesASessionsPhotoForWhenTheFightWas() {
+        // A session's photos are notes on the whole fight, not on a card, so
+        // there is no card to name them after -- the fight's time stands in.
+        val entries = photoArchiveEntries(
+            cards = emptyList(),
+            reviewLogs = emptyList(),
+            images = reader,
+            sessions = listOf(PracticeSession(id = 1, startTime = 1_700_000_000_000, imagePaths = "s.jpg,t.png")),
+            utcOffsetSeconds = 0
+        )
+
+        assertEquals(
+            listOf(
+                "sessions/session_2023-11-14_22-13-20.jpg",
+                "sessions/session_2023-11-14_22-13-20_2.png"
+            ),
+            entries.map { it.name }
+        )
+    }
+
+    @Test
+    fun aPhotoOnACardAndASessionGoesInOnceUnderTheCard() {
+        val entries = photoArchiveEntries(
+            cards = listOf(card(1, "Sixte parry", listOf("a.jpg"))),
+            reviewLogs = emptyList(),
+            images = reader,
+            sessions = listOf(PracticeSession(id = 1, startTime = 0, imagePaths = "a.jpg")),
+            utcOffsetSeconds = 0
+        )
+
+        assertEquals(listOf("cards/Sixte_parry.jpg"), entries.map { it.name })
     }
 
     private fun bytesFor(key: String) = key.encodeToByteArray()

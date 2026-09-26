@@ -93,6 +93,9 @@ class BackupWorker(
         val cardQuestions = cardsWithStates.associate { it.card.id to it.card.question }
         val opponents = opponentRepository.getAllOpponentsSync()
         val opponentNamesById = opponents.associate { it.id to it.name }
+        // The notes on each fight live on its session, so a backup without
+        // the sessions would drop every one.
+        val sessions = cardRepository.getAllSessionsSync()
 
         val filename = CardImportExport.generateBackupFilename()
         val backupFile = backupDir.createFile("application/gzip", filename)
@@ -103,7 +106,8 @@ class BackupWorker(
                 val outputStream = CardImportExport.createCompressedOutputStream(fileStream)
                 val result = CardImportExport.exportCardsWithGroupStates(
                     cardsWithStates, outputStream, allGroups, reviewLogs, cardQuestions,
-                    opponents, opponentNamesById, FileImageReader(applicationContext)
+                    opponents, opponentNamesById, FileImageReader(applicationContext),
+                    sessions
                 )
                 outputStream.close()
                 result

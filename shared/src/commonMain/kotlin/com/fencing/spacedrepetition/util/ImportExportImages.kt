@@ -14,6 +14,7 @@ package com.fencing.spacedrepetition.util
 // what its own header claims: parsing and formatting, no storage.
 
 import com.fencing.spacedrepetition.data.model.Card
+import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
 
 /**
@@ -56,12 +57,37 @@ suspend fun CardImportExport.parsedReviewLogsToEntities(
     parsed: List<CardImportExport.ParsedReviewLog>,
     questionToCardId: Map<String, Long>,
     opponentNameToId: Map<String, Long> = emptyMap(),
-    images: ImageStore
+    images: ImageStore,
+    sessionIdByStart: Map<Long, Long> = emptyMap()
 ): List<ReviewLog> = parsed.mapNotNull { log ->
-    val entity = parsedReviewLogsToEntities(listOf(log), questionToCardId, opponentNameToId)
-        .singleOrNull() ?: return@mapNotNull null
+    val entity = parsedReviewLogsToEntities(
+        listOf(log), questionToCardId, opponentNameToId, sessionIdByStart = sessionIdByStart
+    ).singleOrNull() ?: return@mapNotNull null
     entity.copy(imagePaths = storeImages(log.imageData, images).joinToString(","))
 }
+
+/**
+ * Converts a parsed session to a completed PracticeSession, storing its note
+ * images on the way.
+ *
+ * [cardIds] and [grades] are what the caller rebuilt from the session's own
+ * reviews: an archive does not repeat them, because its review history
+ * already says which cards were graded in the session and how.
+ */
+suspend fun CardImportExport.parsedSessionToSession(
+    parsed: CardImportExport.ParsedSession,
+    cardIds: List<Long>,
+    grades: List<Int>,
+    images: ImageStore
+): PracticeSession = PracticeSession(
+    startTime = parsed.startTime,
+    endTime = parsed.endTime,
+    completed = true,
+    cardIds = cardIds.joinToString(","),
+    grades = grades.joinToString(","),
+    notes = parsed.notes,
+    imagePaths = storeImages(parsed.imageData, images).joinToString(",")
+)
 
 /**
  * Every image key an export of these rows will ask for.
@@ -71,11 +97,18 @@ suspend fun CardImportExport.parsedReviewLogsToEntities(
  * as a list; a review log holds them as one comma-separated column, which is
  * the shape the database has always stored them in.
  */
-fun exportImageKeys(cards: List<Card>, reviewLogs: List<ReviewLog> = emptyList()): Set<String> {
+fun exportImageKeys(
+    cards: List<Card>,
+    reviewLogs: List<ReviewLog> = emptyList(),
+    sessions: List<PracticeSession> = emptyList()
+): Set<String> {
     val keys = mutableSetOf<String>()
     cards.forEach { keys.addAll(it.imagePaths) }
     reviewLogs.forEach { log ->
         log.imagePaths.split(",").forEach { key -> if (key.isNotBlank()) keys.add(key) }
+    }
+    sessions.forEach { session ->
+        session.imagePaths.split(",").forEach { key -> if (key.isNotBlank()) keys.add(key) }
     }
     return keys
 }
@@ -85,9 +118,10 @@ fun exportImageKeys(cards: List<Card>, reviewLogs: List<ReviewLog> = emptyList()
  *
  * Stored keys are content hashes, so an archive of them under their own names
  * would be a folder of sixty-four hex digits -- technically the export the
- * user asked for and of no use to anyone. Each photo is named for the card it
- * belongs to instead, under `cards/` or `reviews/` depending on whether it was
- * attached to the card or to a note taken while practising it.
+ * user asked for and of no use to anyone. Each photo is named for what it
+ * belongs to instead: under `cards/` for the card it is attached to, `reviews/`
+ * for a quick grade's note, and `sessions/` -- named for when the fight was --
+ * for the notes on a practice session.
  *
  * A photo attached in both places, or to two cards -- which the store allows,
  * because identical bytes are one file -- goes in once, under the first name
@@ -102,7 +136,9 @@ fun exportImageKeys(cards: List<Card>, reviewLogs: List<ReviewLog> = emptyList()
 fun photoArchiveEntries(
     cards: List<Card>,
     reviewLogs: List<ReviewLog>,
-    images: ImageReader
+    images: ImageReader,
+    sessions: List<PracticeSession> = emptyList(),
+    utcOffsetSeconds: Int = Time.utcOffsetSeconds()
 ): List<ZipEntry> {
     val entries = mutableListOf<ZipEntry>()
     val taken = mutableSetOf<String>()
@@ -122,6 +158,14 @@ fun photoArchiveEntries(
         val name = questions[log.cardId] ?: "review"
         log.imagePaths.split(",").forEach { key ->
             if (key.isNotBlank()) add(key, "reviews", name)
+        }
+    }
+    // A session's photos belong to the fight, not to one card, so they are
+    // named for when the fight was.
+    sessions.forEach { session ->
+        val name = "session_" + fileTimestamp(session.startTime, utcOffsetSeconds)
+        session.imagePaths.split(",").forEach { key ->
+            if (key.isNotBlank()) add(key, "sessions", name)
         }
     }
     return entries

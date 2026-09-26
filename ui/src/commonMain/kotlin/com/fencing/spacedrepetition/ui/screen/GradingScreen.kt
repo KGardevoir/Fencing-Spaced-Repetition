@@ -51,7 +51,9 @@ fun GradingScreen(
     onCreateOpponent: suspend (String, Double) -> Long,
     onUpdateOpponentDifficulty: (Long, Double) -> Unit,
     onUpdateGrade: (Int, Grade) -> Unit,
-    onUpdateNotes: (Int, String, List<String>) -> Unit,
+    sessionNotes: String,
+    sessionNoteImages: List<String>,
+    onUpdateSessionNotes: (String, List<String>) -> Unit,
     onSubmitGrades: () -> Unit,
     onComplete: () -> Unit,
     onNavigateBack: () -> Unit
@@ -192,10 +194,15 @@ fun GradingScreen(
                                         cardNumber = index + 1,
                                         onGradeSelected = { grade ->
                                             onUpdateGrade(index, grade)
-                                        },
-                                        onNotesChanged = { notes, images ->
-                                            onUpdateNotes(index, notes, images)
-                                        },
+                                        }
+                                    )
+                                }
+
+                                item(key = "session-notes") {
+                                    SessionNotesCard(
+                                        notes = sessionNotes,
+                                        noteImages = sessionNoteImages,
+                                        onNotesChanged = onUpdateSessionNotes,
                                         toolbarState = markdownToolbarState
                                     )
                                 }
@@ -272,21 +279,9 @@ fun GradingScreen(
 fun GradingCardItem(
     sessionCard: SessionCard,
     cardNumber: Int,
-    onGradeSelected: (Grade) -> Unit,
-    onNotesChanged: (String, List<String>) -> Unit,
-    toolbarState: MarkdownToolbarState? = null
+    onGradeSelected: (Grade) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    var notesExpanded by remember { mutableStateOf(false) }
-    var notesValue by remember(sessionCard.card.id) {
-        mutableStateOf(TextFieldValue(sessionCard.notes))
-    }
-    var noteImages by remember(sessionCard.card.id) {
-        mutableStateOf(sessionCard.noteImagePaths)
-    }
-
-    val imagePicker = LocalImagePicker.current
-    var lastLargeImageBytes by remember { mutableStateOf<Int?>(null) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -387,93 +382,78 @@ fun GradingCardItem(
                 }
             }
 
-            // No opponent or fight rating here: both belong to the fight, which
-            // is the session, and are chosen once above the card list.
+            // No opponent, fight rating or notes here: all three belong to the
+            // fight, which is the session, and are set once for it.
+        }
+    }
+}
 
-            // Notes section
+/**
+ * What was noted about the fight -- one set of notes for the session.
+ *
+ * Its own card after the list rather than a field on each card: the notes are
+ * about the fight, not about any one technique in it, and a remark about one
+ * card can say so in the text.
+ */
+@Composable
+private fun SessionNotesCard(
+    notes: String,
+    noteImages: List<String>,
+    onNotesChanged: (String, List<String>) -> Unit,
+    toolbarState: MarkdownToolbarState?
+) {
+    var notesValue by remember { mutableStateOf(TextFieldValue(notes)) }
+    val imagePicker = LocalImagePicker.current
+    var lastLargeImageBytes by remember { mutableStateOf<Int?>(null) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Notes on this fight",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
             Spacer(modifier = Modifier.height(8.dp))
-            HorizontalDivider()
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Notes",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.secondary
+            MarkdownDescriptionField(
+                value = notesValue,
+                onValueChange = {
+                    notesValue = it
+                    onNotesChanged(it.text, noteImages)
+                },
+                label = "Notes",
+                minLines = 2,
+                maxLines = 8,
+                toolbarState = toolbarState
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (noteImages.isNotEmpty()) {
+                CardImagesEdit(
+                    imagePaths = noteImages,
+                    onRemoveImage = { path -> onNotesChanged(notesValue.text, noteImages - path) },
+                    maxHeight = 100
                 )
-                IconButton(onClick = { notesExpanded = !notesExpanded }) {
-                    Icon(
-                        imageVector = if (notesExpanded) Icons.Default.ExpandLess
-                            else if (sessionCard.notes.isNotBlank() || sessionCard.noteImagePaths.isNotEmpty()) Icons.Default.EditNote
-                            else Icons.Default.NoteAdd,
-                        contentDescription = if (notesExpanded) "Collapse notes" else "Add notes"
-                    )
-                }
-            }
-
-            // Show note preview when collapsed
-            if (!notesExpanded && (sessionCard.notes.isNotBlank() || sessionCard.noteImagePaths.isNotEmpty())) {
-                if (sessionCard.notes.isNotBlank()) {
-                    MarkdownText(
-                        text = sessionCard.notes,
-                        modifier = Modifier.padding(bottom = 4.dp)
-                    )
-                }
-                if (sessionCard.noteImagePaths.isNotEmpty()) {
-                    CardImagesDisplay(
-                        imagePaths = sessionCard.noteImagePaths,
-                        modifier = Modifier.fillMaxWidth(),
-                        maxHeight = 80
-                    )
-                }
-            }
-
-            // Expanded notes editor
-            if (notesExpanded) {
-                MarkdownDescriptionField(
-                    value = notesValue,
-                    onValueChange = {
-                        notesValue = it
-                        onNotesChanged(it.text, noteImages)
-                    },
-                    label = "Notes",
-                    minLines = 2,
-                    maxLines = 5,
-                    toolbarState = toolbarState
-                )
-
+                LargeImageNotice(lastLargeImageBytes)
                 Spacer(modifier = Modifier.height(8.dp))
+            }
 
-                if (noteImages.isNotEmpty()) {
-                    CardImagesEdit(
-                        imagePaths = noteImages,
-                        onRemoveImage = { path ->
-                            noteImages = noteImages - path
-                            onNotesChanged(notesValue.text, noteImages)
-                        },
-                        maxHeight = 100
-                    )
-                    LargeImageNotice(lastLargeImageBytes)
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-
-                OutlinedButton(
-                    onClick = {
-                        imagePicker.pick { picked ->
-                            noteImages = noteImages + picked.key
-                            onNotesChanged(notesValue.text, noteImages)
-                            lastLargeImageBytes =
-                                picked.byteCount.takeIf { it > LARGE_IMAGE_BYTES }
-                        }
+            OutlinedButton(
+                onClick = {
+                    imagePicker.pick { picked ->
+                        onNotesChanged(notesValue.text, noteImages + picked.key)
+                        lastLargeImageBytes = picked.byteCount.takeIf { it > LARGE_IMAGE_BYTES }
                     }
-                ) {
-                    Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Add Image")
                 }
+            ) {
+                Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Add Image")
             }
         }
     }

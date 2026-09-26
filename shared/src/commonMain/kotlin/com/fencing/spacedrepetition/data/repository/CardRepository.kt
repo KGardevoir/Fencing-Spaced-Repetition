@@ -490,15 +490,58 @@ class CardRepository(
 
     suspend fun getSessionById(sessionId: Long): PracticeSession? = sessionDao.getSessionById(sessionId)
 
-    suspend fun completeSession(sessionId: Long, grades: List<Grade>) {
+    suspend fun completeSession(
+        sessionId: Long,
+        grades: List<Grade>,
+        notes: String = "",
+        imagePaths: List<String> = emptyList()
+    ) {
         val session = sessionDao.getSessionById(sessionId) ?: return
         val updatedSession = session.copy(
             endTime = Time.now(),
             completed = true,
-            grades = grades.joinToString(",") { it.value.toString() }
+            grades = grades.joinToString(",") { it.value.toString() },
+            notes = notes,
+            imagePaths = imagePaths.joinToString(",")
         )
         sessionDao.updateSession(updatedSession)
     }
+
+    /** Rewrite what was noted about a session's fight, from the history screen. */
+    suspend fun updateSessionNotes(sessionId: Long, notes: String, imagePaths: List<String>) {
+        val session = sessionDao.getSessionById(sessionId) ?: return
+        sessionDao.updateSession(session.copy(notes = notes, imagePaths = imagePaths.joinToString(",")))
+    }
+
+    /**
+     * Reassign the opponent of every review in a session at once.
+     *
+     * The opponent belongs to the fight, and the session is the fight, so it is
+     * changed for the whole session or not at all. Metadata only, like any
+     * history correction: the reviews were scheduled with the multiplier they
+     * recorded, and they keep it.
+     */
+    suspend fun updateSessionOpponent(sessionId: Long, opponentId: Long?) {
+        reviewLogDao.updateOpponentForSession(sessionId, opponentId)
+    }
+
+    fun getSessionByIdFlow(sessionId: Long): Flow<PracticeSession?> =
+        sessionDao.getSessionByIdFlow(sessionId)
+
+    suspend fun getAllSessionsSync(): List<PracticeSession> = sessionDao.getAllSessionsSync()
+
+    /**
+     * The session a restored review belongs to, found by when it started or
+     * created from what an archive carried.
+     *
+     * By start time because that is what identifies a session across devices --
+     * ids are this device's own. A session already here is left as it is, notes
+     * included, the way an opponent already known by name keeps its local
+     * multiplier.
+     */
+    suspend fun ensureSession(session: PracticeSession): Long =
+        sessionDao.getSessionByStartTime(session.startTime)?.id
+            ?: sessionDao.insertSession(session.copy(id = 0))
 
     fun getAllSessions(): Flow<List<PracticeSession>> = sessionDao.getAllSessions()
 

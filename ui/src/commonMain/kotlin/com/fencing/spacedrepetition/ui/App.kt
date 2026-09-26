@@ -190,6 +190,8 @@ fun App(
             val opponents by practiceViewModel.opponents.collectAsState()
             val sessionOpponentId by practiceViewModel.sessionOpponentId.collectAsState()
             val sessionFightDifficulty by practiceViewModel.sessionFightDifficulty.collectAsState()
+            val sessionNotes by practiceViewModel.sessionNotes.collectAsState()
+            val sessionNoteImages by practiceViewModel.sessionNoteImages.collectAsState()
 
             GradingScreen(
                 uiState = uiState,
@@ -202,7 +204,9 @@ fun App(
                 onCreateOpponent = practiceViewModel::createOpponent,
                 onUpdateOpponentDifficulty = practiceViewModel::updateOpponentDifficulty,
                 onUpdateGrade = practiceViewModel::updateGrade,
-                onUpdateNotes = practiceViewModel::updateNotes,
+                sessionNotes = sessionNotes,
+                sessionNoteImages = sessionNoteImages,
+                onUpdateSessionNotes = practiceViewModel::setSessionNotes,
                 onSubmitGrades = practiceViewModel::submitGrades,
                 onComplete = {
                     practiceViewModel.resetSession()
@@ -384,6 +388,8 @@ fun App(
                 onSetOpponentFilter = historyViewModel::setOpponentFilter,
                 onUpdateReviewLogNotes = historyViewModel::updateReviewLogNotes,
                 onUpdateReviewLogOpponent = historyViewModel::updateReviewLogOpponent,
+                onUpdateSessionNotes = historyViewModel::updateSessionNotes,
+                onUpdateSessionOpponent = historyViewModel::updateSessionOpponent,
                 onCreateOpponent = historyViewModel::createOpponent,
                 onNavigateBack = { navigator.back() }
             )

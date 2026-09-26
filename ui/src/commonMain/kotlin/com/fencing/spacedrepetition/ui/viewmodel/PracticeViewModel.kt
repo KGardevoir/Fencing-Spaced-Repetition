@@ -8,7 +8,6 @@ import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.Opponent
-import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.model.SessionCard
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
@@ -19,7 +18,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -55,9 +53,12 @@ class PracticeViewModel(
     private val _sessionFightDifficulty = MutableStateFlow<Int?>(null)
     val sessionFightDifficulty: StateFlow<Int?> = _sessionFightDifficulty.asStateFlow()
 
-    /** Review logs created during this session, available after grading for adding notes. */
-    private val _sessionReviewLogs = MutableStateFlow<List<ReviewLog>>(emptyList())
-    val sessionReviewLogs: StateFlow<List<ReviewLog>> = _sessionReviewLogs.asStateFlow()
+    /** What was noted about this session's fight, and the images attached to it. */
+    private val _sessionNotes = MutableStateFlow("")
+    val sessionNotes: StateFlow<String> = _sessionNotes.asStateFlow()
+
+    private val _sessionNoteImages = MutableStateFlow<List<String>>(emptyList())
+    val sessionNoteImages: StateFlow<List<String>> = _sessionNoteImages.asStateFlow()
 
     private var sessionId: Long? = null
     private var selectedGroupId: Long? = null
@@ -96,10 +97,11 @@ class PracticeViewModel(
         sessionStartTime = Time.now()
         sessionId = null
         _sessionCards.value = emptyList()
-        _sessionReviewLogs.value = emptyList()
         _currentCardIndex.value = 0
         _sessionOpponentId.value = null
         _sessionFightDifficulty.value = null
+        _sessionNotes.value = ""
+        _sessionNoteImages.value = emptyList()
         _uiState.value = PracticeUiState.Loading
 
         sessionJob = viewModelScope.launch {
@@ -201,8 +203,10 @@ class PracticeViewModel(
         mutateCard(cardIndex) { it.copy(grade = grade) }
     }
 
-    fun updateNotes(cardIndex: Int, notes: String, imagePaths: List<String>) {
-        mutateCard(cardIndex) { it.copy(notes = notes, noteImagePaths = imagePaths) }
+    /** Notes on the session's fight: one set for the session, not one per card. */
+    fun setSessionNotes(notes: String, imagePaths: List<String>) {
+        _sessionNotes.value = notes
+        _sessionNoteImages.value = imagePaths
     }
 
     /**
@@ -289,6 +293,8 @@ class PracticeViewModel(
         // against that one fight.
         val opponentId = _sessionOpponentId.value
         val fightDifficulty = _sessionFightDifficulty.value
+        val notes = _sessionNotes.value
+        val noteImages = _sessionNoteImages.value
         _uiState.value = PracticeUiState.Submitting
 
         viewModelScope.launch {
@@ -313,31 +319,10 @@ class PracticeViewModel(
                     }
                 }
 
-                // Complete session
+                // Complete the session, and with it what was noted about the
+                // fight -- the session row is the one place that is kept.
                 sid?.let { id ->
-                    repository.completeSession(id, cards.mapNotNull { it.grade })
-                }
-
-                // Fetch the review logs created for this session so the user can add notes
-                if (sid != null) {
-                    val logs = repository.getReviewLogsBySession(sid).first()
-
-                    // Apply any notes/images that were entered during grading
-                    val updatedLogs = logs.map { log ->
-                        val sessionCard = cards.find { it.card.id == log.cardId }
-                        if (sessionCard != null && (sessionCard.notes.isNotBlank() || sessionCard.noteImagePaths.isNotEmpty())) {
-                            val updated = log.copy(
-                                notes = sessionCard.notes,
-                                imagePaths = sessionCard.noteImagePaths.joinToString(",")
-                            )
-                            repository.updateReviewLog(updated)
-                            updated
-                        } else {
-                            log
-                        }
-                    }
-                    if (token != sessionToken) return@launch
-                    _sessionReviewLogs.value = updatedLogs
+                    repository.completeSession(id, cards.mapNotNull { it.grade }, notes, noteImages)
                 }
 
                 // The reviews are written either way; only the state the user
@@ -354,31 +339,16 @@ class PracticeViewModel(
         }
     }
 
-    fun updateReviewLogNotes(reviewLogId: Long, notes: String, imagePaths: List<String>) {
-        val current = _sessionReviewLogs.value.firstOrNull { it.id == reviewLogId } ?: return
-        viewModelScope.launch {
-            val updated = current.copy(
-                notes = notes,
-                imagePaths = imagePaths.joinToString(",")
-            )
-            repository.updateReviewLog(updated)
-            _sessionReviewLogs.update { logs ->
-                val index = logs.indexOfFirst { it.id == reviewLogId }
-                if (index < 0) return@update logs
-                logs.toMutableList().also { it[index] = updated }
-            }
-        }
-    }
-
     fun resetSession() {
         sessionJob?.cancel()
         sessionJob = null
         sessionToken++
         _sessionCards.value = emptyList()
-        _sessionReviewLogs.value = emptyList()
         _currentCardIndex.value = 0
         _sessionOpponentId.value = null
         _sessionFightDifficulty.value = null
+        _sessionNotes.value = ""
+        _sessionNoteImages.value = emptyList()
         sessionId = null
         selectedGroupId = null
         sessionStartTime = 0L

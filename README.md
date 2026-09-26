@@ -35,6 +35,19 @@ An Android app for practicing martial arts and fencing techniques using delayed-
   disagrees with its own schedule. A fight rated wrongly is put right by
   grading the card again
 
+### Session Notes
+- Notes and their photos belong to the practice session -- the fight -- not to
+  individual cards: one set of notes per session, written on the grading
+  screen and editable afterwards from the session in the history
+- Sessions written before this kept a note per card; upgrading merges each
+  session's notes into one, in the order the cards were reviewed, each under
+  the question of the card it was written about, and moves their photos with
+  them
+- Quick grades from the card editor are not part of a session and keep their
+  own notes
+- Exports with history carry the sessions and their notes, and an import
+  restores them
+
 ### Groups and Organization
 - Create groups (decks) to organize cards by topic, technique, or training focus
 - **Independent learning states**: optionally track separate progress for the same card across different groups

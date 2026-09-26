@@ -4,6 +4,7 @@
 package com.fencing.spacedrepetition.util
 
 import com.fencing.spacedrepetition.data.model.Card
+import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import org.junit.Assert.*
 import org.junit.Test
@@ -821,5 +822,81 @@ class ReviewHistoryImportExportTest {
         assertEquals(1, result.size)
         assertNull(result[0].fightDifficulty)
         assertEquals(1.25, result[0].stabilityMultiplier, 0.0001)
+    }
+
+    // ==================== session TESTS ====================
+
+    /** Exports [logs] of one card with [sessions] and reads the file back; the results land in `lastParsed*`. */
+    private fun exportAndParse(question: String, logs: List<ReviewLog>, sessions: List<PracticeSession>) {
+        val output = ByteArrayOutputStream()
+        CardImportExport.exportCardsWithGroupStates(
+            listOf(CardWithGroupStates(makeCard(9L, question), emptyList(), emptyMap())),
+            output,
+            reviewLogs = logs,
+            cardQuestions = mapOf(9L to question),
+            images = NoImages,
+            sessions = sessions
+        )
+        CardImportExport.parseCards(ByteArrayInputStream(output.toByteArray()))
+    }
+
+    @Test
+    fun `round-trip - a session's notes survive export and import`() {
+        val session = PracticeSession(
+            id = 42, startTime = 1_700_000_000_000L, endTime = 1_700_000_600_000L, completed = true,
+            notes = "**Prime parry**\nKept dropping the point.\n\nWork on distance."
+        )
+        val log = makeReviewLog(cardId = 9L, reviewTime = 1_700_000_100_000L).copy(sessionId = 42)
+
+        exportAndParse("Prime parry", listOf(log), listOf(session))
+
+        val parsed = CardImportExport.lastParsedSessions.single()
+        assertEquals(session.startTime, parsed.startTime)
+        assertEquals(session.endTime, parsed.endTime)
+        assertEquals(session.notes, parsed.notes)
+    }
+
+    @Test
+    fun `round-trip - a review keeps its link to its session, and a quick grade stays one`() {
+        val session = PracticeSession(id = 42, startTime = 1_700_000_000_000L, completed = true)
+        val inSession = makeReviewLog(cardId = 9L, reviewTime = 1_700_000_100_000L).copy(sessionId = 42)
+        val quickGrade = makeReviewLog(cardId = 9L, reviewTime = 1_700_000_900_000L)
+
+        exportAndParse("Prime parry", listOf(inSession, quickGrade), listOf(session))
+
+        // The session was given local id 7 on the importing device.
+        val entities = CardImportExport.parsedReviewLogsToEntities(
+            CardImportExport.lastParsedReviewHistory,
+            mapOf("Prime parry" to 9L),
+            sessionIdByStart = mapOf(session.startTime to 7L)
+        )
+        assertEquals(listOf<Long?>(7L, null), entities.sortedBy { it.reviewTime }.map { it.sessionId })
+    }
+
+    @Test
+    fun `export - a session with none of its reviews in the file is left out`() {
+        val written = PracticeSession(id = 1, startTime = 1_000L, completed = true, notes = "in the file")
+        val unwritten = PracticeSession(id = 2, startTime = 2_000L, completed = true, notes = "about nothing here")
+        val log = makeReviewLog(cardId = 9L).copy(sessionId = 1)
+
+        exportAndParse("Prime parry", listOf(log), listOf(written, unwritten))
+
+        assertEquals(listOf(1_000L), CardImportExport.lastParsedSessions.map { it.startTime })
+    }
+
+    @Test
+    fun `an archive with no sessions restores its history as quick grades`() {
+        // What every export written before sessions were exported looks like:
+        // the reviews say nothing about a session, so there is none to link.
+        val log = makeReviewLog(cardId = 9L, notes = "per-card note").copy(sessionId = 5)
+
+        exportAndParse("Prime parry", listOf(log), sessions = emptyList())
+
+        assertTrue(CardImportExport.lastParsedSessions.isEmpty())
+        val entity = CardImportExport.parsedReviewLogsToEntities(
+            CardImportExport.lastParsedReviewHistory, mapOf("Prime parry" to 9L)
+        ).single()
+        assertNull(entity.sessionId)
+        assertEquals("per-card note", entity.notes)
     }
 }

@@ -61,6 +61,8 @@ fun HistoryScreen(
     onSetOpponentFilter: (Long?) -> Unit,
     onUpdateReviewLogNotes: (ReviewLog, String, List<String>) -> Unit,
     onUpdateReviewLogOpponent: (ReviewLog, Long?) -> Unit,
+    onUpdateSessionNotes: (PracticeSession, String, List<String>) -> Unit,
+    onUpdateSessionOpponent: (PracticeSession, Long?) -> Unit,
     onCreateOpponent: suspend (String, Double) -> Long,
     onNavigateBack: () -> Unit
 ) {
@@ -167,8 +169,8 @@ fun HistoryScreen(
                                 session = item.session,
                                 reviewLogsForSession = reviewLogsForSession,
                                 opponents = opponents,
-                                onUpdateReviewLogNotes = onUpdateReviewLogNotes,
-                                onUpdateReviewLogOpponent = onUpdateReviewLogOpponent,
+                                onUpdateSessionNotes = onUpdateSessionNotes,
+                                onUpdateSessionOpponent = onUpdateSessionOpponent,
                                 onCreateOpponent = onCreateOpponent,
                                 toolbarState = markdownToolbarState
                             )
@@ -307,13 +309,35 @@ fun SessionHistoryCard(
     session: PracticeSession,
     reviewLogsForSession: @Composable (Long) -> List<ReviewLogWithCard>,
     opponents: List<Opponent>,
-    onUpdateReviewLogNotes: (ReviewLog, String, List<String>) -> Unit,
-    onUpdateReviewLogOpponent: (ReviewLog, Long?) -> Unit,
+    onUpdateSessionNotes: (PracticeSession, String, List<String>) -> Unit,
+    onUpdateSessionOpponent: (PracticeSession, Long?) -> Unit,
     onCreateOpponent: suspend (String, Double) -> Long,
     toolbarState: MarkdownToolbarState? = null
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var showSessionEditor by remember { mutableStateOf(false) }
     val reviewLogs = reviewLogsForSession(session.id)
+
+    val sessionNoteImages = remember(session.imagePaths) {
+        session.imagePaths.split(",").filter { it.isNotBlank() }
+    }
+    val hasNotes = session.notes.isNotBlank() || sessionNoteImages.isNotEmpty()
+
+    // The opponent the session's reviews name. Sessions graded before the
+    // opponent was per session can name several; the picker then shows none,
+    // and choosing one sets it for all of them.
+    val distinctOpponentIds = remember(reviewLogs) {
+        reviewLogs.map { it.reviewLog.opponentId }.distinct()
+    }
+
+    // What the session's reviews recorded about the fight -- one pair for any
+    // session graded since the fight was per session, so the summary is exact;
+    // none shown for an older session whose reviews differ.
+    val recordedFight = remember(reviewLogs) {
+        reviewLogs.map { RecordedFight(it.reviewLog.fightDifficulty, it.reviewLog.stabilityMultiplier) }
+            .distinct()
+            .singleOrNull()
+    }
 
 
     val gradeCounts = remember(reviewLogs) {
@@ -446,6 +470,62 @@ fun SessionHistoryCard(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     HorizontalDivider()
+
+                    // The fight's notes: one set for the session.
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Notes on this fight",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(
+                            onClick = { showSessionEditor = !showSessionEditor },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (hasNotes) Icons.Default.EditNote else Icons.Default.NoteAdd,
+                                contentDescription = "Edit this session's notes and opponent",
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+
+                    if (!showSessionEditor && hasNotes) {
+                        if (session.notes.isNotBlank()) {
+                            MarkdownText(text = session.notes)
+                        }
+                        if (sessionNoteImages.isNotEmpty()) {
+                            CardImagesDisplay(imagePaths = sessionNoteImages, maxHeight = 80)
+                        }
+                    }
+
+                    AnimatedVisibility(visible = showSessionEditor) {
+                        HistoryNoteEditor(
+                            stateKey = "session-${session.id}",
+                            initialNotes = session.notes,
+                            initialImages = sessionNoteImages,
+                            selectedOpponentId = distinctOpponentIds.singleOrNull(),
+                            opponentLabel = if (distinctOpponentIds.size > 1) {
+                                "Opponent (whole session; currently mixed)"
+                            } else {
+                                "Opponent (whole session)"
+                            },
+                            opponents = opponents,
+                            recordedFight = recordedFight,
+                            onSave = { notes, images ->
+                                onUpdateSessionNotes(session, notes, images)
+                                showSessionEditor = false
+                            },
+                            onOpponentChange = { opponentId ->
+                                onUpdateSessionOpponent(session, opponentId)
+                            },
+                            onCreateOpponent = onCreateOpponent,
+                            toolbarState = toolbarState
+                        )
+                    }
+
+                    HorizontalDivider()
                     Spacer(modifier = Modifier.height(4.dp))
                     if (reviewLogs.isEmpty()) {
                         Text(
@@ -455,14 +535,7 @@ fun SessionHistoryCard(
                         )
                     } else {
                         reviewLogs.forEach { logWithCard ->
-                            ReviewLogRow(
-                                logWithCard = logWithCard,
-                                opponents = opponents,
-                                onUpdateReviewLogNotes = onUpdateReviewLogNotes,
-                                onUpdateReviewLogOpponent = onUpdateReviewLogOpponent,
-                                onCreateOpponent = onCreateOpponent,
-                                toolbarState = toolbarState
-                            )
+                            ReviewLogRow(logWithCard = logWithCard, opponents = opponents)
                         }
                     }
                 }
@@ -593,8 +666,13 @@ private fun QuickGradeCard(
             // Note editor
             AnimatedVisibility(visible = showNoteEditor) {
                 HistoryNoteEditor(
-                    reviewLog = log,
+                    stateKey = "log-${log.id}",
+                    initialNotes = log.notes,
+                    initialImages = noteImages,
+                    selectedOpponentId = log.opponentId,
+                    opponentLabel = "Opponent",
                     opponents = opponents,
+                    recordedFight = RecordedFight(log.fightDifficulty, log.stabilityMultiplier),
                     onSave = { notes, images ->
                         onUpdateReviewLogNotes(log, notes, images)
                         showNoteEditor = false
@@ -657,18 +735,14 @@ private fun opponentLabel(opponentId: Long?, opponents: List<Opponent>): String?
     return match?.name ?: "[deleted]"
 }
 
+/** One card of a session: what it was graded and what that earned. Read-only. */
 @Composable
 private fun ReviewLogRow(
     logWithCard: ReviewLogWithCard,
-    opponents: List<Opponent>,
-    onUpdateReviewLogNotes: (ReviewLog, String, List<String>) -> Unit,
-    onUpdateReviewLogOpponent: (ReviewLog, Long?) -> Unit,
-    onCreateOpponent: suspend (String, Double) -> Long,
-    toolbarState: MarkdownToolbarState? = null
+    opponents: List<Opponent>
 ) {
     val log = logWithCard.reviewLog
     val grade = Grade.fromValue(log.grade)
-    var showNoteEditor by remember { mutableStateOf(false) }
 
     val gradeColor = when (grade) {
         Grade.AGAIN -> MaterialTheme.colorScheme.errorContainer
@@ -691,10 +765,6 @@ private fun ReviewLogRow(
         Grade.GOOD -> MaterialTheme.colorScheme.onSecondaryContainer
         Grade.EASY -> MaterialTheme.colorScheme.onPrimaryContainer
         else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-
-    val noteImages = remember(log.imagePaths) {
-        log.imagePaths.split(",").filter { it.isNotBlank() }
     }
 
     val opponentLabel = opponentLabel(log.opponentId, opponents)
@@ -758,56 +828,14 @@ private fun ReviewLogRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            IconButton(
-                onClick = { showNoteEditor = !showNoteEditor },
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(
-                    imageVector = if (log.notes.isNotBlank() || noteImages.isNotEmpty())
-                        Icons.Default.EditNote else Icons.Default.NoteAdd,
-                    contentDescription = "Edit notes",
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-        }
-
-        // Display existing notes/images inline when not editing
-        if (!showNoteEditor && (log.notes.isNotBlank() || noteImages.isNotEmpty())) {
-            Spacer(modifier = Modifier.height(4.dp))
-            if (log.notes.isNotBlank()) {
-                MarkdownText(
-                    text = log.notes,
-                    modifier = Modifier.padding(start = 60.dp)
-                )
-            }
-            if (noteImages.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(4.dp))
-                CardImagesDisplay(
-                    imagePaths = noteImages,
-                    modifier = Modifier.padding(start = 60.dp),
-                    maxHeight = 80
-                )
-            }
-        }
-
-        // Note editor
-        AnimatedVisibility(visible = showNoteEditor) {
-            HistoryNoteEditor(
-                reviewLog = log,
-                opponents = opponents,
-                onSave = { notes, images ->
-                    onUpdateReviewLogNotes(log, notes, images)
-                    showNoteEditor = false
-                },
-                onOpponentChange = { opponentId ->
-                    onUpdateReviewLogOpponent(log, opponentId)
-                },
-                onCreateOpponent = onCreateOpponent,
-                toolbarState = toolbarState
-            )
+            // Nothing to edit on a row: its notes, opponent and fight are the
+            // session's, and are edited on the session.
         }
     }
 }
+
+/** What a review, or every review of a session, recorded about its fight. */
+private data class RecordedFight(val fightDifficulty: Int?, val stabilityMultiplier: Double)
 
 /**
  * The fight this review was graded against, and the stability gain it earned.
@@ -824,10 +852,10 @@ private fun ReviewLogRow(
  * opponent's skill multiplier has been edited to since.
  */
 @Composable
-private fun RecordedFightSummary(reviewLog: ReviewLog) {
-    val difficulty = FightDifficulty.fromRating(reviewLog.fightDifficulty)
-    val applied = reviewLog.stabilityMultiplier
-    val opponentShare = applied / FightDifficulty.multiplierFor(reviewLog.fightDifficulty)
+private fun RecordedFightSummary(recorded: RecordedFight) {
+    val difficulty = FightDifficulty.fromRating(recorded.fightDifficulty)
+    val applied = recorded.stabilityMultiplier
+    val opponentShare = applied / FightDifficulty.multiplierFor(recorded.fightDifficulty)
 
     Column {
         Text(
@@ -853,26 +881,32 @@ private fun RecordedFightSummary(reviewLog: ReviewLog) {
 }
 
 /**
- * Inline note editor for a review log entry. Supports markdown notes, image attachments,
- * and reassigning the opponent (metadata-only — does not recompute scheduling).
+ * Inline editor for what the history can still change: notes, their images,
+ * and who the fight was against (metadata-only — does not recompute
+ * scheduling). The fight's rating is shown, never edited.
+ *
+ * Takes plain values rather than a review log because it edits two things: a
+ * session, whose notes and opponent belong to the whole fight, and a quick
+ * grade, which is a fight of one card and keeps its own.
  */
 @Composable
 private fun HistoryNoteEditor(
-    reviewLog: ReviewLog,
+    stateKey: String,
+    initialNotes: String,
+    initialImages: List<String>,
+    selectedOpponentId: Long?,
+    opponentLabel: String,
     opponents: List<Opponent>,
+    recordedFight: RecordedFight?,
     onSave: (String, List<String>) -> Unit,
     onOpponentChange: (Long?) -> Unit,
     onCreateOpponent: suspend (String, Double) -> Long,
     toolbarState: MarkdownToolbarState? = null
 ) {
-    var notesValue by rememberSaveable(reviewLog.id, stateSaver = TextFieldValue.Saver) {
-        mutableStateOf(TextFieldValue(reviewLog.notes))
+    var notesValue by rememberSaveable(stateKey, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(initialNotes))
     }
-    var noteImages by rememberSaveable(reviewLog.id) {
-        mutableStateOf(
-            reviewLog.imagePaths.split(",").filter { it.isNotBlank() }
-        )
-    }
+    var noteImages by rememberSaveable(stateKey) { mutableStateOf(initialImages) }
 
     val imagePicker = LocalImagePicker.current
     var lastLargeImageBytes by remember { mutableStateOf<Int?>(null) }
@@ -886,24 +920,26 @@ private fun HistoryNoteEditor(
         Spacer(modifier = Modifier.height(8.dp))
 
         OpponentPicker(
-            selectedOpponentId = reviewLog.opponentId,
+            selectedOpponentId = selectedOpponentId,
             opponents = opponents,
             onOpponentSelected = onOpponentChange,
-            onCreate = onCreateOpponent
+            onCreate = onCreateOpponent,
+            label = opponentLabel
         )
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        RecordedFightSummary(reviewLog)
-
-        Spacer(modifier = Modifier.height(8.dp))
+        if (recordedFight != null) {
+            RecordedFightSummary(recordedFight)
+            Spacer(modifier = Modifier.height(8.dp))
+        }
 
         MarkdownDescriptionField(
             value = notesValue,
             onValueChange = { notesValue = it },
             label = "Notes",
             minLines = 2,
-            maxLines = 5,
+            maxLines = 8,
             toolbarState = toolbarState
         )
 

@@ -123,10 +123,30 @@ class HistoryViewModel(
         }
     }
 
-    /** Reassign the opponent on a historical review log. Metadata-only — does not recompute FSRS state. */
+    /**
+     * Reassign the opponent on a quick grade -- a review with no session, and so
+     * a fight of its own. Metadata-only — does not recompute FSRS state.
+     */
     fun updateReviewLogOpponent(reviewLog: ReviewLog, opponentId: Long?) {
         viewModelScope.launch {
             repository.updateReviewLog(reviewLog.copy(opponentId = opponentId))
+        }
+    }
+
+    /** Rewrite what was noted about a session's fight. */
+    fun updateSessionNotes(session: PracticeSession, notes: String, imagePaths: List<String>) {
+        viewModelScope.launch {
+            repository.updateSessionNotes(session.id, notes, imagePaths)
+        }
+    }
+
+    /**
+     * Reassign who a session was fought against, for every review in it at once.
+     * Metadata-only — does not recompute FSRS state.
+     */
+    fun updateSessionOpponent(session: PracticeSession, opponentId: Long?) {
+        viewModelScope.launch {
+            repository.updateSessionOpponent(session.id, opponentId)
         }
     }
 

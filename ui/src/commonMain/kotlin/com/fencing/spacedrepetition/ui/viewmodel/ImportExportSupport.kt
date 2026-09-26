@@ -11,6 +11,7 @@ package com.fencing.spacedrepetition.ui.viewmodel
 // than copy them across a module boundary a third time.
 
 import com.fencing.spacedrepetition.data.model.Card
+import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
@@ -147,8 +148,9 @@ internal suspend fun importCsvCards(
 /** The reader an export of these rows will read its images through. */
 internal suspend fun ImageStore.exportReader(
     cards: List<Card>,
-    reviewLogs: List<ReviewLog> = emptyList()
-): ImageReader = readerFor(exportImageKeys(cards, reviewLogs))
+    reviewLogs: List<ReviewLog> = emptyList(),
+    sessions: List<PracticeSession> = emptyList()
+): ImageReader = readerFor(exportImageKeys(cards, reviewLogs, sessions))
 
 /** How an export's own report is shown. */
 internal fun ExportResult.asImportExportState(): ImportExportState = when (this) {
