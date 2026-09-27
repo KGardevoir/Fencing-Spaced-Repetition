@@ -40,6 +40,9 @@ interface ReviewLogDao {
     @Delete
     suspend fun deleteReviewLog(reviewLog: ReviewLog)
 
+    @Query("UPDATE review_logs SET opponentId = :opponentId WHERE sessionId = :sessionId")
+    suspend fun updateOpponentForSession(sessionId: Long, opponentId: Long?)
+
     @Query("DELETE FROM review_logs WHERE cardId = :cardId")
     suspend fun deleteReviewLogsByCard(cardId: Long)
 

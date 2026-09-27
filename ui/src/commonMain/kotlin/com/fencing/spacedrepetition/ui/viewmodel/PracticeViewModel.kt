@@ -8,7 +8,6 @@ import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.Opponent
-import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.model.SessionCard
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
@@ -19,7 +18,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -51,9 +49,16 @@ class PracticeViewModel(
     private val _sessionOpponentId = MutableStateFlow<Long?>(null)
     val sessionOpponentId: StateFlow<Long?> = _sessionOpponentId.asStateFlow()
 
-    /** Review logs created during this session, available after grading for adding notes. */
-    private val _sessionReviewLogs = MutableStateFlow<List<ReviewLog>>(emptyList())
-    val sessionReviewLogs: StateFlow<List<ReviewLog>> = _sessionReviewLogs.asStateFlow()
+    /** How hard the fight was, 1-5, for this session; all cards default to this. */
+    private val _sessionFightDifficulty = MutableStateFlow<Int?>(null)
+    val sessionFightDifficulty: StateFlow<Int?> = _sessionFightDifficulty.asStateFlow()
+
+    /** What was noted about this session's fight, and the images attached to it. */
+    private val _sessionNotes = MutableStateFlow("")
+    val sessionNotes: StateFlow<String> = _sessionNotes.asStateFlow()
+
+    private val _sessionNoteImages = MutableStateFlow<List<String>>(emptyList())
+    val sessionNoteImages: StateFlow<List<String>> = _sessionNoteImages.asStateFlow()
 
     private var sessionId: Long? = null
     private var selectedGroupId: Long? = null
@@ -92,9 +97,11 @@ class PracticeViewModel(
         sessionStartTime = Time.now()
         sessionId = null
         _sessionCards.value = emptyList()
-        _sessionReviewLogs.value = emptyList()
         _currentCardIndex.value = 0
         _sessionOpponentId.value = null
+        _sessionFightDifficulty.value = null
+        _sessionNotes.value = ""
+        _sessionNoteImages.value = emptyList()
         _uiState.value = PracticeUiState.Loading
 
         sessionJob = viewModelScope.launch {
@@ -132,9 +139,11 @@ class PracticeViewModel(
                 val newSessionId = repository.createPracticeSession(cardsForSession.map { it.id })
                 if (token != sessionToken) return@launch
 
-                // Initialize session cards; no default opponent until user picks one
+                // Initialize session cards; no default opponent or fight rating
+                // until the user picks one
                 sessionId = newSessionId
                 _sessionOpponentId.value = null
+                _sessionFightDifficulty.value = null
                 _sessionCards.value = cardsForSession.map { SessionCard(it, null) }
                 _currentCardIndex.value = 0
                 _uiState.value = PracticeUiState.Practicing
@@ -178,10 +187,10 @@ class PracticeViewModel(
      * Replace one card in the session list, atomically.
      *
      * [MutableStateFlow.update] rather than read-copy-write: grading, note
-     * taking, the opponent pickers and the card editor all change the same
-     * list, and the editor does it either side of a database write. A
-     * read-copy-write there publishes a snapshot taken before that write
-     * started, silently dropping any grade or note entered while it ran.
+     * taking and the card editor all change the same list, and the editor does
+     * it either side of a database write. A read-copy-write there publishes a
+     * snapshot taken before that write started, silently dropping any grade or
+     * note entered while it ran.
      */
     private fun mutateCard(cardIndex: Int, transform: (SessionCard) -> SessionCard) {
         _sessionCards.update { cards ->
@@ -194,19 +203,26 @@ class PracticeViewModel(
         mutateCard(cardIndex) { it.copy(grade = grade) }
     }
 
-    fun updateNotes(cardIndex: Int, notes: String, imagePaths: List<String>) {
-        mutateCard(cardIndex) { it.copy(notes = notes, noteImagePaths = imagePaths) }
+    /** Notes on the session's fight: one set for the session, not one per card. */
+    fun setSessionNotes(notes: String, imagePaths: List<String>) {
+        _sessionNotes.value = notes
+        _sessionNoteImages.value = imagePaths
     }
 
-    /** Set the session-level opponent and apply it to every card in the session. */
+    /**
+     * Who the session was fought against.
+     *
+     * One value for the whole session, not one per card: the opponent is a
+     * property of the fight, and the session is the fight. Every review it
+     * produces records this one.
+     */
     fun setSessionOpponent(opponentId: Long?) {
         _sessionOpponentId.value = opponentId
-        _sessionCards.update { cards -> cards.map { it.copy(opponentId = opponentId) } }
     }
 
-    /** Override the opponent for a single card without changing the session default. */
-    fun updateOpponent(cardIndex: Int, opponentId: Long?) {
-        mutateCard(cardIndex) { it.copy(opponentId = opponentId) }
+    /** How hard the session's fight was, on the same footing as its opponent. */
+    fun setSessionFightDifficulty(rating: Int?) {
+        _sessionFightDifficulty.value = rating
     }
 
     /** Update an opponent's skill multiplier. The change is persisted to the database
@@ -215,15 +231,6 @@ class PracticeViewModel(
         viewModelScope.launch {
             val opponent = opponentRepository.getOpponentById(opponentId) ?: return@launch
             opponentRepository.updateOpponent(opponent.copy(skillMultiplier = newMultiplier))
-        }
-    }
-
-    /** Apply an opponent to every card that doesn't yet have one selected. */
-    fun applyDefaultOpponent(opponentId: Long?) {
-        _sessionCards.update { cards ->
-            cards.map { card ->
-                if (card.opponentId == null) card.copy(opponentId = opponentId) else card
-            }
         }
     }
 
@@ -280,51 +287,42 @@ class PracticeViewModel(
         val token = sessionToken
         val groupId = selectedGroupId
         val sid = sessionId
+
+        // Read with the card list, and for the same reason: these describe the
+        // fight the user has just confirmed, and every card in it is graded
+        // against that one fight.
+        val opponentId = _sessionOpponentId.value
+        val fightDifficulty = _sessionFightDifficulty.value
+        val notes = _sessionNotes.value
+        val noteImages = _sessionNoteImages.value
         _uiState.value = PracticeUiState.Submitting
 
         viewModelScope.launch {
             try {
                 val cardsWithGrades = cards.mapNotNull { sessionCard ->
-                    sessionCard.grade?.let { grade -> Triple(sessionCard.card, grade, sessionCard.opponentId) }
+                    sessionCard.grade?.let { grade -> sessionCard.card to grade }
                 }
 
                 // Only call review methods if there are cards to review
                 if (cardsWithGrades.isNotEmpty()) {
                     // If practicing within a group, use group-aware review method
                     if (groupId != null) {
-                        cardsWithGrades.forEach { (card, grade, opponentId) ->
-                            repository.reviewCardWithGroup(card, grade, groupId, sid, opponentId)
+                        cardsWithGrades.forEach { (card, grade) ->
+                            repository.reviewCardWithGroup(
+                                card, grade, groupId, sid, opponentId, fightDifficulty
+                            )
                         }
                     } else {
-                        repository.reviewMultipleCards(cardsWithGrades, sid)
+                        repository.reviewMultipleCards(
+                            cardsWithGrades, sid, opponentId, fightDifficulty
+                        )
                     }
                 }
 
-                // Complete session
+                // Complete the session, and with it what was noted about the
+                // fight -- the session row is the one place that is kept.
                 sid?.let { id ->
-                    repository.completeSession(id, cards.mapNotNull { it.grade })
-                }
-
-                // Fetch the review logs created for this session so the user can add notes
-                if (sid != null) {
-                    val logs = repository.getReviewLogsBySession(sid).first()
-
-                    // Apply any notes/images that were entered during grading
-                    val updatedLogs = logs.map { log ->
-                        val sessionCard = cards.find { it.card.id == log.cardId }
-                        if (sessionCard != null && (sessionCard.notes.isNotBlank() || sessionCard.noteImagePaths.isNotEmpty())) {
-                            val updated = log.copy(
-                                notes = sessionCard.notes,
-                                imagePaths = sessionCard.noteImagePaths.joinToString(",")
-                            )
-                            repository.updateReviewLog(updated)
-                            updated
-                        } else {
-                            log
-                        }
-                    }
-                    if (token != sessionToken) return@launch
-                    _sessionReviewLogs.value = updatedLogs
+                    repository.completeSession(id, cards.mapNotNull { it.grade }, notes, noteImages)
                 }
 
                 // The reviews are written either way; only the state the user
@@ -341,30 +339,16 @@ class PracticeViewModel(
         }
     }
 
-    fun updateReviewLogNotes(reviewLogId: Long, notes: String, imagePaths: List<String>) {
-        val current = _sessionReviewLogs.value.firstOrNull { it.id == reviewLogId } ?: return
-        viewModelScope.launch {
-            val updated = current.copy(
-                notes = notes,
-                imagePaths = imagePaths.joinToString(",")
-            )
-            repository.updateReviewLog(updated)
-            _sessionReviewLogs.update { logs ->
-                val index = logs.indexOfFirst { it.id == reviewLogId }
-                if (index < 0) return@update logs
-                logs.toMutableList().also { it[index] = updated }
-            }
-        }
-    }
-
     fun resetSession() {
         sessionJob?.cancel()
         sessionJob = null
         sessionToken++
         _sessionCards.value = emptyList()
-        _sessionReviewLogs.value = emptyList()
         _currentCardIndex.value = 0
         _sessionOpponentId.value = null
+        _sessionFightDifficulty.value = null
+        _sessionNotes.value = ""
+        _sessionNoteImages.value = emptyList()
         sessionId = null
         selectedGroupId = null
         sessionStartTime = 0L

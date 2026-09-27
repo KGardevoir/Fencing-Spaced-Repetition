@@ -189,18 +189,24 @@ fun App(
             val sessionCards by practiceViewModel.sessionCards.collectAsState()
             val opponents by practiceViewModel.opponents.collectAsState()
             val sessionOpponentId by practiceViewModel.sessionOpponentId.collectAsState()
+            val sessionFightDifficulty by practiceViewModel.sessionFightDifficulty.collectAsState()
+            val sessionNotes by practiceViewModel.sessionNotes.collectAsState()
+            val sessionNoteImages by practiceViewModel.sessionNoteImages.collectAsState()
 
             GradingScreen(
                 uiState = uiState,
                 sessionCards = sessionCards,
                 opponents = opponents,
                 sessionOpponentId = sessionOpponentId,
+                sessionFightDifficulty = sessionFightDifficulty,
                 onSetSessionOpponent = practiceViewModel::setSessionOpponent,
+                onSetSessionFightDifficulty = practiceViewModel::setSessionFightDifficulty,
                 onCreateOpponent = practiceViewModel::createOpponent,
                 onUpdateOpponentDifficulty = practiceViewModel::updateOpponentDifficulty,
                 onUpdateGrade = practiceViewModel::updateGrade,
-                onUpdateNotes = practiceViewModel::updateNotes,
-                onUpdateOpponent = practiceViewModel::updateOpponent,
+                sessionNotes = sessionNotes,
+                sessionNoteImages = sessionNoteImages,
+                onUpdateSessionNotes = practiceViewModel::setSessionNotes,
                 onSubmitGrades = practiceViewModel::submitGrades,
                 onComplete = {
                     practiceViewModel.resetSession()
@@ -382,6 +388,8 @@ fun App(
                 onSetOpponentFilter = historyViewModel::setOpponentFilter,
                 onUpdateReviewLogNotes = historyViewModel::updateReviewLogNotes,
                 onUpdateReviewLogOpponent = historyViewModel::updateReviewLogOpponent,
+                onUpdateSessionNotes = historyViewModel::updateSessionNotes,
+                onUpdateSessionOpponent = historyViewModel::updateSessionOpponent,
                 onCreateOpponent = historyViewModel::createOpponent,
                 onNavigateBack = { navigator.back() }
             )

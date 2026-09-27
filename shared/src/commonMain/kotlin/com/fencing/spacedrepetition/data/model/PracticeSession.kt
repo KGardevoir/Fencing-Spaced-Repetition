@@ -21,19 +21,28 @@ data class PracticeSession(
 
     // Grades assigned (comma-separated, corresponding to cardIds)
     // Empty until session is completed
-    val grades: String = ""
+    val grades: String = "",
+
+    // Notes on the fight (markdown) and the images attached to them. One set
+    // per session rather than one per card: like the opponent and the fight's
+    // difficulty, what is noted is about the fight, and the session is the
+    // fight. Quick grades from the card editor are not in a session and keep
+    // their notes on their own review log.
+    val notes: String = "",
+    val imagePaths: String = "" // Comma-separated image keys
 )
 
 /**
- * Represents a card and its grade during a practice session
+ * A card and its grade during a practice session.
+ *
+ * Carries nothing about the opponent, how hard the fight was, or what was
+ * noted about it. Those describe the fight, and the session is the fight: they
+ * are held once for the session. A copy per card could disagree with the
+ * session it belongs to, so there is not one.
  */
 data class SessionCard(
     val card: Card,
-    val grade: Grade? = null,
-    val notes: String = "",
-    val noteImagePaths: List<String> = emptyList(),
-    /** Opponent selected during grading (null = solo / unspecified). */
-    val opponentId: Long? = null
+    val grade: Grade? = null
 )
 
 enum class Grade(val value: Int, val label: String) {

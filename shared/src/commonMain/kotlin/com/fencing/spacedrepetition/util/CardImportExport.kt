@@ -20,6 +20,7 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.Opponent
+import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
 
 sealed class ImportResult {
@@ -161,6 +162,21 @@ object CardImportExport {
     var lastParsedOpponents: List<ParsedOpponent> = emptyList()
         private set
 
+    /** Parsed practice sessions from an import file (populated after calling parseCards) */
+    var lastParsedSessions: List<ParsedSession> = emptyList()
+        private set
+
+    /**
+     * A practice session an import found: when the fight was, and what was
+     * noted about it. Its reviews name it by [startTime].
+     */
+    data class ParsedSession(
+        val startTime: Long,
+        val endTime: Long? = null,
+        val notes: String = "",
+        val imageData: List<String> = emptyList() // base64-encoded images
+    )
+
     /** An opponent an import found, in either format. */
     data class ParsedOpponent(
         val name: String,
@@ -185,6 +201,7 @@ object CardImportExport {
         lastParsedGroupSettings = emptyMap()
         lastParsedOpponents = emptyList()
         lastParsedReviewHistory = emptyList()
+        lastParsedSessions = emptyList()
 
         val firstContentLine = lines.firstOrNull { it.isNotBlank() }?.trim()
             ?: return Pair(emptyList(), emptyList())
@@ -235,6 +252,9 @@ object CardImportExport {
             .decodeSection(document, ArchiveYaml.KEY_REVIEW_HISTORY, ArchiveReviewLog.serializer(), errors)
             .map { ArchiveYaml.parsedReviewLog(it) }
             .filter { it.cardQuestion.isNotBlank() }
+        lastParsedSessions = ArchiveYaml
+            .decodeSection(document, ArchiveYaml.KEY_SESSIONS, ArchiveSession.serializer(), errors)
+            .map { ArchiveYaml.parsedSession(it) }
 
         val cards = mutableListOf<ParsedCard>()
         ArchiveYaml.cardEntries(document).forEach { entry ->
@@ -649,7 +669,8 @@ object CardImportExport {
         reviewLogs: List<ReviewLog> = emptyList(),
         cardQuestions: Map<Long, String> = emptyMap(),
         opponents: List<Opponent> = emptyList(),
-        opponentNamesById: Map<Long, String> = emptyMap()
+        opponentNamesById: Map<Long, String> = emptyMap(),
+        sessions: List<PracticeSession> = emptyList()
     ): ExportResult {
         return try {
             var rowCount = 0
@@ -658,14 +679,27 @@ object CardImportExport {
                 ArchiveYaml.cardNode(card, groupNames, groupSpecificStates, images)
             }
 
-            val history = if (reviewLogs.isEmpty() || cardQuestions.isEmpty()) emptyList() else {
-                reviewLogs.mapNotNull { log ->
-                    val question = cardQuestions[log.cardId] ?: return@mapNotNull null
-                    ArchiveYaml.reviewLogNode(
-                        log, question, log.opponentId?.let { opponentNamesById[it] }, images
-                    )
-                }
+            val startBySessionId = sessions.associate { it.id to it.startTime }
+            val historyLogs = if (reviewLogs.isEmpty() || cardQuestions.isEmpty()) emptyList() else {
+                reviewLogs.filter { it.cardId in cardQuestions }
             }
+            val history = historyLogs.map { log ->
+                ArchiveYaml.reviewLogNode(
+                    log,
+                    cardQuestions.getValue(log.cardId),
+                    log.opponentId?.let { opponentNamesById[it] },
+                    images,
+                    sessionStart = log.sessionId?.let { startBySessionId[it] }
+                )
+            }
+            // Only the sessions the written history belongs to: a session is
+            // where the notes on a fight live, and one with no reviews in this
+            // file would be a note about nothing the file contains.
+            val writtenSessionIds = historyLogs.mapNotNull { it.sessionId }.toSet()
+            val sessionNodes = sessions
+                .filter { it.id in writtenSessionIds }
+                .sortedBy { it.startTime }
+                .map { ArchiveYaml.sessionNode(it, images) }
 
             writeArchive(
                 out,
@@ -678,6 +712,7 @@ object CardImportExport {
                     // import can find them again.
                     opponents = opponents.map { ArchiveYaml.opponentNode(it) },
                     cards = cards,
+                    sessions = sessionNodes,
                     reviewHistory = history
                 )
             )
@@ -945,7 +980,11 @@ object CardImportExport {
         val notes: String = "",
         val imageData: List<String> = emptyList(), // base64-encoded images
         val opponentName: String? = null,
-        val stabilityMultiplier: Double = 1.0
+        /** How hard the fight was, 1-5 (null = unrated). See FightDifficulty. */
+        val fightDifficulty: Int? = null,
+        val stabilityMultiplier: Double = 1.0,
+        /** The startTime of the session this review was part of; null for a quick grade. */
+        val sessionStart: Long? = null
     )
 
     /**
@@ -979,6 +1018,7 @@ object CardImportExport {
                     ?.let { unescapeNewlines(it) }
                     ?.takeIf { it.isNotBlank() }
                 val stabilityMultiplier = parts.getOrNull(12)?.toDoubleOrNull() ?: 1.0
+                val fightDifficulty = parts.getOrNull(13)?.toIntOrNull()?.takeIf { it in 1..5 }
                 ParsedReviewLog(
                     cardQuestion = unescapeNewlines(parts[0]),
                     reviewTime = parts[1].toLong(),
@@ -992,6 +1032,7 @@ object CardImportExport {
                     notes = parts.getOrNull(9)?.let { unescapeNewlines(it) } ?: "",
                     imageData = imageData,
                     opponentName = opponentName,
+                    fightDifficulty = fightDifficulty,
                     stabilityMultiplier = stabilityMultiplier
                 )
             } catch (e: Exception) {
@@ -1012,13 +1053,14 @@ object CardImportExport {
     fun parsedReviewLogsToEntities(
         parsed: List<ParsedReviewLog>,
         questionToCardId: Map<String, Long>,
-        opponentNameToId: Map<String, Long> = emptyMap()
+        opponentNameToId: Map<String, Long> = emptyMap(),
+        sessionIdByStart: Map<Long, Long> = emptyMap()
     ): List<ReviewLog> {
         return parsed.mapNotNull { p ->
             val cardId = questionToCardId[p.cardQuestion] ?: return@mapNotNull null
             ReviewLog(
                 cardId = cardId,
-                sessionId = null,
+                sessionId = p.sessionStart?.let { sessionIdByStart[it] },
                 reviewTime = p.reviewTime,
                 grade = p.grade,
                 algorithm = p.algorithm,
@@ -1029,6 +1071,7 @@ object CardImportExport {
                 groupName = p.groupName,
                 notes = p.notes,
                 opponentId = p.opponentName?.let { opponentNameToId[it] },
+                fightDifficulty = p.fightDifficulty,
                 stabilityMultiplier = p.stabilityMultiplier
             )
         }

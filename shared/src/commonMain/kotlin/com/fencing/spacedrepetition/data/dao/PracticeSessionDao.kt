@@ -39,6 +39,12 @@ interface PracticeSessionDao {
     @Query("DELETE FROM practice_sessions WHERE id = :sessionId")
     suspend fun deleteSessionById(sessionId: Long)
 
+    @Query("SELECT * FROM practice_sessions ORDER BY startTime DESC")
+    suspend fun getAllSessionsSync(): List<PracticeSession>
+
+    @Query("SELECT * FROM practice_sessions WHERE startTime = :startTime LIMIT 1")
+    suspend fun getSessionByStartTime(startTime: Long): PracticeSession?
+
     @Query("SELECT COUNT(*) FROM practice_sessions WHERE completed = 1")
     fun getCompletedSessionCount(): Flow<Int>
 }

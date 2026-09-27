@@ -13,6 +13,7 @@ import com.fencing.spacedrepetition.data.model.CardWithGroups
 import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.Opponent
+import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
@@ -31,6 +32,7 @@ import com.fencing.spacedrepetition.util.zipArchive
 import com.fencing.spacedrepetition.util.Time
 import com.fencing.spacedrepetition.util.parsedCardToCard
 import com.fencing.spacedrepetition.util.parsedReviewLogsToEntities
+import com.fencing.spacedrepetition.util.parsedSessionToSession
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -519,10 +521,44 @@ class CardViewModel(
         if (parsedHistory.isEmpty()) return
 
         val questionToCardId = repository.getAllCardsSync().associate { it.question to it.id }
+        val sessionIdByStart = restoreSessions(parsedHistory, questionToCardId)
         val reviewLogs = CardImportExport.parsedReviewLogsToEntities(
-            parsedHistory, questionToCardId, opponentIds, imageStore
+            parsedHistory, questionToCardId, opponentIds, imageStore, sessionIdByStart
         )
         if (reviewLogs.isNotEmpty()) repository.importReviewLogs(reviewLogs)
+    }
+
+    /**
+     * Recreates the sessions an archive's history belongs to, and returns each
+     * one's local id by its start time -- which is how the history names them.
+     *
+     * Only sessions with at least one review this import can place: a session
+     * holds the notes on a fight, and one none of whose cards are here would be
+     * notes on nothing. Its cards and grades are rebuilt from those reviews, in
+     * the order they were made, since the archive does not repeat them.
+     */
+    private suspend fun restoreSessions(
+        parsedHistory: List<CardImportExport.ParsedReviewLog>,
+        questionToCardId: Map<String, Long>
+    ): Map<Long, Long> {
+        val parsedSessions = CardImportExport.lastParsedSessions
+        if (parsedSessions.isEmpty()) return emptyMap()
+
+        val placeable = parsedHistory
+            .filter { it.sessionStart != null && it.cardQuestion in questionToCardId }
+            .groupBy { it.sessionStart!! }
+
+        return parsedSessions.mapNotNull { parsed ->
+            val reviews = placeable[parsed.startTime]?.sortedBy { it.reviewTime }
+                ?: return@mapNotNull null
+            val session = CardImportExport.parsedSessionToSession(
+                parsed,
+                cardIds = reviews.map { questionToCardId.getValue(it.cardQuestion) },
+                grades = reviews.map { it.grade },
+                images = imageStore
+            )
+            parsed.startTime to repository.ensureSession(session)
+        }.toMap()
     }
 
     /** Exports every card, optionally with the review history and opponents. */
@@ -575,8 +611,12 @@ class CardViewModel(
             // the group export does has nothing to narrow to.
             val opponents =
                 if (includeHistory) opponentRepository.getAllOpponentsSync() else emptyList()
+            // The sessions carry the notes on each fight; without them a
+            // history export would lose every one.
+            val sessions =
+                if (includeHistory) repository.getAllSessionsSync() else emptyList()
 
-            writeArchive(file, cardsWithStates, groups, reviewLogs, opponents)
+            writeArchive(file, cardsWithStates, groups, reviewLogs, opponents, sessions)
         }
     } catch (e: Exception) {
         ImportExportState.Error("Export failed: ${e.message}")
@@ -620,8 +660,16 @@ class CardViewModel(
                         .filter { it.id in referencedOpponentIds }
                 }
 
+                // Only the sessions those logs were part of. A session's notes
+                // are about the whole fight, so they come whole, even where
+                // they mention a card outside the groups being exported.
+                val referencedSessionIds = reviewLogs.mapNotNull { it.sessionId }.toSet()
+                val sessions: List<PracticeSession> = if (referencedSessionIds.isEmpty()) emptyList() else {
+                    repository.getAllSessionsSync().filter { it.id in referencedSessionIds }
+                }
+
                 _importExportState.value =
-                    writeArchive(file, cardsWithStates, groups, reviewLogs, opponents)
+                    writeArchive(file, cardsWithStates, groups, reviewLogs, opponents, sessions)
             } catch (e: Exception) {
                 _importExportState.value = ImportExportState.Error("Export failed: ${e.message}")
             }
@@ -641,12 +689,13 @@ class CardViewModel(
         cardsWithStates: List<CardWithGroupStates>,
         groups: List<Group>,
         reviewLogs: List<ReviewLog>,
-        opponents: List<Opponent>
+        opponents: List<Opponent>,
+        sessions: List<PracticeSession>
     ): ImportExportState {
         val cardQuestions: Map<Long, String> = if (reviewLogs.isEmpty()) emptyMap() else {
             cardsWithStates.associate { it.card.id to it.card.question }
         }
-        val images = imageStore.exportReader(cardsWithStates.map { it.card }, reviewLogs)
+        val images = imageStore.exportReader(cardsWithStates.map { it.card }, reviewLogs, sessions)
 
         return file.write { out ->
             CardImportExport.exportCardsWithGroupStates(
@@ -657,7 +706,8 @@ class CardViewModel(
                 reviewLogs = reviewLogs,
                 cardQuestions = cardQuestions,
                 opponents = opponents,
-                opponentNamesById = opponents.associate { it.id to it.name }
+                opponentNamesById = opponents.associate { it.id to it.name },
+                sessions = sessions
             )
         }.asImportExportState()
     }
@@ -681,8 +731,9 @@ class CardViewModel(
             try {
                 val cards = repository.getAllCardsSync()
                 val reviewLogs = repository.getAllReviewLogsSync()
+                val sessions = repository.getAllSessionsSync()
 
-                if (exportImageKeys(cards, reviewLogs).isEmpty()) {
+                if (exportImageKeys(cards, reviewLogs, sessions).isEmpty()) {
                     _importExportState.value = ImportExportState.Error("No photos to export")
                     return@launch
                 }
@@ -690,7 +741,8 @@ class CardViewModel(
                 val entries = photoArchiveEntries(
                     cards,
                     reviewLogs,
-                    imageStore.exportReader(cards, reviewLogs)
+                    imageStore.exportReader(cards, reviewLogs, sessions),
+                    sessions
                 )
 
                 // Keys with nothing behind them: an import that dropped an

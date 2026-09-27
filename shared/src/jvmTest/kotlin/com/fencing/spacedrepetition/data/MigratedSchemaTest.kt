@@ -78,6 +78,24 @@ class MigratedSchemaTest {
     }
 
     @Test
+    fun `migrating to 13 leaves review logs with exactly the columns the entity declares`() = runTest {
+        MigrationHarness(foreignKeys = true).use { db ->
+            db.createSchemaV11()
+            db.migrateThrough(from = 11, to = 13)
+
+            assertEquals(
+                setOf(
+                    "id", "cardId", "sessionId", "reviewTime", "grade", "algorithm",
+                    "stateBefore", "stateAfter", "scheduledDays", "elapsedDays",
+                    "groupName", "notes", "imagePaths",
+                    "opponentId", "fightDifficulty", "stabilityMultiplier",
+                ),
+                db.columnsOf("review_logs")
+            )
+        }
+    }
+
+    @Test
     fun `migrating to 12 keeps every table the database is made of`() = runTest {
         MigrationHarness(foreignKeys = true).use { db ->
             db.createSchemaV11()

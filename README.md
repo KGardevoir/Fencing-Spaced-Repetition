@@ -15,6 +15,39 @@ An Android app for practicing martial arts and fencing techniques using delayed-
 ### Scheduling Algorithm
 - **FSRS (Free Spaced Repetition Scheduler)**: Modern algorithm using stability and difficulty parameters for sophisticated scheduling
 
+### Opponents and Fight Difficulty
+- Record who you practised against: each opponent carries a skill multiplier
+  that scales how much stability a successful review earns (1.0 is neutral,
+  above is a harder opponent, below an easier one)
+- Rate the fight itself from **1** to **5** -- 1 = 0.5x, 2 = 0.75x, 3 = 1.0x
+  (neutral), 4 = 1.25x, 5 = 1.5x -- for everything the opponent's rating does
+  not capture: tempo, fatigue, a pool bout versus a relaxed drill
+- The two multiply: a 1.25 opponent in a rating-5 fight earns 1.25 x 1.5 =
+  1.875 of the neutral stability gain
+- Both describe the fight rather than any one card, so both are chosen once for
+  the practice session and recorded against every card in it -- there is no
+  per-card override. Either can be left unset, which is neutral
+- Every review records the rating it was graded with and the stability gain it
+  earned; the history screen shows both on each entry and summarises the
+  session's ratings on its card
+- A recorded rating is read-only: it is half of the multiplier the card was
+  already scheduled with, so editing it afterwards would leave an entry that
+  disagrees with its own schedule. A fight rated wrongly is put right by
+  grading the card again
+
+### Session Notes
+- Notes and their photos belong to the practice session -- the fight -- not to
+  individual cards: one set of notes per session, written on the grading
+  screen and editable afterwards from the session in the history
+- Sessions written before this kept a note per card; upgrading merges each
+  session's notes into one, in the order the cards were reviewed, each under
+  the question of the card it was written about, and moves their photos with
+  them
+- Quick grades from the card editor are not part of a session and keep their
+  own notes
+- Exports with history carry the sessions and their notes, and an import
+  restores them
+
 ### Groups and Organization
 - Create groups (decks) to organize cards by topic, technique, or training focus
 - **Independent learning states**: optionally track separate progress for the same card across different groups

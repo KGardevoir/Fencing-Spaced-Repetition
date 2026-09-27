@@ -26,7 +26,7 @@ import com.fencing.spacedrepetition.util.Time
 
 @Database(
     entities = [Card::class, PracticeSession::class, ReviewLog::class, Group::class, CardGroupCrossRef::class, CardGroupLearningState::class, Opponent::class],
-    version = 12,
+    version = 14,
     exportSchema = true
 )
 @ColumnTypeConverters(Converters::class)
@@ -417,6 +417,98 @@ private val MIGRATION_11_12 = object : Migration(11, 12) {
 }
 
 /**
+ * Adds the difficulty of the fight a review was earned in: a 1-5 rating, NULL
+ * for every review recorded before it existed and for any left unrated. It
+ * scales the stability gain alongside the opponent's skill multiplier, which
+ * `stabilityMultiplier` already records the product of -- so historical rows,
+ * whose multiplier was the opponent's alone, stay exactly as they were.
+ */
+private val MIGRATION_12_13 = object : Migration(12, 13) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `review_logs` ADD COLUMN `fightDifficulty` INTEGER DEFAULT NULL")
+    }
+}
+
+/**
+ * Moves notes from the cards of a session onto the session itself.
+ *
+ * Notes were kept per review, so a session of five cards could hold five
+ * separate notes about one fight. They are now one note per session, like the
+ * opponent and the fight's difficulty, and this merges what is already there:
+ * each session's notes become one, in the order the cards were reviewed, each
+ * headed by the question of the card it was written against -- so nothing is
+ * lost, including which card a remark was about. The images attached to those
+ * notes move with them, each kept once.
+ *
+ * The merged notes are then cleared from the reviews they came from, so there
+ * is exactly one copy. Two kinds of review are left alone: quick grades from
+ * the card editor, which are in no session and keep their own notes; and
+ * reviews naming a session that no longer exists, which have nowhere to go.
+ *
+ * Done in Kotlin rather than one UPDATE: SQLite's group_concat promises no
+ * order before 3.44, and the order of the merged notes is the point.
+ */
+private val MIGRATION_13_14 = object : Migration(13, 14) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `practice_sessions` ADD COLUMN `notes` TEXT NOT NULL DEFAULT ''")
+        connection.execSQL("ALTER TABLE `practice_sessions` ADD COLUMN `imagePaths` TEXT NOT NULL DEFAULT ''")
+
+        class Merged(val notes: MutableList<String> = mutableListOf(), val images: LinkedHashSet<String> = linkedSetOf())
+        val bySession = linkedMapOf<Long, Merged>()
+
+        val read = connection.prepare(
+            """
+            SELECT rl.`sessionId`, rl.`notes`, rl.`imagePaths`, c.`question`
+            FROM `review_logs` rl
+            INNER JOIN `practice_sessions` s ON s.`id` = rl.`sessionId`
+            LEFT JOIN `cards` c ON c.`id` = rl.`cardId`
+            WHERE trim(rl.`notes`) != '' OR trim(rl.`imagePaths`) != ''
+            ORDER BY rl.`sessionId`, rl.`reviewTime`, rl.`id`
+            """
+        )
+        try {
+            while (read.step()) {
+                val merged = bySession.getOrPut(read.getLong(0)) { Merged() }
+                val notes = read.getText(1).trim()
+                if (notes.isNotEmpty()) {
+                    // One line, so a question with a line break in it cannot
+                    // break the bold across two.
+                    val question = if (read.isNull(3)) "Deleted Card"
+                        else read.getText(3).replace(Regex("\\s+"), " ").trim()
+                    merged.notes += "**$question**\n$notes"
+                }
+                read.getText(2).split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                    .forEach { merged.images += it }
+            }
+        } finally {
+            read.close()
+        }
+
+        val write = connection.prepare(
+            "UPDATE `practice_sessions` SET `notes` = ?, `imagePaths` = ? WHERE `id` = ?"
+        )
+        try {
+            bySession.forEach { (sessionId, merged) ->
+                write.bindText(1, merged.notes.joinToString("\n\n"))
+                write.bindText(2, merged.images.joinToString(","))
+                write.bindLong(3, sessionId)
+                write.step()
+                write.reset()
+            }
+        } finally {
+            write.close()
+        }
+
+        connection.execSQL(
+            """
+            UPDATE `review_logs` SET `notes` = '', `imagePaths` = ''
+            WHERE `sessionId` IN (SELECT `id` FROM `practice_sessions`)
+            """
+        )
+    }
+}
+
+/**
  * Every migration, oldest first. The SQL is identical on every platform, so
  * each platform's builder passes this same array and there is nothing here
  * for a target to override.
@@ -433,4 +525,6 @@ val ALL_MIGRATIONS: Array<Migration> = arrayOf(
     MIGRATION_9_10,
     MIGRATION_10_11,
     MIGRATION_11_12,
+    MIGRATION_12_13,
+    MIGRATION_13_14,
 )
