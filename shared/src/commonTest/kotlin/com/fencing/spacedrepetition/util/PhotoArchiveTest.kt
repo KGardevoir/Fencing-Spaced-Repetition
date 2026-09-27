@@ -143,14 +143,16 @@ class PhotoArchiveTest {
             cards = emptyList(),
             reviewLogs = emptyList(),
             images = reader,
-            sessions = listOf(PracticeSession(id = 1, startTime = 1_700_000_000_000, imagePaths = "s.jpg,t.png")),
+            sessions = listOf(PracticeSession(id = 1, startTime = 1_700_000_000_000, imagePaths = "s.jpg,t.jpg")),
             utcOffsetSeconds = 0
         )
 
+        // Two of the same type, so the second is numbered: names are unique
+        // with their extension, and a .jpg and a .png would never collide.
         assertEquals(
             listOf(
                 "sessions/session_2023-11-14_22-13-20.jpg",
-                "sessions/session_2023-11-14_22-13-20_2.png"
+                "sessions/session_2023-11-14_22-13-20_2.jpg"
             ),
             entries.map { it.name }
         )
