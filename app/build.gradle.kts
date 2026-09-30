@@ -74,8 +74,21 @@ android {
             if (keystoreFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
             } else if (System.getenv("DEBUG_KEYSTORE_FILE") != null) {
-                // Nightly CI builds sign releases with the shared debug keystore
-                // so they install over CI debug builds without a real release key.
+                signingConfig = signingConfigs.getByName("sharedDebug")
+            }
+        }
+        // The nightly: release code (minified, optimized) under its own
+        // application ID, so it installs beside the CI debug builds and never
+        // touches their data. Deliberately separate while the nightly crashes
+        // on launch; once it is trusted, a ".debug" suffix here would make it
+        // install as an update over the debug builds instead.
+        create("nightly") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".nightly"
+            versionNameSuffix = "-NIGHTLY"
+            // :shared and :ui define no nightly; they build as release.
+            matchingFallbacks += listOf("release")
+            if (System.getenv("DEBUG_KEYSTORE_FILE") != null) {
                 signingConfig = signingConfigs.getByName("sharedDebug")
             }
         }
