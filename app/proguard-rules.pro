@@ -14,7 +14,16 @@
 -keepattributes *Annotation*
 
 # ===== Room Database =====
--keep class * extends androidx.room.RoomDatabase
+# Room creates each generated <Name>_Impl reflectively through its no-argument
+# constructor, so the constructor has to be kept by name; keeping the class
+# alone does not keep it under R8's full mode. Two Room lines are here:
+# androidx.room3 for the app's own database, and androidx.room -- Room 2.5,
+# which WorkManager brings for its internal WorkDatabase. Room 2.5 predates
+# full mode and ships no constructor rule, so WorkDatabase_Impl lost its
+# constructor and every release build crashed at startup, in
+# androidx.startup.InitializationProvider, before any app code ran.
+-keep class * extends androidx.room.RoomDatabase { <init>(); }
+-keep class * extends androidx.room3.RoomDatabase { <init>(); }
 -keep @androidx.room.Entity class *
 -keep @androidx.room.Dao class *
 -dontwarn androidx.room.paging.**
@@ -68,6 +77,11 @@
 # Keep data classes used in the app
 -keep class com.fencing.spacedrepetition.data.model.** { *; }
 -keep class com.fencing.spacedrepetition.billing.** { *; }
+
+# ===== WorkManager =====
+# A job's input merger is stored by class name and created reflectively when
+# the job runs -- the same failure as WorkDatabase_Impl above, only later.
+-keep class * extends androidx.work.InputMerger { <init>(); }
 
 # ===== AndroidX =====
 -keep class androidx.lifecycle.** { *; }
