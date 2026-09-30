@@ -88,35 +88,36 @@ jobs:
         run: |
           echo "$DEBUG_KEYSTORE_BASE64" | base64 --decode > ${{ runner.temp }}/debug-keystore.jks
 
-      - name: Build release APK
+      - name: Build nightly APK
         env:
           DEBUG_KEYSTORE_FILE: ${{ runner.temp }}/debug-keystore.jks
           DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
           DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
           DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
-        run: ./gradlew assembleRelease
+        run: ./gradlew assembleNightly
 
-      - name: Build release AAB
+      - name: Build nightly AAB
         env:
           DEBUG_KEYSTORE_FILE: ${{ runner.temp }}/debug-keystore.jks
           DEBUG_KEYSTORE_PASSWORD: ${{ secrets.DEBUG_KEYSTORE_PASSWORD }}
           DEBUG_KEY_ALIAS: ${{ secrets.DEBUG_KEY_ALIAS }}
           DEBUG_KEY_PASSWORD: ${{ secrets.DEBUG_KEY_PASSWORD }}
-        run: ./gradlew bundleRelease
+        run: ./gradlew bundleNightly
 
       - name: Compute artifact names and rename files
         id: artifact
         run: |
           TIMESTAMP=$(date -u +%Y%m%d%H%M%S)
-          SHORT_SHA=${GITHUB_SHA::7}
+          # The same commit the build stamps into its About section.
+          SHORT_SHA=${BUILD_GIT_COMMIT::7}
           APK_NAME="AnkiFlex-${TIMESTAMP}-nightly-${SHORT_SHA}.apk"
           AAB_NAME="AnkiFlex-${TIMESTAMP}-nightly-${SHORT_SHA}.aab"
-          mv app/build/outputs/apk/release/app-release.apk \
-             app/build/outputs/apk/release/${APK_NAME}
-          mv app/build/outputs/bundle/release/app-release.aab \
-             app/build/outputs/bundle/release/${AAB_NAME}
-          echo "apk_path=app/build/outputs/apk/release/${APK_NAME}" >> "$GITHUB_OUTPUT"
-          echo "aab_path=app/build/outputs/bundle/release/${AAB_NAME}" >> "$GITHUB_OUTPUT"
+          mv app/build/outputs/apk/nightly/app-nightly.apk \
+             app/build/outputs/apk/nightly/${APK_NAME}
+          mv app/build/outputs/bundle/nightly/app-nightly.aab \
+             app/build/outputs/bundle/nightly/${AAB_NAME}
+          echo "apk_path=app/build/outputs/apk/nightly/${APK_NAME}" >> "$GITHUB_OUTPUT"
+          echo "aab_path=app/build/outputs/bundle/nightly/${AAB_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Delete previous nightly release and tag
         env:

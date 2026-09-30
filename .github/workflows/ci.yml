@@ -282,7 +282,10 @@ jobs:
         id: artifact
         run: |
           TIMESTAMP=$(date -u +%Y%m%d%H%M%S)
-          SHORT_SHA=${GITHUB_SHA::7}
+          # The same commit the build stamps into its About section. Not
+          # GITHUB_SHA: on a pull request that is GitHub's merge commit, so the
+          # file name and the About section named two different commits.
+          SHORT_SHA=${BUILD_GIT_COMMIT::7}
           APK_NAME="AnkiFlex-${TIMESTAMP}-debug-${SHORT_SHA}.apk"
           mv app/build/outputs/apk/debug/app-debug.apk \
              app/build/outputs/apk/debug/${APK_NAME}
