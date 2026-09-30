@@ -77,16 +77,14 @@ android {
                 signingConfig = signingConfigs.getByName("sharedDebug")
             }
         }
-        // The nightly: release code (minified, optimized) that installs as an
-        // update over the CI debug builds rather than beside them.
-        //
-        // That takes both halves. The shared debug key alone was never enough:
-        // the nightly used to be a plain release build, so it carried the bare
-        // application ID while every debug build carries ".debug" -- Android saw
-        // two unrelated apps, and the nightly started with none of the data.
+        // The nightly: release code (minified, optimized) under its own
+        // application ID, so it installs beside the CI debug builds and never
+        // touches their data. Deliberately separate while the nightly crashes
+        // on launch; once it is trusted, a ".debug" suffix here would make it
+        // install as an update over the debug builds instead.
         create("nightly") {
             initWith(getByName("release"))
-            applicationIdSuffix = ".debug"
+            applicationIdSuffix = ".nightly"
             versionNameSuffix = "-NIGHTLY"
             // :shared and :ui define no nightly; they build as release.
             matchingFallbacks += listOf("release")
