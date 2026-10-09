@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.LibraryBooks
@@ -16,6 +17,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Group
@@ -52,6 +54,10 @@ import com.fencing.spacedrepetition.util.BackupReminder
  *   one. The reminder goes away when the backup is recorded.
  * @param onDismissBackupReminder puts the reminder away until it comes due
  *   again. Turning it off for good is a switch in the settings.
+ * @param cardLockEnabled whether sessions keep reusing the same cards.
+ * @param lockedCardCount how many cards the lock holds; 0 while it is on but
+ *   waiting for the next draw.
+ * @param onCardLockChange turns the lock on or off. Off forgets the held set.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,6 +72,9 @@ fun HomeScreen(
     backupReminder: BackupReminder?,
     onBackUpNow: () -> Unit,
     onDismissBackupReminder: () -> Unit,
+    cardLockEnabled: Boolean,
+    lockedCardCount: Int,
+    onCardLockChange: (Boolean) -> Unit,
     onSelectGroup: (Group) -> Unit,
     onStartPractice: () -> Unit,
     onNavigateToCards: () -> Unit,
@@ -219,6 +228,12 @@ fun HomeScreen(
                 }
             }
 
+            CardLockCard(
+                enabled = cardLockEnabled,
+                lockedCardCount = lockedCardCount,
+                onChange = onCardLockChange
+            )
+
             // Main actions
             Button(
                 onClick = onStartPractice,
@@ -303,6 +318,57 @@ fun HomeScreen(
         )
     }
 
+}
+
+/**
+ * The card lock switch: keep practising the same cards until it is turned off.
+ *
+ * The whole row toggles, not just the switch, so it is as easy to hit as the
+ * group card above it.
+ */
+@Composable
+private fun CardLockCard(
+    enabled: Boolean,
+    lockedCardCount: Int,
+    onChange: (Boolean) -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(value = enabled, role = Role.Switch, onValueChange = onChange)
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                if (enabled) Icons.Default.Lock else Icons.Default.LockOpen,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Card Lock",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = when {
+                        !enabled -> "New cards each session"
+                        lockedCardCount == 0 -> "The next cards drawn will be kept"
+                        lockedCardCount == 1 -> "Keeping the same card"
+                        else -> "Keeping the same $lockedCardCount cards"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            // The row handles the click; a second handler here would toggle twice.
+            Switch(checked = enabled, onCheckedChange = null)
+        }
+    }
 }
 
 /**

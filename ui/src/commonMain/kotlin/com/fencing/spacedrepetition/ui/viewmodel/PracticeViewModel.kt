@@ -60,6 +60,39 @@ class PracticeViewModel(
     private val _sessionNoteImages = MutableStateFlow<List<String>>(emptyList())
     val sessionNoteImages: StateFlow<List<String>> = _sessionNoteImages.asStateFlow()
 
+    /**
+     * Card lock: practise the same cards session after session.
+     *
+     * While on, the next set drawn is remembered and every later session
+     * reuses it instead of drawing again. Turning it off forgets the set, so
+     * the next session draws afresh. Off by default, and held in memory only:
+     * a fresh launch starts unlocked.
+     *
+     * The group the set was drawn from is kept with it, so the cards stay
+     * graded against that group's learning state even if the selection on
+     * the home screen moves on.
+     */
+    private data class LockedSet(val groupId: Long?, val cardIds: List<Long>)
+
+    private var lockedSet: LockedSet? = null
+
+    private val _cardLockEnabled = MutableStateFlow(false)
+    val cardLockEnabled: StateFlow<Boolean> = _cardLockEnabled.asStateFlow()
+
+    /** How many cards the lock is holding; 0 until a set has been drawn. */
+    private val _lockedCardCount = MutableStateFlow(0)
+    val lockedCardCount: StateFlow<Int> = _lockedCardCount.asStateFlow()
+
+    fun setCardLock(enabled: Boolean) {
+        _cardLockEnabled.value = enabled
+        if (!enabled) setLockedSet(null)
+    }
+
+    private fun setLockedSet(set: LockedSet?) {
+        lockedSet = set
+        _lockedCardCount.value = set?.cardIds?.size ?: 0
+    }
+
     private var sessionId: Long? = null
     private var selectedGroupId: Long? = null
     private var sessionStartTime: Long = 0L
@@ -85,9 +118,13 @@ class PracticeViewModel(
     private var sessionToken: Long = 0L
     private var sessionJob: Job? = null
 
-    fun startNewSession(numberOfCards: Int = 3, groupId: Long? = null) {
+    fun startNewSession(numberOfCards: Int = 3, selectedGroup: Long? = null) {
         sessionJob?.cancel()
         val token = ++sessionToken
+
+        // A held set brings its own group with it; see [LockedSet].
+        val locked = if (_cardLockEnabled.value) lockedSet else null
+        val groupId = if (locked != null) locked.groupId else selectedGroup
 
         // Cleared here rather than inside the coroutine so that the screen the
         // caller navigates to cannot draw the previous session first. On the
@@ -106,25 +143,14 @@ class PracticeViewModel(
 
         sessionJob = viewModelScope.launch {
             try {
-                // Get due cards (randomized from the full pool if setting is enabled)
-                val dueCards = if (groupId != null) {
-                    repository.getDueCardsByGroup(groupId, limit = numberOfCards)
-                } else {
-                    repository.getDueCards(limit = numberOfCards)
-                }
+                // Cards deleted since the lock was taken simply drop out.
+                val lockedCards = locked?.cardIds?.mapNotNull { repository.getCardById(it) }
+                    .orEmpty()
 
-                // If we have enough due cards, use those
-                // Otherwise, get all cards to allow additional studying
-                val cardsForSession = if (dueCards.size >= numberOfCards) {
-                    dueCards.take(numberOfCards)
-                } else {
-                    val allCards = if (groupId != null) {
-                        repository.getCardsByGroupSync(groupId)
-                    } else {
-                        repository.getAllCardsSync()
-                    }
-                    allCards.take(numberOfCards)
-                }
+                // Nothing left of the held set: draw from the group the user
+                // has selected now, not the one the vanished set came from.
+                val drawGroup = if (lockedCards.isEmpty()) selectedGroup else groupId
+                val cardsForSession = lockedCards.ifEmpty { drawCards(numberOfCards, drawGroup) }
 
                 // Superseded while we were reading: say nothing and leave the
                 // session that replaced this one alone.
@@ -134,6 +160,13 @@ class PracticeViewModel(
                     _uiState.value = PracticeUiState.NoCards
                     return@launch
                 }
+
+                // The lock is on but held nothing usable: this draw is the one
+                // it keeps.
+                if (_cardLockEnabled.value && lockedCards.isEmpty()) {
+                    setLockedSet(LockedSet(drawGroup, cardsForSession.map { it.id }))
+                }
+                selectedGroupId = drawGroup
 
                 // Create session
                 val newSessionId = repository.createPracticeSession(cardsForSession.map { it.id })
@@ -156,6 +189,25 @@ class PracticeViewModel(
                 }
             }
         }
+    }
+
+    private suspend fun drawCards(numberOfCards: Int, groupId: Long?): List<Card> {
+        // Get due cards (randomized from the full pool if setting is enabled)
+        val dueCards = if (groupId != null) {
+            repository.getDueCardsByGroup(groupId, limit = numberOfCards)
+        } else {
+            repository.getDueCards(limit = numberOfCards)
+        }
+
+        // If we have enough due cards, use those
+        // Otherwise, get all cards to allow additional studying
+        if (dueCards.size >= numberOfCards) return dueCards.take(numberOfCards)
+        val allCards = if (groupId != null) {
+            repository.getCardsByGroupSync(groupId)
+        } else {
+            repository.getAllCardsSync()
+        }
+        return allCards.take(numberOfCards)
     }
 
     fun nextCard() {
