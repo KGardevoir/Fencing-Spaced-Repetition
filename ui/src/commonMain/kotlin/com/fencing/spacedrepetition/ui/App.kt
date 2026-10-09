@@ -137,6 +137,10 @@ fun App(
                 cardViewModel.getDueCardCountByGroup(group.id).collectAsState(initial = 0).value
             } ?: totalDueCount
 
+            // The selected group's own lock; each group keeps its own.
+            val cardLocks by practiceViewModel.cardLocks.collectAsState()
+            val cardLock = cardLocks[selectedGroup?.id]
+
             HomeScreen(
                 groups = groups,
                 selectedGroup = selectedGroup,
@@ -148,6 +152,9 @@ fun App(
                 backupReminder = reminder,
                 onBackUpNow = settingsViewModel::runBackupNow,
                 onDismissBackupReminder = settingsViewModel::dismissBackupReminder,
+                cardLockEnabled = cardLock != null,
+                lockedCardCount = cardLock?.size ?: 0,
+                onCardLockChange = { practiceViewModel.setCardLock(selectedGroup?.id, it) },
                 onSelectGroup = { settingsViewModel.setSelectedGroupId(it.id) },
                 onStartPractice = {
                     practiceViewModel.startNewSession(cardsPerSession, selectedGroup?.id)

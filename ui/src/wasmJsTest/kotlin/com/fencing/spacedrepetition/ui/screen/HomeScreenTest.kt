@@ -7,6 +7,8 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -50,6 +52,9 @@ class HomeScreenTest {
         onStartPractice: () -> Unit = {},
         onBackUpNow: () -> Unit = {},
         onDismissBackupReminder: () -> Unit = {},
+        cardLockEnabled: Boolean = false,
+        lockedCardCount: Int = 0,
+        onCardLockChange: (Boolean) -> Unit = {},
         body: androidx.compose.ui.test.ComposeUiTest.() -> Unit
     ) = runComposeUiTest {
         setContent {
@@ -65,6 +70,9 @@ class HomeScreenTest {
                     backupReminder = backupReminder,
                     onBackUpNow = onBackUpNow,
                     onDismissBackupReminder = onDismissBackupReminder,
+                    cardLockEnabled = cardLockEnabled,
+                    lockedCardCount = lockedCardCount,
+                    onCardLockChange = onCardLockChange,
                     onSelectGroup = onSelectGroup,
                     onStartPractice = onStartPractice,
                     onNavigateToCards = {},
@@ -169,6 +177,34 @@ class HomeScreenTest {
         home(backupReminder = BackupReminder(9), onDismissBackupReminder = { dismissals++ }) {
             onNodeWithContentDescription("Dismiss until it is due again").performClick()
             assertEquals(1, dismissals, "the reminder was not dismissed exactly once")
+        }
+    }
+
+    // Card lock. The screen only shows the lock and reports the switch; which
+    // cards it holds is the view model's business.
+    @Test
+    fun theCardLockIsOffByDefault() = home {
+        onNodeWithText("Card Lock").assertIsOff()
+        onNodeWithText("New cards each session").assertIsDisplayed()
+    }
+
+    @Test
+    fun anEmptyLockSaysTheNextDrawIsKept() = home(cardLockEnabled = true) {
+        onNodeWithText("Card Lock").assertIsOn()
+        onNodeWithText("The next cards drawn will be kept").assertIsDisplayed()
+    }
+
+    @Test
+    fun aHeldLockSaysHowManyCardsItKeeps() = home(cardLockEnabled = true, lockedCardCount = 4) {
+        onNodeWithText("Keeping the same 4 cards").assertIsDisplayed()
+    }
+
+    @Test
+    fun tappingTheLockReportsTheNewStateOnce() = run {
+        val changes = mutableListOf<Boolean>()
+        home(onCardLockChange = { changes += it }) {
+            onNodeWithText("Card Lock").performClick()
+            assertEquals(listOf(true), changes, "the lock was not turned on exactly once")
         }
     }
 }
