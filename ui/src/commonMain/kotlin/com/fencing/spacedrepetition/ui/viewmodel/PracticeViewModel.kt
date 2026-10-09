@@ -63,34 +63,21 @@ class PracticeViewModel(
     /**
      * Card lock: practise the same cards session after session.
      *
-     * While on, the next set drawn is remembered and every later session
-     * reuses it instead of drawing again. Turning it off forgets the set, so
-     * the next session draws afresh. Off by default, and held in memory only:
-     * a fresh launch starts unlocked.
+     * Each group has its own lock, keyed by group id (null for the whole
+     * collection). A group with a lock entry is locked; its list is the set
+     * being held, empty until the next draw fills it. While locked, every
+     * session in that group reuses the set instead of drawing again. Turning
+     * a group's lock off forgets its set and leaves the others alone.
      *
-     * The group the set was drawn from is kept with it, so the cards stay
-     * graded against that group's learning state even if the selection on
-     * the home screen moves on.
+     * Off by default, and held in memory only: a fresh launch starts unlocked.
      */
-    private data class LockedSet(val groupId: Long?, val cardIds: List<Long>)
+    private val _cardLocks = MutableStateFlow<Map<Long?, List<Long>>>(emptyMap())
+    val cardLocks: StateFlow<Map<Long?, List<Long>>> = _cardLocks.asStateFlow()
 
-    private var lockedSet: LockedSet? = null
-
-    private val _cardLockEnabled = MutableStateFlow(false)
-    val cardLockEnabled: StateFlow<Boolean> = _cardLockEnabled.asStateFlow()
-
-    /** How many cards the lock is holding; 0 until a set has been drawn. */
-    private val _lockedCardCount = MutableStateFlow(0)
-    val lockedCardCount: StateFlow<Int> = _lockedCardCount.asStateFlow()
-
-    fun setCardLock(enabled: Boolean) {
-        _cardLockEnabled.value = enabled
-        if (!enabled) setLockedSet(null)
-    }
-
-    private fun setLockedSet(set: LockedSet?) {
-        lockedSet = set
-        _lockedCardCount.value = set?.cardIds?.size ?: 0
+    fun setCardLock(groupId: Long?, enabled: Boolean) {
+        _cardLocks.update { locks ->
+            if (enabled) locks + (groupId to locks[groupId].orEmpty()) else locks - groupId
+        }
     }
 
     private var sessionId: Long? = null
@@ -118,13 +105,10 @@ class PracticeViewModel(
     private var sessionToken: Long = 0L
     private var sessionJob: Job? = null
 
-    fun startNewSession(numberOfCards: Int = 3, selectedGroup: Long? = null) {
+    fun startNewSession(numberOfCards: Int = 3, groupId: Long? = null) {
         sessionJob?.cancel()
         val token = ++sessionToken
-
-        // A held set brings its own group with it; see [LockedSet].
-        val locked = if (_cardLockEnabled.value) lockedSet else null
-        val groupId = if (locked != null) locked.groupId else selectedGroup
+        val lockedIds = _cardLocks.value[groupId].orEmpty()
 
         // Cleared here rather than inside the coroutine so that the screen the
         // caller navigates to cannot draw the previous session first. On the
@@ -144,13 +128,8 @@ class PracticeViewModel(
         sessionJob = viewModelScope.launch {
             try {
                 // Cards deleted since the lock was taken simply drop out.
-                val lockedCards = locked?.cardIds?.mapNotNull { repository.getCardById(it) }
-                    .orEmpty()
-
-                // Nothing left of the held set: draw from the group the user
-                // has selected now, not the one the vanished set came from.
-                val drawGroup = if (lockedCards.isEmpty()) selectedGroup else groupId
-                val cardsForSession = lockedCards.ifEmpty { drawCards(numberOfCards, drawGroup) }
+                val lockedCards = lockedIds.mapNotNull { repository.getCardById(it) }
+                val cardsForSession = lockedCards.ifEmpty { drawCards(numberOfCards, groupId) }
 
                 // Superseded while we were reading: say nothing and leave the
                 // session that replaced this one alone.
@@ -161,12 +140,15 @@ class PracticeViewModel(
                     return@launch
                 }
 
-                // The lock is on but held nothing usable: this draw is the one
-                // it keeps.
-                if (_cardLockEnabled.value && lockedCards.isEmpty()) {
-                    setLockedSet(LockedSet(drawGroup, cardsForSession.map { it.id }))
+                // The group is locked but held nothing usable: this draw is
+                // the one it keeps. Checked now, not at the start, in case the
+                // lock was switched while the cards were being read.
+                if (lockedCards.isEmpty()) {
+                    val drawnIds = cardsForSession.map { it.id }
+                    _cardLocks.update { locks ->
+                        if (groupId in locks) locks + (groupId to drawnIds) else locks
+                    }
                 }
-                selectedGroupId = drawGroup
 
                 // Create session
                 val newSessionId = repository.createPracticeSession(cardsForSession.map { it.id })

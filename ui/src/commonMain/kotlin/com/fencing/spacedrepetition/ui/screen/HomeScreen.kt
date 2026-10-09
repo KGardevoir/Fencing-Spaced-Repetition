@@ -54,7 +54,8 @@ import com.fencing.spacedrepetition.util.BackupReminder
  *   one. The reminder goes away when the backup is recorded.
  * @param onDismissBackupReminder puts the reminder away until it comes due
  *   again. Turning it off for good is a switch in the settings.
- * @param cardLockEnabled whether sessions keep reusing the same cards.
+ * @param cardLockEnabled whether sessions in [selectedGroup] keep reusing the
+ *   same cards. Each group has its own lock.
  * @param lockedCardCount how many cards the lock holds; 0 while it is on but
  *   waiting for the next draw.
  * @param onCardLockChange turns the lock on or off. Off forgets the held set.
