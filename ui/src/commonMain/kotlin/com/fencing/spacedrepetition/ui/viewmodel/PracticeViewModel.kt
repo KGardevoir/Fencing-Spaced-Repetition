@@ -60,6 +60,26 @@ class PracticeViewModel(
     private val _sessionNoteImages = MutableStateFlow<List<String>>(emptyList())
     val sessionNoteImages: StateFlow<List<String>> = _sessionNoteImages.asStateFlow()
 
+    /**
+     * Card lock: practise the same cards session after session.
+     *
+     * Each group has its own lock, keyed by group id (null for the whole
+     * collection). A group with a lock entry is locked; its list is the set
+     * being held, empty until the next draw fills it. While locked, every
+     * session in that group reuses the set instead of drawing again. Turning
+     * a group's lock off forgets its set and leaves the others alone.
+     *
+     * Off by default, and held in memory only: a fresh launch starts unlocked.
+     */
+    private val _cardLocks = MutableStateFlow<Map<Long?, List<Long>>>(emptyMap())
+    val cardLocks: StateFlow<Map<Long?, List<Long>>> = _cardLocks.asStateFlow()
+
+    fun setCardLock(groupId: Long?, enabled: Boolean) {
+        _cardLocks.update { locks ->
+            if (enabled) locks + (groupId to locks[groupId].orEmpty()) else locks - groupId
+        }
+    }
+
     private var sessionId: Long? = null
     private var selectedGroupId: Long? = null
     private var sessionStartTime: Long = 0L
@@ -88,6 +108,7 @@ class PracticeViewModel(
     fun startNewSession(numberOfCards: Int = 3, groupId: Long? = null) {
         sessionJob?.cancel()
         val token = ++sessionToken
+        val lockedIds = _cardLocks.value[groupId].orEmpty()
 
         // Cleared here rather than inside the coroutine so that the screen the
         // caller navigates to cannot draw the previous session first. On the
@@ -106,25 +127,9 @@ class PracticeViewModel(
 
         sessionJob = viewModelScope.launch {
             try {
-                // Get due cards (randomized from the full pool if setting is enabled)
-                val dueCards = if (groupId != null) {
-                    repository.getDueCardsByGroup(groupId, limit = numberOfCards)
-                } else {
-                    repository.getDueCards(limit = numberOfCards)
-                }
-
-                // If we have enough due cards, use those
-                // Otherwise, get all cards to allow additional studying
-                val cardsForSession = if (dueCards.size >= numberOfCards) {
-                    dueCards.take(numberOfCards)
-                } else {
-                    val allCards = if (groupId != null) {
-                        repository.getCardsByGroupSync(groupId)
-                    } else {
-                        repository.getAllCardsSync()
-                    }
-                    allCards.take(numberOfCards)
-                }
+                // Cards deleted since the lock was taken simply drop out.
+                val lockedCards = lockedIds.mapNotNull { repository.getCardById(it) }
+                val cardsForSession = lockedCards.ifEmpty { drawCards(numberOfCards, groupId) }
 
                 // Superseded while we were reading: say nothing and leave the
                 // session that replaced this one alone.
@@ -133,6 +138,16 @@ class PracticeViewModel(
                 if (cardsForSession.isEmpty()) {
                     _uiState.value = PracticeUiState.NoCards
                     return@launch
+                }
+
+                // The group is locked but held nothing usable: this draw is
+                // the one it keeps. Checked now, not at the start, in case the
+                // lock was switched while the cards were being read.
+                if (lockedCards.isEmpty()) {
+                    val drawnIds = cardsForSession.map { it.id }
+                    _cardLocks.update { locks ->
+                        if (groupId in locks) locks + (groupId to drawnIds) else locks
+                    }
                 }
 
                 // Create session
@@ -156,6 +171,25 @@ class PracticeViewModel(
                 }
             }
         }
+    }
+
+    private suspend fun drawCards(numberOfCards: Int, groupId: Long?): List<Card> {
+        // Get due cards (randomized from the full pool if setting is enabled)
+        val dueCards = if (groupId != null) {
+            repository.getDueCardsByGroup(groupId, limit = numberOfCards)
+        } else {
+            repository.getDueCards(limit = numberOfCards)
+        }
+
+        // If we have enough due cards, use those
+        // Otherwise, get all cards to allow additional studying
+        if (dueCards.size >= numberOfCards) return dueCards.take(numberOfCards)
+        val allCards = if (groupId != null) {
+            repository.getCardsByGroupSync(groupId)
+        } else {
+            repository.getAllCardsSync()
+        }
+        return allCards.take(numberOfCards)
     }
 
     fun nextCard() {
