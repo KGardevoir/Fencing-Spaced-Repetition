@@ -33,10 +33,11 @@ class RetentionReportTest {
 
     private fun log(
         cardId: Long, grade: Int, time: Long, group: String? = null,
-        before: String = "REVIEW", stability: Double = 10.0, elapsed: Int = 5
+        before: String = "REVIEW", stability: Double = 10.0, elapsed: Int = 5, after: Double? = null
     ) = ReviewLog(
         cardId = cardId, sessionId = null, reviewTime = time, grade = grade, algorithm = "FSRS",
-        stateBefore = "S:$stability,D:5.0,ST:$before", stateAfter = "", scheduledDays = 0,
+        stateBefore = "S:$stability,D:5.0,ST:$before",
+        stateAfter = after?.let { "S:$it,D:5.0,ST:REVIEW" } ?: "", scheduledDays = 0,
         elapsedDays = elapsed, groupName = group
     )
 
@@ -170,5 +171,45 @@ class RetentionReportTest {
         val r = FSRSAlgorithm().retrievability(12.0, 12.0)
         assertTrue(abs(r - 0.9) < 1e-9)
         assertEquals(1.0, FSRSAlgorithm().retrievability(0.0, 12.0))
+    }
+
+    @Test
+    fun `wilson interval brackets the rate and stays inside zero to one`() {
+        val all = wilsonInterval(10, 10)!!
+        assertEquals(1.0, all.endInclusive)
+        assertTrue(all.start in 0.65..0.75)   // ~0.72 for 10/10
+        val half = wilsonInterval(50, 100)!!
+        assertTrue(abs(half.start - 0.404) < 0.002 && abs(half.endInclusive - 0.596) < 0.002)
+        assertNull(wilsonInterval(0, 0))
+        val point = RetentionPoint(monday, reviews = 4, recalled = 3, predicted = null)
+        assertTrue(0.75 in point.recallInterval)
+    }
+
+    @Test
+    fun `quantiles interpolate between neighbours`() {
+        val xs = listOf(1.0, 2.0, 3.0, 4.0)
+        assertEquals(2.5, RetentionReportBuilder.quantile(xs, 0.5))
+        assertEquals(1.75, RetentionReportBuilder.quantile(xs, 0.25))
+        assertEquals(7.0, RetentionReportBuilder.quantile(listOf(7.0), 0.75))
+    }
+
+    @Test
+    fun `stability trend carries each card's latest stability forward`() {
+        val logs = listOf(
+            // First sighting counts for stability though not for recall.
+            log(1, 3, monday - 6 * day, before = "NEW", after = 2.0),
+            log(2, 3, monday - 5 * day, before = "NEW", after = 4.0),
+            log(1, 3, monday + day, after = 8.0),
+            log(1, 0, monday + 2 * day, after = 99.0)   // skip: ignored
+        )
+        val ctx = build(logs = logs).learningContexts[0]
+        val trend = ctx.summary.stabilityTrend
+        assertEquals(listOf(monday - 7 * day, monday), trend.map { it.periodStart })
+        assertEquals(3.0, trend[0].median)
+        assertEquals(2, trend[1].cards)
+        assertEquals(6.0, trend[1].median)   // cards at 8 and 4
+        assertEquals(1, ctx.summary.reviews)
+        val card1 = ctx.cards.first { it.cardId == 1L }
+        assertEquals(listOf(2.0, 8.0), card1.stabilityHistory.map { it.stability })
     }
 }

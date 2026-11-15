@@ -36,10 +36,19 @@ import com.fencing.spacedrepetition.algorithm.RetentionPeriod
 import com.fencing.spacedrepetition.algorithm.RetentionPoint
 import com.fencing.spacedrepetition.algorithm.RetentionReport
 import com.fencing.spacedrepetition.algorithm.RetentionSummary
+import com.fencing.spacedrepetition.algorithm.StabilityPoint
+import kotlin.math.ln
+import kotlin.math.exp
 import com.fencing.spacedrepetition.util.formatDate
 import com.fencing.spacedrepetition.util.formatDateWithoutYear
 import com.fencing.spacedrepetition.util.toOneDecimal
 import kotlin.math.roundToInt
+
+/** What the trend charts plot. */
+private enum class TrendMetric(val label: String) {
+    RECALL("Recall"),
+    STABILITY("Stability")
+}
 
 private enum class ReportTab(val label: String) {
     OVERVIEW("Overview"),
@@ -64,6 +73,7 @@ fun RetentionReportScreen(
     onNavigateBack: () -> Unit
 ) {
     var tab by rememberSaveable { mutableStateOf(ReportTab.OVERVIEW) }
+    var metric by rememberSaveable { mutableStateOf(TrendMetric.RECALL) }
 
     Scaffold(
         topBar = {
@@ -103,8 +113,8 @@ fun RetentionReportScreen(
             }
 
             when (tab) {
-                ReportTab.OVERVIEW -> OverviewTab(report, period, onPeriodChange)
-                ReportTab.GROUPS -> GroupsTab(report, period, onPeriodChange)
+                ReportTab.OVERVIEW -> OverviewTab(report, period, onPeriodChange, metric) { metric = it }
+                ReportTab.GROUPS -> GroupsTab(report, period, onPeriodChange, metric) { metric = it }
             }
         }
     }
@@ -118,19 +128,22 @@ fun RetentionReportScreen(
 private fun OverviewTab(
     report: RetentionReport,
     period: RetentionPeriod,
-    onPeriodChange: (RetentionPeriod) -> Unit
+    onPeriodChange: (RetentionPeriod) -> Unit,
+    metric: TrendMetric,
+    onMetricChange: (TrendMetric) -> Unit
 ) {
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item { PeriodSelector(period, onPeriodChange) }
+        item { ChartControls(period, onPeriodChange, metric, onMetricChange) }
         item {
             SummaryCard(
                 title = "All learning",
                 subtitle = "Every card in every learning context",
                 summary = report.overall,
                 period = period,
+                metric = metric,
                 emphasised = true
             )
         }
@@ -141,7 +154,8 @@ private fun OverviewTab(
                     title = group.name,
                     subtitle = "Learns in ${group.learningContextName}",
                     summary = group.summary,
-                    period = period
+                    period = period,
+                    metric = metric
                 )
             }
         }
@@ -151,7 +165,8 @@ private fun OverviewTab(
                 title = ctx.name,
                 subtitle = contextSubtitle(ctx),
                 summary = ctx.summary,
-                period = period
+                period = period,
+                metric = metric
             )
         }
     }
@@ -212,7 +227,9 @@ private fun resolve(report: RetentionReport, selection: GroupSelection?): Select
 private fun GroupsTab(
     report: RetentionReport,
     period: RetentionPeriod,
-    onPeriodChange: (RetentionPeriod) -> Unit
+    onPeriodChange: (RetentionPeriod) -> Unit,
+    metric: TrendMetric,
+    onMetricChange: (TrendMetric) -> Unit
 ) {
     // Saved as a string key so the choice survives rotation and the report recomputing.
     var selectedKey by rememberSaveable { mutableStateOf<String?>(null) }
@@ -276,13 +293,14 @@ private fun GroupsTab(
                 }
             }
         }
-        item { PeriodSelector(period, onPeriodChange) }
+        item { ChartControls(period, onPeriodChange, metric, onMetricChange) }
         item {
             SummaryCard(
                 title = selected.title,
                 subtitle = selected.subtitle,
                 summary = selected.summary,
-                period = period
+                period = period,
+                metric = metric
             )
         }
         item {
@@ -401,6 +419,10 @@ private fun CardRow(card: CardRetention, expanded: Boolean, onClick: () -> Unit)
                     CardHistoryChart(card)
                     GradeLegend()
                 }
+                if (card.stabilityHistory.isNotEmpty()) {
+                    Text("Stability after each review", style = MaterialTheme.typography.labelLarge)
+                    CardStabilityChart(card)
+                }
             }
         }
     }
@@ -419,9 +441,27 @@ private fun DetailLine(label: String, value: String) {
 // ---------------------------------------------------------------------------
 
 @Composable
+private fun ChartControls(
+    period: RetentionPeriod,
+    onPeriodChange: (RetentionPeriod) -> Unit,
+    metric: TrendMetric,
+    onMetricChange: (TrendMetric) -> Unit
+) {
+    Column {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Plot", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(64.dp))
+            TrendMetric.entries.forEach { m ->
+                FilterChip(selected = metric == m, onClick = { onMetricChange(m) }, label = { Text(m.label) })
+            }
+        }
+        PeriodSelector(period, onPeriodChange)
+    }
+}
+
+@Composable
 private fun PeriodSelector(period: RetentionPeriod, onPeriodChange: (RetentionPeriod) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("Trend by", style = MaterialTheme.typography.bodyMedium)
+        Text("Trend by", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(64.dp))
         FilterChip(
             selected = period == RetentionPeriod.WEEK,
             onClick = { onPeriodChange(RetentionPeriod.WEEK) },
@@ -441,6 +481,7 @@ private fun SummaryCard(
     subtitle: String,
     summary: RetentionSummary,
     period: RetentionPeriod,
+    metric: TrendMetric,
     emphasised: Boolean = false
 ) {
     Card(
@@ -461,9 +502,19 @@ private fun SummaryCard(
                 )
             }
             Row(Modifier.fillMaxWidth()) {
-                Stat("Predicted now", summary.predictedRetentionNow?.let(::percent) ?: "–", Modifier.weight(1f))
-                Stat("Recall, 30 days", summary.recentRecall?.let(::percent) ?: "–", Modifier.weight(1f))
-                Stat("Recall, all time", summary.measuredRecall?.let(::percent) ?: "–", Modifier.weight(1f))
+                Stat("Predicted now", summary.predictedRetentionNow?.let(::percent) ?: "–", null, Modifier.weight(1f))
+                Stat(
+                    "Recall, 30 days",
+                    summary.recentRecall?.let(::percent) ?: "–",
+                    summary.recentRecallInterval?.let(::range),
+                    Modifier.weight(1f)
+                )
+                Stat(
+                    "Recall, all time",
+                    summary.measuredRecall?.let(::percent) ?: "–",
+                    summary.measuredRecallInterval?.let(::range),
+                    Modifier.weight(1f)
+                )
             }
             Text(
                 buildList {
@@ -475,18 +526,30 @@ private fun SummaryCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            if (summary.trend.isNotEmpty()) {
-                TrendChart(summary.trend, period)
-                TrendLegend()
+            when (metric) {
+                TrendMetric.RECALL -> if (summary.trend.isNotEmpty()) {
+                    TrendChart(summary.trend, period)
+                    TrendLegend()
+                }
+                TrendMetric.STABILITY -> if (summary.stabilityTrend.isNotEmpty()) {
+                    StabilityChart(summary.stabilityTrend, period)
+                    StabilityLegend()
+                }
             }
         }
     }
 }
 
 @Composable
-private fun Stat(label: String, value: String, modifier: Modifier = Modifier) {
+private fun Stat(label: String, value: String, interval: String?, modifier: Modifier = Modifier) {
     Column(modifier) {
         Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+        // Always laid out, so tiles with and without an interval line up.
+        Text(
+            interval?.let { "95% CI $it" } ?: " ",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -514,10 +577,14 @@ private fun RetentionBar(value: Double?) {
 }
 
 /**
- * Measured recall per period as a solid line with a dot per period, FSRS's
- * prediction for the same reviews as a dashed line. The y axis starts at
- * 50 % (or lower if the data does) because retention rarely goes below it
- * and a 0-100 axis flattens every change worth seeing.
+ * Measured recall per period as a solid line with a dot per period and a 95 %
+ * error bar (Wilson interval) through each dot, FSRS's prediction for the
+ * same reviews as a dashed line. A week of a handful of reviews has a long
+ * bar: a dip that stays inside it is noise, not forgetting.
+ *
+ * The y axis starts at 50 % (or lower if the data or its error bars do)
+ * because retention rarely goes below it and a 0-100 axis flattens every
+ * change worth seeing.
  */
 @Composable
 private fun TrendChart(points: List<RetentionPoint>, period: RetentionPeriod) {
@@ -527,14 +594,14 @@ private fun TrendChart(points: List<RetentionPoint>, period: RetentionPeriod) {
     val labelStyle = MaterialTheme.typography.labelSmall
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
 
-    val lowest = points.minOf { minOf(it.recall, it.predicted ?: 1.0) }
+    val lowest = points.minOf { minOf(it.recallInterval.start, it.predicted ?: 1.0) }
     val yMin = if (lowest >= 0.5) 0.5 else (lowest * 10).toInt() / 10.0
     val yRange = 1.0 - yMin
 
     Column {
         Row {
             Column(
-                Modifier.height(120.dp).padding(end = 4.dp),
+                Modifier.height(120.dp).width(36.dp).padding(end = 4.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Text("100%", style = labelStyle, color = labelColor)
@@ -573,6 +640,17 @@ private fun TrendChart(points: List<RetentionPoint>, period: RetentionPeriod) {
                         measuredColor,
                         style = Stroke(width = 2.5.dp.toPx())
                     )
+                }
+                val cap = 4.dp.toPx()
+                points.forEachIndexed { i, p ->
+                    val cx = x(i)
+                    val top = y(p.recallInterval.endInclusive)
+                    val bottom = y(p.recallInterval.start)
+                    val barColor = measuredColor.copy(alpha = 0.55f)
+                    val stroke = 1.5.dp.toPx()
+                    drawLine(barColor, Offset(cx, top), Offset(cx, bottom), strokeWidth = stroke)
+                    drawLine(barColor, Offset(cx - cap, top), Offset(cx + cap, top), strokeWidth = stroke)
+                    drawLine(barColor, Offset(cx - cap, bottom), Offset(cx + cap, bottom), strokeWidth = stroke)
                 }
                 measured.forEach { drawCircle(measuredColor, radius = 3.5.dp.toPx(), center = it) }
             }
@@ -641,8 +719,162 @@ private fun CardHistoryChart(card: CardRetention) {
 @Composable
 private fun TrendLegend() {
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        LegendItem(MaterialTheme.colorScheme.primary, "Recall", dashed = false)
+        LegendItem(MaterialTheme.colorScheme.primary, "Recall ± 95%", dashed = false)
         LegendItem(MaterialTheme.colorScheme.tertiary, "Predicted", dashed = true)
+    }
+}
+
+@Composable
+private fun StabilityLegend() {
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        LegendItem(MaterialTheme.colorScheme.secondary, "Median stability", dashed = false)
+        LegendItem(MaterialTheme.colorScheme.secondary.copy(alpha = 0.55f), "Middle 50% of cards", dashed = false)
+    }
+}
+
+/**
+ * A log-scale axis in days spanning [lo]..[hi], widened to whole steps of
+ * 1, 2, 5, 10, ... so the labels are numbers a person reads at a glance.
+ */
+private class LogDaysAxis(lo: Double, hi: Double) {
+    private val steps = listOf(0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 36500.0)
+    val min: Double = steps.lastOrNull { it <= lo } ?: steps.first()
+    val max: Double = (steps.firstOrNull { it >= hi } ?: steps.last()).let { if (it <= min) min * 10 else it }
+    private val span = ln(max) - ln(min)
+
+    /** 0 at [min], 1 at [max]. */
+    fun fraction(v: Double): Float = ((ln(v.coerceIn(min, max)) - ln(min)) / span).toFloat()
+
+    /** Value a fraction of the way up, for the middle label. */
+    fun valueAt(f: Double): Double = exp(ln(min) + span * f)
+}
+
+/**
+ * The typical card's stability at the end of each period: a dot and line for
+ * the median, with a bar from the lower to the upper quartile. On a log
+ * scale, because stability grows multiplicatively -- going from 2 to 4 days
+ * is as much progress as going from 50 to 100.
+ */
+@Composable
+private fun StabilityChart(points: List<StabilityPoint>, period: RetentionPeriod) {
+    val color = MaterialTheme.colorScheme.secondary
+    val gridColor = MaterialTheme.colorScheme.outlineVariant
+    val labelStyle = MaterialTheme.typography.labelSmall
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val axis = LogDaysAxis(points.minOf { it.lowerQuartile }, points.maxOf { it.upperQuartile })
+
+    Column {
+        Row {
+            Column(
+                Modifier.height(120.dp).width(36.dp).padding(end = 4.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(days(axis.max), style = labelStyle, color = labelColor)
+                Text(days(axis.valueAt(0.5)), style = labelStyle, color = labelColor)
+                Text(days(axis.min), style = labelStyle, color = labelColor)
+            }
+            Canvas(Modifier.weight(1f).height(120.dp)) {
+                val w = size.width
+                val h = size.height
+                val pad = 6.dp.toPx()
+                fun x(i: Int) = if (points.size == 1) w / 2 else pad + (w - 2 * pad) * i / (points.size - 1)
+                fun y(v: Double) = h * (1 - axis.fraction(v))
+
+                listOf(0f, h / 2, h).forEach { gy ->
+                    drawLine(gridColor, Offset(0f, gy), Offset(w, gy), strokeWidth = 1f)
+                }
+
+                val cap = 4.dp.toPx()
+                val stroke = 1.5.dp.toPx()
+                val barColor = color.copy(alpha = 0.55f)
+                points.forEachIndexed { i, p ->
+                    val cx = x(i)
+                    val top = y(p.upperQuartile)
+                    val bottom = y(p.lowerQuartile)
+                    drawLine(barColor, Offset(cx, top), Offset(cx, bottom), strokeWidth = stroke)
+                    drawLine(barColor, Offset(cx - cap, top), Offset(cx + cap, top), strokeWidth = stroke)
+                    drawLine(barColor, Offset(cx - cap, bottom), Offset(cx + cap, bottom), strokeWidth = stroke)
+                }
+
+                val medians = points.mapIndexed { i, p -> Offset(x(i), y(p.median)) }
+                if (medians.size > 1) {
+                    drawPath(
+                        Path().apply {
+                            moveTo(medians[0].x, medians[0].y)
+                            medians.drop(1).forEach { lineTo(it.x, it.y) }
+                        },
+                        color,
+                        style = Stroke(width = 2.5.dp.toPx())
+                    )
+                }
+                medians.forEach { drawCircle(color, radius = 3.5.dp.toPx(), center = it) }
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(start = 36.dp)) {
+            Text(periodLabel(points.first().periodStart, period), style = labelStyle, color = labelColor)
+            Spacer(Modifier.weight(1f))
+            if (points.size > 1) {
+                Text(periodLabel(points.last().periodStart, period), style = labelStyle, color = labelColor)
+            }
+        }
+        Text(
+            "${points.last().cards} cards learned · median ${days(points.last().median)}",
+            style = labelStyle,
+            color = labelColor
+        )
+    }
+}
+
+/** One card's stability after each grade, on a log scale: lapses show as drops. */
+@Composable
+private fun CardStabilityChart(card: CardRetention) {
+    val color = MaterialTheme.colorScheme.secondary
+    val gridColor = MaterialTheme.colorScheme.outlineVariant
+    val labelStyle = MaterialTheme.typography.labelSmall
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val history = card.stabilityHistory
+    val axis = LogDaysAxis(history.minOf { it.stability }, history.maxOf { it.stability })
+
+    Column {
+        Row {
+            Column(
+                Modifier.height(72.dp).width(36.dp).padding(end = 4.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(days(axis.max), style = labelStyle, color = labelColor)
+                Text(days(axis.min), style = labelStyle, color = labelColor)
+            }
+            Canvas(Modifier.weight(1f).height(72.dp)) {
+                val w = size.width
+                val h = size.height
+                val pad = 6.dp.toPx()
+                fun x(i: Int) = if (history.size == 1) w / 2 else pad + (w - 2 * pad) * i / (history.size - 1)
+                fun y(v: Double) = pad + (h - 2 * pad) * (1 - axis.fraction(v))
+
+                drawLine(gridColor, Offset(0f, pad), Offset(w, pad), strokeWidth = 1f)
+                drawLine(gridColor, Offset(0f, h - pad), Offset(w, h - pad), strokeWidth = 1f)
+
+                val pts = history.mapIndexed { i, p -> Offset(x(i), y(p.stability)) }
+                if (pts.size > 1) {
+                    drawPath(
+                        Path().apply {
+                            moveTo(pts[0].x, pts[0].y)
+                            pts.drop(1).forEach { lineTo(it.x, it.y) }
+                        },
+                        color,
+                        style = Stroke(width = 2.dp.toPx())
+                    )
+                }
+                pts.forEach { drawCircle(color, radius = 3.5.dp.toPx(), center = it) }
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(start = 36.dp)) {
+            Text(formatDateWithoutYear(history.first().reviewTime), style = labelStyle, color = labelColor)
+            Spacer(Modifier.weight(1f))
+            if (history.size > 1) {
+                Text(formatDateWithoutYear(history.last().reviewTime), style = labelStyle, color = labelColor)
+            }
+        }
     }
 }
 
@@ -709,6 +941,9 @@ private fun retentionColor(value: Double?): Color = when {
 }
 
 private fun percent(value: Double): String = "${(value * 100).roundToInt()}%"
+
+private fun range(interval: ClosedFloatingPointRange<Double>): String =
+    "${(interval.start * 100).roundToInt()}–${(interval.endInclusive * 100).roundToInt()}%"
 
 private fun days(value: Double): String = when {
     value < 1.0 -> "<1 d"

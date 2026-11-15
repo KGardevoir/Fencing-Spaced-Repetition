@@ -10,6 +10,7 @@ import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.repository.GROUP_NAME_CARD_EDIT
+import kotlin.math.sqrt
 
 /**
  * How retention is going, at every level the app keeps learning state:
@@ -59,12 +60,39 @@ data class RetentionSummary(
     val recalled: Int,
     /** Measured recall over the last 30 days; null when there were no reviews. */
     val recentRecall: Double?,
+    /** Of [recentReviews], those not graded Again. */
+    val recentRecalled: Int,
+    /** Counted reviews in the last 30 days. */
+    val recentReviews: Int,
     /** One point per period that had at least one counted review, oldest first. */
-    val trend: List<RetentionPoint>
+    val trend: List<RetentionPoint>,
+    /** Stability of the learned cards at the end of each period with any grade, oldest first. */
+    val stabilityTrend: List<StabilityPoint>
 ) {
     /** All-time measured recall; null when there were no reviews. */
     val measuredRecall: Double? get() = if (reviews == 0) null else recalled.toDouble() / reviews
+
+    /** 95 % confidence interval of [measuredRecall]; null when there were no reviews. */
+    val measuredRecallInterval: ClosedFloatingPointRange<Double>? get() = wilsonInterval(recalled, reviews)
+
+    /** 95 % confidence interval of [recentRecall]; null when there were no recent reviews. */
+    val recentRecallInterval: ClosedFloatingPointRange<Double>? get() = wilsonInterval(recentRecalled, recentReviews)
 }
+
+/**
+ * Stability across the cards in scope as of the end of one period: each
+ * learned card counts once, at the stability its latest grade so far left it.
+ * Stability is heavily skewed -- a few well-known cards sit at hundreds of
+ * days -- so the middle and quartiles describe it better than a mean.
+ */
+data class StabilityPoint(
+    /** Epoch millis of the start of the period, local time. */
+    val periodStart: Long,
+    val cards: Int,
+    val median: Double,
+    val lowerQuartile: Double,
+    val upperQuartile: Double
+)
 
 data class RetentionPoint(
     /** Epoch millis of the start of the period, local time. */
@@ -75,6 +103,25 @@ data class RetentionPoint(
     val predicted: Double?
 ) {
     val recall: Double get() = recalled.toDouble() / reviews
+
+    /** 95 % confidence interval of [recall]. */
+    val recallInterval: ClosedFloatingPointRange<Double> get() = wilsonInterval(recalled, reviews)!!
+}
+
+/**
+ * The Wilson score interval at 95 %: a range for a recall rate that stays
+ * honest at the small counts a week of practice produces, where the textbook
+ * p ± 1.96·sqrt(p(1-p)/n) collapses to nothing at 100 % and spills past 0-1.
+ */
+fun wilsonInterval(successes: Int, trials: Int, z: Double = 1.96): ClosedFloatingPointRange<Double>? {
+    if (trials <= 0) return null
+    val n = trials.toDouble()
+    val p = successes / n
+    val z2 = z * z
+    val centre = p + z2 / (2 * n)
+    val margin = z * sqrt(p * (1 - p) / n + z2 / (4 * n * n))
+    val denominator = 1 + z2 / n
+    return ((centre - margin) / denominator).coerceIn(0.0, 1.0)..((centre + margin) / denominator).coerceIn(0.0, 1.0)
 }
 
 data class LearningContextReport(
@@ -115,11 +162,15 @@ data class CardRetention(
     val reviews: Int,
     val recalled: Int,
     /** The card's counted reviews in this context, oldest first. */
-    val history: List<CardReviewPoint>
+    val history: List<CardReviewPoint>,
+    /** Stability after every grade in this context, first sighting included, oldest first. */
+    val stabilityHistory: List<CardStabilityPoint>
 ) {
     val measuredRecall: Double? get() = if (reviews == 0) null else recalled.toDouble() / reviews
     val isLearned: Boolean get() = state != STATE_NEW && lastReview > 0L
 }
+
+data class CardStabilityPoint(val reviewTime: Long, val stability: Double)
 
 data class CardReviewPoint(
     val reviewTime: Long,
@@ -155,7 +206,6 @@ object RetentionReportBuilder {
     ): RetentionReport {
         val enabledCards = cards.filter { !it.isDisabled }
         val cardsById = cards.associateBy { it.id }
-        val groupsById = groups.associateBy { it.id }
         val groupsByName = groups.associateBy { it.name }
         val learningGroupIds = learningGroups.map { it.id }.toSet()
         val statesByKey = learningStates.associateBy { it.cardId to it.learningGroupId }
@@ -169,7 +219,9 @@ object RetentionReportBuilder {
 
         // Only reviews of a card that had been seen before measure recall:
         // a first sighting has nothing to remember, and a skip is not a grade.
-        val countedLogs = logs.filter { it.grade in 1..4 && parseState(it.stateBefore) != STATE_NEW }
+        val gradedLogs = logs.filter { it.grade in 1..4 }
+        fun ReviewLog.counts() = parseState(stateBefore) != STATE_NEW
+        val countedLogs = gradedLogs.filter { it.counts() }
 
         // Which context a log graded. A log keeps only the name of the group it
         // was practised in, so this follows the group as it is today: renaming a
@@ -183,8 +235,39 @@ object RetentionReportBuilder {
             val group = groupsByName[name] ?: return unattributed
             return contextOf(group)
         }
-        val logsByContext: Map<Any?, List<ReviewLog>> = countedLogs.groupBy(::logContext)
+        // Graded logs, first sightings included: they set a card's first stability.
+        val gradedByContext: Map<Any?, List<ReviewLog>> = gradedLogs.groupBy(::logContext)
         val logsByGroupName = countedLogs.groupBy { it.groupName }
+
+        /**
+         * Stability as of the end of each period, from the latest grade each
+         * key (a card, or a card in one context) had received by then.
+         */
+        fun <K> stabilityTrendOf(keyedLogs: List<Pair<K, ReviewLog>>): List<StabilityPoint> {
+            val withStability = keyedLogs
+                .mapNotNull { (k, log) -> parseStability(log.stateAfter)?.takeIf { it > 0.0 }?.let { Triple(k, log.reviewTime, it) } }
+                .sortedBy { it.second }
+            if (withStability.isEmpty()) return emptyList()
+            val latest = HashMap<K, Double>()
+            val points = mutableListOf<StabilityPoint>()
+            var i = 0
+            while (i < withStability.size) {
+                val start = periodStart(withStability[i].second, utcOffsetSeconds, period)
+                while (i < withStability.size && periodStart(withStability[i].second, utcOffsetSeconds, period) == start) {
+                    latest[withStability[i].first] = withStability[i].third
+                    i++
+                }
+                val sorted = latest.values.sorted()
+                points += StabilityPoint(
+                    periodStart = start,
+                    cards = sorted.size,
+                    median = quantile(sorted, 0.5),
+                    lowerQuartile = quantile(sorted, 0.25),
+                    upperQuartile = quantile(sorted, 0.75)
+                )
+            }
+            return points
+        }
 
         fun snapshotOf(card: Card, learningGroupId: Long?): Snapshot {
             if (learningGroupId == null) {
@@ -213,7 +296,11 @@ object RetentionReportBuilder {
             return retrievability(log.elapsedDays.toDouble(), stability)
         }
 
-        fun summarize(snapshots: List<Snapshot>, scopeLogs: List<ReviewLog>): RetentionSummary {
+        fun summarize(
+            snapshots: List<Snapshot>,
+            scopeLogs: List<ReviewLog>,
+            stabilityTrend: List<StabilityPoint>
+        ): RetentionSummary {
             val learned = snapshots.filter { it.state != STATE_NEW && it.lastReview > 0L }
             val rNow = learned.mapNotNull(::retrievabilityNow)
             val recentSince = now - RECENT_WINDOW_DAYS * DAY_MILLIS
@@ -241,7 +328,10 @@ object RetentionReportBuilder {
                 recalled = scopeLogs.count { it.grade >= 2 },
                 recentRecall = recent.takeIf { it.isNotEmpty() }
                     ?.let { r -> r.count { it.grade >= 2 }.toDouble() / r.size },
-                trend = trend
+                recentRecalled = recent.count { it.grade >= 2 },
+                recentReviews = recent.size,
+                trend = trend,
+                stabilityTrend = stabilityTrend
             )
         }
 
@@ -258,8 +348,11 @@ object RetentionReportBuilder {
                 val ids = memberGroups.flatMap { cardIdsByGroup[it.id].orEmpty() }.toSet()
                 enabledCards.filter { it.id in ids }
             }
-            val contextLogs = logsByContext[lgId].orEmpty()
+            val contextCardIds = contextCards.map { it.id }.toSet()
+            val contextGraded = gradedByContext[lgId].orEmpty()
+            val contextLogs = contextGraded.filter { it.counts() }
             val logsByCard = contextLogs.groupBy { it.cardId }
+            val gradedByCard = contextGraded.groupBy { it.cardId }
 
             val cardRows = contextCards.map { card ->
                 val s = snapshotOf(card, lgId)
@@ -277,7 +370,12 @@ object RetentionReportBuilder {
                     nextReview = s.nextReview,
                     reviews = cardLogs.size,
                     recalled = cardLogs.count { it.grade >= 2 },
-                    history = cardLogs.map { CardReviewPoint(it.reviewTime, it.grade, predictedAtReview(it)) }
+                    history = cardLogs.map { CardReviewPoint(it.reviewTime, it.grade, predictedAtReview(it)) },
+                    stabilityHistory = gradedByCard[card.id].orEmpty()
+                        .sortedBy { it.reviewTime }
+                        .mapNotNull { log ->
+                            parseStability(log.stateAfter)?.takeIf { it > 0.0 }?.let { CardStabilityPoint(log.reviewTime, it) }
+                        }
                 )
             }.sortedWith(
                 // Weakest first; cards not yet learned at the bottom.
@@ -290,7 +388,11 @@ object RetentionReportBuilder {
                 learningGroupId = lgId,
                 name = lgId?.let { id -> learningGroups.first { it.id == id }.name } ?: GLOBAL_NAME,
                 cardGroupNames = memberGroups.map { it.name }.sorted(),
-                summary = summarize(contextCards.map { snapshotOf(it, lgId) }, contextLogs),
+                summary = summarize(
+                    contextCards.map { snapshotOf(it, lgId) },
+                    contextLogs,
+                    stabilityTrendOf(contextGraded.filter { it.cardId in contextCardIds }.map { it.cardId to it })
+                ),
                 cards = cardRows
             )
         }
@@ -311,7 +413,14 @@ object RetentionReportBuilder {
                 learningContextName = contextNames[lgId] ?: GLOBAL_NAME,
                 summary = summarize(
                     groupCards.map { snapshotOf(it, lgId) },
-                    logsByGroupName[group.name].orEmpty()
+                    logsByGroupName[group.name].orEmpty(),
+                    // Stability is the state the group's cards share in its
+                    // learning context, whichever group the grade came from.
+                    stabilityTrendOf(
+                        gradedByContext[lgId].orEmpty()
+                            .filter { it.cardId in ids && cardsById[it.cardId]?.isDisabled == false }
+                            .map { it.cardId to it }
+                    )
                 ),
                 cards = contextCards[lgId].orEmpty().filter { it.cardId in ids }
             )
@@ -324,7 +433,16 @@ object RetentionReportBuilder {
         val overallSnapshots = contextReports.flatMap { ctx ->
             ctx.cards.mapNotNull { row -> cardsById[row.cardId]?.let { snapshotOf(it, ctx.learningGroupId) } }
         }
-        val overall = summarize(overallSnapshots, countedLogs)
+        val enabledIds = enabledCards.map { it.id }.toSet()
+        val overall = summarize(
+            overallSnapshots,
+            countedLogs,
+            stabilityTrendOf(
+                gradedLogs
+                    .filter { it.cardId in enabledIds }
+                    .mapNotNull { log -> logContext(log).takeIf { it !== unattributed }?.let { ctx -> (log.cardId to ctx) to log } }
+            )
+        )
 
         return RetentionReport(
             overall = overall,
@@ -343,6 +461,15 @@ object RetentionReportBuilder {
         val lastReview: Long,
         val nextReview: Long
     )
+
+    /** Linear-interpolated quantile of an ascending, non-empty list. */
+    internal fun quantile(sorted: List<Double>, q: Double): Double {
+        if (sorted.size == 1) return sorted[0]
+        val pos = q * (sorted.size - 1)
+        val lo = pos.toInt()
+        val hi = minOf(lo + 1, sorted.size - 1)
+        return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo)
+    }
 
     /** The `ST:` field of a serialized review state, e.g. `S:3.1,D:5.2,ST:REVIEW`. */
     internal fun parseState(serialized: String): String? = field(serialized, "ST")
