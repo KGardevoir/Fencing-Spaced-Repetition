@@ -13,9 +13,11 @@ package com.fencing.spacedrepetition.util
 //     version: 5
 //     learningGroups:            # shared learning progress; absent = Global
 //       - name: Bouting
+//         cardsPerSession: 15    # how its sessions are drawn, and
+//         fsrsRetention: 85      # the settings that schedule it
 //     groups:                    # only those with settings or a learning group
 //       - name: Footwork
-//         cardsPerSession: 20
+//         autoShowAnswer: true
 //         learningGroup: Bouting
 //     opponents:
 //       - name: Alex
@@ -57,6 +59,11 @@ package com.fencing.spacedrepetition.util
 // group is put in a learning group of its own name, which is what learning
 // independently has become.
 //
+// Files written before the settings moved to learning groups carry
+// cardsPerSession, randomizeDueCards, randomizeBucketHours, practiceDays,
+// maximumInterval, fsrsRetention and fsrsEnableFuzzing on the groups instead. They still import: a group's learning settings go to its
+// learning group, where the file gives that learning group none of its own.
+//
 // Every field with a sensible default is left out when it holds that default,
 // so a card nobody has practised is three lines and a backup is a good deal
 // smaller than the shape above suggests. Nothing is lost by it: what is
@@ -72,6 +79,7 @@ import com.charleskorn.kaml.SingleLineStringStyle
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
@@ -117,7 +125,14 @@ internal data class ArchiveSession(
 @Serializable
 internal data class ArchiveLearningGroup(
     val name: String,
-    val description: String = ""
+    val description: String = "",
+    val cardsPerSession: Int? = null,
+    val randomizeDueCards: Boolean? = null,
+    val randomizeBucketHours: Int? = null,
+    val practiceDays: String? = null,
+    val maximumInterval: Int? = null,
+    val fsrsRetention: Int? = null,
+    val fsrsEnableFuzzing: Boolean? = null
 )
 
 @Serializable
@@ -125,8 +140,10 @@ internal data class ArchiveGroup(
     val name: String,
     /** The name of the learning group it practises against; absent for Global. */
     val learningGroup: String? = null,
-    val cardsPerSession: Int? = null,
     val autoShowAnswer: Boolean? = null,
+    // Read, never written: older files kept these here, before they moved
+    // to [ArchiveLearningGroup].
+    val cardsPerSession: Int? = null,
     val randomizeDueCards: Boolean? = null,
     val randomizeBucketHours: Int? = null,
     val practiceDays: String? = null,
@@ -288,14 +305,19 @@ internal object ArchiveYaml {
     fun groupNode(group: Group, learningGroupName: String? = null) = ArchiveGroup(
         name = group.name,
         learningGroup = learningGroupName,
-        cardsPerSession = group.cardsPerSession,
-        autoShowAnswer = group.autoShowAnswer,
-        randomizeDueCards = group.randomizeDueCards,
-        randomizeBucketHours = group.randomizeBucketHours,
-        practiceDays = group.practiceDays,
-        maximumInterval = group.maximumInterval,
-        fsrsRetention = group.fsrsRetention,
-        fsrsEnableFuzzing = group.fsrsEnableFuzzing
+        autoShowAnswer = group.autoShowAnswer
+    )
+
+    fun learningGroupNode(learningGroup: LearningGroup) = ArchiveLearningGroup(
+        name = learningGroup.name,
+        description = learningGroup.description,
+        cardsPerSession = learningGroup.cardsPerSession,
+        randomizeDueCards = learningGroup.randomizeDueCards,
+        randomizeBucketHours = learningGroup.randomizeBucketHours,
+        practiceDays = learningGroup.practiceDays,
+        maximumInterval = learningGroup.maximumInterval,
+        fsrsRetention = learningGroup.fsrsRetention,
+        fsrsEnableFuzzing = learningGroup.fsrsEnableFuzzing
     )
 
     fun opponentNode(opponent: Opponent) = ArchiveOpponent(
@@ -473,6 +495,17 @@ internal object ArchiveYaml {
         group.maximumInterval?.let { put("maximumInterval", it.toString()) }
         group.fsrsRetention?.let { put("fsrsRetention", it.toString()) }
         group.fsrsEnableFuzzing?.let { put("fsrsEnableFuzzing", it.toString()) }
+    }
+
+    /** The same settings map as [groupSettings], for a learning group's own settings. */
+    fun learningGroupSettings(learningGroup: ArchiveLearningGroup): Map<String, String> = buildMap {
+        learningGroup.cardsPerSession?.let { put("cardsPerSession", it.toString()) }
+        learningGroup.randomizeDueCards?.let { put("randomizeDueCards", it.toString()) }
+        learningGroup.randomizeBucketHours?.let { put("randomizeBucketHours", it.toString()) }
+        learningGroup.practiceDays?.let { put("practiceDays", it) }
+        learningGroup.maximumInterval?.let { put("maximumInterval", it.toString()) }
+        learningGroup.fsrsRetention?.let { put("fsrsRetention", it.toString()) }
+        learningGroup.fsrsEnableFuzzing?.let { put("fsrsEnableFuzzing", it.toString()) }
     }
 
     fun parsedOpponent(opponent: ArchiveOpponent) = CardImportExport.ParsedOpponent(

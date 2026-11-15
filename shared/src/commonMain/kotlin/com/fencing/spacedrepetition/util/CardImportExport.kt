@@ -163,6 +163,23 @@ object CardImportExport {
     var lastParsedLearningGroups: Map<String, String> = emptyMap()
         private set
 
+    /**
+     * The learning settings an import file gives each learning group it
+     * declares, by name -- the map [applyLearningGroupSettings] takes. A
+     * learning group the file gives no settings is left out.
+     */
+    var lastParsedLearningGroupSettings: Map<String, Map<String, String>> = emptyMap()
+        private set
+
+    /**
+     * The settings that belong to a learning group, which older files wrote
+     * on the groups.
+     */
+    val LEARNING_SETTING_KEYS = setOf(
+        "cardsPerSession", "randomizeDueCards", "randomizeBucketHours",
+        "practiceDays", "maximumInterval", "fsrsRetention", "fsrsEnableFuzzing"
+    )
+
     /** Parsed review history from an import file (populated after calling parseCards) */
     var lastParsedReviewHistory: List<ParsedReviewLog> = emptyList()
         private set
@@ -209,6 +226,7 @@ object CardImportExport {
     fun parseCards(lines: List<String>): Pair<List<ParsedCard>, List<String>> {
         lastParsedGroupSettings = emptyMap()
         lastParsedLearningGroups = emptyMap()
+        lastParsedLearningGroupSettings = emptyMap()
         lastParsedOpponents = emptyList()
         lastParsedReviewHistory = emptyList()
         lastParsedSessions = emptyList()
@@ -250,10 +268,13 @@ object CardImportExport {
 
         val errors = mutableListOf<String>()
 
-        lastParsedLearningGroups = ArchiveYaml
+        val learningGroups = ArchiveYaml
             .decodeSection(document, KEY_LEARNING_GROUPS, ArchiveLearningGroup.serializer(), errors)
             .filter { it.name.isNotBlank() }
-            .associate { it.name.trim() to it.description }
+        lastParsedLearningGroups = learningGroups.associate { it.name.trim() to it.description }
+        lastParsedLearningGroupSettings = learningGroups
+            .associate { it.name.trim() to ArchiveYaml.learningGroupSettings(it) }
+            .filterValues { it.isNotEmpty() }
         lastParsedGroupSettings = ArchiveYaml
             .decodeSection(document, KEY_GROUPS, ArchiveGroup.serializer(), errors)
             .filter { it.name.isNotBlank() }
@@ -726,7 +747,7 @@ object CardImportExport {
                 out,
                 ArchiveDocument(
                     learningGroups = learningGroups.filter { it.id in writtenLearningGroupIds }
-                        .map { ArchiveLearningGroup(it.name, it.description) },
+                        .map { ArchiveYaml.learningGroupNode(it) },
                     // Only the groups with settings or a learning group of
                     // their own. A group with neither is already described by
                     // the cards that name it.
@@ -857,14 +878,25 @@ object CardImportExport {
      *
      * A setting the file does not mention is cleared rather than left alone:
      * an export carries every override a group has, so its absence means the
-     * group does not have one. fsrsEnableFuzzing is in the list now that the
-     * format writes it -- the tab-separated one never did, which left it the
-     * one override an export quietly dropped.
+     * group does not have one. The learning settings in the map, if an older
+     * file put them there, are for [applyLearningGroupSettings] instead.
      */
     fun applyGroupSettings(group: Group, settings: Map<String, String>): Group {
         return group.copy(
+            autoShowAnswer = settings["autoShowAnswer"]?.toBooleanStrictOrNull()
+        )
+    }
+
+    /**
+     * Applies parsed learning settings to a LearningGroup entity, clearing
+     * any the map does not mention, as [applyGroupSettings] does.
+     * fsrsEnableFuzzing is in the list now that the format writes it -- the
+     * tab-separated one never did, which left it the one override an export
+     * quietly dropped.
+     */
+    fun applyLearningGroupSettings(learningGroup: LearningGroup, settings: Map<String, String>): LearningGroup {
+        return learningGroup.copy(
             cardsPerSession = settings["cardsPerSession"]?.toIntOrNull(),
-            autoShowAnswer = settings["autoShowAnswer"]?.toBooleanStrictOrNull(),
             randomizeDueCards = settings["randomizeDueCards"]?.toBooleanStrictOrNull(),
             randomizeBucketHours = settings["randomizeBucketHours"]?.toIntOrNull(),
             practiceDays = settings["practiceDays"],

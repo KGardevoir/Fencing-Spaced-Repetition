@@ -168,6 +168,10 @@ class GroupRepository(
      * Deletes a learning group and every state kept in it. Its card groups go
      * back to Global, by the foreign key, rather than being deleted with it.
      */
+    /** How many different cards [groupIds] hold between them. */
+    suspend fun countCardsInGroups(groupIds: Set<Long>): Int =
+        groupDao.countDistinctCardsInGroups(groupIds.toList())
+
     suspend fun deleteLearningGroup(learningGroup: LearningGroup) =
         groupDao.deleteLearningGroup(learningGroup)
 

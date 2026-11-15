@@ -21,7 +21,7 @@ class GroupTest {
 
     @Test
     fun `hasCustomSettings - cardsPerSession override`() {
-        val group = Group(name = "Test", cardsPerSession = 5)
+        val group = LearningGroup(name = "Test", cardsPerSession = 5)
         assertTrue(group.hasCustomSettings())
     }
 
@@ -33,98 +33,106 @@ class GroupTest {
 
     @Test
     fun `hasCustomSettings - randomizeDueCards override`() {
-        val group = Group(name = "Test", randomizeDueCards = false)
+        val group = LearningGroup(name = "Test", randomizeDueCards = false)
         assertTrue(group.hasCustomSettings())
     }
 
     @Test
     fun `hasCustomSettings - randomizeBucketHours override`() {
-        val group = Group(name = "Test", randomizeBucketHours = 72)
+        val group = LearningGroup(name = "Test", randomizeBucketHours = 72)
         assertTrue(group.hasCustomSettings())
     }
 
     @Test
     fun `hasCustomSettings - practiceDays override`() {
-        val group = Group(name = "Test", practiceDays = "1,3,5")
+        val group = LearningGroup(name = "Test", practiceDays = "1,3,5")
         assertTrue(group.hasCustomSettings())
     }
 
     @Test
     fun `hasCustomSettings - maximumInterval override`() {
-        val group = Group(name = "Test", maximumInterval = 365)
+        val group = LearningGroup(name = "Test", maximumInterval = 365)
         assertTrue(group.hasCustomSettings())
     }
 
     @Test
     fun `hasCustomSettings - fsrsRetention override`() {
-        val group = Group(name = "Test", fsrsRetention = 85)
+        val group = LearningGroup(name = "Test", fsrsRetention = 85)
         assertTrue(group.hasCustomSettings())
     }
 
     @Test
+    fun `hasCustomSettings - learning group cardsPerSession override`() {
+        assertTrue(LearningGroup(name = "Test", cardsPerSession = 15).hasCustomSettings())
+        assertFalse(LearningGroup(name = "Test").hasCustomSettings())
+    }
+
+    @Test
     fun `hasCustomSettings - multiple overrides`() {
-        val group = Group(
+        val group = LearningGroup(
             name = "Test",
             cardsPerSession = 10,
-            autoShowAnswer = false,
-            maximumInterval = 180
+            randomizeBucketHours = 180,
+            fsrsRetention = 85
         )
         assertTrue(group.hasCustomSettings())
+        // A card group's only setting is auto-show.
+        assertTrue(Group(name = "Test", autoShowAnswer = false).hasCustomSettings())
     }
 
     // ==================== parsePracticeDays TESTS ====================
 
     @Test
     fun `parsePracticeDays - null returns null`() {
-        val group = Group(name = "Test", practiceDays = null)
+        val group = LearningGroup(name = "Test", practiceDays = null)
         assertNull(group.parsePracticeDays())
     }
 
     @Test
     fun `parsePracticeDays - valid days`() {
-        val group = Group(name = "Test", practiceDays = "1,3,5")
+        val group = LearningGroup(name = "Test", practiceDays = "1,3,5")
         assertEquals(setOf(1, 3, 5), group.parsePracticeDays())
     }
 
     @Test
     fun `parsePracticeDays - all days`() {
-        val group = Group(name = "Test", practiceDays = "1,2,3,4,5,6,7")
+        val group = LearningGroup(name = "Test", practiceDays = "1,2,3,4,5,6,7")
         assertEquals(setOf(1, 2, 3, 4, 5, 6, 7), group.parsePracticeDays())
     }
 
     @Test
     fun `parsePracticeDays - single day`() {
-        val group = Group(name = "Test", practiceDays = "7")
+        val group = LearningGroup(name = "Test", practiceDays = "7")
         assertEquals(setOf(7), group.parsePracticeDays())
     }
 
     @Test
     fun `parsePracticeDays - ignores out of range values`() {
-        val group = Group(name = "Test", practiceDays = "0,1,8,3")
+        val group = LearningGroup(name = "Test", practiceDays = "0,1,8,3")
         assertEquals(setOf(1, 3), group.parsePracticeDays())
     }
 
     @Test
     fun `parsePracticeDays - ignores non-numeric values`() {
-        val group = Group(name = "Test", practiceDays = "1,abc,3")
+        val group = LearningGroup(name = "Test", practiceDays = "1,abc,3")
         assertEquals(setOf(1, 3), group.parsePracticeDays())
     }
 
     @Test
     fun `parsePracticeDays - handles whitespace`() {
-        val group = Group(name = "Test", practiceDays = " 1 , 3 , 5 ")
+        val group = LearningGroup(name = "Test", practiceDays = " 1 , 3 , 5 ")
         assertEquals(setOf(1, 3, 5), group.parsePracticeDays())
     }
 
     @Test
     fun `parsePracticeDays - empty string returns empty set`() {
-        val group = Group(name = "Test", practiceDays = "")
+        val group = LearningGroup(name = "Test", practiceDays = "")
         assertEquals(emptySet<Int>(), group.parsePracticeDays())
     }
 
     @Test
     fun `parsePracticeDays - handles duplicate values`() {
-        val group = Group(name = "Test", practiceDays = "1,1,3,3,5")
+        val group = LearningGroup(name = "Test", practiceDays = "1,1,3,3,5")
         assertEquals(setOf(1, 3, 5), group.parsePracticeDays())
     }
 }

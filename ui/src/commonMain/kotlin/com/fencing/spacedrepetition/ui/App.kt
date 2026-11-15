@@ -23,6 +23,8 @@ import com.fencing.spacedrepetition.ui.screen.GroupEditScreen
 import com.fencing.spacedrepetition.ui.screen.GroupListScreen
 import com.fencing.spacedrepetition.ui.screen.HistoryScreen
 import com.fencing.spacedrepetition.ui.screen.HomeScreen
+import com.fencing.spacedrepetition.ui.screen.GlobalLearningSettingsScreen
+import com.fencing.spacedrepetition.ui.screen.LearningGroupEditScreen
 import com.fencing.spacedrepetition.ui.screen.LearningGroupsScreen
 import com.fencing.spacedrepetition.ui.screen.OpponentsScreen
 import com.fencing.spacedrepetition.ui.screen.PracticeScreen
@@ -95,6 +97,7 @@ fun App(
 
         Destination.Home -> {
             val groups by groupViewModel.allGroups.collectAsState()
+            val learningGroups by groupViewModel.learningGroups.collectAsState()
             val savedGroupId by settingsViewModel.selectedGroupId.collectAsState()
             val globalCardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
             val totalCardCount by cardViewModel.cardCount.collectAsState()
@@ -127,8 +130,10 @@ fun App(
                 }
             }
 
-            // A group's own cards-per-session overrides the global setting.
-            val cardsPerSession = selectedGroup?.cardsPerSession ?: globalCardsPerSession
+            // The learning group's cards-per-session overrides the global setting.
+            val cardsPerSession =
+                learningGroups.find { it.id == selectedGroup?.learningGroupId }?.cardsPerSession
+                    ?: globalCardsPerSession
 
             val cardsToPractise = selectedGroup?.let { group ->
                 cardViewModel.getCardCountByGroup(group.id).collectAsState(initial = 0).value
@@ -174,7 +179,13 @@ fun App(
             val uiState by practiceViewModel.uiState.collectAsState()
             val sessionCards by practiceViewModel.sessionCards.collectAsState()
             val currentCardIndex by practiceViewModel.currentCardIndex.collectAsState()
-            val autoShowAnswer by settingsViewModel.autoShowAnswer.collectAsState()
+            val globalAutoShowAnswer by settingsViewModel.autoShowAnswer.collectAsState()
+            val groups by groupViewModel.allGroups.collectAsState()
+            val savedGroupId by settingsViewModel.selectedGroupId.collectAsState()
+            // The session is drawn from the selected group, the same fallback
+            // as the home screen's; its own auto-show overrides the global one.
+            val practisedGroup = groups.find { it.id == savedGroupId } ?: groups.firstOrNull()
+            val autoShowAnswer = practisedGroup?.autoShowAnswer ?: globalAutoShowAnswer
 
             PracticeScreen(
                 uiState = uiState,
@@ -346,9 +357,7 @@ fun App(
 
         Destination.AddGroup -> GroupEditor(
             group = Group(name = ""),
-            groupCardCount = 0,
             groupViewModel = groupViewModel,
-            cardViewModel = cardViewModel,
             settingsViewModel = settingsViewModel,
             onSave = { newGroup -> groupViewModel.addGroupWithSettings(newGroup) { navigator.back() } },
             onNavigateBack = { navigator.back() }
@@ -356,15 +365,10 @@ fun App(
 
         is Destination.EditGroup -> {
             val group = destination.group
-            val groupCardCount by remember(group.id) {
-                cardViewModel.getCardCountForGroup(group.id)
-            }.collectAsState(initial = 0)
 
             GroupEditor(
                 group = group,
-                groupCardCount = groupCardCount,
                 groupViewModel = groupViewModel,
-                cardViewModel = cardViewModel,
                 settingsViewModel = settingsViewModel,
                 onSave = { updated -> groupViewModel.saveGroup(updated, group) { navigator.back() } },
                 onNavigateBack = { navigator.back() }
@@ -378,8 +382,79 @@ fun App(
             LearningGroupsScreen(
                 learningGroups = learningGroups,
                 groups = groups,
-                onSaveLearningGroup = groupViewModel::saveLearningGroup,
+                onEditLearningGroup = { navigator.go(Destination.EditLearningGroup(it)) },
+                onEditGlobal = { navigator.go(Destination.GlobalLearningSettings) },
                 onDeleteLearningGroup = groupViewModel::deleteLearningGroup,
+                onNavigateBack = { navigator.back() }
+            )
+        }
+
+        Destination.GlobalLearningSettings -> {
+            val totalCards by cardViewModel.cardCount.collectAsState()
+            val cardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
+            val randomizeDueCards by settingsViewModel.randomizeDueCards.collectAsState()
+            val randomizeBucketHours by settingsViewModel.randomizeBucketHours.collectAsState()
+            val practiceDays by settingsViewModel.practiceDays.collectAsState()
+            val maximumInterval by settingsViewModel.maximumInterval.collectAsState()
+            val fsrsRetention by settingsViewModel.fsrsRetention.collectAsState()
+            val fsrsEnableFuzzing by settingsViewModel.fsrsEnableFuzzing.collectAsState()
+            val practiceScheduleEstimate by cardViewModel.practiceScheduleEstimate.collectAsState()
+            val historyWindowDays by cardViewModel.historyWindowDays.collectAsState()
+
+            GlobalLearningSettingsScreen(
+                totalCards = totalCards,
+                cardsPerSession = cardsPerSession,
+                randomizeDueCards = randomizeDueCards,
+                randomizeBucketHours = randomizeBucketHours,
+                practiceDays = practiceDays,
+                maximumInterval = maximumInterval,
+                fsrsRetention = fsrsRetention,
+                fsrsEnableFuzzing = fsrsEnableFuzzing,
+                practiceScheduleEstimate = practiceScheduleEstimate,
+                historyWindowDays = historyWindowDays,
+                onSetCardsPerSession = settingsViewModel::setCardsPerSession,
+                onSetRandomizeDueCards = settingsViewModel::setRandomizeDueCards,
+                onSetRandomizeBucketHours = settingsViewModel::setRandomizeBucketHours,
+                onSetPracticeDays = settingsViewModel::setPracticeDays,
+                onSetMaximumInterval = settingsViewModel::setMaximumInterval,
+                onSetFsrsRetention = settingsViewModel::setFsrsRetention,
+                onSetFsrsEnableFuzzing = settingsViewModel::setFsrsEnableFuzzing,
+                onSetHistoryWindowDays = cardViewModel::setHistoryWindowDays,
+                onNavigateBack = { navigator.back() }
+            )
+        }
+
+        is Destination.EditLearningGroup -> {
+            val learningGroups by groupViewModel.learningGroups.collectAsState()
+            val groups by groupViewModel.allGroups.collectAsState()
+            val globalCardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
+            val globalRandomizeDueCards by settingsViewModel.randomizeDueCards.collectAsState()
+            val globalRandomizeBucketHours by settingsViewModel.randomizeBucketHours.collectAsState()
+            val globalPracticeDays by settingsViewModel.practiceDays.collectAsState()
+            val globalMaximumInterval by settingsViewModel.maximumInterval.collectAsState()
+            val globalFsrsRetention by settingsViewModel.fsrsRetention.collectAsState()
+            val globalFsrsEnableFuzzing by settingsViewModel.fsrsEnableFuzzing.collectAsState()
+            val practiceScheduleEstimate by cardViewModel.practiceScheduleEstimate.collectAsState()
+            val historyWindowDays by cardViewModel.historyWindowDays.collectAsState()
+
+            LearningGroupEditScreen(
+                learningGroup = destination.learningGroup,
+                learningGroups = learningGroups,
+                groups = groups,
+                globalCardsPerSession = globalCardsPerSession,
+                globalRandomizeDueCards = globalRandomizeDueCards,
+                globalRandomizeBucketHours = globalRandomizeBucketHours,
+                globalPracticeDays = globalPracticeDays,
+                globalMaximumInterval = globalMaximumInterval,
+                globalFsrsRetention = globalFsrsRetention,
+                globalFsrsEnableFuzzing = globalFsrsEnableFuzzing,
+                practiceScheduleEstimate = practiceScheduleEstimate,
+                historyWindowDays = historyWindowDays,
+                onHistoryWindowDaysChange = { cardViewModel.setHistoryWindowDays(it) },
+                countCards = groupViewModel::countCardsInGroups,
+                onSave = { updated, memberIds ->
+                    groupViewModel.saveLearningGroup(updated, memberIds) { navigator.back() }
+                },
                 onNavigateBack = { navigator.back() }
             )
         }
@@ -435,18 +510,8 @@ fun App(
         }
 
         Destination.Settings -> {
-            val totalCards by cardViewModel.cardCount.collectAsState()
             val themeMode by settingsViewModel.themeMode.collectAsState()
             val autoShowAnswer by settingsViewModel.autoShowAnswer.collectAsState()
-            val cardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
-            val randomizeDueCards by settingsViewModel.randomizeDueCards.collectAsState()
-            val randomizeBucketHours by settingsViewModel.randomizeBucketHours.collectAsState()
-            val maximumInterval by settingsViewModel.maximumInterval.collectAsState()
-            val practiceDays by settingsViewModel.practiceDays.collectAsState()
-            val fsrsRetention by settingsViewModel.fsrsRetention.collectAsState()
-            val practiceScheduleEstimate by cardViewModel.practiceScheduleEstimate.collectAsState()
-            val historyWindowDays by cardViewModel.historyWindowDays.collectAsState()
-            val fsrsEnableFuzzing by settingsViewModel.fsrsEnableFuzzing.collectAsState()
             val autoBackupEnabled by settingsViewModel.autoBackupEnabled.collectAsState()
             val autoBackupIntervalDays by settingsViewModel.autoBackupIntervalDays.collectAsState()
             val lastBackupTime by settingsViewModel.lastBackupTime.collectAsState()
@@ -456,19 +521,9 @@ fun App(
                 settingsViewModel.backupReminderIntervalDays.collectAsState()
 
             SettingsScreen(
-                totalCards = totalCards,
                 buildInfo = buildInfo,
                 themeMode = themeMode,
                 autoShowAnswer = autoShowAnswer,
-                cardsPerSession = cardsPerSession,
-                randomizeDueCards = randomizeDueCards,
-                randomizeBucketHours = randomizeBucketHours,
-                maximumInterval = maximumInterval,
-                practiceDays = practiceDays,
-                fsrsRetention = fsrsRetention,
-                practiceScheduleEstimate = practiceScheduleEstimate,
-                historyWindowDays = historyWindowDays,
-                fsrsEnableFuzzing = fsrsEnableFuzzing,
                 autoBackupEnabled = autoBackupEnabled,
                 autoBackupIntervalDays = autoBackupIntervalDays,
                 lastBackupTime = lastBackupTime,
@@ -480,14 +535,6 @@ fun App(
                 onPickBackupFolder = onPickBackupFolder,
                 onSetThemeMode = settingsViewModel::setThemeMode,
                 onSetAutoShowAnswer = settingsViewModel::setAutoShowAnswer,
-                onSetCardsPerSession = settingsViewModel::setCardsPerSession,
-                onSetRandomizeDueCards = settingsViewModel::setRandomizeDueCards,
-                onSetRandomizeBucketHours = settingsViewModel::setRandomizeBucketHours,
-                onSetMaximumInterval = settingsViewModel::setMaximumInterval,
-                onTogglePracticeDay = settingsViewModel::togglePracticeDay,
-                onSetFsrsRetention = settingsViewModel::setFsrsRetention,
-                onSetHistoryWindowDays = cardViewModel::setHistoryWindowDays,
-                onSetFsrsEnableFuzzing = settingsViewModel::setFsrsEnableFuzzing,
                 onSetAutoBackupEnabled = settingsViewModel::setAutoBackupEnabled,
                 onSetAutoBackupIntervalDays = settingsViewModel::setAutoBackupIntervalDays,
                 onSetMaxBackupsKept = settingsViewModel::setMaxBackupsKept,
@@ -561,41 +608,19 @@ private fun CardEditor(
 @Composable
 private fun GroupEditor(
     group: Group,
-    groupCardCount: Int,
     groupViewModel: GroupViewModel,
-    cardViewModel: CardViewModel,
     settingsViewModel: SettingsViewModel,
     onSave: (Group) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     val learningGroups by groupViewModel.learningGroups.collectAsState()
-    val globalCardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
     val globalAutoShowAnswer by settingsViewModel.autoShowAnswer.collectAsState()
-    val globalRandomizeDueCards by settingsViewModel.randomizeDueCards.collectAsState()
-    val globalRandomizeBucketHours by settingsViewModel.randomizeBucketHours.collectAsState()
-    val globalPracticeDays by settingsViewModel.practiceDays.collectAsState()
-    val globalMaximumInterval by settingsViewModel.maximumInterval.collectAsState()
-    val globalFsrsRetention by settingsViewModel.fsrsRetention.collectAsState()
-    val globalFsrsEnableFuzzing by settingsViewModel.fsrsEnableFuzzing.collectAsState()
-    val practiceScheduleEstimate by cardViewModel.practiceScheduleEstimate.collectAsState()
-    val historyWindowDays by cardViewModel.historyWindowDays.collectAsState()
 
     GroupEditScreen(
         group = group,
         learningGroups = learningGroups,
         onCreateLearningGroup = { name, onCreated -> groupViewModel.addLearningGroup(name, onCreated) },
-        globalCardsPerSession = globalCardsPerSession,
         globalAutoShowAnswer = globalAutoShowAnswer,
-        globalRandomizeDueCards = globalRandomizeDueCards,
-        globalRandomizeBucketHours = globalRandomizeBucketHours,
-        globalPracticeDays = globalPracticeDays,
-        globalMaximumInterval = globalMaximumInterval,
-        globalFsrsRetention = globalFsrsRetention,
-        globalFsrsEnableFuzzing = globalFsrsEnableFuzzing,
-        groupCardCount = groupCardCount,
-        practiceScheduleEstimate = practiceScheduleEstimate,
-        historyWindowDays = historyWindowDays,
-        onHistoryWindowDaysChange = { cardViewModel.setHistoryWindowDays(it) },
         onSave = onSave,
         onNavigateBack = onNavigateBack
     )

@@ -35,18 +35,7 @@ class GroupEditScreenTest {
                 GroupEditScreen(
                     group = group(),
                     learningGroups = emptyList(),
-                    globalCardsPerSession = 3,
                     globalAutoShowAnswer = false,
-                    globalRandomizeDueCards = true,
-                    globalRandomizeBucketHours = 24,
-                    globalPracticeDays = setOf(1, 3, 5),
-                    globalMaximumInterval = 365,
-                    globalFsrsRetention = 90,
-                    globalFsrsEnableFuzzing = true,
-                    groupCardCount = 12,
-                    practiceScheduleEstimate = null,
-                    historyWindowDays = 28,
-                    onHistoryWindowDaysChange = {},
                     onSave = {},
                     onNavigateBack = {}
                 )
@@ -69,18 +58,7 @@ class GroupEditScreenTest {
                 GroupEditScreen(
                     group = group(),
                     learningGroups = emptyList(),
-                    globalCardsPerSession = 3,
                     globalAutoShowAnswer = false,
-                    globalRandomizeDueCards = true,
-                    globalRandomizeBucketHours = 24,
-                    globalPracticeDays = setOf(1, 3, 5),
-                    globalMaximumInterval = 365,
-                    globalFsrsRetention = 90,
-                    globalFsrsEnableFuzzing = true,
-                    groupCardCount = 12,
-                    practiceScheduleEstimate = null,
-                    historyWindowDays = 28,
-                    onHistoryWindowDaysChange = {},
                     onSave = { saved = it },
                     onNavigateBack = {}
                 )

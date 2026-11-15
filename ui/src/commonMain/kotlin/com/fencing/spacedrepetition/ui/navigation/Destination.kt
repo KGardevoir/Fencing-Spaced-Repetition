@@ -10,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.LearningGroup
 
 /**
  * Where the app can be.
@@ -31,6 +32,8 @@ sealed interface Destination {
     data class EditGroup(val group: Group) : Destination
     data object AddGroup : Destination
     data object LearningGroups : Destination
+    data object GlobalLearningSettings : Destination
+    data class EditLearningGroup(val learningGroup: LearningGroup) : Destination
     data object Settings : Destination
     data object History : Destination
     data object Opponents : Destination

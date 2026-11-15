@@ -21,6 +21,13 @@ import com.fencing.spacedrepetition.util.Time
  * instead, so two groups can share progress with each other without sharing
  * it with the rest of the collection. A group pointed at no learning group
  * learns Global, which is the default.
+ *
+ * The settings live here too, not on the card groups: how its state is
+ * scheduled, since every group in a learning group grades against one state
+ * per card and so must schedule it the same way, and how its sessions are
+ * drawn -- how many cards, and whether due cards are shuffled. Each is null
+ * to use the app-wide default, which is also what Global uses. A card group
+ * keeps only whether it shows the description straight away.
  */
 @Entity(tableName = "learning_groups")
 data class LearningGroup(
@@ -28,8 +35,34 @@ data class LearningGroup(
     val id: Long = 0,
     val name: String,
     val description: String = "",
-    val created: Long = Time.now()
-)
+    val created: Long = Time.now(),
+    val cardsPerSession: Int? = null,
+    val randomizeDueCards: Boolean? = null,
+    val randomizeBucketHours: Int? = null,
+    val practiceDays: String? = null,  // comma-separated ISO-8601 day ints (1=Mon..7=Sun)
+    val maximumInterval: Int? = null,
+    val fsrsRetention: Int? = null,         // integer percent 70–97, e.g. 90 for 90 %
+    val fsrsEnableFuzzing: Boolean? = null  // override FSRS interval fuzzing setting
+) {
+    /** Returns true if any setting override is set */
+    fun hasCustomSettings(): Boolean =
+        cardsPerSession != null || randomizeDueCards != null || randomizeBucketHours != null ||
+        practiceDays != null || maximumInterval != null ||
+        fsrsRetention != null || fsrsEnableFuzzing != null
+
+    /** Parse the practiceDays string to a Set<Int>, or null if not overridden */
+    fun parsePracticeDays(): Set<Int>? = parsePracticeDays(practiceDays)
+}
+
+/** Parses a comma-separated list of ISO-8601 day numbers, or null for none. */
+fun parsePracticeDays(raw: String?): Set<Int>? {
+    raw ?: return null
+    return raw.split(",")
+        .filter { it.isNotBlank() }
+        .mapNotNull { it.trim().toIntOrNull() }
+        .filter { it in 1..7 }
+        .toSet()
+}
 
 @Entity(
     tableName = "groups",
@@ -52,32 +85,14 @@ data class Group(
     /** The learning group whose state this group practises against; null is Global. */
     val learningGroupId: Long? = null,
     val created: Long = Time.now(),
-    // Per-group settings overrides (null = use global default)
-    val cardsPerSession: Int? = null,
-    val autoShowAnswer: Boolean? = null,
-    val randomizeDueCards: Boolean? = null,
-    val randomizeBucketHours: Int? = null,
-    val practiceDays: String? = null,  // comma-separated ISO-8601 day ints (1=Mon..7=Sun)
-    val maximumInterval: Int? = null,
-    // Retention overrides (null = use global default)
-    val fsrsRetention: Int? = null,         // integer percent 70–97, e.g. 90 for 90 %
-    val fsrsEnableFuzzing: Boolean? = null  // override FSRS interval fuzzing setting
+    /**
+     * Whether to show a card's description straight away; null for the
+     * global setting. Every other setting is the learning group's.
+     */
+    val autoShowAnswer: Boolean? = null
 ) {
     /** Returns true if any per-group setting override is set */
-    fun hasCustomSettings(): Boolean =
-        cardsPerSession != null || autoShowAnswer != null || randomizeDueCards != null ||
-        randomizeBucketHours != null || practiceDays != null || maximumInterval != null ||
-        fsrsRetention != null || fsrsEnableFuzzing != null
-
-    /** Parse the practiceDays string to a Set<Int>, or null if not overridden */
-    fun parsePracticeDays(): Set<Int>? {
-        val raw = practiceDays ?: return null
-        return raw.split(",")
-            .filter { it.isNotBlank() }
-            .mapNotNull { it.trim().toIntOrNull() }
-            .filter { it in 1..7 }
-            .toSet()
-    }
+    fun hasCustomSettings(): Boolean = autoShowAnswer != null
 }
 
 @Entity(
