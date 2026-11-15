@@ -54,7 +54,8 @@ fun AppNavigation(
     groupViewModel: GroupViewModel,
     settingsViewModel: SettingsViewModel,
     historyViewModel: HistoryViewModel,
-    opponentViewModel: OpponentViewModel
+    opponentViewModel: OpponentViewModel,
+    navigator: Navigator
 ) {
     val context = LocalContext.current
     val autoBackupUri by settingsViewModel.autoBackupUri.collectAsState()
@@ -93,7 +94,8 @@ fun AppNavigation(
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         },
         backupFolderName = backupFolderName,
-        onPickBackupFolder = { folderPickerLauncher.launch(null) }
+        onPickBackupFolder = { folderPickerLauncher.launch(null) },
+        navigator = navigator
     )
 }
 

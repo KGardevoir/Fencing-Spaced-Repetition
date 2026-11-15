@@ -30,6 +30,7 @@ import com.fencing.spacedrepetition.ui.image.LocalImagePicker
 import com.fencing.spacedrepetition.ui.image.rememberAndroidImageExporter
 import com.fencing.spacedrepetition.ui.image.rememberAndroidImagePicker
 import com.fencing.spacedrepetition.ui.navigation.AppNavigation
+import com.fencing.spacedrepetition.ui.navigation.NavigationViewModel
 import com.fencing.spacedrepetition.ui.theme.FencingSpacedRepetitionTheme
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
@@ -115,6 +116,8 @@ class MainActivity : ComponentActivity() {
                     val opponentViewModel: OpponentViewModel = viewModel(
                         factory = OpponentViewModelFactory(opponentRepository)
                     )
+                    // Owns the back stack so it survives Activity recreation.
+                    val navigationViewModel: NavigationViewModel = viewModel()
 
                     AppNavigation(
                         cardViewModel = cardViewModel,
@@ -122,7 +125,8 @@ class MainActivity : ComponentActivity() {
                         groupViewModel = groupViewModel,
                         settingsViewModel = settingsViewModel,
                         historyViewModel = historyViewModel,
-                        opponentViewModel = opponentViewModel
+                        opponentViewModel = opponentViewModel,
+                        navigator = navigationViewModel.navigator
                     )
                 }
             }
