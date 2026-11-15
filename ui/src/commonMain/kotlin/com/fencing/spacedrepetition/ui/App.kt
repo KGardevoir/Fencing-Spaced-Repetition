@@ -583,6 +583,7 @@ private fun GroupEditor(
     GroupEditScreen(
         group = group,
         learningGroups = learningGroups,
+        onCreateLearningGroup = { name, onCreated -> groupViewModel.addLearningGroup(name, onCreated) },
         globalCardsPerSession = globalCardsPerSession,
         globalAutoShowAnswer = globalAutoShowAnswer,
         globalRandomizeDueCards = globalRandomizeDueCards,

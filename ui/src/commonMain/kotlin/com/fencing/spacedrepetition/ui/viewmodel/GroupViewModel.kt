@@ -163,6 +163,17 @@ class GroupViewModel(
         }
     }
 
+    /** Creates an empty learning group, as the group editor does, and hands back its id. */
+    fun addLearningGroup(name: String, onCreated: (Long) -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                onCreated(groupRepository.insertLearningGroup(LearningGroup(name = name)))
+            } catch (e: Exception) {
+                // Handle error
+            }
+        }
+    }
+
     fun deleteLearningGroup(learningGroup: LearningGroup) {
         viewModelScope.launch {
             groupRepository.deleteLearningGroup(learningGroup)

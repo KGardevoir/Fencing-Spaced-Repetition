@@ -11,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Tune
@@ -35,6 +36,7 @@ import kotlin.math.roundToInt
 fun GroupEditScreen(
     group: Group,
     learningGroups: List<LearningGroup>,
+    onCreateLearningGroup: (name: String, onCreated: (Long) -> Unit) -> Unit = { _, _ -> },
     globalCardsPerSession: Int,
     globalAutoShowAnswer: Boolean,
     globalRandomizeDueCards: Boolean,
@@ -177,7 +179,8 @@ fun GroupEditScreen(
             LearningGroupPicker(
                 learningGroups = learningGroups,
                 selectedId = learningGroupId,
-                onSelect = { learningGroupId = it }
+                onSelect = { learningGroupId = it },
+                onCreate = onCreateLearningGroup
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -495,17 +498,25 @@ private fun SettingOverrideSection(
 
 /**
  * Which learning group a card group practises against. Global is the first
- * choice and the default; the learning groups themselves are made and
- * renamed on their own screen, reached from the home screen.
+ * choice and the default. A new learning group can be made here, as a group
+ * can from the card editor, and is selected as soon as it exists; renaming,
+ * deleting and moving several groups at once is on the Learning Groups
+ * screen, reached from the home screen.
  */
 @Composable
 private fun LearningGroupPicker(
     learningGroups: List<LearningGroup>,
     selectedId: Long?,
-    onSelect: (Long?) -> Unit
+    onSelect: (Long?) -> Unit,
+    onCreate: (name: String, onCreated: (Long) -> Unit) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var showCreateDialog by rememberSaveable { mutableStateOf(false) }
+    // The name of a learning group just created, shown until the list
+    // catches up with it.
+    var pendingName by remember { mutableStateOf<String?>(null) }
     val selected = learningGroups.find { it.id == selectedId }
+    val selectedName = selected?.name ?: pendingName?.takeIf { selectedId != null }
 
     Box {
         Row(
@@ -524,14 +535,14 @@ private fun LearningGroupPicker(
             Column(modifier = Modifier.weight(1f)) {
                 Text("Learning Group", style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    if (selected == null) "Global — shares learning progress with every Global group"
-                    else "${selected.name} — shares learning progress with the groups in it",
+                    if (selectedName == null) "Global — shares learning progress with every Global group"
+                    else "$selectedName — shares learning progress with the groups in it",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Text(
-                selected?.name ?: "Global",
+                selectedName ?: "Global",
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -558,6 +569,59 @@ private fun LearningGroupPicker(
                     }
                 )
             }
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text("New learning group…") },
+                leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    showCreateDialog = true
+                }
+            )
         }
+    }
+
+    if (showCreateDialog) {
+        var newName by rememberSaveable { mutableStateOf("") }
+        val trimmed = newName.trim()
+        val nameTaken = trimmed.equals("Global", ignoreCase = true) ||
+            learningGroups.any { it.name.equals(trimmed, ignoreCase = true) }
+        AlertDialog(
+            onDismissRequest = { showCreateDialog = false },
+            icon = { Icon(AppIcons.LearningGroup, contentDescription = null) },
+            title = { Text("Create New Learning Group") },
+            text = {
+                OutlinedTextField(
+                    value = newName,
+                    onValueChange = { newName = it },
+                    label = { Text("Learning Group Name") },
+                    singleLine = true,
+                    isError = nameTaken,
+                    supportingText = if (nameTaken) {
+                        { Text("That name is already in use") }
+                    } else null,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onCreate(trimmed) { newId ->
+                            pendingName = trimmed
+                            onSelect(newId)
+                            showCreateDialog = false
+                        }
+                    },
+                    enabled = trimmed.isNotEmpty() && !nameTaken
+                ) {
+                    Text("Create")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
