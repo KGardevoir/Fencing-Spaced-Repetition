@@ -73,6 +73,8 @@ class Migration15To16Test {
             assertEquals(0L, db.queryLong("SELECT `fsrsEnableFuzzing` FROM `learning_groups` WHERE `id` = 1"))
             assertEquals(180L, db.queryLong("SELECT `maximumInterval` FROM `learning_groups` WHERE `id` = 1"))
             assertEquals("1,3,5", db.queryText("SELECT `practiceDays` FROM `learning_groups` WHERE `id` = 1"))
+            // Cards per session stays on the groups, as their override.
+            assertEquals(1L, db.queryLong("SELECT COUNT(*) FROM `learning_groups` WHERE `id` = 1 AND `cardsPerSession` IS NULL"))
         }
     }
 
@@ -87,7 +89,7 @@ class Migration15To16Test {
                 db.queryLong(
                     """
                     SELECT COUNT(*) FROM `learning_groups` WHERE `id` = 2
-                      AND `practiceDays` IS NULL AND `maximumInterval` IS NULL
+                      AND `cardsPerSession` IS NULL AND `practiceDays` IS NULL AND `maximumInterval` IS NULL
                       AND `fsrsRetention` IS NULL AND `fsrsEnableFuzzing` IS NULL
                     """
                 )

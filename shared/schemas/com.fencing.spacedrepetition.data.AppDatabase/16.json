@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 16,
-    "identityHash": "8fa562ec09638556ec651723f077db16",
+    "identityHash": "c8fc1a3230369cae3578e6dc8c4d6f0c",
     "entities": [
       {
         "tableName": "cards",
@@ -563,7 +563,7 @@
       },
       {
         "tableName": "learning_groups",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `description` TEXT NOT NULL, `created` INTEGER NOT NULL, `practiceDays` TEXT, `maximumInterval` INTEGER, `fsrsRetention` INTEGER, `fsrsEnableFuzzing` INTEGER)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `description` TEXT NOT NULL, `created` INTEGER NOT NULL, `cardsPerSession` INTEGER, `practiceDays` TEXT, `maximumInterval` INTEGER, `fsrsRetention` INTEGER, `fsrsEnableFuzzing` INTEGER)",
         "fields": [
           {
             "fieldPath": "id",
@@ -588,6 +588,11 @@
             "columnName": "created",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "cardsPerSession",
+            "columnName": "cardsPerSession",
+            "affinity": "INTEGER"
           },
           {
             "fieldPath": "practiceDays",
@@ -679,7 +684,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8fa562ec09638556ec651723f077db16')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'c8fc1a3230369cae3578e6dc8c4d6f0c')"
     ]
   }
 }

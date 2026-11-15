@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.*
@@ -17,12 +18,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.BuildInfo
-import com.fencing.spacedrepetition.algorithm.ScheduleEstimate
 import com.fencing.spacedrepetition.SupportLinks
 import com.fencing.spacedrepetition.data.preferences.SettingsConstants
 import com.fencing.spacedrepetition.data.preferences.ThemeMode
-import com.fencing.spacedrepetition.ui.components.FsrsRetentionPreview
-import com.fencing.spacedrepetition.ui.components.RetentionSelector
+import com.fencing.spacedrepetition.ui.components.AppIcons
 import com.fencing.spacedrepetition.util.formatDateAtTime
 import kotlin.math.roundToInt
 
@@ -36,19 +35,11 @@ private const val DISABLED_ALPHA = 0.38f
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    totalCards: Int,
     buildInfo: BuildInfo,
     themeMode: ThemeMode,
     autoShowAnswer: Boolean,
-    cardsPerSession: Int,
     randomizeDueCards: Boolean,
     randomizeBucketHours: Int,
-    maximumInterval: Int,
-    practiceDays: Set<Int>,
-    fsrsRetention: Int,
-    practiceScheduleEstimate: ScheduleEstimate?,
-    historyWindowDays: Int,
-    fsrsEnableFuzzing: Boolean,
     autoBackupEnabled: Boolean,
     autoBackupIntervalDays: Int,
     lastBackupTime: Long,
@@ -70,14 +61,10 @@ fun SettingsScreen(
     onPickBackupFolder: () -> Unit,
     onSetThemeMode: (ThemeMode) -> Unit,
     onSetAutoShowAnswer: (Boolean) -> Unit,
-    onSetCardsPerSession: (Int) -> Unit,
     onSetRandomizeDueCards: (Boolean) -> Unit,
     onSetRandomizeBucketHours: (Int) -> Unit,
-    onSetMaximumInterval: (Int) -> Unit,
-    onTogglePracticeDay: (Int) -> Unit,
-    onSetFsrsRetention: (Int) -> Unit,
-    onSetHistoryWindowDays: (Int) -> Unit,
-    onSetFsrsEnableFuzzing: (Boolean) -> Unit,
+    /** Cards per session and the scheduling settings live with Global, on the Learning Groups screen. */
+    onOpenLearningGroups: () -> Unit,
     onSetAutoBackupEnabled: (Boolean) -> Unit,
     onSetAutoBackupIntervalDays: (Int) -> Unit,
     onSetMaxBackupsKept: (Int) -> Unit,
@@ -90,8 +77,6 @@ fun SettingsScreen(
     val bucketPresets = SettingsConstants.BUCKET_PRESETS
     val currentBucketIndex = SettingsConstants.findPresetIndex(bucketPresets, randomizeBucketHours)
 
-    val intervalPresets = SettingsConstants.INTERVAL_PRESETS
-    val currentPresetIndex = SettingsConstants.findPresetIndex(intervalPresets, maximumInterval)
 
 
     val backupIntervalPresets = SettingsConstants.BACKUP_INTERVAL_PRESETS
@@ -179,43 +164,6 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary
             )
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Cards per session
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Cards per Session",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    Text(
-                        text = "$cardsPerSession",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                Slider(
-                    value = cardsPerSession.toFloat(),
-                    onValueChange = { onSetCardsPerSession(it.roundToInt()) },
-                    valueRange = SettingsConstants.CARDS_PER_SESSION_MIN..SettingsConstants.CARDS_PER_SESSION_MAX,
-                    steps = SettingsConstants.CARDS_PER_SESSION_STEPS,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Text(
-                    text = "Number of cards to practice each session",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
             Spacer(modifier = Modifier.height(8.dp))
 
             // Auto-show answer
@@ -317,162 +265,30 @@ fun SettingsScreen(
             HorizontalDivider()
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Scheduling section
-            Text(
-                "Scheduling",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Practice days
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp)
-            ) {
-                Text(
-                    text = "Practice Days",
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    SettingsConstants.DAY_LABELS.forEach { (day, label) ->
-                        val selected = practiceDays.contains(day)
-                        FilterChip(
-                            selected = selected,
-                            onClick = { onTogglePracticeDay(day) },
-                            label = { Text(label) },
-                            modifier = Modifier.size(width = 42.dp, height = 36.dp),
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = if (practiceDays.size == 7) "Daily" else "${practiceDays.size} days per week",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "Cards are scheduled to come due on days you practice.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            HorizontalDivider()
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Algorithm section
-            Text(
-                "Algorithm (FSRS-6)",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Maximum interval
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Maximum Interval",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    Text(
-                        text = intervalPresets[currentPresetIndex].second,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                Slider(
-                    value = currentPresetIndex.toFloat(),
-                    onValueChange = { newIndex ->
-                        val presetValue = intervalPresets[newIndex.roundToInt()].first
-                        onSetMaximumInterval(presetValue)
-                    },
-                    valueRange = 0f..(intervalPresets.size - 1).toFloat(),
-                    steps = intervalPresets.size - 2,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Text(
-                    text = "Maximum time between reviews",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // FSRS desired retention
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp)
-            ) {
-                Text(
-                    text = "FSRS Desired Retention",
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                RetentionSelector(
-                    retentionPercent = fsrsRetention,
-                    onRetentionChange = onSetFsrsRetention,
-                    cardsInRotation = totalCards,
-                    scheduleDaysPerWeek = practiceDays.size,
-                    scheduleSetsPerPractice = cardsPerSession,
-                    historyEstimate = practiceScheduleEstimate,
-                    historyWindowDays = historyWindowDays,
-                    onHistoryWindowDaysChange = onSetHistoryWindowDays
-                )
-                Text(
-                    text = "Target probability of remembering a card when it comes due (FSRS only).",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                FsrsRetentionPreview(retentionPercent = fsrsRetention)
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // FSRS interval fuzzing
+            // Learning settings: moved to Global, on the Learning Groups screen.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onSetFsrsEnableFuzzing(!fsrsEnableFuzzing) }
+                    .clickable(onClick = onOpenLearningGroups)
                     .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                Icon(
+                    AppIcons.LearningGroup,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
+                    Text("Learning Settings", style = MaterialTheme.typography.bodyLarge)
                     Text(
-                        text = "FSRS Interval Fuzzing",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    Text(
-                        text = "Add a small random variance (\u22645\u00a0%) to FSRS intervals to spread reviews and prevent pile-ups (FSRS only).",
+                        "Cards per session, practice days, maximum interval, retention and " +
+                            "fuzzing are set per learning group, with the defaults under Global.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Switch(
-                    checked = fsrsEnableFuzzing,
-                    onCheckedChange = onSetFsrsEnableFuzzing
-                )
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
             }
 
             Spacer(modifier = Modifier.height(16.dp))

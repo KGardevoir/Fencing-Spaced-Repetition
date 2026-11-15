@@ -27,12 +27,15 @@ import com.fencing.spacedrepetition.ui.components.AppIcons
 /**
  * The learning groups, and which card groups learn in each.
  *
- * Global is listed first and cannot be edited or deleted: it is not a row
+ * Global is listed first and cannot be renamed or deleted: it is not a row
  * anywhere, only what a card group learns against when it is in no learning
- * group. Taking a group out of a learning group sends it back there.
+ * group. Taking a group out of a learning group sends it back there. Its
+ * settings are the app-wide defaults, which every learning group overrides
+ * setting by setting.
  *
  * @param onEditLearningGroup opens the learning group editor; a learning
  *   group with id 0 is a new one.
+ * @param onEditGlobal opens the Global settings.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,6 +43,7 @@ fun LearningGroupsScreen(
     learningGroups: List<LearningGroup>,
     groups: List<Group>,
     onEditLearningGroup: (LearningGroup) -> Unit,
+    onEditGlobal: () -> Unit,
     onDeleteLearningGroup: (LearningGroup) -> Unit,
     onNavigateBack: () -> Unit
 ) {
@@ -90,7 +94,8 @@ fun LearningGroupsScreen(
                     description = "The default. Every card's own learning progress, " +
                         "scheduled by the app settings.",
                     members = globalGroups,
-                    isGlobal = true
+                    isGlobal = true,
+                    onEdit = onEditGlobal
                 )
             }
             items(learningGroups, key = { it.id }) { learningGroup ->
@@ -150,7 +155,7 @@ private fun LearningGroupRow(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (isGlobal) Modifier else Modifier.clickable(onClick = onEdit)),
+            .clickable(onClick = onEdit),
         colors = CardDefaults.cardColors(
             containerColor = if (isGlobal) MaterialTheme.colorScheme.surfaceVariant
             else MaterialTheme.colorScheme.secondaryContainer
@@ -186,10 +191,10 @@ private fun LearningGroupRow(
                     overflow = TextOverflow.Ellipsis
                 )
             }
+            IconButton(onClick = onEdit) {
+                Icon(Icons.Default.Edit, contentDescription = "Edit $name")
+            }
             if (!isGlobal) {
-                IconButton(onClick = onEdit) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit $name")
-                }
                 IconButton(onClick = onDelete) {
                     Icon(Icons.Default.Delete, contentDescription = "Delete $name")
                 }

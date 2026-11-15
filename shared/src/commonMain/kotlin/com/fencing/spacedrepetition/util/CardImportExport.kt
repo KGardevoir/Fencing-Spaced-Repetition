@@ -896,6 +896,7 @@ object CardImportExport {
      */
     fun applyLearningGroupSettings(learningGroup: LearningGroup, settings: Map<String, String>): LearningGroup {
         return learningGroup.copy(
+            cardsPerSession = settings["cardsPerSession"]?.toIntOrNull(),
             practiceDays = settings["practiceDays"],
             maximumInterval = settings["maximumInterval"]?.toIntOrNull(),
             fsrsRetention = settings["fsrsRetention"]?.toIntOrNull(),

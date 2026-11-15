@@ -62,6 +62,12 @@ class GroupTest {
     }
 
     @Test
+    fun `hasCustomSettings - learning group cardsPerSession override`() {
+        assertTrue(LearningGroup(name = "Test", cardsPerSession = 15).hasCustomSettings())
+        assertFalse(LearningGroup(name = "Test").hasCustomSettings())
+    }
+
+    @Test
     fun `hasCustomSettings - multiple overrides`() {
         val group = Group(
             name = "Test",

@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.ui.components.AppIcons
+import com.fencing.spacedrepetition.ui.components.CardsPerSessionSlider
 import com.fencing.spacedrepetition.data.preferences.SettingsConstants
 import kotlin.math.roundToInt
 
@@ -48,8 +49,12 @@ fun GroupEditScreen(
     var learningGroupId by remember { mutableStateOf(group.learningGroupId) }
 
     // Per-group settings overrides (null = use global)
+    // What the group practises when it does not override cards per session:
+    // its learning group's, or the global setting.
+    val inheritedCardsPerSession =
+        learningGroups.find { it.id == learningGroupId }?.cardsPerSession ?: globalCardsPerSession
     var overrideCardsPerSession by remember { mutableStateOf(group.cardsPerSession != null) }
-    var cardsPerSession by remember { mutableIntStateOf(group.cardsPerSession ?: globalCardsPerSession) }
+    var cardsPerSession by remember { mutableIntStateOf(group.cardsPerSession ?: inheritedCardsPerSession) }
 
     var overrideAutoShowAnswer by remember { mutableStateOf(group.autoShowAnswer != null) }
     var autoShowAnswer by remember { mutableStateOf(group.autoShowAnswer ?: globalAutoShowAnswer) }
@@ -174,7 +179,8 @@ fun GroupEditScreen(
                 )
             }
             Text(
-                "Override global settings for this group. Disabled overrides use the global default.",
+                "Override settings for this group. Disabled overrides use the learning group's " +
+                    "cards per session, or else the global default.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -184,23 +190,25 @@ fun GroupEditScreen(
             SettingOverrideSection(
                 label = "Cards per Session",
                 overridden = overrideCardsPerSession,
-                onOverrideChange = { overrideCardsPerSession = it }
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("$cardsPerSession", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                onOverrideChange = {
+                    // Start an override from what the group practises now.
+                    if (it && !overrideCardsPerSession) cardsPerSession = inheritedCardsPerSession
+                    overrideCardsPerSession = it
                 }
-                Slider(
-                    value = cardsPerSession.toFloat(),
-                    onValueChange = { cardsPerSession = it.roundToInt() },
-                    valueRange = SettingsConstants.CARDS_PER_SESSION_MIN..SettingsConstants.CARDS_PER_SESSION_MAX,
-                    steps = SettingsConstants.CARDS_PER_SESSION_STEPS,
-                    modifier = Modifier.fillMaxWidth(),
+            ) {
+                CardsPerSessionSlider(
+                    if (overrideCardsPerSession) cardsPerSession else inheritedCardsPerSession,
+                    { cardsPerSession = it },
                     enabled = overrideCardsPerSession
                 )
+                if (!overrideCardsPerSession) {
+                    Text(
+                        if (learningGroups.any { it.id == learningGroupId && it.cardsPerSession != null })
+                            "From the learning group" else "From the Global settings",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             // Auto-show answer override
@@ -284,7 +292,7 @@ fun GroupEditScreen(
             Text(
                 "Practice days, maximum interval, desired retention and interval fuzzing " +
                     "schedule learning progress, so they are set on the learning group " +
-                    "(on the Learning Groups screen); a Global group uses the app settings.",
+                    "(on the Learning Groups screen); a Global group uses the Global ones there.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp)

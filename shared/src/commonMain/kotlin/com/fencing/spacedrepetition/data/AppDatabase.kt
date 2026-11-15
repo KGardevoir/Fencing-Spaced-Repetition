@@ -704,6 +704,8 @@ private val MIGRATION_14_15 = object : Migration(14, 15) {
  * learning group takes each setting from the first of its groups, by id, that
  * overrides it. A Global group's overrides have nowhere to go: Global is
  * scheduled by the app-wide settings, which live outside the database.
+ * Learning groups also gain a session size of their own, which the card
+ * groups' cards per session, kept as they are, go on overriding.
  *
  * `groups` is rebuilt without the four columns, with the same care as
  * [MIGRATION_14_15] over `card_group_cross_ref`, which cascades from it.
@@ -717,6 +719,9 @@ private val MIGRATION_15_16 = object : Migration(15, 16) {
     )
 
     override suspend fun migrate(connection: SQLiteConnection) {
+        // A learning group's own session size: new, so nothing to copy. The
+        // card groups keep theirs as overrides of it.
+        connection.execSQL("ALTER TABLE `learning_groups` ADD COLUMN `cardsPerSession` INTEGER")
         settings.forEach { (column, type) ->
             connection.execSQL("ALTER TABLE `learning_groups` ADD COLUMN `$column` $type")
             connection.execSQL("""

@@ -148,7 +148,7 @@ class MigratedSchemaTest {
             )
             assertEquals(
                 setOf(
-                    "id", "name", "description", "created",
+                    "id", "name", "description", "created", "cardsPerSession",
                     "practiceDays", "maximumInterval", "fsrsRetention", "fsrsEnableFuzzing",
                 ),
                 db.columnsOf("learning_groups")

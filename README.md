@@ -51,7 +51,7 @@ An Android app for practicing martial arts and fencing techniques using delayed-
 ### Groups and Organization
 - Create groups (decks) to organize cards by topic, technique, or training focus
 - **Learning groups**: card groups learn against Global progress by default, or share a separate set of progress with the other groups in a learning group
-- Each learning group sets how its progress is scheduled -- practice days, maximum interval, desired retention, interval fuzzing -- while each card group keeps its session settings (cards per session, auto-show, shuffling); Global follows the app settings
+- Each learning group sets its cards per session and how its progress is scheduled -- practice days, maximum interval, desired retention, interval fuzzing. The defaults are Global's, edited from the Global row on the Learning Groups screen. A card group can still override cards per session, auto-show and shuffling for itself
 - Select which group to practice from the home screen
 
 ### Card Management
@@ -180,7 +180,7 @@ Question and description content, category, tags, image paths, FSRS scheduling p
 Named groups, each pointing at a learning group (null = Global), with optional session-setting overrides. Cards are linked to groups via a many-to-many relationship. Learning states are kept per card per learning group, so every group in the same learning group shares one set of progress.
 
 ### Learning Groups
-Named sets of shared learning progress, with optional overrides for the settings that schedule it: practice days, maximum interval, desired retention and interval fuzzing.
+Named sets of shared learning progress, with optional overrides for cards per session and the settings that schedule it: practice days, maximum interval, desired retention and interval fuzzing.
 
 ### Practice Sessions
 Session start/end times, associated card IDs, and assigned grades.

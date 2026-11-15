@@ -26,6 +26,9 @@ import com.fencing.spacedrepetition.util.Time
  * the card groups: every group in a learning group grades against one state
  * per card, so they must all schedule it the same way. Each is null to use
  * the app-wide default, which is also what Global uses.
+ *
+ * [cardsPerSession] is the session size its card groups practise, unless a
+ * card group overrides it in turn.
  */
 @Entity(tableName = "learning_groups")
 data class LearningGroup(
@@ -34,6 +37,7 @@ data class LearningGroup(
     val name: String,
     val description: String = "",
     val created: Long = Time.now(),
+    val cardsPerSession: Int? = null,
     val practiceDays: String? = null,  // comma-separated ISO-8601 day ints (1=Mon..7=Sun)
     val maximumInterval: Int? = null,
     val fsrsRetention: Int? = null,         // integer percent 70–97, e.g. 90 for 90 %
@@ -41,7 +45,7 @@ data class LearningGroup(
 ) {
     /** Returns true if any learning setting override is set */
     fun hasCustomSettings(): Boolean =
-        practiceDays != null || maximumInterval != null ||
+        cardsPerSession != null || practiceDays != null || maximumInterval != null ||
         fsrsRetention != null || fsrsEnableFuzzing != null
 
     /** Parse the practiceDays string to a Set<Int>, or null if not overridden */
@@ -79,8 +83,9 @@ data class Group(
     /** The learning group whose state this group practises against; null is Global. */
     val learningGroupId: Long? = null,
     val created: Long = Time.now(),
-    // Per-group session settings overrides (null = use global default). The
-    // settings that schedule learning progress are on [LearningGroup].
+    // Per-group session settings overrides (null = use the learning group's,
+    // or the global default). The settings that schedule learning progress
+    // are on [LearningGroup].
     val cardsPerSession: Int? = null,
     val autoShowAnswer: Boolean? = null,
     val randomizeDueCards: Boolean? = null,

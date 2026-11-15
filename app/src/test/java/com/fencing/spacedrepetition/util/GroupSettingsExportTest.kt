@@ -524,7 +524,7 @@ class GroupSettingsExportTest {
             created = 0, modified = 0
         )
         val learningGroup = LearningGroup(
-            id = 5, name = "Bouting", fsrsRetention = 85, fsrsEnableFuzzing = false,
+            id = 5, name = "Bouting", cardsPerSession = 15, fsrsRetention = 85, fsrsEnableFuzzing = false,
             practiceDays = "2,4", maximumInterval = 90, created = 0
         )
         val group = Group(id = 1, name = "FencingDrills", learningGroupId = 5, cardsPerSession = 4)

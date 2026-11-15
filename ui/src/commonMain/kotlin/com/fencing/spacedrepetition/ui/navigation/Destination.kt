@@ -32,6 +32,7 @@ sealed interface Destination {
     data class EditGroup(val group: Group) : Destination
     data object AddGroup : Destination
     data object LearningGroups : Destination
+    data object GlobalLearningSettings : Destination
     data class EditLearningGroup(val learningGroup: LearningGroup) : Destination
     data object Settings : Destination
     data object History : Destination

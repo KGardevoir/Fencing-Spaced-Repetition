@@ -22,11 +22,13 @@ import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.algorithm.ScheduleEstimate
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.LearningGroup
-import com.fencing.spacedrepetition.data.preferences.SettingsConstants
 import com.fencing.spacedrepetition.ui.components.AppIcons
+import com.fencing.spacedrepetition.ui.components.CardsPerSessionSlider
+import com.fencing.spacedrepetition.ui.components.FuzzingSwitch
+import com.fencing.spacedrepetition.ui.components.MaximumIntervalSlider
+import com.fencing.spacedrepetition.ui.components.PracticeDaysPicker
 import com.fencing.spacedrepetition.ui.components.FsrsRetentionPreview
 import com.fencing.spacedrepetition.ui.components.RetentionSelector
-import kotlin.math.roundToInt
 
 /**
  * A learning group: its name and description, which card groups are in it,
@@ -68,6 +70,9 @@ fun LearningGroupEditScreen(
     var description by rememberSaveable { mutableStateOf(learningGroup.description) }
     var memberIds by remember { mutableStateOf(initialMemberIds) }
 
+    var overrideCardsPerSession by remember { mutableStateOf(learningGroup.cardsPerSession != null) }
+    var cardsPerSession by remember { mutableIntStateOf(learningGroup.cardsPerSession ?: globalCardsPerSession) }
+
     var overridePracticeDays by remember { mutableStateOf(learningGroup.practiceDays != null) }
     var practiceDays by remember { mutableStateOf(learningGroup.parsePracticeDays() ?: globalPracticeDays) }
 
@@ -83,8 +88,6 @@ fun LearningGroupEditScreen(
     var cardCount by remember { mutableIntStateOf(0) }
     LaunchedEffect(memberIds) { cardCount = countCards(memberIds) }
 
-    val intervalPresets = SettingsConstants.INTERVAL_PRESETS
-
     val nameTaken = learningGroups.any {
         it.id != learningGroup.id && it.name.equals(name.trim(), ignoreCase = true)
     } || name.trim().equals("Global", ignoreCase = true)
@@ -92,6 +95,7 @@ fun LearningGroupEditScreen(
     fun buildUpdated() = learningGroup.copy(
         name = name.trim(),
         description = description.trim(),
+        cardsPerSession = if (overrideCardsPerSession) cardsPerSession else null,
         practiceDays = if (overridePracticeDays) practiceDays.sorted().joinToString(",") else null,
         maximumInterval = if (overrideMaximumInterval) maximumInterval else null,
         fsrsRetention = if (overrideFsrsRetention) fsrsRetention else null,
@@ -246,51 +250,32 @@ fun LearningGroupEditScreen(
                 )
             }
             Text(
-                "How this learning group's progress is scheduled. Disabled overrides use the global default.",
+                "How much this learning group practises and how its progress is scheduled. " +
+                    "Disabled overrides use the Global settings.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(12.dp))
 
             SettingOverrideSection(
+                label = "Cards per Session",
+                overridden = overrideCardsPerSession,
+                onOverrideChange = { overrideCardsPerSession = it }
+            ) {
+                CardsPerSessionSlider(cardsPerSession, { cardsPerSession = it }, enabled = overrideCardsPerSession)
+                Text(
+                    "A card group can still override this for itself.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            SettingOverrideSection(
                 label = "Practice Days",
                 overridden = overridePracticeDays,
                 onOverrideChange = { overridePracticeDays = it }
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    SettingsConstants.DAY_LABELS.forEach { (day, label) ->
-                        val selected = practiceDays.contains(day)
-                        FilterChip(
-                            selected = selected,
-                            onClick = {
-                                if (overridePracticeDays) {
-                                    practiceDays = if (selected && practiceDays.size > 1) {
-                                        practiceDays - day
-                                    } else if (!selected) {
-                                        practiceDays + day
-                                    } else {
-                                        practiceDays
-                                    }
-                                }
-                            },
-                            label = { Text(label) },
-                            modifier = Modifier.size(width = 42.dp, height = 36.dp),
-                            enabled = overridePracticeDays,
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        )
-                    }
-                }
-                Text(
-                    if (practiceDays.size == 7) "Daily" else "${practiceDays.size} days per week",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                PracticeDaysPicker(practiceDays, { practiceDays = it }, enabled = overridePracticeDays)
             }
 
             SettingOverrideSection(
@@ -298,22 +283,7 @@ fun LearningGroupEditScreen(
                 overridden = overrideMaximumInterval,
                 onOverrideChange = { overrideMaximumInterval = it }
             ) {
-                val currentPresetIndex = SettingsConstants.findPresetIndex(intervalPresets, maximumInterval)
-                Text(
-                    intervalPresets[currentPresetIndex].second,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Slider(
-                    value = currentPresetIndex.toFloat(),
-                    onValueChange = { newIndex ->
-                        maximumInterval = intervalPresets[newIndex.roundToInt()].first
-                    },
-                    valueRange = 0f..(intervalPresets.size - 1).toFloat(),
-                    steps = intervalPresets.size - 2,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = overrideMaximumInterval
-                )
+                MaximumIntervalSlider(maximumInterval, { maximumInterval = it }, enabled = overrideMaximumInterval)
             }
 
             SettingOverrideSection(
@@ -326,7 +296,7 @@ fun LearningGroupEditScreen(
                     onRetentionChange = { fsrsRetention = it },
                     cardsInRotation = cardCount,
                     scheduleDaysPerWeek = practiceDays.size,
-                    scheduleSetsPerPractice = globalCardsPerSession,
+                    scheduleSetsPerPractice = cardsPerSession,
                     historyEstimate = practiceScheduleEstimate,
                     historyWindowDays = historyWindowDays,
                     onHistoryWindowDaysChange = onHistoryWindowDaysChange,
@@ -345,25 +315,7 @@ fun LearningGroupEditScreen(
                 overridden = overrideFsrsEnableFuzzing,
                 onOverrideChange = { overrideFsrsEnableFuzzing = it }
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(enabled = overrideFsrsEnableFuzzing) { fsrsEnableFuzzing = !fsrsEnableFuzzing },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        "Add ≤5 % random variance to FSRS intervals to spread reviews",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Switch(
-                        checked = fsrsEnableFuzzing,
-                        onCheckedChange = { fsrsEnableFuzzing = it },
-                        enabled = overrideFsrsEnableFuzzing
-                    )
-                }
+                FuzzingSwitch(fsrsEnableFuzzing, { fsrsEnableFuzzing = it }, enabled = overrideFsrsEnableFuzzing)
             }
 
             Spacer(modifier = Modifier.height(32.dp))
