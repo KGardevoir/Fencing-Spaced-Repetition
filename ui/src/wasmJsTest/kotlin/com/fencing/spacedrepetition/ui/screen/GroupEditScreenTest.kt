@@ -35,10 +35,7 @@ class GroupEditScreenTest {
                 GroupEditScreen(
                     group = group(),
                     learningGroups = emptyList(),
-                    globalCardsPerSession = 3,
                     globalAutoShowAnswer = false,
-                    globalRandomizeDueCards = true,
-                    globalRandomizeBucketHours = 24,
                     onSave = {},
                     onNavigateBack = {}
                 )
@@ -61,10 +58,7 @@ class GroupEditScreenTest {
                 GroupEditScreen(
                     group = group(),
                     learningGroups = emptyList(),
-                    globalCardsPerSession = 3,
                     globalAutoShowAnswer = false,
-                    globalRandomizeDueCards = true,
-                    globalRandomizeBucketHours = 24,
                     onSave = { saved = it },
                     onNavigateBack = {}
                 )
