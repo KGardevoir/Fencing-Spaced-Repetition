@@ -114,7 +114,7 @@ class CardImportExportV3Test {
                 CardWithGroupStates(
                     card = card,
                     groupNames = listOf("TestGroup"),
-                    groupSpecificStates = emptyMap()
+                    learningStates = emptyMap()
                 )
             )
 
@@ -173,7 +173,7 @@ class CardImportExportV3Test {
                     CardWithGroupStates(
                         card = originalCard,
                         groupNames = listOf("TestGroup"),
-                        groupSpecificStates = emptyMap()
+                        learningStates = emptyMap()
                     )
                 ),
                 gzipOut,
@@ -225,7 +225,7 @@ class CardImportExportV3Test {
             CardWithGroupStates(
                 card = card,
                 groupNames = listOf("Group1"),
-                groupSpecificStates = emptyMap()
+                learningStates = emptyMap()
             )
         )
 
@@ -263,7 +263,7 @@ class CardImportExportV3Test {
             CardWithGroupStates(
                 card = card,
                 groupNames = listOf("Group1"),
-                groupSpecificStates = emptyMap()
+                learningStates = emptyMap()
             )
         )
 

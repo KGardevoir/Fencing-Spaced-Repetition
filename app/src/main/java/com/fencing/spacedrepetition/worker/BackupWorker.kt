@@ -107,7 +107,7 @@ class BackupWorker(
                 val result = CardImportExport.exportCardsWithGroupStates(
                     cardsWithStates, outputStream, allGroups, reviewLogs, cardQuestions,
                     opponents, opponentNamesById, FileImageReader(applicationContext),
-                    sessions
+                    sessions, groupRepository.getAllLearningGroupsSync()
                 )
                 outputStream.close()
                 result

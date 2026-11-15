@@ -12,13 +12,45 @@ import androidx.room3.PrimaryKey
 import androidx.room3.Relation
 import com.fencing.spacedrepetition.util.Time
 
-@Entity(tableName = "groups")
+/**
+ * A set of learning progress that one or more card groups share.
+ *
+ * Every card keeps one learning state of its own -- the Global one, held on
+ * the card itself. A learning group is a second, separate state per card:
+ * every card group pointed at it practises and grades against that state
+ * instead, so two groups can share progress with each other without sharing
+ * it with the rest of the collection. A group pointed at no learning group
+ * learns Global, which is the default.
+ */
+@Entity(tableName = "learning_groups")
+data class LearningGroup(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val name: String,
+    val description: String = "",
+    val created: Long = Time.now()
+)
+
+@Entity(
+    tableName = "groups",
+    foreignKeys = [
+        ForeignKey(
+            entity = LearningGroup::class,
+            parentColumns = ["id"],
+            childColumns = ["learningGroupId"],
+            // Deleting a learning group sends its card groups back to Global.
+            onDelete = ForeignKey.SET_NULL
+        )
+    ],
+    indices = [Index("learningGroupId")]
+)
 data class Group(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val name: String,
     val description: String = "",
-    val independentLearning: Boolean = false,
+    /** The learning group whose state this group practises against; null is Global. */
+    val learningGroupId: Long? = null,
     val created: Long = Time.now(),
     // Per-group settings overrides (null = use global default)
     val cardsPerSession: Int? = null,
@@ -72,9 +104,10 @@ data class CardGroupCrossRef(
     val groupId: Long
 )
 
+/** One card's learning progress in one [LearningGroup]. */
 @Entity(
-    tableName = "card_group_learning_state",
-    primaryKeys = ["cardId", "groupId"],
+    tableName = "card_learning_state",
+    primaryKeys = ["cardId", "learningGroupId"],
     foreignKeys = [
         ForeignKey(
             entity = Card::class,
@@ -83,17 +116,17 @@ data class CardGroupCrossRef(
             onDelete = ForeignKey.CASCADE
         ),
         ForeignKey(
-            entity = Group::class,
+            entity = LearningGroup::class,
             parentColumns = ["id"],
-            childColumns = ["groupId"],
+            childColumns = ["learningGroupId"],
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("groupId"), Index("cardId")]
+    indices = [Index("learningGroupId"), Index("cardId")]
 )
-data class CardGroupLearningState(
+data class CardLearningState(
     val cardId: Long,
-    val groupId: Long,
+    val learningGroupId: Long,
 
     // FSRS parameters
     val fsrsStability: Double = 0.0,

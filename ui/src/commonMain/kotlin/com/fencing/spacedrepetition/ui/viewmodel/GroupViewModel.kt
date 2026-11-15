@@ -6,6 +6,7 @@ package com.fencing.spacedrepetition.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.ui.ExportFile
@@ -83,10 +84,9 @@ class GroupViewModel(
     fun addGroupWithSettings(group: Group, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
             try {
-                val newId = groupRepository.insertGroup(group)
-                if (group.independentLearning) {
-                    groupRepository.toggleIndependentLearning(newId, true)
-                }
+                // A new group has no cards, so its learning group needs no
+                // states made for it yet: the column is the whole of it.
+                groupRepository.insertGroup(group)
                 onSuccess()
             } catch (e: Exception) {
                 // Handle error
@@ -111,14 +111,61 @@ class GroupViewModel(
         }
     }
 
-    fun toggleIndependentLearning(groupId: Long, enabled: Boolean, onSuccess: () -> Unit = {}) {
+    /**
+     * Saves an edited group. A change of learning group goes through
+     * [GroupRepository.setLearningGroup] first, which gives the group's cards
+     * a state there, and the row is written after it so the two cannot race.
+     */
+    fun saveGroup(updated: Group, previous: Group, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
             try {
-                groupRepository.toggleIndependentLearning(groupId, enabled)
+                if (updated.learningGroupId != previous.learningGroupId) {
+                    groupRepository.setLearningGroup(updated.id, updated.learningGroupId)
+                }
+                groupRepository.updateGroup(updated)
                 onSuccess()
             } catch (e: Exception) {
                 // Handle error
             }
+        }
+    }
+
+    // Learning groups
+
+    val learningGroups: StateFlow<List<LearningGroup>> = groupRepository.getAllLearningGroups()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /**
+     * Creates or updates a learning group and makes [memberGroupIds] exactly
+     * the card groups in it: those newly in move here, those no longer in go
+     * back to Global.
+     */
+    fun saveLearningGroup(learningGroup: LearningGroup, memberGroupIds: Set<Long>) {
+        viewModelScope.launch {
+            try {
+                val id = if (learningGroup.id == 0L) {
+                    groupRepository.insertLearningGroup(learningGroup)
+                } else {
+                    groupRepository.updateLearningGroup(learningGroup)
+                    learningGroup.id
+                }
+                groupRepository.getAllGroupsSync().forEach { group ->
+                    val wasIn = group.learningGroupId == id
+                    val isIn = group.id in memberGroupIds
+                    when {
+                        isIn && !wasIn -> groupRepository.setLearningGroup(group.id, id)
+                        wasIn && !isIn -> groupRepository.setLearningGroup(group.id, null)
+                    }
+                }
+            } catch (e: Exception) {
+                // Handle error
+            }
+        }
+    }
+
+    fun deleteLearningGroup(learningGroup: LearningGroup) {
+        viewModelScope.launch {
+            groupRepository.deleteLearningGroup(learningGroup)
         }
     }
 
@@ -162,13 +209,15 @@ class GroupViewModel(
                 val groups = groupRepository.getAllGroupsSync()
                     .filter { it.name in exportedGroupNames }
                 val images = imageStore.exportReader(cardsWithStates.map { it.card })
+                val learningGroups = groupRepository.getAllLearningGroupsSync()
 
                 _importExportState.value = file.write { out ->
                     CardImportExport.exportCardsWithGroupStates(
                         cardsWithStates = cardsWithStates,
                         out = out,
                         images = images,
-                        groupSettings = groups
+                        groupSettings = groups,
+                        learningGroups = learningGroups
                     )
                 }.asImportExportState()
             } catch (e: Exception) {
@@ -203,12 +252,13 @@ class GroupViewModel(
                 }
                 val (parsedCards, parseErrors) = contents as ArchiveContents.Cards
 
-                val groupIds = groupRepository.groupsForImport(parsedCards)
+                val targets = groupRepository.groupsForImport(parsedCards)
+                val groupIds = targets.groupIds
                 val targetGroupName = groupRepository.getGroupById(groupId)?.name
 
                 val importedCount = when {
                     parsedCards.any { it.isGroupSpecificState } ->
-                        cardRepository.importCardsWithGroupStates(parsedCards, groupIds) {
+                        cardRepository.importCardsWithGroupStates(parsedCards, groupIds, targets.learningGroupIds) {
                             CardImportExport.parsedCardToCard(it, imageStore)
                         }
                     parsedCards.any { it.hasFullState } ->

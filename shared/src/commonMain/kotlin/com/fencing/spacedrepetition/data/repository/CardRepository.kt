@@ -116,9 +116,14 @@ class CardRepository(
         }
     }
 
+    /** Resets the state [cardId] keeps in the learning group that [groupId] practises against. */
     suspend fun resetCardStateInGroup(cardId: Long, groupId: Long) {
-        // Reset only the group-specific learning state for this card in this group
-        val learningState = groupDao.getLearningState(cardId, groupId)
+        val learningGroupId = groupDao.getGroupById(groupId)?.learningGroupId ?: return
+        resetCardStateInLearningGroup(cardId, learningGroupId)
+    }
+
+    suspend fun resetCardStateInLearningGroup(cardId: Long, learningGroupId: Long) {
+        val learningState = groupDao.getLearningState(cardId, learningGroupId)
         if (learningState != null) {
             val resetState = learningState.copy(
                 fsrsStability = 0.0,
@@ -375,10 +380,13 @@ class CardRepository(
      *   and puts them in the image store, which is the one step of an import
      *   that has to wait on something -- a browser's storage is asynchronous,
      *   which is why the parameter suspends.
+     * @param learningGroups the learning group each non-global state context
+     *   resolves to; a state whose context is not in it is skipped.
      */
     suspend fun importCardsWithGroupStates(
         parsedCards: List<ParsedCard>,
         existingGroups: Map<String, Long>,
+        learningGroups: Map<String, Long> = emptyMap(),
         toCard: suspend (ParsedCard) -> Card
     ): Int {
         // Group parsed cards by concept (same card, different state contexts)
@@ -423,11 +431,10 @@ class CardRepository(
 
             // Import group-specific learning states
             states.filter { it.isGroupSpecificState }.forEach { groupState ->
-                val groupName = groupState.stateContext!!
-                existingGroups[groupName]?.let { groupId ->
-                    val learningState = CardGroupLearningState(
+                learningGroups[groupState.stateContext!!]?.let { learningGroupId ->
+                    val learningState = CardLearningState(
                         cardId = cardId,
-                        groupId = groupId,
+                        learningGroupId = learningGroupId,
                         fsrsStability = groupState.fsrsStability ?: 0.0,
                         fsrsDifficulty = groupState.fsrsDifficulty ?: 0.0,
                         fsrsElapsedDays = groupState.fsrsElapsedDays ?: 0,
@@ -456,22 +463,22 @@ class CardRepository(
 
     suspend fun getAllCardsWithGroupStates(): List<CardWithGroupStates> {
         val cardsWithGroups = cardDao.getAllCardsWithGroups().first()
+        val learningGroupNames = groupDao.getAllLearningGroups().first().associate { it.id to it.name }
         return cardsWithGroups.map { cardWithGroups ->
             val card = cardWithGroups.card
             val groups = cardWithGroups.groups
             val groupNames = groups.map { it.name }
 
-            // Get group-specific states for groups with independent learning
-            val groupSpecificStates = mutableMapOf<String, CardGroupLearningState>()
-            groups.forEach { group ->
-                if (group.independentLearning) {
-                    groupDao.getLearningState(card.id, group.id)?.let { state ->
-                        groupSpecificStates[group.name] = state
-                    }
-                }
+            // The states kept in the learning groups this card's groups use
+            val learningGroupIds = groups.mapNotNull { it.learningGroupId }.toSet()
+            val learningStates = if (learningGroupIds.isEmpty()) emptyMap() else {
+                groupDao.getAllLearningStatesForCard(card.id)
+                    .filter { it.learningGroupId in learningGroupIds }
+                    .mapNotNull { state -> learningGroupNames[state.learningGroupId]?.let { it to state } }
+                    .toMap()
             }
 
-            CardWithGroupStates(card, groupNames, groupSpecificStates)
+            CardWithGroupStates(card, groupNames, learningStates)
         }
     }
 
@@ -545,22 +552,9 @@ class CardRepository(
 
     fun getAllSessions(): Flow<List<PracticeSession>> = sessionDao.getAllSessions()
 
-    // Independent learning state operations
-    suspend fun getLearningState(cardId: Long, groupId: Long): CardGroupLearningState? =
-        groupDao.getLearningState(cardId, groupId)
-
-    fun getLearningStateFlow(cardId: Long, groupId: Long): Flow<CardGroupLearningState?> =
-        groupDao.getLearningStateFlow(cardId, groupId)
-
-    suspend fun updateLearningState(learningState: CardGroupLearningState) =
+    // Learning group state operations
+    suspend fun updateLearningState(learningState: CardLearningState) =
         groupDao.updateLearningState(learningState)
-
-    suspend fun initializeLearningState(cardId: Long, groupId: Long) {
-        val existingState = groupDao.getLearningState(cardId, groupId)
-        if (existingState == null) {
-            groupDao.insertLearningState(CardGroupLearningState(cardId, groupId))
-        }
-    }
 
     // Review operations
     suspend fun reviewCard(
@@ -634,18 +628,17 @@ class CardRepository(
         val group = groupDao.getGroupById(groupId)
             ?: return reviewCard(card, grade, sessionId, groupId, opponentId, fightDifficulty)
 
-        if (!group.independentLearning) {
-            // Use global learning state but apply group settings
-            return reviewCard(card, grade, sessionId, groupId, opponentId, fightDifficulty)
-        }
+        val learningGroupId = group.learningGroupId
+            // Global learning state, with the group's settings applied
+            ?: return reviewCard(card, grade, sessionId, groupId, opponentId, fightDifficulty)
 
-        // Use group-specific learning state
+        // The state kept in the group's learning group
         val now = Time.now()
-        var learningState = groupDao.getLearningState(card.id, groupId)
+        var learningState = groupDao.getLearningState(card.id, learningGroupId)
 
         // Initialize learning state if it doesn't exist
         if (learningState == null) {
-            learningState = CardGroupLearningState(card.id, groupId)
+            learningState = CardLearningState(card.id, learningGroupId)
             groupDao.insertLearningState(learningState)
         }
 
@@ -735,12 +728,11 @@ class CardRepository(
     ): Card {
         val group = groupDao.getGroupById(groupId)
             ?: return computeReview(card, grade, groupId, opponentId, fightDifficulty)
-        if (!group.independentLearning) {
-            return computeReview(card, grade, groupId, opponentId, fightDifficulty)
-        }
+        val learningGroupId = group.learningGroupId
+            ?: return computeReview(card, grade, groupId, opponentId, fightDifficulty)
         val now = Time.now()
-        val learningState = groupDao.getLearningState(card.id, groupId)
-            ?: CardGroupLearningState(card.id, groupId)
+        val learningState = groupDao.getLearningState(card.id, learningGroupId)
+            ?: CardLearningState(card.id, learningGroupId)
         val elapsedDays = if (learningState.lastReview == 0L) 0 else
             ((now - learningState.lastReview) / (1000 * 60 * 60 * 24)).toInt()
         val stabilityMultiplier = resolveStabilityMultiplier(opponentId, fightDifficulty)
@@ -937,13 +929,13 @@ class CardRepository(
         "S:${card.fsrsStability},D:${card.fsrsDifficulty},ST:${card.fsrsState}"
 
     private suspend fun reviewLearningStateWithFSRS(
-        learningState: CardGroupLearningState,
+        learningState: CardLearningState,
         grade: Grade,
         now: Long,
         elapsedDays: Int,
         groupId: Long? = null,
         stabilityMultiplier: Double = 1.0
-    ): CardGroupLearningState {
+    ): CardLearningState {
         // Resolve maximum interval, desired retention, and fuzzing (group override or global)
         val maxInterval = resolveMaximumInterval(groupId)
         fsrsAlgorithm.setMaximumInterval(maxInterval)
@@ -989,7 +981,7 @@ class CardRepository(
         )
     }
 
-    private fun serializeLearningState(learningState: CardGroupLearningState): String =
+    private fun serializeLearningState(learningState: CardLearningState): String =
         "S:${learningState.fsrsStability},D:${learningState.fsrsDifficulty},ST:${learningState.fsrsState}"
 
     /**

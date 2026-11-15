@@ -11,7 +11,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.backhandler.BackHandler
 import com.fencing.spacedrepetition.BuildInfo
-import com.fencing.spacedrepetition.data.model.CardGroupLearningState
+import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.ui.navigation.Destination
 import com.fencing.spacedrepetition.ui.navigation.Navigator
@@ -23,6 +23,7 @@ import com.fencing.spacedrepetition.ui.screen.GroupEditScreen
 import com.fencing.spacedrepetition.ui.screen.GroupListScreen
 import com.fencing.spacedrepetition.ui.screen.HistoryScreen
 import com.fencing.spacedrepetition.ui.screen.HomeScreen
+import com.fencing.spacedrepetition.ui.screen.LearningGroupsScreen
 import com.fencing.spacedrepetition.ui.screen.OpponentsScreen
 import com.fencing.spacedrepetition.ui.screen.PracticeScreen
 import com.fencing.spacedrepetition.ui.screen.SettingsScreen
@@ -162,6 +163,7 @@ fun App(
                 },
                 onNavigateToCards = { navigator.go(Destination.CardList) },
                 onNavigateToGroups = { navigator.go(Destination.GroupList) },
+                onNavigateToLearningGroups = { navigator.go(Destination.LearningGroups) },
                 onNavigateToSettings = { navigator.go(Destination.Settings) },
                 onNavigateToHistory = { navigator.go(Destination.History) },
                 onNavigateToOpponents = { navigator.go(Destination.Opponents) }
@@ -231,6 +233,7 @@ fun App(
             val allCardsWithGroups by cardViewModel.allCardsWithGroups.collectAsState()
             val groups by groupViewModel.allGroups.collectAsState()
             val selectedGroupFilters by cardViewModel.selectedGroupFilters.collectAsState()
+            val learningGroups by groupViewModel.learningGroups.collectAsState()
             val showDisabledFilter by cardViewModel.showDisabledFilter.collectAsState()
             val searchQuery by cardViewModel.searchQuery.collectAsState()
             val cardCount by cardViewModel.cardCount.collectAsState()
@@ -257,6 +260,7 @@ fun App(
                     remember(cardId) { cardViewModel.getLearningStatesForCard(cardId) }
                         .collectAsState(initial = emptyList()).value
                 },
+                learningGroups = learningGroups,
                 onUpdateSearchQuery = cardViewModel::updateSearchQuery,
                 onClearGroupFilters = cardViewModel::clearGroupFilters,
                 onToggleGroupFilter = cardViewModel::toggleGroupFilter,
@@ -311,9 +315,11 @@ fun App(
             val sortedGroups by groupViewModel.sortedGroups.collectAsState()
             val importExportState by groupViewModel.importExportState.collectAsState()
             val groupSortOption by groupViewModel.groupSortOption.collectAsState()
+            val learningGroups by groupViewModel.learningGroups.collectAsState()
 
             GroupListScreen(
                 groups = sortedGroups,
+                learningGroups = learningGroups,
                 sortOption = groupSortOption,
                 importExportState = importExportState,
                 dueCardCountFor = { groupId ->
@@ -341,6 +347,7 @@ fun App(
         Destination.AddGroup -> GroupEditor(
             group = Group(name = ""),
             groupCardCount = 0,
+            groupViewModel = groupViewModel,
             cardViewModel = cardViewModel,
             settingsViewModel = settingsViewModel,
             onSave = { newGroup -> groupViewModel.addGroupWithSettings(newGroup) { navigator.back() } },
@@ -356,17 +363,23 @@ fun App(
             GroupEditor(
                 group = group,
                 groupCardCount = groupCardCount,
+                groupViewModel = groupViewModel,
                 cardViewModel = cardViewModel,
                 settingsViewModel = settingsViewModel,
-                onSave = { updated ->
-                    // Toggling independent learning initialises per-group
-                    // learning states, so it is a separate call rather than
-                    // part of the row update.
-                    if (updated.independentLearning != group.independentLearning) {
-                        groupViewModel.toggleIndependentLearning(group.id, updated.independentLearning)
-                    }
-                    groupViewModel.updateGroup(updated) { navigator.back() }
-                },
+                onSave = { updated -> groupViewModel.saveGroup(updated, group) { navigator.back() } },
+                onNavigateBack = { navigator.back() }
+            )
+        }
+
+        Destination.LearningGroups -> {
+            val learningGroups by groupViewModel.learningGroups.collectAsState()
+            val groups by groupViewModel.allGroups.collectAsState()
+
+            LearningGroupsScreen(
+                learningGroups = learningGroups,
+                groups = groups,
+                onSaveLearningGroup = groupViewModel::saveLearningGroup,
+                onDeleteLearningGroup = groupViewModel::deleteLearningGroup,
                 onNavigateBack = { navigator.back() }
             )
         }
@@ -504,13 +517,14 @@ private fun CardEditor(
     onNavigateBack: () -> Unit
 ) {
     val allGroups by groupViewModel.allGroups.collectAsState()
+    val learningGroups by groupViewModel.learningGroups.collectAsState()
     val cardGroupsFlow = remember(cardToEdit?.id) {
         cardToEdit?.let { cardViewModel.getGroupsForCard(it.id) } ?: flowOf(emptyList<Group>())
     }
     val cardGroups by cardGroupsFlow.collectAsState(initial = emptyList())
     val learningStatesFlow = remember(cardToEdit?.id) {
         cardToEdit?.let { cardViewModel.getLearningStatesForCard(it.id) }
-            ?: flowOf(emptyList<CardGroupLearningState>())
+            ?: flowOf(emptyList<CardLearningState>())
     }
     val learningStates by learningStatesFlow.collectAsState(initial = emptyList())
 
@@ -518,6 +532,7 @@ private fun CardEditor(
         allGroups = allGroups,
         cardGroups = cardGroups,
         learningStates = learningStates,
+        learningGroups = learningGroups,
         cardToEdit = cardToEdit,
         initialGroupId = initialGroupId,
         onComputeGrade = { cardId, grade, groupId, onComputed ->
@@ -547,11 +562,13 @@ private fun CardEditor(
 private fun GroupEditor(
     group: Group,
     groupCardCount: Int,
+    groupViewModel: GroupViewModel,
     cardViewModel: CardViewModel,
     settingsViewModel: SettingsViewModel,
     onSave: (Group) -> Unit,
     onNavigateBack: () -> Unit
 ) {
+    val learningGroups by groupViewModel.learningGroups.collectAsState()
     val globalCardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
     val globalAutoShowAnswer by settingsViewModel.autoShowAnswer.collectAsState()
     val globalRandomizeDueCards by settingsViewModel.randomizeDueCards.collectAsState()
@@ -565,6 +582,7 @@ private fun GroupEditor(
 
     GroupEditScreen(
         group = group,
+        learningGroups = learningGroups,
         globalCardsPerSession = globalCardsPerSession,
         globalAutoShowAnswer = globalAutoShowAnswer,
         globalRandomizeDueCards = globalRandomizeDueCards,

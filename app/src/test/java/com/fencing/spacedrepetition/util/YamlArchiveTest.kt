@@ -4,8 +4,9 @@
 package com.fencing.spacedrepetition.util
 
 import com.fencing.spacedrepetition.data.model.Card
-import com.fencing.spacedrepetition.data.model.CardGroupLearningState
+import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import org.junit.Assert.*
@@ -32,7 +33,7 @@ class YamlArchiveTest {
                 CardWithGroupStates(
                     Card(id = 1, question = "Parry four", answer = "Inside line", created = 0, modified = 0),
                     listOf("Footwork"),
-                    mapOf("Footwork" to CardGroupLearningState(cardId = 1, groupId = 9, fsrsReps = 2))
+                    mapOf("Footwork" to CardLearningState(cardId = 1, learningGroupId = 9, fsrsReps = 2))
                 )
             ),
             out = out,
@@ -61,7 +62,7 @@ class YamlArchiveTest {
             id = 1, question = "Q", answer = "A", imagePaths = listOf("photo.jpg"),
             created = 0, modified = 0
         )
-        val states = (1..3).associate { "Group$it" to CardGroupLearningState(cardId = 1, groupId = it.toLong()) }
+        val states = (1..3).associate { "Group$it" to CardLearningState(cardId = 1, learningGroupId = it.toLong()) }
 
         val out = StringBuilder()
         CardImportExport.exportCardsWithGroupStates(
@@ -91,8 +92,8 @@ class YamlArchiveTest {
             lastReview = 1_699_900_000_000L, nextReview = 1_700_000_000_000L,
             created = 0, modified = 0
         )
-        val groupState = CardGroupLearningState(
-            cardId = 1, groupId = 9, fsrsStability = 3.5, fsrsDifficulty = 6.0,
+        val groupState = CardLearningState(
+            cardId = 1, learningGroupId = 9, fsrsStability = 3.5, fsrsDifficulty = 6.0,
             fsrsElapsedDays = 1, fsrsScheduledDays = 2, fsrsReps = 2, fsrsLapses = 0,
             fsrsState = "LEARNING", lastReview = 100L, nextReview = 200L
         )
@@ -139,7 +140,9 @@ class YamlArchiveTest {
 
         val perGroup = parsed.first { it.isGroupSpecificState }
         assertEquals("Foot work", perGroup.stateContext)
-        assertEquals(listOf("Foot work"), perGroup.groupNames)
+        assertTrue(perGroup.learningGroupState)
+        // A learning group is not a card group: its state puts the card in none.
+        assertEquals(emptyList<String>(), perGroup.groupNames)
         assertEquals(groupState.fsrsStability, perGroup.fsrsStability!!, 0.0001)
         assertEquals(groupState.fsrsState, perGroup.fsrsState)
         assertEquals(groupState.nextReview, perGroup.nextReview)
@@ -277,6 +280,69 @@ class YamlArchiveTest {
         assertEquals(1, errors.size)
         assertTrue(errors[0], errors[0].startsWith("Line 2:"))
         assertEquals("Fine", cards.single().concept)
+    }
+
+    @Test
+    fun `learning groups are written once and named by the groups and states that use them`() {
+        val card = Card(id = 1, question = "Q", answer = "A", created = 0, modified = 0)
+        val out = StringBuilder()
+        CardImportExport.exportCardsWithGroupStates(
+            cardsWithStates = listOf(
+                CardWithGroupStates(
+                    card,
+                    listOf("Footwork", "Bouting"),
+                    mapOf("Shared" to CardLearningState(cardId = 1, learningGroupId = 4, fsrsReps = 3))
+                )
+            ),
+            out = out,
+            images = NoImages,
+            groupSettings = listOf(
+                Group(id = 1, name = "Footwork", learningGroupId = 4),
+                Group(id = 2, name = "Bouting", learningGroupId = 4),
+                Group(id = 3, name = "Plain")
+            ),
+            learningGroups = listOf(
+                LearningGroup(id = 4, name = "Shared", description = "Bouting and drills"),
+                LearningGroup(id = 5, name = "Unused")
+            )
+        )
+        val content = out.toString()
+
+        assertTrue(content, content.contains("learningGroups:\n  - name: \"Shared\"\n    description: \"Bouting and drills\"\n"))
+        assertFalse(content, content.contains("Unused"))
+        assertFalse(content, content.contains("\"Plain\""))
+        assertEquals(2, Regex("^    learningGroup: \"Shared\"$", RegexOption.MULTILINE).findAll(content).count())
+        assertTrue(content, content.contains("    learningStates:\n      - learningGroup: \"Shared\"\n"))
+
+        val (parsed, errors) = CardImportExport.parseCards(content.lines())
+        assertEquals(emptyList<String>(), errors)
+        val state = parsed.single { it.isGroupSpecificState }
+        assertEquals("Shared", state.stateContext)
+        assertTrue(state.learningGroupState)
+        assertEquals(3, state.fsrsReps)
+        assertEquals(mapOf("Shared" to "Bouting and drills"), CardImportExport.lastParsedLearningGroups)
+        assertEquals("Shared", CardImportExport.lastParsedGroupSettings["Bouting"]?.get(CardImportExport.LEARNING_GROUP_SETTING))
+    }
+
+    @Test
+    fun `a file from before learning groups still reads its per-group states`() {
+        val (parsed, errors) = CardImportExport.parseCards(
+            """
+            version: 5
+            cards:
+              - question: "Q"
+                groups:
+                  - "Footwork"
+                groupStates:
+                  - group: "Footwork"
+                    reps: 2
+            """.trimIndent().lines()
+        )
+        assertEquals(emptyList<String>(), errors)
+        val state = parsed.single { it.isGroupSpecificState }
+        assertEquals("Footwork", state.stateContext)
+        assertFalse(state.learningGroupState)
+        assertEquals(2, state.fsrsReps)
     }
 
     /**

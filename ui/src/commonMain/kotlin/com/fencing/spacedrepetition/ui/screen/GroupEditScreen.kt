@@ -11,6 +11,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -21,6 +23,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.algorithm.ScheduleEstimate
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.LearningGroup
+import com.fencing.spacedrepetition.ui.components.AppIcons
 import com.fencing.spacedrepetition.data.preferences.SettingsConstants
 import com.fencing.spacedrepetition.ui.components.FsrsRetentionPreview
 import com.fencing.spacedrepetition.ui.components.RetentionSelector
@@ -30,6 +34,7 @@ import kotlin.math.roundToInt
 @Composable
 fun GroupEditScreen(
     group: Group,
+    learningGroups: List<LearningGroup>,
     globalCardsPerSession: Int,
     globalAutoShowAnswer: Boolean,
     globalRandomizeDueCards: Boolean,
@@ -49,7 +54,7 @@ fun GroupEditScreen(
 
     var name by rememberSaveable { mutableStateOf(group.name) }
     var description by rememberSaveable { mutableStateOf(group.description) }
-    var independentLearning by remember { mutableStateOf(group.independentLearning) }
+    var learningGroupId by remember { mutableStateOf(group.learningGroupId) }
 
     // Per-group settings overrides (null = use global)
     var overrideCardsPerSession by remember { mutableStateOf(group.cardsPerSession != null) }
@@ -83,7 +88,7 @@ fun GroupEditScreen(
     fun buildUpdatedGroup() = group.copy(
         name = name.trim(),
         description = description.trim(),
-        independentLearning = independentLearning,
+        learningGroupId = learningGroupId,
         cardsPerSession = if (overrideCardsPerSession) cardsPerSession else null,
         autoShowAnswer = if (overrideAutoShowAnswer) autoShowAnswer else null,
         randomizeDueCards = if (overrideRandomizeDueCards) randomizeDueCards else null,
@@ -169,27 +174,11 @@ fun GroupEditScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { independentLearning = !independentLearning }
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Independent Learning", style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        "Cards will have separate learning progress in this group",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Switch(
-                    checked = independentLearning,
-                    onCheckedChange = { independentLearning = it }
-                )
-            }
+            LearningGroupPicker(
+                learningGroups = learningGroups,
+                selectedId = learningGroupId,
+                onSelect = { learningGroupId = it }
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
             HorizontalDivider()
@@ -501,5 +490,74 @@ private fun SettingOverrideSection(
         }
         content()
         Spacer(modifier = Modifier.height(4.dp))
+    }
+}
+
+/**
+ * Which learning group a card group practises against. Global is the first
+ * choice and the default; the learning groups themselves are made and
+ * renamed on their own screen, reached from the home screen.
+ */
+@Composable
+private fun LearningGroupPicker(
+    learningGroups: List<LearningGroup>,
+    selectedId: Long?,
+    onSelect: (Long?) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selected = learningGroups.find { it.id == selectedId }
+
+    Box {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = true }
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                AppIcons.LearningGroup,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Learning Group", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    if (selected == null) "Global — shares learning progress with every Global group"
+                    else "${selected.name} — shares learning progress with the groups in it",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(
+                selected?.name ?: "Global",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Icon(Icons.Default.ArrowDropDown, contentDescription = "Choose learning group")
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("Global") },
+                leadingIcon = { if (selectedId == null) Icon(Icons.Default.Check, contentDescription = null) },
+                onClick = {
+                    onSelect(null)
+                    expanded = false
+                }
+            )
+            learningGroups.forEach { learningGroup ->
+                DropdownMenuItem(
+                    text = { Text(learningGroup.name) },
+                    leadingIcon = {
+                        if (learningGroup.id == selectedId) Icon(Icons.Default.Check, contentDescription = null)
+                    },
+                    onClick = {
+                        onSelect(learningGroup.id)
+                        expanded = false
+                    }
+                )
+            }
+        }
     }
 }

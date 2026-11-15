@@ -11,9 +11,10 @@ import androidx.room3.Query
 import androidx.room3.Transaction
 import androidx.room3.Update
 import com.fencing.spacedrepetition.data.model.CardGroupCrossRef
-import com.fencing.spacedrepetition.data.model.CardGroupLearningState
+import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.GroupWithCards
+import com.fencing.spacedrepetition.data.model.LearningGroup
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -83,31 +84,47 @@ interface GroupDao {
     @Query("SELECT * FROM groups WHERE name = :name LIMIT 1")
     suspend fun getGroupByName(name: String): Group?
 
-    // CardGroupLearningState operations
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertLearningState(learningState: CardGroupLearningState)
+    // Learning groups
+    @Query("SELECT * FROM learning_groups ORDER BY name COLLATE NOCASE ASC")
+    fun getAllLearningGroups(): Flow<List<LearningGroup>>
+
+    @Query("SELECT * FROM learning_groups WHERE id = :learningGroupId")
+    suspend fun getLearningGroupById(learningGroupId: Long): LearningGroup?
+
+    @Query("SELECT * FROM learning_groups WHERE name = :name LIMIT 1")
+    suspend fun getLearningGroupByName(name: String): LearningGroup?
+
+    @Insert
+    suspend fun insertLearningGroup(learningGroup: LearningGroup): Long
 
     @Update
-    suspend fun updateLearningState(learningState: CardGroupLearningState)
+    suspend fun updateLearningGroup(learningGroup: LearningGroup)
 
-    @Query("SELECT * FROM card_group_learning_state WHERE cardId = :cardId AND groupId = :groupId")
-    suspend fun getLearningState(cardId: Long, groupId: Long): CardGroupLearningState?
+    @Delete
+    suspend fun deleteLearningGroup(learningGroup: LearningGroup)
 
-    @Query("SELECT * FROM card_group_learning_state WHERE cardId = :cardId AND groupId = :groupId")
-    fun getLearningStateFlow(cardId: Long, groupId: Long): Flow<CardGroupLearningState?>
+    @Query("UPDATE groups SET learningGroupId = :learningGroupId WHERE id = :groupId")
+    suspend fun setLearningGroupForGroup(groupId: Long, learningGroupId: Long?)
 
-    @Query("SELECT * FROM card_group_learning_state WHERE cardId = :cardId")
-    suspend fun getAllLearningStatesForCard(cardId: Long): List<CardGroupLearningState>
+    // Learning state operations
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLearningState(learningState: CardLearningState)
 
-    @Query("SELECT * FROM card_group_learning_state WHERE cardId = :cardId")
-    fun getAllLearningStatesForCardFlow(cardId: Long): Flow<List<CardGroupLearningState>>
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertLearningStateIfAbsent(learningState: CardLearningState)
 
-    @Query("DELETE FROM card_group_learning_state WHERE cardId = :cardId AND groupId = :groupId")
-    suspend fun deleteLearningState(cardId: Long, groupId: Long)
+    @Update
+    suspend fun updateLearningState(learningState: CardLearningState)
 
-    @Query("DELETE FROM card_group_learning_state WHERE cardId = :cardId")
+    @Query("SELECT * FROM card_learning_state WHERE cardId = :cardId AND learningGroupId = :learningGroupId")
+    suspend fun getLearningState(cardId: Long, learningGroupId: Long): CardLearningState?
+
+    @Query("SELECT * FROM card_learning_state WHERE cardId = :cardId")
+    suspend fun getAllLearningStatesForCard(cardId: Long): List<CardLearningState>
+
+    @Query("SELECT * FROM card_learning_state WHERE cardId = :cardId")
+    fun getAllLearningStatesForCardFlow(cardId: Long): Flow<List<CardLearningState>>
+
+    @Query("DELETE FROM card_learning_state WHERE cardId = :cardId")
     suspend fun deleteAllLearningStatesForCard(cardId: Long)
-
-    @Query("DELETE FROM card_group_learning_state WHERE groupId = :groupId")
-    suspend fun deleteAllLearningStatesForGroup(groupId: Long)
 }

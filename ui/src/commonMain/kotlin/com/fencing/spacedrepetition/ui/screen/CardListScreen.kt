@@ -28,10 +28,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.fencing.spacedrepetition.ui.components.AppIcons
 import com.fencing.spacedrepetition.data.model.Card
-import com.fencing.spacedrepetition.data.model.CardGroupLearningState
+import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.CardWithGroups
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.ui.viewmodel.CardSortOption
 import com.fencing.spacedrepetition.ui.viewmodel.ImportExportState
 import com.fencing.spacedrepetition.ui.viewmodel.SortDirection
@@ -61,7 +63,8 @@ fun CardListScreen(
     sortDirection: SortDirection,
     isSelectionMode: Boolean,
     selectedCardIds: Set<Long>,
-    learningStatesFor: @Composable (Long) -> List<CardGroupLearningState>,
+    learningStatesFor: @Composable (Long) -> List<CardLearningState>,
+    learningGroups: List<LearningGroup> = emptyList(),
     onUpdateSearchQuery: (String) -> Unit,
     onClearGroupFilters: () -> Unit,
     onToggleGroupFilter: (Long) -> Unit,
@@ -139,7 +142,7 @@ fun CardListScreen(
                             onClick = { showBulkGroupDialog = true },
                             enabled = selectedCardIds.isNotEmpty()
                         ) {
-                            Icon(Icons.Default.Folder, "Change groups")
+                            Icon(AppIcons.CardGroups, "Change groups")
                         }
                         IconButton(
                             onClick = { showBulkResetDialog = true },
@@ -260,7 +263,7 @@ fun CardListScreen(
                                         showGroupSelectionDialog = true
                                     },
                                     leadingIcon = {
-                                        Icon(Icons.Default.FolderOpen, contentDescription = null)
+                                        Icon(AppIcons.CardGroups, contentDescription = null)
                                     },
                                     enabled = groups.isNotEmpty()
                                 )
@@ -302,7 +305,7 @@ fun CardListScreen(
                                         showCsvGroupSelectionForExport = true
                                     },
                                     leadingIcon = {
-                                        Icon(Icons.Default.FolderOpen, contentDescription = null)
+                                        Icon(AppIcons.CardGroups, contentDescription = null)
                                     },
                                     enabled = groups.isNotEmpty()
                                 )
@@ -457,6 +460,7 @@ fun CardListScreen(
                             card = card,
                             groups = cardGroups,
                             learningStates = learningStates,
+                            learningGroups = learningGroups,
                             isSelectionMode = isSelectionMode,
                             isSelected = card.id in selectedCardIds,
                             sortOption = cardSortOption,
@@ -635,7 +639,7 @@ fun CardListScreen(
         BulkResetDialog(
             selectedCardIds = selectedCardIds,
             allCardsWithGroups = allCardsWithGroups,
-            currentGroupFilter = null,
+            learningGroups = learningGroups,
             onDismiss = { showBulkResetDialog = false },
             onResetGlobal = {
                 onResetSelectedCardsGlobalState()
@@ -746,7 +750,7 @@ fun BulkGroupDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Default.Folder, contentDescription = null) },
+        icon = { Icon(AppIcons.CardGroups, contentDescription = null) },
         title = { Text("Change Groups") },
         text = {
             Column {
@@ -809,7 +813,7 @@ fun ExportGroupSelectionDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Default.FolderOpen, contentDescription = null) },
+        icon = { Icon(AppIcons.CardGroups, contentDescription = null) },
         title = { Text("Export Selected Groups") },
         text = {
             Column {
@@ -886,7 +890,8 @@ fun ExportGroupSelectionDialog(
 fun CardListItem(
     card: Card,
     groups: List<Group>,
-    learningStates: List<CardGroupLearningState> = emptyList(),
+    learningStates: List<CardLearningState> = emptyList(),
+    learningGroups: List<LearningGroup> = emptyList(),
     isSelectionMode: Boolean = false,
     isSelected: Boolean = false,
     sortOption: CardSortOption = CardSortOption.DUE_DATE,
@@ -1079,7 +1084,7 @@ fun CardListItem(
                                 label = { Text(group.name, style = MaterialTheme.typography.labelSmall) },
                                 leadingIcon = {
                                     Icon(
-                                        Icons.Default.Folder,
+                                        AppIcons.CardGroups,
                                         contentDescription = null,
                                         modifier = Modifier.size(16.dp)
                                     )
@@ -1091,18 +1096,20 @@ fun CardListItem(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                // Independent learning states display
-                val independentGroups = groups.filter { it.independentLearning }
-                if (independentGroups.isNotEmpty()) {
+                // Learning group states display
+                val cardLearningGroups = learningGroups.filter { learningGroup ->
+                    groups.any { it.learningGroupId == learningGroup.id }
+                }
+                if (cardLearningGroups.isNotEmpty()) {
                     Text(
-                        text = "Independent Learning:",
+                        text = "Learning Groups:",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    independentGroups.forEach { group ->
-                        val state = learningStates.find { it.groupId == group.id }
+                    cardLearningGroups.forEach { group ->
+                        val state = learningStates.find { it.learningGroupId == group.id }
                         val stateText = if (state == null) {
                             "${group.name}: No state"
                         } else {
@@ -1176,34 +1183,26 @@ fun CardListItem(
 fun BulkResetDialog(
     selectedCardIds: Set<Long>,
     allCardsWithGroups: List<CardWithGroups>,
-    currentGroupFilter: Group?,
+    learningGroups: List<LearningGroup>,
     onDismiss: () -> Unit,
     onResetGlobal: () -> Unit,
     onResetGroups: (Set<Long>) -> Unit,
     onResetBoth: (Set<Long>) -> Unit
 ) {
-    // Find all independent learning groups that contain any of the selected cards
-    val independentLearningGroups = remember(selectedCardIds, allCardsWithGroups) {
-        allCardsWithGroups
+    // Every learning group any of the selected cards is learnt in
+    val affectedLearningGroups = remember(selectedCardIds, allCardsWithGroups, learningGroups) {
+        val ids = allCardsWithGroups
             .filter { it.card.id in selectedCardIds }
             .flatMap { it.groups }
-            .filter { it.independentLearning }
-            .distinctBy { it.id }
-            .sortedBy { it.name }
+            .mapNotNull { it.learningGroupId }
+            .toSet()
+        learningGroups.filter { it.id in ids }.sortedBy { it.name.lowercase() }
     }
 
-    // Preselect the current filter group if it's an independent learning group
-    var selectedGroupIds by remember(currentGroupFilter, independentLearningGroups) {
-        val preselected = if (currentGroupFilter != null &&
-            independentLearningGroups.any { it.id == currentGroupFilter.id }) {
-            setOf(currentGroupFilter.id)
-        } else {
-            emptySet()
-        }
-        mutableStateOf(preselected)
-    }
+    // Learning group ids to reset
+    var selectedGroupIds by remember(affectedLearningGroups) { mutableStateOf(emptySet<Long>()) }
 
-    if (independentLearningGroups.isEmpty()) {
+    if (affectedLearningGroups.isEmpty()) {
         // Simple dialog for cards not in independent learning groups
         AlertDialog(
             onDismissRequest = onDismiss,
@@ -1246,20 +1245,20 @@ fun BulkResetDialog(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "Some cards are in ${independentLearningGroups.size} group${if (independentLearningGroups.size > 1) "s" else ""} with independent learning.",
+                        "Some cards are learnt in ${affectedLearningGroups.size} learning group${if (affectedLearningGroups.size > 1) "s" else ""} as well as Global.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
-                        "Select groups to reset:",
+                        "Select learning groups to reset:",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
                     Spacer(modifier = Modifier.height(8.dp))
 
                     // Group selection checkboxes
-                    independentLearningGroups.forEach { group ->
+                    affectedLearningGroups.forEach { group ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1300,7 +1299,7 @@ fun BulkResetDialog(
                     ) {
                         TextButton(
                             onClick = {
-                                selectedGroupIds = independentLearningGroups.map { it.id }.toSet()
+                                selectedGroupIds = affectedLearningGroups.map { it.id }.toSet()
                             },
                             modifier = Modifier.weight(1f)
                         ) {
@@ -1339,7 +1338,7 @@ fun BulkResetDialog(
                             contentColor = MaterialTheme.colorScheme.error
                         )
                     ) {
-                        Text("Reset Selected Groups Only (${selectedGroupIds.size})")
+                        Text("Reset Selected Learning Groups Only (${selectedGroupIds.size})")
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -1353,7 +1352,7 @@ fun BulkResetDialog(
                             contentColor = MaterialTheme.colorScheme.error
                         )
                     ) {
-                        Text("Reset Both Global & Groups (${selectedGroupIds.size})")
+                        Text("Reset Both Global & Learning Groups (${selectedGroupIds.size})")
                     }
                 }
             },

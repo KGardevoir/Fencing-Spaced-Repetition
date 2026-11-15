@@ -8,9 +8,10 @@ import com.fencing.spacedrepetition.data.dao.GroupDao
 import com.fencing.spacedrepetition.util.CardWithGroupStates
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupCrossRef
-import com.fencing.spacedrepetition.data.model.CardGroupLearningState
+import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.GroupWithCards
+import com.fencing.spacedrepetition.data.model.LearningGroup
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
@@ -84,58 +85,58 @@ class GroupRepository(
     }
 
     suspend fun getCardsByGroupWithStates(groupId: Long): List<CardWithGroupStates> {
-        val cards = getCardsByGroupSync(groupId)
-        val allGroups = getAllGroupsSync()
-        val independentLearningGroupNames = allGroups.filter { it.independentLearning }.map { it.name to it.id }.toMap()
-
-        return cards.map { card ->
+        val learningGroupNames = getAllLearningGroupsSync().associate { it.id to it.name }
+        return getCardsByGroupSync(groupId).map { card ->
             val groups = getGroupsForCardSync(card.id)
-            val groupNames = groups.map { it.name }
-
-            // Get group-specific states for groups with independent learning
-            val groupSpecificStates = mutableMapOf<String, com.fencing.spacedrepetition.data.model.CardGroupLearningState>()
-            groups.forEach { group ->
-                if (group.independentLearning) {
-                    groupDao.getLearningState(card.id, group.id)?.let { state ->
-                        groupSpecificStates[group.name] = state
-                    }
-                }
-            }
-
-            CardWithGroupStates(card, groupNames, groupSpecificStates)
+            CardWithGroupStates(
+                card,
+                groups.map { it.name },
+                learningStatesByName(card.id, groups, learningGroupNames)
+            )
         }
+    }
+
+    /**
+     * The learning states [cardId] holds in the learning groups its [groups]
+     * practise against, by learning group name -- what an export writes.
+     */
+    internal suspend fun learningStatesByName(
+        cardId: Long,
+        groups: List<Group>,
+        learningGroupNames: Map<Long, String>
+    ): Map<String, CardLearningState> {
+        val learningGroupIds = groups.mapNotNull { it.learningGroupId }.toSet()
+        if (learningGroupIds.isEmpty()) return emptyMap()
+        return groupDao.getAllLearningStatesForCard(cardId)
+            .filter { it.learningGroupId in learningGroupIds }
+            .mapNotNull { state -> learningGroupNames[state.learningGroupId]?.let { it to state } }
+            .toMap()
     }
 
     /**
      * Ensures all group names exist, creating any that don't.
      * Returns an updated map of group name to ID.
-     * If groupsWithIndependentLearning is provided, sets independentLearning flag for those groups.
+     *
+     * [legacyIndependentGroups] names groups that an older export recorded as
+     * learning independently. Each is put in a learning group of its own name
+     * -- created if need be -- unless it already belongs to one, which is how
+     * a file from before learning groups keeps its meaning.
      */
     suspend fun ensureGroupsExist(
         groupNames: Set<String>,
-        groupsWithIndependentLearning: Set<String> = emptySet()
+        legacyIndependentGroups: Set<String> = emptySet()
     ): Map<String, Long> {
         val existingGroups = getAllGroupsSync().associate { it.name to it.id }.toMutableMap()
 
         groupNames.forEach { name ->
-            if (name.isNotBlank()) {
-                if (!existingGroups.containsKey(name)) {
-                    // Create new group
-                    val newGroup = Group(
-                        name = name,
-                        description = "Imported group",
-                        independentLearning = name in groupsWithIndependentLearning
-                    )
-                    val newId = groupDao.insertGroup(newGroup)
-                    existingGroups[name] = newId
-                } else if (name in groupsWithIndependentLearning) {
-                    // Update existing group to enable independent learning if needed
-                    val existingGroupId = existingGroups[name]!!
-                    val existingGroup = groupDao.getGroupById(existingGroupId)
-                    if (existingGroup != null && !existingGroup.independentLearning) {
-                        groupDao.updateGroup(existingGroup.copy(independentLearning = true))
-                    }
-                }
+            if (name.isNotBlank() && !existingGroups.containsKey(name)) {
+                existingGroups[name] = groupDao.insertGroup(Group(name = name, description = "Imported group"))
+            }
+        }
+        legacyIndependentGroups.forEach { name ->
+            val group = existingGroups[name]?.let { groupDao.getGroupById(it) } ?: return@forEach
+            if (group.learningGroupId == null) {
+                setLearningGroup(group.id, ensureLearningGroup(name))
             }
         }
 
@@ -144,41 +145,65 @@ class GroupRepository(
 
     suspend fun getGroupByName(name: String): Group? = groupDao.getGroupByName(name)
 
-    fun getAllLearningStatesForCard(cardId: Long): Flow<List<CardGroupLearningState>> =
+    fun getAllLearningStatesForCard(cardId: Long): Flow<List<CardLearningState>> =
         groupDao.getAllLearningStatesForCardFlow(cardId)
 
-    suspend fun getAllLearningStatesForCardSync(cardId: Long): List<CardGroupLearningState> =
+    suspend fun getAllLearningStatesForCardSync(cardId: Long): List<CardLearningState> =
         groupDao.getAllLearningStatesForCard(cardId)
 
-    suspend fun toggleIndependentLearning(groupId: Long, enabled: Boolean) {
-        val group = groupDao.getGroupById(groupId) ?: return
-        val updatedGroup = group.copy(independentLearning = enabled)
-        groupDao.updateGroup(updatedGroup)
+    // Learning groups
+    fun getAllLearningGroups(): Flow<List<LearningGroup>> = groupDao.getAllLearningGroups()
 
-        // If enabling independent learning, initialize learning states for all cards in the group
-        if (enabled) {
-            val cards = cardDao.getCardsByGroupSync(groupId)
-            cards.forEach { card ->
-                val existingState = groupDao.getLearningState(card.id, groupId)
-                if (existingState == null) {
-                    groupDao.insertLearningState(
-                        com.fencing.spacedrepetition.data.model.CardGroupLearningState(
-                            cardId = card.id,
-                            groupId = groupId,
-                            // Copy current card state to the new learning state
-                            fsrsStability = card.fsrsStability,
-                            fsrsDifficulty = card.fsrsDifficulty,
-                            fsrsElapsedDays = card.fsrsElapsedDays,
-                            fsrsScheduledDays = card.fsrsScheduledDays,
-                            fsrsReps = card.fsrsReps,
-                            fsrsLapses = card.fsrsLapses,
-                            fsrsState = card.fsrsState,
-                            lastReview = card.lastReview,
-                            nextReview = card.nextReview
-                        )
-                    )
-                }
-            }
+    suspend fun getAllLearningGroupsSync(): List<LearningGroup> = groupDao.getAllLearningGroups().first()
+
+    suspend fun getLearningGroupById(id: Long): LearningGroup? = groupDao.getLearningGroupById(id)
+
+    suspend fun insertLearningGroup(learningGroup: LearningGroup): Long =
+        groupDao.insertLearningGroup(learningGroup)
+
+    suspend fun updateLearningGroup(learningGroup: LearningGroup) =
+        groupDao.updateLearningGroup(learningGroup)
+
+    /**
+     * Deletes a learning group and every state kept in it. Its card groups go
+     * back to Global, by the foreign key, rather than being deleted with it.
+     */
+    suspend fun deleteLearningGroup(learningGroup: LearningGroup) =
+        groupDao.deleteLearningGroup(learningGroup)
+
+    /** The id of the learning group called [name], creating it if there is none. */
+    suspend fun ensureLearningGroup(name: String, description: String = ""): Long =
+        groupDao.getLearningGroupByName(name)?.id
+            ?: groupDao.insertLearningGroup(LearningGroup(name = name, description = description))
+
+    /**
+     * Points a card group at a learning group, or at Global for null.
+     *
+     * A card that has no state in the learning group yet starts from its
+     * Global one, so moving a group in does not make every card in it new
+     * again. A card that already has one -- because another group in the
+     * same learning group holds it -- keeps it: that is the progress being
+     * shared.
+     */
+    suspend fun setLearningGroup(groupId: Long, learningGroupId: Long?) {
+        groupDao.setLearningGroupForGroup(groupId, learningGroupId)
+        if (learningGroupId == null) return
+        cardDao.getCardsByGroupSync(groupId).forEach { card ->
+            groupDao.insertLearningStateIfAbsent(
+                CardLearningState(
+                    cardId = card.id,
+                    learningGroupId = learningGroupId,
+                    fsrsStability = card.fsrsStability,
+                    fsrsDifficulty = card.fsrsDifficulty,
+                    fsrsElapsedDays = card.fsrsElapsedDays,
+                    fsrsScheduledDays = card.fsrsScheduledDays,
+                    fsrsReps = card.fsrsReps,
+                    fsrsLapses = card.fsrsLapses,
+                    fsrsState = card.fsrsState,
+                    lastReview = card.lastReview,
+                    nextReview = card.nextReview
+                )
+            )
         }
     }
 }

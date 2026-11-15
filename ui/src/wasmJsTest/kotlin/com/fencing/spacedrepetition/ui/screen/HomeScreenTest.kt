@@ -77,6 +77,7 @@ class HomeScreenTest {
                     onStartPractice = onStartPractice,
                     onNavigateToCards = {},
                     onNavigateToGroups = {},
+                    onNavigateToLearningGroups = {},
                     onNavigateToSettings = {},
                     onNavigateToHistory = {},
                     onNavigateToOpponents = {}

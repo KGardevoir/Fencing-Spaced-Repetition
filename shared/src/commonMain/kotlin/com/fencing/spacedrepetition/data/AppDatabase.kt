@@ -17,16 +17,17 @@ import com.fencing.spacedrepetition.data.dao.PracticeSessionDao
 import com.fencing.spacedrepetition.data.dao.ReviewLogDao
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupCrossRef
-import com.fencing.spacedrepetition.data.model.CardGroupLearningState
+import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.util.Time
 
 @Database(
-    entities = [Card::class, PracticeSession::class, ReviewLog::class, Group::class, CardGroupCrossRef::class, CardGroupLearningState::class, Opponent::class],
-    version = 14,
+    entities = [Card::class, PracticeSession::class, ReviewLog::class, Group::class, CardGroupCrossRef::class, CardLearningState::class, LearningGroup::class, Opponent::class],
+    version = 15,
     exportSchema = true
 )
 @ColumnTypeConverters(Converters::class)
@@ -509,6 +510,192 @@ private val MIGRATION_13_14 = object : Migration(13, 14) {
 }
 
 /**
+ * Replaces each group's independent-learning switch with learning groups:
+ * named sets of learning progress that any number of card groups can share.
+ *
+ * Every group that learned independently becomes the only member of a new
+ * learning group of the same name, and keeps the states it had -- so nothing
+ * anyone sees changes until they choose to put a second group in with it.
+ * Every other group learns Global, as it already did. States left behind by
+ * a group whose switch had been turned back off go with the old table: they
+ * were not used, and there is no learning group for them to belong to.
+ *
+ * The same care as [MIGRATION_11_12] over the order: `groups` is rebuilt,
+ * and `card_group_cross_ref` cascades from it, so the cross references are
+ * set aside and dropped first and put back after.
+ */
+private val MIGRATION_14_15 = object : Migration(14, 15) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("""
+            CREATE TABLE IF NOT EXISTS `learning_groups` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `name` TEXT NOT NULL,
+                `description` TEXT NOT NULL,
+                `created` INTEGER NOT NULL
+            )
+        """)
+
+        // One learning group per group that learned independently, in Kotlin
+        // rather than one INSERT ... SELECT: group names are not unique, so
+        // matching the new rows back to their groups by name could cross two.
+        connection.execSQL("""
+            CREATE TABLE `learning_group_map_14_15` (
+                `groupId` INTEGER PRIMARY KEY NOT NULL,
+                `learningGroupId` INTEGER NOT NULL
+            )
+        """)
+        val independent = mutableListOf<Triple<Long, String, Long>>()
+        val read = connection.prepare(
+            "SELECT `id`, `name`, `created` FROM `groups` WHERE `independentLearning` = 1 ORDER BY `id`"
+        )
+        try {
+            while (read.step()) independent += Triple(read.getLong(0), read.getText(1), read.getLong(2))
+        } finally {
+            read.close()
+        }
+        val insert = connection.prepare(
+            "INSERT INTO `learning_groups` (`name`, `description`, `created`) VALUES (?, '', ?)"
+        )
+        val lastId = connection.prepare("SELECT last_insert_rowid()")
+        val map = connection.prepare(
+            "INSERT INTO `learning_group_map_14_15` (`groupId`, `learningGroupId`) VALUES (?, ?)"
+        )
+        try {
+            independent.forEach { (groupId, name, created) ->
+                insert.bindText(1, name)
+                insert.bindLong(2, created)
+                insert.step()
+                insert.reset()
+                lastId.step()
+                val learningGroupId = lastId.getLong(0)
+                lastId.reset()
+                map.bindLong(1, groupId)
+                map.bindLong(2, learningGroupId)
+                map.step()
+                map.reset()
+            }
+        } finally {
+            insert.close()
+            lastId.close()
+            map.close()
+        }
+
+        // Set the children aside and drop them before `groups` is rebuilt.
+        connection.execSQL("""
+            CREATE TABLE `cross_ref_backup_14_15` AS
+            SELECT `cardId`, `groupId` FROM `card_group_cross_ref`
+        """)
+        connection.execSQL("""
+            CREATE TABLE `learning_state_backup_14_15` AS
+            SELECT
+                m.`learningGroupId` AS `learningGroupId`, s.`cardId` AS `cardId`,
+                s.`fsrsStability`, s.`fsrsDifficulty`, s.`fsrsElapsedDays`, s.`fsrsScheduledDays`,
+                s.`fsrsReps`, s.`fsrsLapses`, s.`fsrsState`,
+                s.`lastReview`, s.`nextReview`, s.`modified`
+            FROM `card_group_learning_state` s
+            INNER JOIN `learning_group_map_14_15` m ON m.`groupId` = s.`groupId`
+        """)
+        connection.execSQL("DROP TABLE `card_group_cross_ref`")
+        connection.execSQL("DROP TABLE `card_group_learning_state`")
+
+        connection.execSQL("""
+            CREATE TABLE IF NOT EXISTS `groups_new` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `name` TEXT NOT NULL,
+                `description` TEXT NOT NULL DEFAULT '',
+                `learningGroupId` INTEGER DEFAULT NULL,
+                `created` INTEGER NOT NULL DEFAULT 0,
+                `cardsPerSession` INTEGER DEFAULT NULL,
+                `autoShowAnswer` INTEGER DEFAULT NULL,
+                `randomizeDueCards` INTEGER DEFAULT NULL,
+                `randomizeBucketHours` INTEGER DEFAULT NULL,
+                `practiceDays` TEXT DEFAULT NULL,
+                `maximumInterval` INTEGER DEFAULT NULL,
+                `fsrsRetention` INTEGER DEFAULT NULL,
+                `fsrsEnableFuzzing` INTEGER DEFAULT NULL,
+                FOREIGN KEY(`learningGroupId`) REFERENCES `learning_groups`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL
+            )
+        """)
+        connection.execSQL("""
+            INSERT INTO `groups_new` (
+                `id`, `name`, `description`, `learningGroupId`, `created`,
+                `cardsPerSession`, `autoShowAnswer`, `randomizeDueCards`,
+                `randomizeBucketHours`, `practiceDays`, `maximumInterval`,
+                `fsrsRetention`, `fsrsEnableFuzzing`
+            )
+            SELECT
+                g.`id`, g.`name`, g.`description`, m.`learningGroupId`, g.`created`,
+                g.`cardsPerSession`, g.`autoShowAnswer`, g.`randomizeDueCards`,
+                g.`randomizeBucketHours`, g.`practiceDays`, g.`maximumInterval`,
+                g.`fsrsRetention`, g.`fsrsEnableFuzzing`
+            FROM `groups` g
+            LEFT JOIN `learning_group_map_14_15` m ON m.`groupId` = g.`id`
+        """)
+        connection.execSQL("DROP TABLE `groups`")
+        connection.execSQL("ALTER TABLE `groups_new` RENAME TO `groups`")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_groups_learningGroupId` ON `groups` (`learningGroupId`)")
+
+        connection.execSQL("""
+            CREATE TABLE IF NOT EXISTS `card_group_cross_ref` (
+                `cardId` INTEGER NOT NULL,
+                `groupId` INTEGER NOT NULL,
+                PRIMARY KEY(`cardId`, `groupId`),
+                FOREIGN KEY(`cardId`) REFERENCES `cards`(`id`) ON DELETE CASCADE,
+                FOREIGN KEY(`groupId`) REFERENCES `groups`(`id`) ON DELETE CASCADE
+            )
+        """)
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_card_group_cross_ref_groupId` ON `card_group_cross_ref`(`groupId`)")
+        connection.execSQL("""
+            INSERT INTO `card_group_cross_ref` (`cardId`, `groupId`)
+            SELECT `cardId`, `groupId` FROM `cross_ref_backup_14_15`
+            WHERE `cardId` IN (SELECT `id` FROM `cards`)
+              AND `groupId` IN (SELECT `id` FROM `groups`)
+        """)
+
+        connection.execSQL("""
+            CREATE TABLE IF NOT EXISTS `card_learning_state` (
+                `cardId` INTEGER NOT NULL,
+                `learningGroupId` INTEGER NOT NULL,
+                `fsrsStability` REAL NOT NULL,
+                `fsrsDifficulty` REAL NOT NULL,
+                `fsrsElapsedDays` INTEGER NOT NULL,
+                `fsrsScheduledDays` INTEGER NOT NULL,
+                `fsrsReps` INTEGER NOT NULL,
+                `fsrsLapses` INTEGER NOT NULL,
+                `fsrsState` TEXT NOT NULL,
+                `lastReview` INTEGER NOT NULL,
+                `nextReview` INTEGER NOT NULL,
+                `modified` INTEGER NOT NULL,
+                PRIMARY KEY(`cardId`, `learningGroupId`),
+                FOREIGN KEY(`cardId`) REFERENCES `cards`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE,
+                FOREIGN KEY(`learningGroupId`) REFERENCES `learning_groups`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+        """)
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_card_learning_state_learningGroupId` ON `card_learning_state` (`learningGroupId`)")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_card_learning_state_cardId` ON `card_learning_state` (`cardId`)")
+        connection.execSQL("""
+            INSERT INTO `card_learning_state` (
+                `cardId`, `learningGroupId`,
+                `fsrsStability`, `fsrsDifficulty`, `fsrsElapsedDays`, `fsrsScheduledDays`,
+                `fsrsReps`, `fsrsLapses`, `fsrsState`,
+                `lastReview`, `nextReview`, `modified`
+            )
+            SELECT
+                `cardId`, `learningGroupId`,
+                `fsrsStability`, `fsrsDifficulty`, `fsrsElapsedDays`, `fsrsScheduledDays`,
+                `fsrsReps`, `fsrsLapses`, `fsrsState`,
+                `lastReview`, `nextReview`, `modified`
+            FROM `learning_state_backup_14_15`
+            WHERE `cardId` IN (SELECT `id` FROM `cards`)
+        """)
+
+        connection.execSQL("DROP TABLE `cross_ref_backup_14_15`")
+        connection.execSQL("DROP TABLE `learning_state_backup_14_15`")
+        connection.execSQL("DROP TABLE `learning_group_map_14_15`")
+    }
+}
+
+/**
  * Every migration, oldest first. The SQL is identical on every platform, so
  * each platform's builder passes this same array and there is nothing here
  * for a target to override.
@@ -527,4 +714,5 @@ val ALL_MIGRATIONS: Array<Migration> = arrayOf(
     MIGRATION_11_12,
     MIGRATION_12_13,
     MIGRATION_13_14,
+    MIGRATION_14_15,
 )

@@ -14,6 +14,7 @@ package com.fencing.spacedrepetition.util
 
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
@@ -90,11 +91,20 @@ fun CardImportExport.exportCardsWithGroupStates(
     opponents: List<Opponent> = emptyList(),
     opponentNamesById: Map<Long, String> = emptyMap(),
     images: ImageReader,
-    sessions: List<PracticeSession> = emptyList()
+    sessions: List<PracticeSession> = emptyList(),
+    learningGroups: List<LearningGroup> = emptyList()
 ): ExportResult = outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
     exportCardsWithGroupStates(
-        cardsWithStates, writer, images, groupSettings, reviewLogs,
-        cardQuestions, opponents, opponentNamesById, sessions
+        cardsWithStates = cardsWithStates,
+        out = writer,
+        images = images,
+        groupSettings = groupSettings,
+        learningGroups = learningGroups,
+        reviewLogs = reviewLogs,
+        cardQuestions = cardQuestions,
+        opponents = opponents,
+        opponentNamesById = opponentNamesById,
+        sessions = sessions
     )
 }
 

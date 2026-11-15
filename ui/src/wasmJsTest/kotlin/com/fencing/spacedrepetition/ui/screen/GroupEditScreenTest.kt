@@ -34,6 +34,7 @@ class GroupEditScreenTest {
             FencingSpacedRepetitionTheme {
                 GroupEditScreen(
                     group = group(),
+                    learningGroups = emptyList(),
                     globalCardsPerSession = 3,
                     globalAutoShowAnswer = false,
                     globalRandomizeDueCards = true,
@@ -67,6 +68,7 @@ class GroupEditScreenTest {
             FencingSpacedRepetitionTheme {
                 GroupEditScreen(
                     group = group(),
+                    learningGroups = emptyList(),
                     globalCardsPerSession = 3,
                     globalAutoShowAnswer = false,
                     globalRandomizeDueCards = true,

@@ -24,7 +24,7 @@ data class ParsedCard(
     val imagePaths: List<String> = emptyList(), // For export (file paths)
     val imageData: List<String> = emptyList(),  // For import (base64 encoded)
     // Full state (null if simple import)
-    val stateContext: String? = null,  // "GLOBAL" or group name for group-specific state
+    val stateContext: String? = null,  // "GLOBAL", a learning group's name, or (legacy) a group's name
     val nextReview: Long? = null,
     val lastReview: Long? = null,
     val fsrsStability: Double? = null,
@@ -34,7 +34,13 @@ data class ParsedCard(
     val fsrsLapses: Int? = null,
     val fsrsScheduledDays: Int? = null,
     val fsrsElapsedDays: Int? = null,
-    val groupNames: List<String> = emptyList()
+    val groupNames: List<String> = emptyList(),
+    /**
+     * True when [stateContext] names a learning group. False for the states of
+     * files from before learning groups, which name the group that learned
+     * independently instead.
+     */
+    val learningGroupState: Boolean = false
 ) {
     // Every full-format row carries a state context ("GLOBAL" or a group
     // name); the two-column simple format carries none.
@@ -52,10 +58,11 @@ data class CardWithGroupNames(
 )
 
 /**
- * Data class for exporting a card with group-specific learning states
+ * Data class for exporting a card with its learning group states, keyed by
+ * learning group name.
  */
 data class CardWithGroupStates(
     val card: Card,
     val groupNames: List<String>,
-    val groupSpecificStates: Map<String, com.fencing.spacedrepetition.data.model.CardGroupLearningState> = emptyMap()
+    val learningStates: Map<String, com.fencing.spacedrepetition.data.model.CardLearningState> = emptyMap()
 )
