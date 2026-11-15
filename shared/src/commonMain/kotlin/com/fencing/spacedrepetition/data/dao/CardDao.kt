@@ -72,10 +72,10 @@ interface CardDao {
         SELECT DISTINCT c.* FROM cards c
         INNER JOIN card_group_cross_ref cgc ON c.id = cgc.cardId
         INNER JOIN groups g ON cgc.groupId = g.id
-        LEFT JOIN card_group_learning_state cgls ON cgls.cardId = c.id AND cgls.groupId = :groupId
+        LEFT JOIN card_learning_state cls ON cls.cardId = c.id AND cls.learningGroupId = g.learningGroupId
         WHERE cgc.groupId = :groupId
         ORDER BY CASE
-            WHEN g.independentLearning = 1 THEN COALESCE(cgls.nextReview, c.nextReview)
+            WHEN g.learningGroupId IS NOT NULL THEN COALESCE(cls.nextReview, c.nextReview)
             ELSE c.nextReview
           END ASC
     """)
@@ -85,10 +85,10 @@ interface CardDao {
         SELECT DISTINCT c.* FROM cards c
         INNER JOIN card_group_cross_ref cgc ON c.id = cgc.cardId
         INNER JOIN groups g ON cgc.groupId = g.id
-        LEFT JOIN card_group_learning_state cgls ON cgls.cardId = c.id AND cgls.groupId = :groupId
+        LEFT JOIN card_learning_state cls ON cls.cardId = c.id AND cls.learningGroupId = g.learningGroupId
         WHERE cgc.groupId = :groupId AND c.isDisabled = 0
         ORDER BY CASE
-            WHEN g.independentLearning = 1 THEN COALESCE(cgls.nextReview, c.nextReview)
+            WHEN g.learningGroupId IS NOT NULL THEN COALESCE(cls.nextReview, c.nextReview)
             ELSE c.nextReview
           END ASC
     """)
@@ -98,15 +98,15 @@ interface CardDao {
         SELECT DISTINCT c.* FROM cards c
         INNER JOIN card_group_cross_ref cgc ON c.id = cgc.cardId
         INNER JOIN groups g ON cgc.groupId = g.id
-        LEFT JOIN card_group_learning_state cgls ON cgls.cardId = c.id AND cgls.groupId = :groupId
+        LEFT JOIN card_learning_state cls ON cls.cardId = c.id AND cls.learningGroupId = g.learningGroupId
         WHERE cgc.groupId = :groupId
           AND c.isDisabled = 0
           AND CASE
-            WHEN g.independentLearning = 1 THEN COALESCE(cgls.nextReview, c.nextReview)
+            WHEN g.learningGroupId IS NOT NULL THEN COALESCE(cls.nextReview, c.nextReview)
             ELSE c.nextReview
           END <= :now
         ORDER BY CASE
-            WHEN g.independentLearning = 1 THEN COALESCE(cgls.nextReview, c.nextReview)
+            WHEN g.learningGroupId IS NOT NULL THEN COALESCE(cls.nextReview, c.nextReview)
             ELSE c.nextReview
           END ASC
         LIMIT :limit
@@ -117,11 +117,11 @@ interface CardDao {
         SELECT COUNT(DISTINCT c.id) FROM cards c
         INNER JOIN card_group_cross_ref cgc ON c.id = cgc.cardId
         INNER JOIN groups g ON cgc.groupId = g.id
-        LEFT JOIN card_group_learning_state cgls ON cgls.cardId = c.id AND cgls.groupId = :groupId
+        LEFT JOIN card_learning_state cls ON cls.cardId = c.id AND cls.learningGroupId = g.learningGroupId
         WHERE cgc.groupId = :groupId
           AND c.isDisabled = 0
           AND CASE
-            WHEN g.independentLearning = 1 THEN COALESCE(cgls.nextReview, c.nextReview)
+            WHEN g.learningGroupId IS NOT NULL THEN COALESCE(cls.nextReview, c.nextReview)
             ELSE c.nextReview
           END <= :now
     """)

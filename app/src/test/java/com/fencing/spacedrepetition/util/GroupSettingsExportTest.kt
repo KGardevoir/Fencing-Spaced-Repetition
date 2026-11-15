@@ -4,8 +4,9 @@
 package com.fencing.spacedrepetition.util
 
 import com.fencing.spacedrepetition.data.model.Card
-import com.fencing.spacedrepetition.data.model.CardGroupLearningState
+import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.LearningGroup
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.ByteArrayInputStream
@@ -163,7 +164,7 @@ class GroupSettingsExportTest {
 
     @Test
     fun `applyGroupSettings - preserves non-settings fields`() {
-        val group = Group(id = 42, name = "MyGroup", description = "desc", independentLearning = true, created = 12345L)
+        val group = Group(id = 42, name = "MyGroup", description = "desc", learningGroupId = 7L, created = 12345L)
         val settings = mapOf("cardsPerSession" to "3")
 
         val result = CardImportExport.applyGroupSettings(group, settings)
@@ -171,7 +172,7 @@ class GroupSettingsExportTest {
         assertEquals(42L, result.id)
         assertEquals("MyGroup", result.name)
         assertEquals("desc", result.description)
-        assertEquals(true, result.independentLearning)
+        assertEquals(7L, result.learningGroupId)
         assertEquals(12345L, result.created)
         assertEquals(3, result.cardsPerSession)
     }
@@ -194,7 +195,8 @@ class GroupSettingsExportTest {
             listOf(CardWithGroupStates(card, listOf("CustomGroup"), emptyMap())),
             output,
             groupSettings = groups,
-            images = NoImages
+            images = NoImages,
+            learningGroups = listOf(LearningGroup(id = 5, name = "Advanced"))
         )
 
         val content = output.toString(Charsets.UTF_8.name())
@@ -223,7 +225,8 @@ class GroupSettingsExportTest {
             listOf(CardWithGroupStates(card, listOf("DefaultGroup", "CustomGroup"), emptyMap())),
             output,
             groupSettings = groups,
-            images = NoImages
+            images = NoImages,
+            learningGroups = listOf(LearningGroup(id = 5, name = "Advanced"))
         )
 
         val content = output.toString(Charsets.UTF_8.name())
@@ -309,7 +312,8 @@ class GroupSettingsExportTest {
             listOf(CardWithGroupStates(card, listOf("Epee Drills"), emptyMap())),
             output,
             groupSettings = groups,
-            images = NoImages
+            images = NoImages,
+            learningGroups = listOf(LearningGroup(id = 5, name = "Advanced"))
         )
 
         // Import
@@ -350,14 +354,14 @@ class GroupSettingsExportTest {
             created = 0, modified = 0
         )
 
-        val groupState = CardGroupLearningState(
-            cardId = 1, groupId = 1,
+        val groupState = CardLearningState(
+            cardId = 1, learningGroupId = 1,
             fsrsStability = 8.0, fsrsDifficulty = 0.3,
             fsrsState = "REVIEW", fsrsReps = 5
         )
 
         val groups = listOf(
-            Group(id = 1, name = "Advanced", independentLearning = true, cardsPerSession = 10)
+            Group(id = 1, name = "Advanced", learningGroupId = 5, cardsPerSession = 10)
         )
 
         // Export with both group states and group settings
@@ -366,7 +370,8 @@ class GroupSettingsExportTest {
             listOf(CardWithGroupStates(card, listOf("Advanced"), mapOf("Advanced" to groupState))),
             output,
             groupSettings = groups,
-            images = NoImages
+            images = NoImages,
+            learningGroups = listOf(LearningGroup(id = 5, name = "Advanced"))
         )
 
         // Import
@@ -391,6 +396,9 @@ class GroupSettingsExportTest {
         // Verify group settings
         val settings = CardImportExport.lastParsedGroupSettings
         assertEquals("10", settings["Advanced"]?.get("cardsPerSession"))
+        assertEquals("Advanced", settings["Advanced"]?.get(CardImportExport.LEARNING_GROUP_SETTING))
+        assertTrue(groupRow.learningGroupState)
+        assertEquals(mapOf("Advanced" to ""), CardImportExport.lastParsedLearningGroups)
     }
 
     // ==================== Retention settings export/import TESTS ====================

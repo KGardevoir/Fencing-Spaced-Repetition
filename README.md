@@ -50,7 +50,7 @@ An Android app for practicing martial arts and fencing techniques using delayed-
 
 ### Groups and Organization
 - Create groups (decks) to organize cards by topic, technique, or training focus
-- **Independent learning states**: optionally track separate progress for the same card across different groups
+- **Learning groups**: card groups learn against Global progress by default, or share a separate set of progress with the other groups in a learning group
 - Select which group to practice from the home screen
 
 ### Card Management
@@ -176,7 +176,7 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for complete deployment instructions, includi
 Question and description content, category, tags, image paths, FSRS scheduling parameters, and review scheduling timestamps.
 
 ### Groups
-Named groups with optional independent learning mode. Cards are linked to groups via a many-to-many relationship. Group-specific learning states allow tracking separate progress per group.
+Named groups, each pointing at a learning group (null = Global). Cards are linked to groups via a many-to-many relationship. Learning states are kept per card per learning group, so every group in the same learning group shares one set of progress.
 
 ### Practice Sessions
 Session start/end times, associated card IDs, and assigned grades.

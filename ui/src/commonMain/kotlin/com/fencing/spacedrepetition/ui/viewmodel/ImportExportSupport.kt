@@ -77,29 +77,52 @@ internal suspend fun readCsvForGroupSelection(file: ImportFile): ImportExportSta
     }
 }
 
+/** Where an import's cards go: group name -> id, and state context -> learning group id. */
+internal data class ImportTargets(
+    val groupIds: Map<String, Long>,
+    val learningGroupIds: Map<String, Long>
+)
+
 /**
- * Creates every group an import mentions and applies the settings the file
- * carries for them, returning name -> id for the cards that follow.
+ * Creates every group and learning group an import mentions and applies the
+ * settings the file carries for them, returning where the cards that follow
+ * belong.
  *
- * Groups that hold a state row of their own are created with independent
- * learning on, because that is what having one means -- otherwise the states
- * would be imported into groups that do not keep any.
+ * A file from before learning groups names, for each extra state, the group
+ * that learned independently. Each such group is put in a learning group of
+ * its own name -- unless it is already in one, whose state it then fills --
+ * so the states land somewhere that keeps them.
  */
-internal suspend fun GroupRepository.groupsForImport(parsedCards: List<ParsedCard>): Map<String, Long> {
+internal suspend fun GroupRepository.groupsForImport(parsedCards: List<ParsedCard>): ImportTargets {
     val groupNames = parsedCards.flatMap { it.groupNames }.filter { it.isNotBlank() }.toSet()
-    val independentLearning = parsedCards
-        .filter { it.isGroupSpecificState }
+    val stateRecords = parsedCards.filter { it.isGroupSpecificState }
+    val legacyIndependent = stateRecords
+        .filter { !it.learningGroupState }
         .mapNotNull { it.stateContext }
         .toSet()
 
-    val groupIds = ensureGroupsExist(groupNames, independentLearning)
+    val groupIds = ensureGroupsExist(groupNames, legacyIndependent)
 
+    CardImportExport.lastParsedLearningGroups.forEach { (name, description) ->
+        ensureLearningGroup(name, description)
+    }
     CardImportExport.lastParsedGroupSettings.forEach { (groupName, settings) ->
         val groupId = groupIds[groupName] ?: return@forEach
         val group = getGroupById(groupId) ?: return@forEach
         updateGroup(CardImportExport.applyGroupSettings(group, settings))
+        settings[CardImportExport.LEARNING_GROUP_SETTING]?.let { learningGroupName ->
+            setLearningGroup(groupId, ensureLearningGroup(learningGroupName))
+        }
     }
-    return groupIds
+
+    val learningGroupIds = buildMap {
+        stateRecords.filter { it.learningGroupState }.mapNotNull { it.stateContext }.toSet()
+            .forEach { name -> put(name, ensureLearningGroup(name)) }
+        legacyIndependent.forEach { groupName ->
+            groupIds[groupName]?.let { getGroupById(it) }?.learningGroupId?.let { put(groupName, it) }
+        }
+    }
+    return ImportTargets(groupIds, learningGroupIds)
 }
 
 /**

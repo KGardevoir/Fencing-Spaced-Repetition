@@ -4,7 +4,7 @@
 package com.fencing.spacedrepetition.util
 
 import com.fencing.spacedrepetition.data.model.Card
-import com.fencing.spacedrepetition.data.model.CardGroupLearningState
+import com.fencing.spacedrepetition.data.model.CardLearningState
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.ByteArrayInputStream
@@ -235,9 +235,9 @@ class CardImportExportV2Test {
             modified = System.currentTimeMillis()
         )
 
-        val groupState = CardGroupLearningState(
+        val groupState = CardLearningState(
             cardId = 1,
-            groupId = 2,
+            learningGroupId = 2,
             fsrsStability = 10.0,
             fsrsDifficulty = 0.2,
             fsrsState = "REVIEW",
@@ -264,7 +264,7 @@ class CardImportExportV2Test {
         assertEquals(1, cardCount(content))
         assertEquals(1, groupStateCount(content))
         assertTrue(content.contains("      stability: 5.0")) // Global stability
-        assertTrue(content.contains("    groupStates:\n      - group: \"IndependentGroup\""))
+        assertTrue(content.contains("    learningStates:\n      - learningGroup: \"IndependentGroup\""))
         assertTrue(content.contains("        stability: 10.0")) // Group stability
     }
 
@@ -280,9 +280,9 @@ class CardImportExportV2Test {
             modified = System.currentTimeMillis()
         )
 
-        val group1State = CardGroupLearningState(cardId = 1, groupId = 1, fsrsStability = 2.0, fsrsReps = 2)
-        val group2State = CardGroupLearningState(cardId = 1, groupId = 2, fsrsStability = 3.0, fsrsReps = 3)
-        val group3State = CardGroupLearningState(cardId = 1, groupId = 3, fsrsStability = 4.0, fsrsReps = 4)
+        val group1State = CardLearningState(cardId = 1, learningGroupId = 1, fsrsStability = 2.0, fsrsReps = 2)
+        val group2State = CardLearningState(cardId = 1, learningGroupId = 2, fsrsStability = 3.0, fsrsReps = 3)
+        val group3State = CardLearningState(cardId = 1, learningGroupId = 3, fsrsStability = 4.0, fsrsReps = 4)
 
         val cardsWithStates = listOf(
             CardWithGroupStates(
@@ -328,9 +328,9 @@ class CardImportExportV2Test {
             modified = System.currentTimeMillis()
         )
 
-        val groupState = CardGroupLearningState(
+        val groupState = CardLearningState(
             cardId = 1,
-            groupId = 2,
+            learningGroupId = 2,
             fsrsStability = 12.0,
             fsrsDifficulty = 0.2,
             fsrsState = "REVIEW",
@@ -469,8 +469,8 @@ class CardImportExportV2Test {
         val card2 = Card(id = 2, question = "Q2", answer = "A2",            fsrsStability = 2.0, created = 0, modified = 0)
         val card3 = Card(id = 3, question = "Q3", answer = "A3",            fsrsStability = 3.0, created = 0, modified = 0)
 
-        val groupState1 = CardGroupLearningState(cardId = 1, groupId = 1, fsrsStability = 5.0)
-        val groupState2 = CardGroupLearningState(cardId = 2, groupId = 1, fsrsStability = 6.0)
+        val groupState1 = CardLearningState(cardId = 1, learningGroupId = 1, fsrsStability = 5.0)
+        val groupState2 = CardLearningState(cardId = 2, learningGroupId = 1, fsrsStability = 6.0)
 
         val cardsWithStates = listOf(
             CardWithGroupStates(card1, listOf("IndGroup"), mapOf("IndGroup" to groupState1)),
@@ -499,7 +499,7 @@ class CardImportExportV2Test {
 
     /** How many per-group learning states it wrote, across every card. */
     private fun groupStateCount(content: String): Int =
-        Regex("^      - group:", RegexOption.MULTILINE).findAll(content).count()
+        Regex("^      - learningGroup:", RegexOption.MULTILINE).findAll(content).count()
 
     /**
      * Reads no images.

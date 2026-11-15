@@ -28,7 +28,7 @@ Scheduling uses FSRS (Free Spaced Repetition Scheduler), a modern algorithm with
 
 ORGANIZE YOUR TRAINING
 
-Create groups to organize cards by focus area -- footwork, blade work, competition prep, or any structure that fits your training. Each group can optionally maintain independent learning progress, so the same technique card can be at different stages in different training contexts.
+Create groups to organize cards by focus area -- footwork, blade work, competition prep, or any structure that fits your training. Groups learn against one shared, global progress by default; put groups into a learning group and they share a separate set of progress, so the same technique card can be at different stages in different training contexts.
 
 SMART SCHEDULING
 
@@ -51,7 +51,7 @@ KEY FEATURES
 - Delayed-choice grading: practice first, grade afterwards
 - Configurable session size (1-6 cards per session)
 - FSRS spaced repetition algorithm
-- Groups with optional independent learning states
+- Learning groups: several card groups sharing one set of learning progress
 - Image attachments on cards
 - Categories and tags
 - Import/export with three format levels

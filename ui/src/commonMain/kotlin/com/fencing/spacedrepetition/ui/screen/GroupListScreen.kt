@@ -15,7 +15,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.fencing.spacedrepetition.ui.components.AppIcons
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.ui.components.CsvGroupSelectionDialog
 import com.fencing.spacedrepetition.util.ParsedCard
 import com.fencing.spacedrepetition.ui.viewmodel.GroupSortOption
@@ -39,6 +41,7 @@ import com.fencing.spacedrepetition.ui.viewmodel.ImportExportState
 @Composable
 fun GroupListScreen(
     groups: List<Group>,
+    learningGroups: List<LearningGroup> = emptyList(),
     sortOption: GroupSortOption,
     importExportState: ImportExportState,
     dueCardCountFor: @Composable (Long) -> Int,
@@ -123,7 +126,7 @@ fun GroupListScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(
-                        Icons.Default.Folder,
+                        AppIcons.CardGroups,
                         contentDescription = null,
                         modifier = Modifier.size(64.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -153,6 +156,7 @@ fun GroupListScreen(
                     GroupListItem(
                         group = group,
                         dueCardCount = dueCardCountFor(group.id),
+                        learningGroupName = learningGroups.find { it.id == group.learningGroupId }?.name,
                         onEdit = { onNavigateToEdit(group.id) },
                         onDelete = { showDeleteDialog = group },
                         onImport = { onImportArchive(group) },
@@ -306,6 +310,7 @@ fun GroupListScreen(
 fun GroupListItem(
     group: Group,
     dueCardCount: Int,
+    learningGroupName: String? = null,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onImport: () -> Unit,
@@ -325,7 +330,7 @@ fun GroupListItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                Icons.Default.Folder,
+                AppIcons.CardGroups,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary
             )
@@ -336,11 +341,11 @@ fun GroupListItem(
                         group.name,
                         style = MaterialTheme.typography.titleMedium
                     )
-                    if (group.independentLearning) {
+                    if (learningGroupName != null) {
                         Spacer(modifier = Modifier.width(8.dp))
                         Icon(
-                            Icons.Default.School,
-                            contentDescription = "Independent Learning",
+                            AppIcons.LearningGroup,
+                            contentDescription = "Learning Group",
                             modifier = Modifier.size(16.dp),
                             tint = MaterialTheme.colorScheme.tertiary
                         )
@@ -362,9 +367,9 @@ fun GroupListItem(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                if (group.independentLearning) {
+                if (learningGroupName != null) {
                     Text(
-                        "Independent learning enabled",
+                        "Learning group: $learningGroupName",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.tertiary
                     )

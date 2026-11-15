@@ -11,9 +11,12 @@ package com.fencing.spacedrepetition.util
 // lot. What is here is only the shape:
 //
 //     version: 5
-//     groups:                    # only those with settings of their own
+//     learningGroups:            # shared learning progress; absent = Global
+//       - name: Bouting
+//     groups:                    # only those with settings or a learning group
 //       - name: Footwork
 //         cardsPerSession: 20
+//         learningGroup: Bouting
 //     opponents:
 //       - name: Alex
 //         skillMultiplier: 1.25
@@ -28,8 +31,8 @@ package com.fencing.spacedrepetition.util
 //         state:                 # absent on a card nobody has practised
 //           nextReview: 1774000000000
 //           ...
-//         groupStates:           # only for groups that learn independently
-//           - group: Footwork
+//         learningStates:        # one per learning group the card is learnt in
+//           - learningGroup: Bouting
 //             ...
 //     sessions:                  # the fights the review history belongs to
 //       - startTime: 1773990000000
@@ -49,6 +52,11 @@ package com.fencing.spacedrepetition.util
 // of every photograph on that card, base64 and all. A card in four groups
 // that learn independently used to inline its pictures five times.
 //
+// Files written before learning groups existed carry `groupStates:` keyed by
+// a group name instead of `learningStates:`. They still import: each such
+// group is put in a learning group of its own name, which is what learning
+// independently has become.
+//
 // Every field with a sensible default is left out when it holds that default,
 // so a card nobody has practised is three lines and a backup is a good deal
 // smaller than the shape above suggests. Nothing is lost by it: what is
@@ -62,7 +70,7 @@ import com.charleskorn.kaml.YamlNode
 import com.charleskorn.kaml.MultiLineStringStyle
 import com.charleskorn.kaml.SingleLineStringStyle
 import com.fencing.spacedrepetition.data.model.Card
-import com.fencing.spacedrepetition.data.model.CardGroupLearningState
+import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.PracticeSession
@@ -82,6 +90,7 @@ internal data class ArchiveDocument(
      * version it is even when nothing else about it is unusual.
      */
     val version: Int = ArchiveYaml.VERSION,
+    val learningGroups: List<ArchiveLearningGroup> = emptyList(),
     val groups: List<ArchiveGroup> = emptyList(),
     val opponents: List<ArchiveOpponent> = emptyList(),
     val cards: List<ArchiveCard> = emptyList(),
@@ -106,8 +115,16 @@ internal data class ArchiveSession(
 )
 
 @Serializable
+internal data class ArchiveLearningGroup(
+    val name: String,
+    val description: String = ""
+)
+
+@Serializable
 internal data class ArchiveGroup(
     val name: String,
+    /** The name of the learning group it practises against; absent for Global. */
+    val learningGroup: String? = null,
     val cardsPerSession: Int? = null,
     val autoShowAnswer: Boolean? = null,
     val randomizeDueCards: Boolean? = null,
@@ -135,6 +152,8 @@ internal data class ArchiveCard(
     val images: List<String> = emptyList(),
     val groups: List<String> = emptyList(),
     val state: ArchiveState? = null,
+    val learningStates: List<ArchiveLearningState> = emptyList(),
+    /** Per-group states from before learning groups; read, never written. */
     val groupStates: List<ArchiveGroupState> = emptyList()
 ) {
     val questionText: String get() = (question ?: concept).orEmpty().trim()
@@ -143,6 +162,20 @@ internal data class ArchiveCard(
 
 @Serializable
 internal data class ArchiveState(
+    val nextReview: Long = 0L,
+    val lastReview: Long = 0L,
+    val stability: Double = 0.0,
+    val difficulty: Double = 0.0,
+    val fsrsState: String = "NEW",
+    val reps: Int = 0,
+    val lapses: Int = 0,
+    val scheduledDays: Int = 0,
+    val elapsedDays: Int = 0
+)
+
+@Serializable
+internal data class ArchiveLearningState(
+    val learningGroup: String,
     val nextReview: Long = 0L,
     val lastReview: Long = 0L,
     val stability: Double = 0.0,
@@ -252,8 +285,9 @@ internal object ArchiveYaml {
 
     // ---------- entities to document ----------
 
-    fun groupNode(group: Group) = ArchiveGroup(
+    fun groupNode(group: Group, learningGroupName: String? = null) = ArchiveGroup(
         name = group.name,
+        learningGroup = learningGroupName,
         cardsPerSession = group.cardsPerSession,
         autoShowAnswer = group.autoShowAnswer,
         randomizeDueCards = group.randomizeDueCards,
@@ -281,7 +315,7 @@ internal object ArchiveYaml {
     fun cardNode(
         card: Card,
         groupNames: List<String>,
-        groupStates: Map<String, CardGroupLearningState>,
+        learningStates: Map<String, CardLearningState>,
         images: ImageReader
     ): ArchiveCard {
         val state = ArchiveState(
@@ -301,9 +335,9 @@ internal object ArchiveYaml {
             images = card.imagePaths.mapNotNull { CardImportExport.encodeImageToBase64(it, images) },
             groups = groupNames.filter { it.isNotBlank() },
             state = state.takeIf { it != ArchiveState() },
-            groupStates = groupStates.map { (name, learning) ->
-                ArchiveGroupState(
-                    group = name,
+            learningStates = learningStates.map { (name, learning) ->
+                ArchiveLearningState(
+                    learningGroup = name,
                     nextReview = learning.nextReview,
                     lastReview = learning.lastReview,
                     stability = learning.fsrsStability,
@@ -430,6 +464,7 @@ internal object ArchiveYaml {
         (e.message ?: "could not be read").lines().first().trim()
 
     fun groupSettings(group: ArchiveGroup): Map<String, String> = buildMap {
+        group.learningGroup?.takeIf { it.isNotBlank() }?.let { put(CardImportExport.LEARNING_GROUP_SETTING, it.trim()) }
         group.cardsPerSession?.let { put("cardsPerSession", it.toString()) }
         group.autoShowAnswer?.let { put("autoShowAnswer", it.toString()) }
         group.randomizeDueCards?.let { put("randomizeDueCards", it.toString()) }
@@ -481,6 +516,9 @@ internal object ArchiveYaml {
      * here rather than reshaping the repositories keeps this change to the
      * file format, which is what it is.
      *
+     * A learning state's record names its learning group, and is marked as
+     * doing so; a legacy group state's names the group it was kept for.
+     *
      * Pictures ride on the card's own record only. The group records are read
      * for their scheduling and nothing else, which is why the format never
      * had to repeat them.
@@ -514,7 +552,24 @@ internal object ArchiveYaml {
                 imageData = card.images
             )
         }
-        return listOf(own) + card.groupStates.filter { it.group.isNotBlank() }.map { groupState ->
+        val learning = card.learningStates.filter { it.learningGroup.isNotBlank() }.map { learningState ->
+            parsedCard(
+                question, answer, lineNumber, emptyList(), emptyList(),
+                learningState.learningGroup.trim(),
+                ArchiveState(
+                    nextReview = learningState.nextReview,
+                    lastReview = learningState.lastReview,
+                    stability = learningState.stability,
+                    difficulty = learningState.difficulty,
+                    fsrsState = learningState.fsrsState,
+                    reps = learningState.reps,
+                    lapses = learningState.lapses,
+                    scheduledDays = learningState.scheduledDays,
+                    elapsedDays = learningState.elapsedDays
+                )
+            ).copy(learningGroupState = true)
+        }
+        return listOf(own) + learning + card.groupStates.filter { it.group.isNotBlank() }.map { groupState ->
             parsedCard(
                 question, answer, lineNumber, emptyList(), listOf(groupState.group),
                 groupState.group,

@@ -11,6 +11,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -21,6 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.algorithm.ScheduleEstimate
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.LearningGroup
+import com.fencing.spacedrepetition.ui.components.AppIcons
 import com.fencing.spacedrepetition.data.preferences.SettingsConstants
 import com.fencing.spacedrepetition.ui.components.FsrsRetentionPreview
 import com.fencing.spacedrepetition.ui.components.RetentionSelector
@@ -30,6 +35,8 @@ import kotlin.math.roundToInt
 @Composable
 fun GroupEditScreen(
     group: Group,
+    learningGroups: List<LearningGroup>,
+    onCreateLearningGroup: (name: String, onCreated: (Long) -> Unit) -> Unit = { _, _ -> },
     globalCardsPerSession: Int,
     globalAutoShowAnswer: Boolean,
     globalRandomizeDueCards: Boolean,
@@ -49,7 +56,7 @@ fun GroupEditScreen(
 
     var name by rememberSaveable { mutableStateOf(group.name) }
     var description by rememberSaveable { mutableStateOf(group.description) }
-    var independentLearning by remember { mutableStateOf(group.independentLearning) }
+    var learningGroupId by remember { mutableStateOf(group.learningGroupId) }
 
     // Per-group settings overrides (null = use global)
     var overrideCardsPerSession by remember { mutableStateOf(group.cardsPerSession != null) }
@@ -83,7 +90,7 @@ fun GroupEditScreen(
     fun buildUpdatedGroup() = group.copy(
         name = name.trim(),
         description = description.trim(),
-        independentLearning = independentLearning,
+        learningGroupId = learningGroupId,
         cardsPerSession = if (overrideCardsPerSession) cardsPerSession else null,
         autoShowAnswer = if (overrideAutoShowAnswer) autoShowAnswer else null,
         randomizeDueCards = if (overrideRandomizeDueCards) randomizeDueCards else null,
@@ -169,27 +176,12 @@ fun GroupEditScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { independentLearning = !independentLearning }
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Independent Learning", style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        "Cards will have separate learning progress in this group",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Switch(
-                    checked = independentLearning,
-                    onCheckedChange = { independentLearning = it }
-                )
-            }
+            LearningGroupPicker(
+                learningGroups = learningGroups,
+                selectedId = learningGroupId,
+                onSelect = { learningGroupId = it },
+                onCreate = onCreateLearningGroup
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
             HorizontalDivider()
@@ -501,5 +493,135 @@ private fun SettingOverrideSection(
         }
         content()
         Spacer(modifier = Modifier.height(4.dp))
+    }
+}
+
+/**
+ * Which learning group a card group practises against. Global is the first
+ * choice and the default. A new learning group can be made here, as a group
+ * can from the card editor, and is selected as soon as it exists; renaming,
+ * deleting and moving several groups at once is on the Learning Groups
+ * screen, reached from the home screen.
+ */
+@Composable
+private fun LearningGroupPicker(
+    learningGroups: List<LearningGroup>,
+    selectedId: Long?,
+    onSelect: (Long?) -> Unit,
+    onCreate: (name: String, onCreated: (Long) -> Unit) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var showCreateDialog by rememberSaveable { mutableStateOf(false) }
+    // The name of a learning group just created, shown until the list
+    // catches up with it.
+    var pendingName by remember { mutableStateOf<String?>(null) }
+    val selected = learningGroups.find { it.id == selectedId }
+    val selectedName = selected?.name ?: pendingName?.takeIf { selectedId != null }
+
+    Box {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = true }
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                AppIcons.LearningGroup,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Learning Group", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    if (selectedName == null) "Global — shares learning progress with every Global group"
+                    else "$selectedName — shares learning progress with the groups in it",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(
+                selectedName ?: "Global",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Icon(Icons.Default.ArrowDropDown, contentDescription = "Choose learning group")
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("Global") },
+                leadingIcon = { if (selectedId == null) Icon(Icons.Default.Check, contentDescription = null) },
+                onClick = {
+                    onSelect(null)
+                    expanded = false
+                }
+            )
+            learningGroups.forEach { learningGroup ->
+                DropdownMenuItem(
+                    text = { Text(learningGroup.name) },
+                    leadingIcon = {
+                        if (learningGroup.id == selectedId) Icon(Icons.Default.Check, contentDescription = null)
+                    },
+                    onClick = {
+                        onSelect(learningGroup.id)
+                        expanded = false
+                    }
+                )
+            }
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text("New learning group…") },
+                leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    showCreateDialog = true
+                }
+            )
+        }
+    }
+
+    if (showCreateDialog) {
+        var newName by rememberSaveable { mutableStateOf("") }
+        val trimmed = newName.trim()
+        val nameTaken = trimmed.equals("Global", ignoreCase = true) ||
+            learningGroups.any { it.name.equals(trimmed, ignoreCase = true) }
+        AlertDialog(
+            onDismissRequest = { showCreateDialog = false },
+            icon = { Icon(AppIcons.LearningGroup, contentDescription = null) },
+            title = { Text("Create New Learning Group") },
+            text = {
+                OutlinedTextField(
+                    value = newName,
+                    onValueChange = { newName = it },
+                    label = { Text("Learning Group Name") },
+                    singleLine = true,
+                    isError = nameTaken,
+                    supportingText = if (nameTaken) {
+                        { Text("That name is already in use") }
+                    } else null,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onCreate(trimmed) { newId ->
+                            pendingName = trimmed
+                            onSelect(newId)
+                            showCreateDialog = false
+                        }
+                    },
+                    enabled = trimmed.isNotEmpty() && !nameTaken
+                ) {
+                    Text("Create")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

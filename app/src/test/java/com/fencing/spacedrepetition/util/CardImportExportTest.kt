@@ -4,7 +4,7 @@
 package com.fencing.spacedrepetition.util
 
 import com.fencing.spacedrepetition.data.model.Card
-import com.fencing.spacedrepetition.data.model.CardGroupLearningState
+import com.fencing.spacedrepetition.data.model.CardLearningState
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.ByteArrayInputStream
@@ -423,7 +423,7 @@ class CardImportExportTest {
             CardWithGroupStates(
                 card = card,
                 groupNames = listOf("Math"),
-                groupSpecificStates = emptyMap()
+                learningStates = emptyMap()
             )
         )
 
@@ -438,7 +438,7 @@ class CardImportExportTest {
         assertTrue(output.contains("- question: \"Q1\""))
         assertTrue(output.contains("state:"))
         // A card with no independent group keeps no per-group states.
-        assertFalse(output.contains("groupStates:"))
+        assertFalse(output.contains("learningStates:"))
     }
 
     @Test
@@ -457,9 +457,9 @@ class CardImportExportTest {
             modified = System.currentTimeMillis()
         )
 
-        val groupLearningState = CardGroupLearningState(
+        val groupLearningState = CardLearningState(
             cardId = 1,
-            groupId = 2,
+            learningGroupId = 2,
             fsrsStability = 8.0,
             fsrsDifficulty = 0.25,
             fsrsState = "REVIEW",
@@ -473,7 +473,7 @@ class CardImportExportTest {
             CardWithGroupStates(
                 card = card,
                 groupNames = listOf("Math", "IndependentGroup"),
-                groupSpecificStates = mapOf("IndependentGroup" to groupLearningState)
+                learningStates = mapOf("IndependentGroup" to groupLearningState)
             )
         )
 
@@ -490,7 +490,7 @@ class CardImportExportTest {
         assertTrue(output.contains("groups:\n      - \"Math\"\n      - \"IndependentGroup\"\n"))
         assertTrue(output.contains("    state:\n      nextReview: 1700000000000"))
         assertTrue(output.contains("      stability: 5.0"))
-        assertTrue(output.contains("    groupStates:\n      - group: \"IndependentGroup\""))
+        assertTrue(output.contains("    learningStates:\n      - learningGroup: \"IndependentGroup\""))
         assertTrue(output.contains("        stability: 8.0"))
 
         // And reads back as the two rows the importer expects.
@@ -567,9 +567,9 @@ class CardImportExportTest {
             modified = System.currentTimeMillis()
         )
 
-        val groupState = CardGroupLearningState(
+        val groupState = CardLearningState(
             cardId = 1,
-            groupId = 2,
+            learningGroupId = 2,
             fsrsStability = 10.0,
             fsrsDifficulty = 0.2,
             fsrsState = "REVIEW",
@@ -585,7 +585,7 @@ class CardImportExportTest {
             listOf(CardWithGroupStates(
                 card = originalCard,
                 groupNames = listOf("NormalGroup", "IndependentGroup"),
-                groupSpecificStates = mapOf("IndependentGroup" to groupState)
+                learningStates = mapOf("IndependentGroup" to groupState)
             )),
             outputStream,
             images = NoImages

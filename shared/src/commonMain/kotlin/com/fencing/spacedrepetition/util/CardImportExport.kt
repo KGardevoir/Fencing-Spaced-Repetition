@@ -19,6 +19,7 @@ import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
@@ -55,6 +56,7 @@ object CardImportExport {
     private const val LEGACY_HEADER_PREFIX = "#FSR_EXPORT_V"
 
     private const val KEY_GROUPS = "groups"
+    private const val KEY_LEARNING_GROUPS = "learningGroups"
     private const val KEY_OPPONENTS = "opponents"
 
     private const val DELIMITER = "\t"
@@ -154,6 +156,13 @@ object CardImportExport {
     var lastParsedGroupSettings: Map<String, Map<String, String>> = emptyMap()
         private set
 
+    /** The key a group's learning group travels under in [lastParsedGroupSettings]. */
+    const val LEARNING_GROUP_SETTING = "learningGroup"
+
+    /** Learning groups an import file declared, as name to description. */
+    var lastParsedLearningGroups: Map<String, String> = emptyMap()
+        private set
+
     /** Parsed review history from an import file (populated after calling parseCards) */
     var lastParsedReviewHistory: List<ParsedReviewLog> = emptyList()
         private set
@@ -199,6 +208,7 @@ object CardImportExport {
      */
     fun parseCards(lines: List<String>): Pair<List<ParsedCard>, List<String>> {
         lastParsedGroupSettings = emptyMap()
+        lastParsedLearningGroups = emptyMap()
         lastParsedOpponents = emptyList()
         lastParsedReviewHistory = emptyList()
         lastParsedSessions = emptyList()
@@ -240,6 +250,10 @@ object CardImportExport {
 
         val errors = mutableListOf<String>()
 
+        lastParsedLearningGroups = ArchiveYaml
+            .decodeSection(document, KEY_LEARNING_GROUPS, ArchiveLearningGroup.serializer(), errors)
+            .filter { it.name.isNotBlank() }
+            .associate { it.name.trim() to it.description }
         lastParsedGroupSettings = ArchiveYaml
             .decodeSection(document, KEY_GROUPS, ArchiveGroup.serializer(), errors)
             .filter { it.name.isNotBlank() }
@@ -666,6 +680,7 @@ object CardImportExport {
         out: Appendable,
         images: ImageReader,
         groupSettings: List<Group> = emptyList(),
+        learningGroups: List<LearningGroup> = emptyList(),
         reviewLogs: List<ReviewLog> = emptyList(),
         cardQuestions: Map<Long, String> = emptyMap(),
         opponents: List<Opponent> = emptyList(),
@@ -674,10 +689,16 @@ object CardImportExport {
     ): ExportResult {
         return try {
             var rowCount = 0
-            val cards = cardsWithStates.map { (card, groupNames, groupSpecificStates) ->
-                rowCount += 1 + groupSpecificStates.size
-                ArchiveYaml.cardNode(card, groupNames, groupSpecificStates, images)
+            val cards = cardsWithStates.map { (card, groupNames, learningStates) ->
+                rowCount += 1 + learningStates.size
+                ArchiveYaml.cardNode(card, groupNames, learningStates, images)
             }
+            val learningGroupNames = learningGroups.associate { it.id to it.name }
+            val writtenGroups = groupSettings.filter {
+                it.hasCustomSettings() || it.learningGroupId in learningGroupNames
+            }
+            // Only the learning groups the written groups use.
+            val writtenLearningGroupIds = writtenGroups.mapNotNull { it.learningGroupId }.toSet()
 
             val startBySessionId = sessions.associate { it.id to it.startTime }
             val historyLogs = if (reviewLogs.isEmpty() || cardQuestions.isEmpty()) emptyList() else {
@@ -704,10 +725,14 @@ object CardImportExport {
             writeArchive(
                 out,
                 ArchiveDocument(
-                    // Only the groups with settings of their own. A group
-                    // with none is already described by the cards that name it.
-                    groups = groupSettings.filter { it.hasCustomSettings() }
-                        .map { ArchiveYaml.groupNode(it) },
+                    learningGroups = learningGroups.filter { it.id in writtenLearningGroupIds }
+                        .map { ArchiveLearningGroup(it.name, it.description) },
+                    // Only the groups with settings or a learning group of
+                    // their own. A group with neither is already described by
+                    // the cards that name it.
+                    groups = writtenGroups.map {
+                        ArchiveYaml.groupNode(it, it.learningGroupId?.let(learningGroupNames::get))
+                    },
                     // The opponents, so the review logs can name them and an
                     // import can find them again.
                     opponents = opponents.map { ArchiveYaml.opponentNode(it) },

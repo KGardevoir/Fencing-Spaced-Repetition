@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.fencing.spacedrepetition.ui.components.AppIcons
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.util.BackupReminder
 
@@ -80,6 +81,7 @@ fun HomeScreen(
     onStartPractice: () -> Unit,
     onNavigateToCards: () -> Unit,
     onNavigateToGroups: () -> Unit,
+    onNavigateToLearningGroups: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToHistory: () -> Unit,
     onNavigateToOpponents: () -> Unit
@@ -98,7 +100,10 @@ fun HomeScreen(
                         Icon(Icons.Default.Person, "Manage Opponents")
                     }
                     IconButton(onClick = onNavigateToGroups) {
-                        Icon(Icons.Default.Folder, "Manage Groups")
+                        Icon(AppIcons.CardGroups, "Manage Groups")
+                    }
+                    IconButton(onClick = onNavigateToLearningGroups) {
+                        Icon(AppIcons.LearningGroup, "Learning Groups")
                     }
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(Icons.Default.Settings, "Settings")
@@ -198,7 +203,7 @@ fun HomeScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            Icons.Default.Folder,
+                            AppIcons.CardGroups,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary
                         )
@@ -458,7 +463,7 @@ fun GroupSelectionDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Default.Folder, contentDescription = null) },
+        icon = { Icon(AppIcons.CardGroups, contentDescription = null) },
         title = { Text("Select Practice Group") },
         text = {
             LazyColumn {

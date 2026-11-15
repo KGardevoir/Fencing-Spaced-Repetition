@@ -8,7 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.algorithm.RetentionPlanner
 import com.fencing.spacedrepetition.algorithm.ScheduleEstimate
 import com.fencing.spacedrepetition.data.model.Card
-import com.fencing.spacedrepetition.data.model.CardGroupLearningState
+import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.CardWithGroups
 import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.Group
@@ -212,10 +212,10 @@ class CardViewModel(
     fun getGroupsForCard(cardId: Long): Flow<List<Group>> =
         groupRepository.getGroupsForCard(cardId)
 
-    fun getLearningStatesForCard(cardId: Long): Flow<List<CardGroupLearningState>> =
+    fun getLearningStatesForCard(cardId: Long): Flow<List<CardLearningState>> =
         groupRepository.getAllLearningStatesForCard(cardId)
 
-    fun updateLearningState(learningState: CardGroupLearningState, onComplete: () -> Unit = {}) {
+    fun updateLearningState(learningState: CardLearningState, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             repository.updateLearningState(learningState)
             onComplete()
@@ -352,12 +352,13 @@ class CardViewModel(
         }
     }
 
-    fun resetSelectedCardsInGroups(groupIds: Set<Long>, onComplete: () -> Unit = {}) {
+    /** Resets the selected cards' states in the given learning groups. */
+    fun resetSelectedCardsInGroups(learningGroupIds: Set<Long>, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             val idsToReset = _selectedCardIds.value.toList()
             idsToReset.forEach { cardId ->
-                groupIds.forEach { groupId ->
-                    repository.resetCardStateInGroup(cardId, groupId)
+                learningGroupIds.forEach { learningGroupId ->
+                    repository.resetCardStateInLearningGroup(cardId, learningGroupId)
                 }
             }
             _selectedCardIds.value = emptySet()
@@ -366,15 +367,15 @@ class CardViewModel(
         }
     }
 
-    fun resetSelectedCardsBothStates(groupIds: Set<Long>, onComplete: () -> Unit = {}) {
+    fun resetSelectedCardsBothStates(learningGroupIds: Set<Long>, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             val idsToReset = _selectedCardIds.value.toList()
             idsToReset.forEach { cardId ->
                 // Reset global state
                 repository.resetCardState(cardId, resetGroupStates = false)
-                // Reset specific group states
-                groupIds.forEach { groupId ->
-                    repository.resetCardStateInGroup(cardId, groupId)
+                // Reset the chosen learning group states
+                learningGroupIds.forEach { learningGroupId ->
+                    repository.resetCardStateInLearningGroup(cardId, learningGroupId)
                 }
             }
             _selectedCardIds.value = emptySet()
@@ -467,12 +468,13 @@ class CardViewModel(
                 }
                 val (parsedCards, parseErrors) = contents as ArchiveContents.Cards
 
-                val groupIds = groupRepository.groupsForImport(parsedCards)
+                val targets = groupRepository.groupsForImport(parsedCards)
+                val groupIds = targets.groupIds
 
                 val importedCount = when {
                     // V2/V3, where a card can hold one learning state per group.
                     parsedCards.any { it.isGroupSpecificState } ->
-                        repository.importCardsWithGroupStates(parsedCards, groupIds) {
+                        repository.importCardsWithGroupStates(parsedCards, groupIds, targets.learningGroupIds) {
                             CardImportExport.parsedCardToCard(it, imageStore)
                         }
                     // V1, which has full state but only one of it per card.
@@ -696,6 +698,7 @@ class CardViewModel(
             cardsWithStates.associate { it.card.id to it.card.question }
         }
         val images = imageStore.exportReader(cardsWithStates.map { it.card }, reviewLogs, sessions)
+        val learningGroups = groupRepository.getAllLearningGroupsSync()
 
         return file.write { out ->
             CardImportExport.exportCardsWithGroupStates(
@@ -703,6 +706,7 @@ class CardViewModel(
                 out = out,
                 images = images,
                 groupSettings = groups,
+                learningGroups = learningGroups,
                 reviewLogs = reviewLogs,
                 cardQuestions = cardQuestions,
                 opponents = opponents,

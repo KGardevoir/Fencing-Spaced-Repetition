@@ -22,8 +22,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.fencing.spacedrepetition.ui.components.AppIcons
 import com.fencing.spacedrepetition.data.model.Card
-import com.fencing.spacedrepetition.data.model.CardGroupLearningState
+import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.Grade
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.backhandler.BackHandler
@@ -32,6 +33,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.ui.components.LargeImageNotice
 import com.fencing.spacedrepetition.ui.image.LARGE_IMAGE_BYTES
 import com.fencing.spacedrepetition.ui.image.LocalImagePicker
@@ -51,7 +53,8 @@ import com.fencing.spacedrepetition.ui.components.rememberMarkdownToolbarState
 fun AddEditCardScreen(
     allGroups: List<Group>,
     cardGroups: List<Group>,
-    learningStates: List<CardGroupLearningState>,
+    learningStates: List<CardLearningState>,
+    learningGroups: List<LearningGroup> = emptyList(),
     cardToEdit: Card? = null,
     initialGroupId: Long? = null,
     onComputeGrade: (cardId: Long, grade: Grade, groupId: Long?, onComputed: (Card) -> Unit) -> Unit,
@@ -59,7 +62,7 @@ fun AddEditCardScreen(
     onResetCardStateInGroup: (cardId: Long, groupId: Long, onDone: () -> Unit) -> Unit,
     onUpdateCard: (card: Card, groupIds: List<Long>, onSuccess: () -> Unit) -> Unit,
     onRecordGradeFromEdit: (before: Card, after: Card, grade: Grade, groupId: Long?) -> Unit,
-    onUpdateLearningState: (CardGroupLearningState) -> Unit,
+    onUpdateLearningState: (CardLearningState) -> Unit,
     onAddCard: (
         question: String,
         answer: String,
@@ -96,11 +99,11 @@ fun AddEditCardScreen(
     val imagePicker = LocalImagePicker.current
     var lastLargeImageBytes by remember { mutableStateOf<Int?>(null) }
 
-    // Mutable state for editing independent learning states (groupId -> state fields)
-    var independentLearningEdits by remember(learningStates) {
+    // Mutable state for editing learning group states (learningGroupId -> state fields)
+    var learningGroupEdits by remember(learningStates) {
         mutableStateOf(
             learningStates.associate { state ->
-                state.groupId to IndependentLearningEdit(
+                state.learningGroupId to LearningGroupStateEdit(
                     fsrsStability = state.fsrsStability.toString(),
                     fsrsDifficulty = state.fsrsDifficulty.toString(),
                     fsrsReps = state.fsrsReps.toString(),
@@ -131,12 +134,20 @@ fun AddEditCardScreen(
     // Track per-group next review dates for instant UI updates after grading
     var groupNextReviews by remember(learningStates) {
         mutableStateOf(
-            learningStates.associate { it.groupId to it.nextReview }
+            learningStates.associate { it.learningGroupId to it.nextReview }
         )
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+
+    // The learning groups this card is learnt in through its selected groups,
+    // each with one of those groups: grading uses that group's settings, and
+    // resetting goes through it to the learning group's state.
+    val cardLearningGroups: List<Pair<LearningGroup, Group>> = learningGroups.mapNotNull { learningGroup ->
+        allGroups.firstOrNull { it.learningGroupId == learningGroup.id && it.id in selectedGroupIds }
+            ?.let { learningGroup to it }
+    }
 
     val isEditing = cardToEdit != null
 
@@ -278,7 +289,7 @@ fun AddEditCardScreen(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                Icons.Default.Folder,
+                                AppIcons.CardGroups,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary
                             )
@@ -328,10 +339,6 @@ fun AddEditCardScreen(
 
             // Next review schedule (only when editing)
             if (isEditing && cardToEdit != null) {
-                val independentGroups = allGroups.filter {
-                    it.independentLearning && it.id in selectedGroupIds
-                }
-
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
@@ -378,9 +385,9 @@ fun AddEditCardScreen(
                         }
 
                         // Per-group next review dates
-                        independentGroups.forEach { group ->
+                        cardLearningGroups.forEach { (group, _) ->
                             val groupReview = groupNextReviews[group.id] ?: 0L
-                            val groupState = learningStates.find { it.groupId == group.id }
+                            val groupState = learningStates.find { it.learningGroupId == group.id }
                             val groupFsrsState = groupState?.fsrsState ?: "NEW"
                             val groupStatusText = formatReviewStatus(groupFsrsState, groupReview)
 
@@ -497,25 +504,21 @@ fun AddEditCardScreen(
                                 }
                             }
 
-                            // Independent learning group grading
-                            val independentGradeGroups = allGroups.filter {
-                                it.independentLearning && it.id in selectedGroupIds
-                            }
-
-                            if (independentGradeGroups.isNotEmpty()) {
-                                independentGradeGroups.forEach { group ->
+                            // Learning group grading
+                            if (cardLearningGroups.isNotEmpty()) {
+                                cardLearningGroups.forEach { (learningGroup, group) ->
                                     Spacer(modifier = Modifier.height(16.dp))
 
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
-                                            Icons.Default.Folder,
+                                            AppIcons.LearningGroup,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.secondary,
                                             modifier = Modifier.size(16.dp)
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
-                                            "${group.name} (Independent)",
+                                            "${learningGroup.name} (Learning Group)",
                                             style = MaterialTheme.typography.labelLarge,
                                             color = MaterialTheme.colorScheme.secondary
                                         )
@@ -531,21 +534,21 @@ fun AddEditCardScreen(
                                                 grade = grade,
                                                 onClick = {
                                                     onComputeGrade(cardToEdit.id, grade, group.id) { updated ->
-                                                        independentLearningEdits = independentLearningEdits + (group.id to IndependentLearningEdit(
+                                                        learningGroupEdits = learningGroupEdits + (learningGroup.id to LearningGroupStateEdit(
                                                             fsrsStability = updated.fsrsStability.toString(),
                                                             fsrsDifficulty = updated.fsrsDifficulty.toString(),
                                                             fsrsReps = updated.fsrsReps.toString(),
                                                             fsrsLapses = updated.fsrsLapses.toString(),
                                                             fsrsState = updated.fsrsState
                                                         ))
-                                                        groupNextReviews = groupNextReviews + (group.id to updated.nextReview)
+                                                        groupNextReviews = groupNextReviews + (learningGroup.id to updated.nextReview)
                                                         appliedGrade = grade
                                                         appliedGradeGroupId = group.id
                                                         isDirty = true
                                                         scope.launch {
                                                             val dateStr = formatDateWithoutYear(updated.nextReview)
                                                             snackbarHostState.showSnackbar(
-                                                                "${group.name}: Grade staged — save to apply (next: $dateStr)"
+                                                                "${learningGroup.name}: Grade staged — save to apply (next: $dateStr)"
                                                             )
                                                         }
                                                     }
@@ -722,30 +725,27 @@ fun AddEditCardScreen(
                     }
                 }
 
-                // Independent Learning States section
-                val independentGroups = allGroups.filter {
-                    it.independentLearning && it.id in selectedGroupIds
-                }
-                if (independentGroups.isNotEmpty()) {
+                // Learning group states section
+                if (cardLearningGroups.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    independentGroups.forEach { group ->
-                        val groupState = learningStates.find { it.groupId == group.id }
-                        val editState = independentLearningEdits[group.id]
+                    cardLearningGroups.forEach { (learningGroup, group) ->
+                        val groupState = learningStates.find { it.learningGroupId == learningGroup.id }
+                        val editState = learningGroupEdits[learningGroup.id]
 
-                        IndependentLearningStateCard(
-                            groupName = group.name,
+                        LearningGroupStateCard(
+                            groupName = learningGroup.name,
                             groupState = groupState,
                             editState = editState,
                             onStateChange = { newEdit ->
-                                independentLearningEdits = independentLearningEdits + (group.id to newEdit)
+                                learningGroupEdits = learningGroupEdits + (learningGroup.id to newEdit)
                                 isDirty = true
                             },
                             onReset = {
                                 cardToEdit?.let { card ->
                                     onResetCardStateInGroup(card.id, group.id) {
                                         // Reset local edit state
-                                        independentLearningEdits = independentLearningEdits + (group.id to IndependentLearningEdit())
+                                        learningGroupEdits = learningGroupEdits + (learningGroup.id to LearningGroupStateEdit())
                                     }
                                 }
                             }
@@ -789,8 +789,8 @@ fun AddEditCardScreen(
                                     onRecordGradeFromEdit(cardToEdit, updatedCard, grade, appliedGradeGroupId)
                                 }
                                 // Save independent learning state changes
-                                independentLearningEdits.forEach { (groupId, edit) ->
-                                    val existingState = learningStates.find { it.groupId == groupId }
+                                learningGroupEdits.forEach { (learningGroupId, edit) ->
+                                    val existingState = learningStates.find { it.learningGroupId == learningGroupId }
                                     if (existingState != null) {
                                         val updatedState = existingState.copy(
                                             fsrsStability = edit.fsrsStability.toDoubleOrNull() ?: existingState.fsrsStability,
@@ -929,9 +929,9 @@ fun AddEditCardScreen(
 
     // Reset learning state confirmation dialog
     if (showResetDialog && cardToEdit != null) {
-        val independentLearningGroups = cardGroups.filter { it.independentLearning }
+        val resetLearningGroups = cardLearningGroups
 
-        if (independentLearningGroups.isNotEmpty()) {
+        if (resetLearningGroups.isNotEmpty()) {
             // Show enhanced dialog with options
             AlertDialog(
                 onDismissRequest = { showResetDialog = false },
@@ -940,7 +940,7 @@ fun AddEditCardScreen(
                 text = {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            "This card is in ${independentLearningGroups.size} group(s) with independent learning.",
+                            "This card is learnt in ${resetLearningGroups.size} learning group(s) as well as Global.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -979,10 +979,10 @@ fun AddEditCardScreen(
                         // Reset Group States Only
                         OutlinedButton(
                             onClick = {
-                                independentLearningGroups.forEach { group ->
+                                resetLearningGroups.forEach { (learningGroup, group) ->
                                     onResetCardStateInGroup(cardToEdit.id, group.id) {
-                                        // Reset local edit state for this group
-                                        independentLearningEdits = independentLearningEdits + (group.id to IndependentLearningEdit())
+                                        // Reset local edit state for this learning group
+                                        learningGroupEdits = learningGroupEdits + (learningGroup.id to LearningGroupStateEdit())
                                     }
                                 }
                                 showResetDialog = false
@@ -992,7 +992,7 @@ fun AddEditCardScreen(
                                 contentColor = MaterialTheme.colorScheme.error
                             )
                         ) {
-                            Text("Reset Group States Only (${independentLearningGroups.size})")
+                            Text("Reset Learning Group States Only (${resetLearningGroups.size})")
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))
@@ -1009,8 +1009,8 @@ fun AddEditCardScreen(
                                     fsrsState = "NEW"
                                 }
                                 // Reset local edit states for all groups
-                                independentLearningGroups.forEach { group ->
-                                    independentLearningEdits = independentLearningEdits + (group.id to IndependentLearningEdit())
+                                resetLearningGroups.forEach { (learningGroup, _) ->
+                                    learningGroupEdits = learningGroupEdits + (learningGroup.id to LearningGroupStateEdit())
                                 }
                                 showResetDialog = false
                             },
@@ -1019,7 +1019,7 @@ fun AddEditCardScreen(
                                 contentColor = MaterialTheme.colorScheme.error
                             )
                         ) {
-                            Text("Reset Both Global & Group States")
+                            Text("Reset Both Global & Learning Group States")
                         }
                     }
                 },
@@ -1070,7 +1070,7 @@ fun AddEditCardScreen(
         var newGroupName by rememberSaveable { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showCreateGroupDialog = false },
-            icon = { Icon(Icons.Default.CreateNewFolder, contentDescription = null) },
+            icon = { Icon(AppIcons.CardGroups, contentDescription = null) },
             title = { Text("Create New Group") },
             text = {
                 OutlinedTextField(
@@ -1136,18 +1136,18 @@ fun AddEditCardScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun IndependentLearningStateCard(
+fun LearningGroupStateCard(
     groupName: String,
-    groupState: CardGroupLearningState?,
-    editState: IndependentLearningEdit?,
-    onStateChange: (IndependentLearningEdit) -> Unit,
+    groupState: CardLearningState?,
+    editState: LearningGroupStateEdit?,
+    onStateChange: (LearningGroupStateEdit) -> Unit,
     onReset: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
 
     // Use edit state if available, otherwise use group state or defaults
-    val currentEdit = editState ?: IndependentLearningEdit(
+    val currentEdit = editState ?: LearningGroupStateEdit(
         fsrsStability = groupState?.fsrsStability?.toString() ?: "0.0",
         fsrsDifficulty = groupState?.fsrsDifficulty?.toString() ?: "0.0",
         fsrsReps = groupState?.fsrsReps?.toString() ?: "0",
@@ -1171,7 +1171,7 @@ fun IndependentLearningStateCard(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        Icons.Default.Folder,
+                        AppIcons.LearningGroup,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp)
@@ -1396,7 +1396,7 @@ fun CompactGradeButton(
 /**
  * Data class to hold editable independent learning state fields
  */
-data class IndependentLearningEdit(
+data class LearningGroupStateEdit(
     val fsrsStability: String = "0.0",
     val fsrsDifficulty: String = "0.0",
     val fsrsReps: String = "0",

@@ -96,6 +96,43 @@ class MigratedSchemaTest {
     }
 
     @Test
+    fun `migrating to 15 leaves groups with exactly the columns the entity declares`() = runTest {
+        MigrationHarness(foreignKeys = true).use { db ->
+            db.createSchemaV11()
+            db.migrateThrough(from = 11, to = 15)
+
+            assertEquals(
+                setOf(
+                    "id", "name", "description", "learningGroupId", "created",
+                    "cardsPerSession", "autoShowAnswer", "randomizeDueCards",
+                    "randomizeBucketHours", "practiceDays", "maximumInterval",
+                    "fsrsRetention", "fsrsEnableFuzzing",
+                ),
+                db.columnsOf("groups")
+            )
+        }
+    }
+
+    @Test
+    fun `migrating to 15 leaves learning groups and their states with exactly the columns the entities declare`() = runTest {
+        MigrationHarness(foreignKeys = true).use { db ->
+            db.createSchemaV11()
+            db.migrateThrough(from = 11, to = 15)
+
+            assertEquals(setOf("id", "name", "description", "created"), db.columnsOf("learning_groups"))
+            assertEquals(
+                setOf(
+                    "cardId", "learningGroupId",
+                    "fsrsStability", "fsrsDifficulty", "fsrsElapsedDays", "fsrsScheduledDays",
+                    "fsrsReps", "fsrsLapses", "fsrsState",
+                    "lastReview", "nextReview", "modified",
+                ),
+                db.columnsOf("card_learning_state")
+            )
+        }
+    }
+
+    @Test
     fun `migrating to 12 keeps every table the database is made of`() = runTest {
         MigrationHarness(foreignKeys = true).use { db ->
             db.createSchemaV11()
