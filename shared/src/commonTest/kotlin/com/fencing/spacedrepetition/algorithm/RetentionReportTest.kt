@@ -115,6 +115,8 @@ class RetentionReportTest {
         val cuts = report.cardGroups.first { it.name == "Cuts" }
         assertEquals("Sabre", cuts.learningContextName)
         assertEquals(2, cuts.summary.reviews)
+        assertEquals(setOf(2L, 3L), cuts.cards.map { it.cardId }.toSet())
+        assertEquals(listOf(1L), report.cardGroups.first { it.name == "Parries" }.cards.map { it.cardId })
         val parries = report.cardGroups.first { it.name == "Parries" }
         assertEquals(1, parries.summary.reviews)
         assertEquals(1.0, parries.summary.measuredRecall)

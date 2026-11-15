@@ -94,7 +94,9 @@ data class CardGroupReport(
     /** null is Global. */
     val learningGroupId: Long?,
     val learningContextName: String,
-    val summary: RetentionSummary
+    val summary: RetentionSummary,
+    /** The group's enabled cards, in the state of the context it learns in, weakest first. */
+    val cards: List<CardRetention>
 )
 
 data class CardRetention(
@@ -294,6 +296,7 @@ object RetentionReportBuilder {
         }
 
         val contextNames = contextReports.associate { it.learningGroupId to it.name }
+        val contextCards = contextReports.associate { it.learningGroupId to it.cards }
 
         // --- Card groups --------------------------------------------------------
 
@@ -309,7 +312,8 @@ object RetentionReportBuilder {
                 summary = summarize(
                     groupCards.map { snapshotOf(it, lgId) },
                     logsByGroupName[group.name].orEmpty()
-                )
+                ),
+                cards = contextCards[lgId].orEmpty().filter { it.cardId in ids }
             )
         }
 

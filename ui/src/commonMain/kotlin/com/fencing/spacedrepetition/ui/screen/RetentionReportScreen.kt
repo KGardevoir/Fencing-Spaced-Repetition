@@ -43,13 +43,13 @@ import kotlin.math.roundToInt
 
 private enum class ReportTab(val label: String) {
     OVERVIEW("Overview"),
-    GROUPS("Card groups"),
-    CARDS("Cards")
+    GROUPS("Groups")
 }
 
 /**
  * How retention is progressing: the whole collection and each learning
- * context, each card group, and each card in each learning context.
+ * context on the overview, and any one card group or learning group --
+ * chosen from a dropdown -- with its trend and every card in it.
  *
  * Every summary shows two numbers that are easy to confuse, so both are
  * labelled plainly: "Predicted now" is FSRS's estimate of what you would
@@ -105,7 +105,6 @@ fun RetentionReportScreen(
             when (tab) {
                 ReportTab.OVERVIEW -> OverviewTab(report, period, onPeriodChange)
                 ReportTab.GROUPS -> GroupsTab(report, period, onPeriodChange)
-                ReportTab.CARDS -> CardsTab(report)
             }
         }
     }
@@ -135,13 +134,18 @@ private fun OverviewTab(
                 emphasised = true
             )
         }
-        item {
-            Text(
-                "Learning contexts",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(top = 8.dp)
-            )
+        if (report.cardGroups.isNotEmpty()) {
+            item { SectionHeader("Card groups") }
+            items(report.cardGroups, key = { "group-${it.groupId}" }) { group ->
+                SummaryCard(
+                    title = group.name,
+                    subtitle = "Learns in ${group.learningContextName}",
+                    summary = group.summary,
+                    period = period
+                )
+            }
         }
+        item { SectionHeader("Learning groups") }
         items(report.learningContexts, key = { "ctx-${it.learningGroupId}" }) { ctx ->
             SummaryCard(
                 title = ctx.name,
@@ -161,71 +165,132 @@ private fun contextSubtitle(ctx: LearningContextReport): String = when {
 }
 
 // ---------------------------------------------------------------------------
-// Card groups
+// Groups: one card group or learning group at a time, and its cards
 // ---------------------------------------------------------------------------
 
+/** What the Groups tab is showing: a card group, or a learning context (null id is Global). */
+private sealed interface GroupSelection {
+    data class CardGroup(val groupId: Long) : GroupSelection
+    data class LearningContext(val learningGroupId: Long?) : GroupSelection
+}
+
+private fun GroupSelection.key(): String = when (this) {
+    is GroupSelection.CardGroup -> "g:$groupId"
+    is GroupSelection.LearningContext -> "l:${learningGroupId ?: ""}"
+}
+
+private fun selectionFromKey(key: String?): GroupSelection? = when {
+    key == null -> null
+    key.startsWith("g:") -> key.removePrefix("g:").toLongOrNull()?.let { GroupSelection.CardGroup(it) }
+    key.startsWith("l:") -> GroupSelection.LearningContext(key.removePrefix("l:").toLongOrNull())
+    else -> null
+}
+
+private class SelectedGroup(
+    val selection: GroupSelection,
+    val title: String,
+    val subtitle: String,
+    val summary: RetentionSummary,
+    val cards: List<CardRetention>
+)
+
+private fun resolve(report: RetentionReport, selection: GroupSelection?): SelectedGroup? {
+    when (selection) {
+        is GroupSelection.CardGroup -> report.cardGroups.firstOrNull { it.groupId == selection.groupId }
+            ?.let { return SelectedGroup(selection, it.name, "Card group · learns in ${it.learningContextName}", it.summary, it.cards) }
+        is GroupSelection.LearningContext -> report.learningContexts.firstOrNull { it.learningGroupId == selection.learningGroupId }
+            ?.let { return SelectedGroup(selection, it.name, "Learning group · " + contextSubtitle(it), it.summary, it.cards) }
+        null -> {}
+    }
+    // Nothing chosen yet, or the chosen group was deleted: the first card group, else Global.
+    report.cardGroups.firstOrNull()?.let { return resolve(report, GroupSelection.CardGroup(it.groupId)) }
+    return report.learningContexts.firstOrNull()?.let { resolve(report, GroupSelection.LearningContext(it.learningGroupId)) }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun GroupsTab(
     report: RetentionReport,
     period: RetentionPeriod,
     onPeriodChange: (RetentionPeriod) -> Unit
 ) {
-    LazyColumn(
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item { PeriodSelector(period, onPeriodChange) }
-        if (report.cardGroups.isEmpty()) {
-            item { EmptyNote("No card groups yet.") }
-        }
-        items(report.cardGroups, key = { "group-${it.groupId}" }) { group ->
-            SummaryCard(
-                title = group.name,
-                subtitle = "Learns in ${group.learningContextName}",
-                summary = group.summary,
-                period = period
-            )
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Cards, per learning context
-// ---------------------------------------------------------------------------
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun CardsTab(report: RetentionReport) {
-    // Remembered by id so the selection survives the report recomputing.
-    var selectedContextId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // Saved as a string key so the choice survives rotation and the report recomputing.
+    var selectedKey by rememberSaveable { mutableStateOf<String?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
-    var expanded by remember { mutableStateOf<Long?>(null) }
+    var expandedCard by remember { mutableStateOf<Long?>(null) }
+    var menuOpen by remember { mutableStateOf(false) }
 
-    val context = report.learningContexts.firstOrNull { it.learningGroupId == selectedContextId }
-        ?: report.learningContexts.first()
+    val selected = resolve(report, selectionFromKey(selectedKey)) ?: return
+    val shown = selected.cards.filter { query.isBlank() || it.question.contains(query, ignoreCase = true) }
 
-    val shown = context.cards.filter { query.isBlank() || it.question.contains(query, ignoreCase = true) }
+    fun choose(selection: GroupSelection) {
+        selectedKey = selection.key()
+        expandedCard = null
+        menuOpen = false
+    }
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ExposedDropdownMenuBox(
+                expanded = menuOpen,
+                onExpandedChange = { menuOpen = !menuOpen }
             ) {
-                report.learningContexts.forEach { ctx ->
-                    FilterChip(
-                        selected = ctx.learningGroupId == context.learningGroupId,
-                        onClick = {
-                            selectedContextId = ctx.learningGroupId
-                            expanded = null
-                        },
-                        label = { Text(ctx.name) }
-                    )
+                OutlinedTextField(
+                    value = selected.title,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Group") },
+                    supportingText = { Text(if (selected.selection is GroupSelection.CardGroup) "Card group" else "Learning group") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = menuOpen) },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                )
+                ExposedDropdownMenu(
+                    expanded = menuOpen,
+                    onDismissRequest = { menuOpen = false }
+                ) {
+                    if (report.cardGroups.isNotEmpty()) {
+                        MenuHeader("Card groups")
+                        report.cardGroups.forEach { group ->
+                            DropdownMenuItem(
+                                text = { Text(group.name) },
+                                onClick = { choose(GroupSelection.CardGroup(group.groupId)) },
+                                trailingIcon = { MenuPercent(group.summary.predictedRetentionNow) }
+                            )
+                        }
+                        HorizontalDivider()
+                    }
+                    MenuHeader("Learning groups")
+                    report.learningContexts.forEach { ctx ->
+                        DropdownMenuItem(
+                            text = { Text(ctx.name) },
+                            onClick = { choose(GroupSelection.LearningContext(ctx.learningGroupId)) },
+                            trailingIcon = { MenuPercent(ctx.summary.predictedRetentionNow) }
+                        )
+                    }
                 }
             }
+        }
+        item { PeriodSelector(period, onPeriodChange) }
+        item {
+            SummaryCard(
+                title = selected.title,
+                subtitle = selected.subtitle,
+                summary = selected.summary,
+                period = period
+            )
+        }
+        item {
+            Text(
+                "Cards",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(top = 8.dp)
+            )
         }
         item {
             OutlinedTextField(
@@ -239,23 +304,46 @@ private fun CardsTab(report: RetentionReport) {
         }
         item {
             Text(
-                "${context.summary.learnedCount} of ${context.summary.cardCount} cards learned in " +
-                    "${context.name} · weakest first",
+                "${selected.summary.learnedCount} of ${selected.summary.cardCount} cards learned · weakest first",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         if (shown.isEmpty()) {
-            item { EmptyNote(if (context.cards.isEmpty()) "No cards learn in ${context.name}." else "No matching cards.") }
+            item { EmptyNote(if (selected.cards.isEmpty()) "No cards in ${selected.title}." else "No matching cards.") }
         }
-        items(shown, key = { "card-${context.learningGroupId}-${it.cardId}" }) { card ->
+        items(shown, key = { "card-${selected.selection.key()}-${it.cardId}" }) { card ->
             CardRow(
                 card = card,
-                expanded = expanded == card.cardId,
-                onClick = { expanded = if (expanded == card.cardId) null else card.cardId }
+                expanded = expandedCard == card.cardId,
+                onClick = { expandedCard = if (expandedCard == card.cardId) null else card.cardId }
             )
         }
     }
+}
+
+@Composable
+private fun SectionHeader(text: String) {
+    Text(text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
+}
+
+@Composable
+private fun MenuHeader(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+    )
+}
+
+@Composable
+private fun MenuPercent(value: Double?) {
+    Text(
+        value?.let(::percent) ?: "–",
+        style = MaterialTheme.typography.labelMedium,
+        color = retentionColor(value)
+    )
 }
 
 @Composable
