@@ -51,6 +51,7 @@ An Android app for practicing martial arts and fencing techniques using delayed-
 ### Groups and Organization
 - Create groups (decks) to organize cards by topic, technique, or training focus
 - **Learning groups**: card groups learn against Global progress by default, or share a separate set of progress with the other groups in a learning group
+- Each learning group sets how its progress is scheduled -- practice days, maximum interval, desired retention, interval fuzzing -- while each card group keeps its session settings (cards per session, auto-show, shuffling); Global follows the app settings
 - Select which group to practice from the home screen
 
 ### Card Management
@@ -63,7 +64,7 @@ An Android app for practicing martial arts and fencing techniques using delayed-
 ### Import and Export
 - Export the whole collection as a YAML document, gzipped (`*.yaml.gz`)
 - One export carries everything: card content, images (inline base64), group
-  membership, per-group settings, every learning state, opponents, and
+  membership, per-group and per-learning-group settings, every learning state, opponents, and
   optionally the full review history
 - Readable and editable by hand -- a minimal deck is just a `cards:` list of
   `question`/`answer` pairs
@@ -176,7 +177,10 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for complete deployment instructions, includi
 Question and description content, category, tags, image paths, FSRS scheduling parameters, and review scheduling timestamps.
 
 ### Groups
-Named groups, each pointing at a learning group (null = Global). Cards are linked to groups via a many-to-many relationship. Learning states are kept per card per learning group, so every group in the same learning group shares one set of progress.
+Named groups, each pointing at a learning group (null = Global), with optional session-setting overrides. Cards are linked to groups via a many-to-many relationship. Learning states are kept per card per learning group, so every group in the same learning group shares one set of progress.
+
+### Learning Groups
+Named sets of shared learning progress, with optional overrides for the settings that schedule it: practice days, maximum interval, desired retention and interval fuzzing.
 
 ### Practice Sessions
 Session start/end times, associated card IDs, and assigned grades.

@@ -104,8 +104,20 @@ internal suspend fun GroupRepository.groupsForImport(parsedCards: List<ParsedCar
     val groupIds = ensureGroupsExist(groupNames, legacyIndependent)
 
     CardImportExport.lastParsedLearningGroups.forEach { (name, description) ->
-        ensureLearningGroup(name, description)
+        val id = ensureLearningGroup(name, description)
+        // Every learning group the file declares carries all its settings,
+        // so one with none in the file has none.
+        getLearningGroupById(id)?.let { learningGroup ->
+            val settings = CardImportExport.lastParsedLearningGroupSettings[name].orEmpty()
+            updateLearningGroup(CardImportExport.applyLearningGroupSettings(learningGroup, settings))
+        }
     }
+    // An older file keeps learning settings on the groups. Each goes to the
+    // group's learning group -- per setting, the first group to give one
+    // winning, as the database migration does -- unless the file gave that
+    // learning group settings of its own. A Global group's have nowhere to
+    // go, as Global follows the app-wide settings.
+    val legacyLearningSettings = mutableMapOf<Long, MutableMap<String, String>>()
     CardImportExport.lastParsedGroupSettings.forEach { (groupName, settings) ->
         val groupId = groupIds[groupName] ?: return@forEach
         val group = getGroupById(groupId) ?: return@forEach
@@ -113,6 +125,16 @@ internal suspend fun GroupRepository.groupsForImport(parsedCards: List<ParsedCar
         settings[CardImportExport.LEARNING_GROUP_SETTING]?.let { learningGroupName ->
             setLearningGroup(groupId, ensureLearningGroup(learningGroupName))
         }
+        val learningGroupId = getGroupById(groupId)?.learningGroupId ?: return@forEach
+        val learningSettings = legacyLearningSettings.getOrPut(learningGroupId) { mutableMapOf() }
+        settings.filterKeys { it in CardImportExport.LEARNING_SETTING_KEYS }
+            .forEach { (key, value) -> if (key !in learningSettings) learningSettings[key] = value }
+    }
+    legacyLearningSettings.forEach { (learningGroupId, settings) ->
+        if (settings.isEmpty()) return@forEach
+        val learningGroup = getLearningGroupById(learningGroupId) ?: return@forEach
+        if (learningGroup.name in CardImportExport.lastParsedLearningGroupSettings) return@forEach
+        updateLearningGroup(CardImportExport.applyLearningGroupSettings(learningGroup, settings))
     }
 
     val learningGroupIds = buildMap {

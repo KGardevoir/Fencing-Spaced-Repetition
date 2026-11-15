@@ -97,11 +97,14 @@ class YamlArchiveTest {
             fsrsElapsedDays = 1, fsrsScheduledDays = 2, fsrsReps = 2, fsrsLapses = 0,
             fsrsState = "LEARNING", lastReview = 100L, nextReview = 200L
         )
-        val group = Group(
-            id = 9, name = "Foot work", cardsPerSession = 20, autoShowAnswer = true,
-            randomizeDueCards = false, randomizeBucketHours = 6, practiceDays = "1,3,5",
+        val learningGroup = LearningGroup(
+            id = 9, name = "Foot work", practiceDays = "1,3,5",
             maximumInterval = 365, fsrsRetention = 85, fsrsEnableFuzzing = false,
             created = 0
+        )
+        val group = Group(
+            id = 9, name = "Foot work", learningGroupId = 9, cardsPerSession = 20, autoShowAnswer = true,
+            randomizeDueCards = false, randomizeBucketHours = 6, created = 0
         )
         val log = reviewLog(
             cardId = 1, grade = 2, notes = "Late:\nhand dropped", groupName = "Foot work",
@@ -114,6 +117,7 @@ class YamlArchiveTest {
             out = out,
             images = NoImages,
             groupSettings = listOf(group),
+            learningGroups = listOf(learningGroup),
             reviewLogs = listOf(log),
             cardQuestions = mapOf(1L to card.question),
             opponents = listOf(Opponent(id = 3, name = "Alex", skillMultiplier = 1.25, notes = "Left-handed", created = 0, modified = 0)),
@@ -151,7 +155,18 @@ class YamlArchiveTest {
             Group(id = 0, name = "Foot work", created = 0),
             CardImportExport.lastParsedGroupSettings.getValue("Foot work")
         )
-        assertEquals(group.copy(id = 0, created = 0), restored)
+        // The learning group travels by name, applied separately.
+        assertEquals(group.copy(id = 0, learningGroupId = null, created = 0), restored)
+        assertEquals(
+            "Foot work",
+            CardImportExport.lastParsedGroupSettings.getValue("Foot work")[CardImportExport.LEARNING_GROUP_SETTING]
+        )
+
+        val restoredLearningGroup = CardImportExport.applyLearningGroupSettings(
+            LearningGroup(id = 0, name = "Foot work", created = 0),
+            CardImportExport.lastParsedLearningGroupSettings.getValue("Foot work")
+        )
+        assertEquals(learningGroup.copy(id = 0, created = 0), restoredLearningGroup)
 
         val opponent = CardImportExport.lastParsedOpponents.single()
         assertEquals("Alex", opponent.name)

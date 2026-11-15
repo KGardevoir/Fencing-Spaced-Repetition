@@ -140,7 +140,7 @@ class GroupViewModel(
      * the card groups in it: those newly in move here, those no longer in go
      * back to Global.
      */
-    fun saveLearningGroup(learningGroup: LearningGroup, memberGroupIds: Set<Long>) {
+    fun saveLearningGroup(learningGroup: LearningGroup, memberGroupIds: Set<Long>, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
             try {
                 val id = if (learningGroup.id == 0L) {
@@ -157,6 +157,7 @@ class GroupViewModel(
                         wasIn && !isIn -> groupRepository.setLearningGroup(group.id, null)
                     }
                 }
+                onSuccess()
             } catch (e: Exception) {
                 // Handle error
             }
@@ -173,6 +174,10 @@ class GroupViewModel(
             }
         }
     }
+
+    /** How many different cards [groupIds] hold between them. */
+    suspend fun countCardsInGroups(groupIds: Set<Long>): Int =
+        if (groupIds.isEmpty()) 0 else groupRepository.countCardsInGroups(groupIds)
 
     fun deleteLearningGroup(learningGroup: LearningGroup) {
         viewModelScope.launch {

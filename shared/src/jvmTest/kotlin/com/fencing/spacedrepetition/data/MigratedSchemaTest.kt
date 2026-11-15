@@ -133,6 +133,32 @@ class MigratedSchemaTest {
     }
 
     @Test
+    fun `migrating to 16 moves the learning settings from groups to learning groups`() = runTest {
+        MigrationHarness(foreignKeys = true).use { db ->
+            db.createSchemaV11()
+            db.migrateThrough(from = 11, to = 16)
+
+            assertEquals(
+                setOf(
+                    "id", "name", "description", "learningGroupId", "created",
+                    "cardsPerSession", "autoShowAnswer", "randomizeDueCards",
+                    "randomizeBucketHours",
+                ),
+                db.columnsOf("groups")
+            )
+            assertEquals(
+                setOf(
+                    "id", "name", "description", "created",
+                    "practiceDays", "maximumInterval", "fsrsRetention", "fsrsEnableFuzzing",
+                ),
+                db.columnsOf("learning_groups")
+            )
+            assertTrue("index_groups_learningGroupId" in db.indexNames())
+            assertTrue("index_card_group_cross_ref_groupId" in db.indexNames())
+        }
+    }
+
+    @Test
     fun `migrating to 12 keeps every table the database is made of`() = runTest {
         MigrationHarness(foreignKeys = true).use { db ->
             db.createSchemaV11()

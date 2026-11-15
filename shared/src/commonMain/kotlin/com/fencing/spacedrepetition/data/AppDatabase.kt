@@ -27,7 +27,7 @@ import com.fencing.spacedrepetition.util.Time
 
 @Database(
     entities = [Card::class, PracticeSession::class, ReviewLog::class, Group::class, CardGroupCrossRef::class, CardLearningState::class, LearningGroup::class, Opponent::class],
-    version = 15,
+    version = 16,
     exportSchema = true
 )
 @ColumnTypeConverters(Converters::class)
@@ -696,6 +696,91 @@ private val MIGRATION_14_15 = object : Migration(14, 15) {
 }
 
 /**
+ * Moves the settings that schedule learning progress -- practice days,
+ * maximum interval, desired retention and interval fuzzing -- from card
+ * groups to learning groups.
+ *
+ * Every group in a learning group grades against one state per card, so the
+ * learning group takes each setting from the first of its groups, by id, that
+ * overrides it. A Global group's overrides have nowhere to go: Global is
+ * scheduled by the app-wide settings, which live outside the database.
+ *
+ * `groups` is rebuilt without the four columns, with the same care as
+ * [MIGRATION_14_15] over `card_group_cross_ref`, which cascades from it.
+ */
+private val MIGRATION_15_16 = object : Migration(15, 16) {
+    private val settings = listOf(
+        "practiceDays" to "TEXT",
+        "maximumInterval" to "INTEGER",
+        "fsrsRetention" to "INTEGER",
+        "fsrsEnableFuzzing" to "INTEGER"
+    )
+
+    override suspend fun migrate(connection: SQLiteConnection) {
+        settings.forEach { (column, type) ->
+            connection.execSQL("ALTER TABLE `learning_groups` ADD COLUMN `$column` $type")
+            connection.execSQL("""
+                UPDATE `learning_groups` SET `$column` = (
+                    SELECT g.`$column` FROM `groups` g
+                    WHERE g.`learningGroupId` = `learning_groups`.`id` AND g.`$column` IS NOT NULL
+                    ORDER BY g.`id` LIMIT 1
+                )
+            """)
+        }
+
+        connection.execSQL("""
+            CREATE TABLE `cross_ref_backup_15_16` AS
+            SELECT `cardId`, `groupId` FROM `card_group_cross_ref`
+        """)
+        connection.execSQL("DROP TABLE `card_group_cross_ref`")
+
+        connection.execSQL("""
+            CREATE TABLE IF NOT EXISTS `groups_new` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `name` TEXT NOT NULL,
+                `description` TEXT NOT NULL,
+                `learningGroupId` INTEGER,
+                `created` INTEGER NOT NULL,
+                `cardsPerSession` INTEGER,
+                `autoShowAnswer` INTEGER,
+                `randomizeDueCards` INTEGER,
+                `randomizeBucketHours` INTEGER,
+                FOREIGN KEY(`learningGroupId`) REFERENCES `learning_groups`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL
+            )
+        """)
+        connection.execSQL("""
+            INSERT INTO `groups_new` (
+                `id`, `name`, `description`, `learningGroupId`, `created`,
+                `cardsPerSession`, `autoShowAnswer`, `randomizeDueCards`, `randomizeBucketHours`
+            )
+            SELECT
+                `id`, `name`, `description`, `learningGroupId`, `created`,
+                `cardsPerSession`, `autoShowAnswer`, `randomizeDueCards`, `randomizeBucketHours`
+            FROM `groups`
+        """)
+        connection.execSQL("DROP TABLE `groups`")
+        connection.execSQL("ALTER TABLE `groups_new` RENAME TO `groups`")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_groups_learningGroupId` ON `groups` (`learningGroupId`)")
+
+        connection.execSQL("""
+            CREATE TABLE IF NOT EXISTS `card_group_cross_ref` (
+                `cardId` INTEGER NOT NULL,
+                `groupId` INTEGER NOT NULL,
+                PRIMARY KEY(`cardId`, `groupId`),
+                FOREIGN KEY(`cardId`) REFERENCES `cards`(`id`) ON DELETE CASCADE,
+                FOREIGN KEY(`groupId`) REFERENCES `groups`(`id`) ON DELETE CASCADE
+            )
+        """)
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_card_group_cross_ref_groupId` ON `card_group_cross_ref`(`groupId`)")
+        connection.execSQL("""
+            INSERT INTO `card_group_cross_ref` (`cardId`, `groupId`)
+            SELECT `cardId`, `groupId` FROM `cross_ref_backup_15_16`
+        """)
+        connection.execSQL("DROP TABLE `cross_ref_backup_15_16`")
+    }
+}
+
+/**
  * Every migration, oldest first. The SQL is identical on every platform, so
  * each platform's builder passes this same array and there is nothing here
  * for a target to override.
@@ -715,4 +800,5 @@ val ALL_MIGRATIONS: Array<Migration> = arrayOf(
     MIGRATION_12_13,
     MIGRATION_13_14,
     MIGRATION_14_15,
+    MIGRATION_15_16,
 )

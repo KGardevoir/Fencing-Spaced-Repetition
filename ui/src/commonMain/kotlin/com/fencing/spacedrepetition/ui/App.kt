@@ -23,6 +23,7 @@ import com.fencing.spacedrepetition.ui.screen.GroupEditScreen
 import com.fencing.spacedrepetition.ui.screen.GroupListScreen
 import com.fencing.spacedrepetition.ui.screen.HistoryScreen
 import com.fencing.spacedrepetition.ui.screen.HomeScreen
+import com.fencing.spacedrepetition.ui.screen.LearningGroupEditScreen
 import com.fencing.spacedrepetition.ui.screen.LearningGroupsScreen
 import com.fencing.spacedrepetition.ui.screen.OpponentsScreen
 import com.fencing.spacedrepetition.ui.screen.PracticeScreen
@@ -346,9 +347,7 @@ fun App(
 
         Destination.AddGroup -> GroupEditor(
             group = Group(name = ""),
-            groupCardCount = 0,
             groupViewModel = groupViewModel,
-            cardViewModel = cardViewModel,
             settingsViewModel = settingsViewModel,
             onSave = { newGroup -> groupViewModel.addGroupWithSettings(newGroup) { navigator.back() } },
             onNavigateBack = { navigator.back() }
@@ -356,15 +355,10 @@ fun App(
 
         is Destination.EditGroup -> {
             val group = destination.group
-            val groupCardCount by remember(group.id) {
-                cardViewModel.getCardCountForGroup(group.id)
-            }.collectAsState(initial = 0)
 
             GroupEditor(
                 group = group,
-                groupCardCount = groupCardCount,
                 groupViewModel = groupViewModel,
-                cardViewModel = cardViewModel,
                 settingsViewModel = settingsViewModel,
                 onSave = { updated -> groupViewModel.saveGroup(updated, group) { navigator.back() } },
                 onNavigateBack = { navigator.back() }
@@ -378,8 +372,39 @@ fun App(
             LearningGroupsScreen(
                 learningGroups = learningGroups,
                 groups = groups,
-                onSaveLearningGroup = groupViewModel::saveLearningGroup,
+                onEditLearningGroup = { navigator.go(Destination.EditLearningGroup(it)) },
                 onDeleteLearningGroup = groupViewModel::deleteLearningGroup,
+                onNavigateBack = { navigator.back() }
+            )
+        }
+
+        is Destination.EditLearningGroup -> {
+            val learningGroups by groupViewModel.learningGroups.collectAsState()
+            val groups by groupViewModel.allGroups.collectAsState()
+            val globalCardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
+            val globalPracticeDays by settingsViewModel.practiceDays.collectAsState()
+            val globalMaximumInterval by settingsViewModel.maximumInterval.collectAsState()
+            val globalFsrsRetention by settingsViewModel.fsrsRetention.collectAsState()
+            val globalFsrsEnableFuzzing by settingsViewModel.fsrsEnableFuzzing.collectAsState()
+            val practiceScheduleEstimate by cardViewModel.practiceScheduleEstimate.collectAsState()
+            val historyWindowDays by cardViewModel.historyWindowDays.collectAsState()
+
+            LearningGroupEditScreen(
+                learningGroup = destination.learningGroup,
+                learningGroups = learningGroups,
+                groups = groups,
+                globalCardsPerSession = globalCardsPerSession,
+                globalPracticeDays = globalPracticeDays,
+                globalMaximumInterval = globalMaximumInterval,
+                globalFsrsRetention = globalFsrsRetention,
+                globalFsrsEnableFuzzing = globalFsrsEnableFuzzing,
+                practiceScheduleEstimate = practiceScheduleEstimate,
+                historyWindowDays = historyWindowDays,
+                onHistoryWindowDaysChange = { cardViewModel.setHistoryWindowDays(it) },
+                countCards = groupViewModel::countCardsInGroups,
+                onSave = { updated, memberIds ->
+                    groupViewModel.saveLearningGroup(updated, memberIds) { navigator.back() }
+                },
                 onNavigateBack = { navigator.back() }
             )
         }
@@ -561,9 +586,7 @@ private fun CardEditor(
 @Composable
 private fun GroupEditor(
     group: Group,
-    groupCardCount: Int,
     groupViewModel: GroupViewModel,
-    cardViewModel: CardViewModel,
     settingsViewModel: SettingsViewModel,
     onSave: (Group) -> Unit,
     onNavigateBack: () -> Unit
@@ -573,12 +596,6 @@ private fun GroupEditor(
     val globalAutoShowAnswer by settingsViewModel.autoShowAnswer.collectAsState()
     val globalRandomizeDueCards by settingsViewModel.randomizeDueCards.collectAsState()
     val globalRandomizeBucketHours by settingsViewModel.randomizeBucketHours.collectAsState()
-    val globalPracticeDays by settingsViewModel.practiceDays.collectAsState()
-    val globalMaximumInterval by settingsViewModel.maximumInterval.collectAsState()
-    val globalFsrsRetention by settingsViewModel.fsrsRetention.collectAsState()
-    val globalFsrsEnableFuzzing by settingsViewModel.fsrsEnableFuzzing.collectAsState()
-    val practiceScheduleEstimate by cardViewModel.practiceScheduleEstimate.collectAsState()
-    val historyWindowDays by cardViewModel.historyWindowDays.collectAsState()
 
     GroupEditScreen(
         group = group,
@@ -588,14 +605,6 @@ private fun GroupEditor(
         globalAutoShowAnswer = globalAutoShowAnswer,
         globalRandomizeDueCards = globalRandomizeDueCards,
         globalRandomizeBucketHours = globalRandomizeBucketHours,
-        globalPracticeDays = globalPracticeDays,
-        globalMaximumInterval = globalMaximumInterval,
-        globalFsrsRetention = globalFsrsRetention,
-        globalFsrsEnableFuzzing = globalFsrsEnableFuzzing,
-        groupCardCount = groupCardCount,
-        practiceScheduleEstimate = practiceScheduleEstimate,
-        historyWindowDays = historyWindowDays,
-        onHistoryWindowDaysChange = { cardViewModel.setHistoryWindowDays(it) },
         onSave = onSave,
         onNavigateBack = onNavigateBack
     )

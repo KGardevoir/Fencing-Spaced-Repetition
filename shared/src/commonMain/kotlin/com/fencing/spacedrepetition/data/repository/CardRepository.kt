@@ -879,42 +879,31 @@ class CardRepository(
      *
      * Practice days use ISO-8601 convention: 1=Monday through 7=Sunday.
      */
-    /** Resolve maximum interval: group override takes precedence over global. */
-    private suspend fun resolveMaximumInterval(groupId: Long?): Int {
-        if (groupId != null) {
-            val group = groupDao.getGroupById(groupId)
-            if (group?.maximumInterval != null) return group.maximumInterval
-        }
-        return preferences.maximumInterval.first()
+    /**
+     * The learning group [groupId] practises against, whose settings schedule
+     * its learning progress; null for a Global group, or no group at all,
+     * which the app-wide settings schedule.
+     */
+    private suspend fun learningGroupFor(groupId: Long?): LearningGroup? {
+        val learningGroupId = groupId?.let { groupDao.getGroupById(it) }?.learningGroupId ?: return null
+        return groupDao.getLearningGroupById(learningGroupId)
     }
 
-    /** Resolve practice days: group override takes precedence over global. */
-    private suspend fun resolvePracticeDays(groupId: Long?): Set<Int> {
-        if (groupId != null) {
-            val group = groupDao.getGroupById(groupId)
-            val groupDays = group?.parsePracticeDays()
-            if (groupDays != null) return groupDays
-        }
-        return preferences.practiceDays.first()
-    }
+    /** Resolve maximum interval: learning group override takes precedence over global. */
+    private suspend fun resolveMaximumInterval(groupId: Long?): Int =
+        learningGroupFor(groupId)?.maximumInterval ?: preferences.maximumInterval.first()
 
-    /** Resolve FSRS desired retention (integer percent): group override takes precedence over global. */
-    private suspend fun resolveFsrsRetention(groupId: Long?): Int {
-        if (groupId != null) {
-            val group = groupDao.getGroupById(groupId)
-            if (group?.fsrsRetention != null) return group.fsrsRetention
-        }
-        return preferences.fsrsRetention.first()
-    }
+    /** Resolve practice days: learning group override takes precedence over global. */
+    private suspend fun resolvePracticeDays(groupId: Long?): Set<Int> =
+        learningGroupFor(groupId)?.parsePracticeDays() ?: preferences.practiceDays.first()
 
-    /** Resolve FSRS interval fuzzing flag: group override takes precedence over global. */
-    private suspend fun resolveFsrsEnableFuzzing(groupId: Long?): Boolean {
-        if (groupId != null) {
-            val group = groupDao.getGroupById(groupId)
-            if (group?.fsrsEnableFuzzing != null) return group.fsrsEnableFuzzing
-        }
-        return preferences.fsrsEnableFuzzing.first()
-    }
+    /** Resolve FSRS desired retention (integer percent): learning group override takes precedence over global. */
+    private suspend fun resolveFsrsRetention(groupId: Long?): Int =
+        learningGroupFor(groupId)?.fsrsRetention ?: preferences.fsrsRetention.first()
+
+    /** Resolve FSRS interval fuzzing flag: learning group override takes precedence over global. */
+    private suspend fun resolveFsrsEnableFuzzing(groupId: Long?): Boolean =
+        learningGroupFor(groupId)?.fsrsEnableFuzzing ?: preferences.fsrsEnableFuzzing.first()
 
     private suspend fun adjustForPracticeFrequency(scheduledDays: Int, groupId: Long? = null): Int {
         val practiceDays = resolvePracticeDays(groupId)
