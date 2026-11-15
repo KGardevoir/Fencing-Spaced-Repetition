@@ -151,6 +151,12 @@ class GroupRepository(
     suspend fun getAllLearningStatesForCardSync(cardId: Long): List<CardLearningState> =
         groupDao.getAllLearningStatesForCard(cardId)
 
+    /** Every card's state in every learning group. */
+    fun getAllLearningStates(): Flow<List<CardLearningState>> = groupDao.getAllLearningStates()
+
+    /** Every card-to-group membership. */
+    fun getAllCardGroupCrossRefs(): Flow<List<CardGroupCrossRef>> = groupDao.getAllCardGroupCrossRefs()
+
     // Learning groups
     fun getAllLearningGroups(): Flow<List<LearningGroup>> = groupDao.getAllLearningGroups()
 
