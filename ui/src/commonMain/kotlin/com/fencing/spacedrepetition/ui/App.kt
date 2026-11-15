@@ -535,7 +535,6 @@ fun App(
                 onPickBackupFolder = onPickBackupFolder,
                 onSetThemeMode = settingsViewModel::setThemeMode,
                 onSetAutoShowAnswer = settingsViewModel::setAutoShowAnswer,
-                onOpenLearningGroups = { navigator.go(Destination.LearningGroups) },
                 onSetAutoBackupEnabled = settingsViewModel::setAutoBackupEnabled,
                 onSetAutoBackupIntervalDays = settingsViewModel::setAutoBackupIntervalDays,
                 onSetMaxBackupsKept = settingsViewModel::setMaxBackupsKept,

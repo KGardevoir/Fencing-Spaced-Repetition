@@ -9,7 +9,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.*
@@ -21,7 +20,6 @@ import com.fencing.spacedrepetition.BuildInfo
 import com.fencing.spacedrepetition.SupportLinks
 import com.fencing.spacedrepetition.data.preferences.SettingsConstants
 import com.fencing.spacedrepetition.data.preferences.ThemeMode
-import com.fencing.spacedrepetition.ui.components.AppIcons
 import com.fencing.spacedrepetition.util.formatDateAtTime
 import kotlin.math.roundToInt
 
@@ -59,8 +57,6 @@ fun SettingsScreen(
     onPickBackupFolder: () -> Unit,
     onSetThemeMode: (ThemeMode) -> Unit,
     onSetAutoShowAnswer: (Boolean) -> Unit,
-    /** Cards per session, shuffling and scheduling live with Global, on the Learning Groups screen. */
-    onOpenLearningGroups: () -> Unit,
     onSetAutoBackupEnabled: (Boolean) -> Unit,
     onSetAutoBackupIntervalDays: (Int) -> Unit,
     onSetMaxBackupsKept: (Int) -> Unit,
@@ -184,37 +180,6 @@ fun SettingsScreen(
                     checked = autoShowAnswer,
                     onCheckedChange = onSetAutoShowAnswer
                 )
-            }
-
-
-            Spacer(modifier = Modifier.height(16.dp))
-            HorizontalDivider()
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Learning settings: moved to Global, on the Learning Groups screen.
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onOpenLearningGroups)
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    AppIcons.LearningGroup,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Learning Settings", style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        "Cards per session, shuffling, practice days, maximum interval, retention " +
-                            "and fuzzing are set per learning group, with the defaults under Global.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
             }
 
             Spacer(modifier = Modifier.height(16.dp))
