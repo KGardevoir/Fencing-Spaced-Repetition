@@ -22,13 +22,12 @@ import com.fencing.spacedrepetition.util.Time
  * it with the rest of the collection. A group pointed at no learning group
  * learns Global, which is the default.
  *
- * The settings that decide how that state is scheduled live here too, not on
- * the card groups: every group in a learning group grades against one state
- * per card, so they must all schedule it the same way. Each is null to use
- * the app-wide default, which is also what Global uses.
- *
- * [cardsPerSession] is the session size its card groups practise, unless a
- * card group overrides it in turn.
+ * The settings live here too, not on the card groups: how its state is
+ * scheduled, since every group in a learning group grades against one state
+ * per card and so must schedule it the same way, and how its sessions are
+ * drawn -- how many cards, and whether due cards are shuffled. Each is null
+ * to use the app-wide default, which is also what Global uses. A card group
+ * keeps only whether it shows the description straight away.
  */
 @Entity(tableName = "learning_groups")
 data class LearningGroup(
@@ -38,14 +37,17 @@ data class LearningGroup(
     val description: String = "",
     val created: Long = Time.now(),
     val cardsPerSession: Int? = null,
+    val randomizeDueCards: Boolean? = null,
+    val randomizeBucketHours: Int? = null,
     val practiceDays: String? = null,  // comma-separated ISO-8601 day ints (1=Mon..7=Sun)
     val maximumInterval: Int? = null,
     val fsrsRetention: Int? = null,         // integer percent 70–97, e.g. 90 for 90 %
     val fsrsEnableFuzzing: Boolean? = null  // override FSRS interval fuzzing setting
 ) {
-    /** Returns true if any learning setting override is set */
+    /** Returns true if any setting override is set */
     fun hasCustomSettings(): Boolean =
-        cardsPerSession != null || practiceDays != null || maximumInterval != null ||
+        cardsPerSession != null || randomizeDueCards != null || randomizeBucketHours != null ||
+        practiceDays != null || maximumInterval != null ||
         fsrsRetention != null || fsrsEnableFuzzing != null
 
     /** Parse the practiceDays string to a Set<Int>, or null if not overridden */
@@ -83,18 +85,14 @@ data class Group(
     /** The learning group whose state this group practises against; null is Global. */
     val learningGroupId: Long? = null,
     val created: Long = Time.now(),
-    // Per-group session settings overrides (null = use the learning group's,
-    // or the global default). The settings that schedule learning progress
-    // are on [LearningGroup].
-    val cardsPerSession: Int? = null,
-    val autoShowAnswer: Boolean? = null,
-    val randomizeDueCards: Boolean? = null,
-    val randomizeBucketHours: Int? = null
+    /**
+     * Whether to show a card's description straight away; null for the
+     * global setting. Every other setting is the learning group's.
+     */
+    val autoShowAnswer: Boolean? = null
 ) {
     /** Returns true if any per-group setting override is set */
-    fun hasCustomSettings(): Boolean =
-        cardsPerSession != null || autoShowAnswer != null || randomizeDueCards != null ||
-        randomizeBucketHours != null
+    fun hasCustomSettings(): Boolean = autoShowAnswer != null
 }
 
 @Entity(

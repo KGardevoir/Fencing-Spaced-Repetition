@@ -23,7 +23,9 @@ import com.fencing.spacedrepetition.algorithm.ScheduleEstimate
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.ui.components.AppIcons
+import com.fencing.spacedrepetition.ui.components.BucketSizeSlider
 import com.fencing.spacedrepetition.ui.components.CardsPerSessionSlider
+import com.fencing.spacedrepetition.ui.components.RandomizeDueCardsSwitch
 import com.fencing.spacedrepetition.ui.components.FuzzingSwitch
 import com.fencing.spacedrepetition.ui.components.MaximumIntervalSlider
 import com.fencing.spacedrepetition.ui.components.PracticeDaysPicker
@@ -49,6 +51,8 @@ fun LearningGroupEditScreen(
     learningGroups: List<LearningGroup>,
     groups: List<Group>,
     globalCardsPerSession: Int,
+    globalRandomizeDueCards: Boolean,
+    globalRandomizeBucketHours: Int,
     globalPracticeDays: Set<Int>,
     globalMaximumInterval: Int,
     globalFsrsRetention: Int,
@@ -73,6 +77,14 @@ fun LearningGroupEditScreen(
     var overrideCardsPerSession by remember { mutableStateOf(learningGroup.cardsPerSession != null) }
     var cardsPerSession by remember { mutableIntStateOf(learningGroup.cardsPerSession ?: globalCardsPerSession) }
 
+    var overrideRandomizeDueCards by remember { mutableStateOf(learningGroup.randomizeDueCards != null) }
+    var randomizeDueCards by remember { mutableStateOf(learningGroup.randomizeDueCards ?: globalRandomizeDueCards) }
+
+    var overrideRandomizeBucketHours by remember { mutableStateOf(learningGroup.randomizeBucketHours != null) }
+    var randomizeBucketHours by remember {
+        mutableIntStateOf(learningGroup.randomizeBucketHours ?: globalRandomizeBucketHours)
+    }
+
     var overridePracticeDays by remember { mutableStateOf(learningGroup.practiceDays != null) }
     var practiceDays by remember { mutableStateOf(learningGroup.parsePracticeDays() ?: globalPracticeDays) }
 
@@ -96,6 +108,8 @@ fun LearningGroupEditScreen(
         name = name.trim(),
         description = description.trim(),
         cardsPerSession = if (overrideCardsPerSession) cardsPerSession else null,
+        randomizeDueCards = if (overrideRandomizeDueCards) randomizeDueCards else null,
+        randomizeBucketHours = if (overrideRandomizeBucketHours) randomizeBucketHours else null,
         practiceDays = if (overridePracticeDays) practiceDays.sorted().joinToString(",") else null,
         maximumInterval = if (overrideMaximumInterval) maximumInterval else null,
         fsrsRetention = if (overrideFsrsRetention) fsrsRetention else null,
@@ -263,11 +277,22 @@ fun LearningGroupEditScreen(
                 onOverrideChange = { overrideCardsPerSession = it }
             ) {
                 CardsPerSessionSlider(cardsPerSession, { cardsPerSession = it }, enabled = overrideCardsPerSession)
-                Text(
-                    "A card group can still override this for itself.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            }
+
+            SettingOverrideSection(
+                label = "Randomize Due Cards",
+                overridden = overrideRandomizeDueCards,
+                onOverrideChange = { overrideRandomizeDueCards = it }
+            ) {
+                RandomizeDueCardsSwitch(randomizeDueCards, { randomizeDueCards = it }, enabled = overrideRandomizeDueCards)
+            }
+
+            SettingOverrideSection(
+                label = "Sampling Bucket Size",
+                overridden = overrideRandomizeBucketHours,
+                onOverrideChange = { overrideRandomizeBucketHours = it }
+            ) {
+                BucketSizeSlider(randomizeBucketHours, { randomizeBucketHours = it }, enabled = overrideRandomizeBucketHours)
             }
 
             SettingOverrideSection(

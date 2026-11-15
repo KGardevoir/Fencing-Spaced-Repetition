@@ -133,22 +133,21 @@ class MigratedSchemaTest {
     }
 
     @Test
-    fun `migrating to 16 moves the learning settings from groups to learning groups`() = runTest {
+    fun `migrating to 16 moves every setting but auto-show from groups to learning groups`() = runTest {
         MigrationHarness(foreignKeys = true).use { db ->
             db.createSchemaV11()
             db.migrateThrough(from = 11, to = 16)
 
             assertEquals(
                 setOf(
-                    "id", "name", "description", "learningGroupId", "created",
-                    "cardsPerSession", "autoShowAnswer", "randomizeDueCards",
-                    "randomizeBucketHours",
+                    "id", "name", "description", "learningGroupId", "created", "autoShowAnswer",
                 ),
                 db.columnsOf("groups")
             )
             assertEquals(
                 setOf(
-                    "id", "name", "description", "created", "cardsPerSession",
+                    "id", "name", "description", "created",
+                    "cardsPerSession", "randomizeDueCards", "randomizeBucketHours",
                     "practiceDays", "maximumInterval", "fsrsRetention", "fsrsEnableFuzzing",
                 ),
                 db.columnsOf("learning_groups")

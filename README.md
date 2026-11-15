@@ -51,7 +51,7 @@ An Android app for practicing martial arts and fencing techniques using delayed-
 ### Groups and Organization
 - Create groups (decks) to organize cards by topic, technique, or training focus
 - **Learning groups**: card groups learn against Global progress by default, or share a separate set of progress with the other groups in a learning group
-- Each learning group sets its cards per session and how its progress is scheduled -- practice days, maximum interval, desired retention, interval fuzzing. The defaults are Global's, edited from the Global row on the Learning Groups screen. A card group can still override cards per session, auto-show and shuffling for itself
+- Each learning group sets how its sessions are drawn -- cards per session, shuffling and its bucket size -- and how its progress is scheduled -- practice days, maximum interval, desired retention, interval fuzzing. The defaults are Global's, edited from the Global row on the Learning Groups screen. A card group's only setting is whether to auto-show the description
 - Select which group to practice from the home screen
 
 ### Card Management
@@ -177,10 +177,10 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for complete deployment instructions, includi
 Question and description content, category, tags, image paths, FSRS scheduling parameters, and review scheduling timestamps.
 
 ### Groups
-Named groups, each pointing at a learning group (null = Global), with optional session-setting overrides. Cards are linked to groups via a many-to-many relationship. Learning states are kept per card per learning group, so every group in the same learning group shares one set of progress.
+Named groups, each pointing at a learning group (null = Global), with an optional auto-show override. Cards are linked to groups via a many-to-many relationship. Learning states are kept per card per learning group, so every group in the same learning group shares one set of progress.
 
 ### Learning Groups
-Named sets of shared learning progress, with optional overrides for cards per session and the settings that schedule it: practice days, maximum interval, desired retention and interval fuzzing.
+Named sets of shared learning progress, with optional overrides for cards per session, shuffling, and the settings that schedule it: practice days, maximum interval, desired retention and interval fuzzing.
 
 ### Practice Sessions
 Session start/end times, associated card IDs, and assigned grades.

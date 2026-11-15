@@ -103,3 +103,42 @@ fun FuzzingSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, enabled:
         Switch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
     }
 }
+
+@Composable
+fun RandomizeDueCardsSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, enabled: Boolean = true) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled) { onCheckedChange(!checked) },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            "Shuffle cards with similar due dates for variety",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f)
+        )
+        Switch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
+    }
+}
+
+@Composable
+fun BucketSizeSlider(value: Int, onValueChange: (Int) -> Unit, enabled: Boolean = true) {
+    val presets = SettingsConstants.BUCKET_PRESETS
+    val index = SettingsConstants.findPresetIndex(presets, value)
+    Text(presets[index].second, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+    Slider(
+        value = index.toFloat(),
+        onValueChange = { onValueChange(presets[it.roundToInt()].first) },
+        valueRange = 0f..(presets.size - 1).toFloat(),
+        steps = presets.size - 2,
+        modifier = Modifier.fillMaxWidth(),
+        enabled = enabled
+    )
+    Text(
+        "Cards due within the same bucket are shuffled randomly. Smaller buckets preserve due-date ordering more strictly.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}

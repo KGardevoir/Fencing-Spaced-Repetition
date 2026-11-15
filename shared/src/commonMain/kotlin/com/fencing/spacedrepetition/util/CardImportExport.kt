@@ -172,10 +172,13 @@ object CardImportExport {
         private set
 
     /**
-     * The settings that schedule learning progress. They belong to a learning
-     * group, but older files wrote them on the groups.
+     * The settings that belong to a learning group, which older files wrote
+     * on the groups.
      */
-    val LEARNING_SETTING_KEYS = setOf("practiceDays", "maximumInterval", "fsrsRetention", "fsrsEnableFuzzing")
+    val LEARNING_SETTING_KEYS = setOf(
+        "cardsPerSession", "randomizeDueCards", "randomizeBucketHours",
+        "practiceDays", "maximumInterval", "fsrsRetention", "fsrsEnableFuzzing"
+    )
 
     /** Parsed review history from an import file (populated after calling parseCards) */
     var lastParsedReviewHistory: List<ParsedReviewLog> = emptyList()
@@ -880,10 +883,7 @@ object CardImportExport {
      */
     fun applyGroupSettings(group: Group, settings: Map<String, String>): Group {
         return group.copy(
-            cardsPerSession = settings["cardsPerSession"]?.toIntOrNull(),
-            autoShowAnswer = settings["autoShowAnswer"]?.toBooleanStrictOrNull(),
-            randomizeDueCards = settings["randomizeDueCards"]?.toBooleanStrictOrNull(),
-            randomizeBucketHours = settings["randomizeBucketHours"]?.toIntOrNull()
+            autoShowAnswer = settings["autoShowAnswer"]?.toBooleanStrictOrNull()
         )
     }
 
@@ -897,6 +897,8 @@ object CardImportExport {
     fun applyLearningGroupSettings(learningGroup: LearningGroup, settings: Map<String, String>): LearningGroup {
         return learningGroup.copy(
             cardsPerSession = settings["cardsPerSession"]?.toIntOrNull(),
+            randomizeDueCards = settings["randomizeDueCards"]?.toBooleanStrictOrNull(),
+            randomizeBucketHours = settings["randomizeBucketHours"]?.toIntOrNull(),
             practiceDays = settings["practiceDays"],
             maximumInterval = settings["maximumInterval"]?.toIntOrNull(),
             fsrsRetention = settings["fsrsRetention"]?.toIntOrNull(),

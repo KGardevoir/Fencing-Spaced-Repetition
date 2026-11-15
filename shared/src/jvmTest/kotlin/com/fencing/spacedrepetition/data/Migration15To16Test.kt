@@ -9,12 +9,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 
 /**
- * Migration 15 -> 16, which moves the learning settings from card groups to
- * learning groups.
+ * Migration 15 -> 16, which moves every setting but auto-show from card
+ * groups to learning groups.
  *
  * What matters: each learning group takes, setting by setting, the value of
- * the first of its groups that overrides it; the groups keep their session
- * settings, their learning group and their cards through the rebuild; and
+ * the first of its groups that overrides it; the groups keep auto-show,
+ * their learning group and their cards through the rebuild; and
  * nothing is left behind in the learning states.
  *
  * Run against a real SQLite engine on a database migrated up from schema v11.
@@ -22,9 +22,10 @@ import kotlin.test.assertFalse
 class Migration15To16Test {
 
     /**
-     * Learning group 1 holds "Footwork" (retention 85, fuzzing off) and
-     * "Blade" (retention 80, a 180-day maximum interval): the first wins
-     * retention, the second gives the interval nobody else set. Learning group
+     * Learning group 1 holds "Footwork" (12 cards, retention 85, fuzzing off,
+     * auto-show on) and "Blade" (20 cards, retention 80, a 180-day maximum
+     * interval, shuffled in 6-hour buckets): the first wins cards and
+     * retention, the second gives what nobody else set. Learning group
      * 2 holds one group with no learning settings. "Global" learns Global and
      * overrides retention, which has nowhere to go.
      */
@@ -43,12 +44,13 @@ class Migration15To16Test {
             """
             INSERT INTO `groups` (
                 `id`, `name`, `description`, `learningGroupId`, `created`, `cardsPerSession`,
+                `autoShowAnswer`, `randomizeDueCards`, `randomizeBucketHours`,
                 `practiceDays`, `maximumInterval`, `fsrsRetention`, `fsrsEnableFuzzing`
             ) VALUES
-                (10, 'Footwork', '', 1, 1, 12, NULL, NULL, 85, 0),
-                (20, 'Blade', '', 1, 2, NULL, '1,3,5', 180, 80, NULL),
-                (30, 'Lunges', '', 2, 3, NULL, NULL, NULL, NULL, NULL),
-                (40, 'Global', '', NULL, 4, 7, NULL, NULL, 95, NULL)
+                (10, 'Footwork', '', 1, 1, 12, 1, NULL, NULL, NULL, NULL, 85, 0),
+                (20, 'Blade', '', 1, 2, 20, NULL, 1, 6, '1,3,5', 180, 80, NULL),
+                (30, 'Lunges', '', 2, 3, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+                (40, 'Global', '', NULL, 4, 7, 0, NULL, NULL, NULL, NULL, 95, NULL)
             """
         )
         exec("INSERT INTO `card_group_cross_ref` (`cardId`, `groupId`) VALUES (1, 10), (2, 20), (1, 40)")
@@ -73,8 +75,9 @@ class Migration15To16Test {
             assertEquals(0L, db.queryLong("SELECT `fsrsEnableFuzzing` FROM `learning_groups` WHERE `id` = 1"))
             assertEquals(180L, db.queryLong("SELECT `maximumInterval` FROM `learning_groups` WHERE `id` = 1"))
             assertEquals("1,3,5", db.queryText("SELECT `practiceDays` FROM `learning_groups` WHERE `id` = 1"))
-            // Cards per session stays on the groups, as their override.
-            assertEquals(1L, db.queryLong("SELECT COUNT(*) FROM `learning_groups` WHERE `id` = 1 AND `cardsPerSession` IS NULL"))
+            assertEquals(12L, db.queryLong("SELECT `cardsPerSession` FROM `learning_groups` WHERE `id` = 1"))
+            assertEquals(1L, db.queryLong("SELECT `randomizeDueCards` FROM `learning_groups` WHERE `id` = 1"))
+            assertEquals(6L, db.queryLong("SELECT `randomizeBucketHours` FROM `learning_groups` WHERE `id` = 1"))
         }
     }
 
@@ -89,7 +92,8 @@ class Migration15To16Test {
                 db.queryLong(
                     """
                     SELECT COUNT(*) FROM `learning_groups` WHERE `id` = 2
-                      AND `cardsPerSession` IS NULL AND `practiceDays` IS NULL AND `maximumInterval` IS NULL
+                      AND `cardsPerSession` IS NULL AND `randomizeDueCards` IS NULL
+                      AND `randomizeBucketHours` IS NULL AND `practiceDays` IS NULL AND `maximumInterval` IS NULL
                       AND `fsrsRetention` IS NULL AND `fsrsEnableFuzzing` IS NULL
                     """
                 )
@@ -98,19 +102,20 @@ class Migration15To16Test {
     }
 
     @Test
-    fun `groups keep their session settings, learning group and cards`() = runTest {
+    fun `groups keep auto-show, their learning group and their cards`() = runTest {
         MigrationHarness(foreignKeys = true).use { db ->
             db.seedV15()
             db.migrate(from = 15)
 
             assertEquals(4L, db.count("groups"))
-            assertEquals(12L, db.queryLong("SELECT `cardsPerSession` FROM `groups` WHERE `id` = 10"))
-            assertEquals(7L, db.queryLong("SELECT `cardsPerSession` FROM `groups` WHERE `id` = 40"))
+            assertEquals(1L, db.queryLong("SELECT `autoShowAnswer` FROM `groups` WHERE `id` = 10"))
+            assertEquals(0L, db.queryLong("SELECT `autoShowAnswer` FROM `groups` WHERE `id` = 40"))
             assertEquals(1L, db.queryLong("SELECT `learningGroupId` FROM `groups` WHERE `id` = 20"))
             assertEquals(1L, db.queryLong("SELECT COUNT(*) FROM `groups` WHERE `id` = 40 AND `learningGroupId` IS NULL"))
             assertEquals(3L, db.count("card_group_cross_ref"))
             assertEquals(1L, db.count("card_learning_state"))
             assertFalse("fsrsRetention" in db.columnsOf("groups"))
+            assertFalse("cardsPerSession" in db.columnsOf("groups"))
             assertEquals("ok", db.integrityCheck())
             assertEquals(0L, db.foreignKeyViolations())
         }

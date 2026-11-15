@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 16,
-    "identityHash": "c8fc1a3230369cae3578e6dc8c4d6f0c",
+    "identityHash": "0e3fbadc3ccc133c37879d5ecc208aba",
     "entities": [
       {
         "tableName": "cards",
@@ -289,7 +289,7 @@
       },
       {
         "tableName": "groups",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `description` TEXT NOT NULL, `learningGroupId` INTEGER, `created` INTEGER NOT NULL, `cardsPerSession` INTEGER, `autoShowAnswer` INTEGER, `randomizeDueCards` INTEGER, `randomizeBucketHours` INTEGER, FOREIGN KEY(`learningGroupId`) REFERENCES `learning_groups`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `description` TEXT NOT NULL, `learningGroupId` INTEGER, `created` INTEGER NOT NULL, `autoShowAnswer` INTEGER, FOREIGN KEY(`learningGroupId`) REFERENCES `learning_groups`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
         "fields": [
           {
             "fieldPath": "id",
@@ -321,23 +321,8 @@
             "notNull": true
           },
           {
-            "fieldPath": "cardsPerSession",
-            "columnName": "cardsPerSession",
-            "affinity": "INTEGER"
-          },
-          {
             "fieldPath": "autoShowAnswer",
             "columnName": "autoShowAnswer",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "randomizeDueCards",
-            "columnName": "randomizeDueCards",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "randomizeBucketHours",
-            "columnName": "randomizeBucketHours",
             "affinity": "INTEGER"
           }
         ],
@@ -563,7 +548,7 @@
       },
       {
         "tableName": "learning_groups",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `description` TEXT NOT NULL, `created` INTEGER NOT NULL, `cardsPerSession` INTEGER, `practiceDays` TEXT, `maximumInterval` INTEGER, `fsrsRetention` INTEGER, `fsrsEnableFuzzing` INTEGER)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `description` TEXT NOT NULL, `created` INTEGER NOT NULL, `cardsPerSession` INTEGER, `randomizeDueCards` INTEGER, `randomizeBucketHours` INTEGER, `practiceDays` TEXT, `maximumInterval` INTEGER, `fsrsRetention` INTEGER, `fsrsEnableFuzzing` INTEGER)",
         "fields": [
           {
             "fieldPath": "id",
@@ -592,6 +577,16 @@
           {
             "fieldPath": "cardsPerSession",
             "columnName": "cardsPerSession",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "randomizeDueCards",
+            "columnName": "randomizeDueCards",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "randomizeBucketHours",
+            "columnName": "randomizeBucketHours",
             "affinity": "INTEGER"
           },
           {
@@ -684,7 +679,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'c8fc1a3230369cae3578e6dc8c4d6f0c')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '0e3fbadc3ccc133c37879d5ecc208aba')"
     ]
   }
 }

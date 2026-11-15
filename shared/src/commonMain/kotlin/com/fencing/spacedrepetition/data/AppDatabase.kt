@@ -696,22 +696,24 @@ private val MIGRATION_14_15 = object : Migration(14, 15) {
 }
 
 /**
- * Moves the settings that schedule learning progress -- practice days,
- * maximum interval, desired retention and interval fuzzing -- from card
- * groups to learning groups.
+ * Moves every group setting but auto-show from card groups to learning
+ * groups: cards per session, shuffling and its bucket size, practice days,
+ * maximum interval, desired retention and interval fuzzing.
  *
- * Every group in a learning group grades against one state per card, so the
- * learning group takes each setting from the first of its groups, by id, that
- * overrides it. A Global group's overrides have nowhere to go: Global is
- * scheduled by the app-wide settings, which live outside the database.
- * Learning groups also gain a session size of their own, which the card
- * groups' cards per session, kept as they are, go on overriding.
+ * Every group in a learning group grades against one state per card and
+ * draws its sessions the same way, so the learning group takes each setting
+ * from the first of its groups, by id, that overrides it. A Global group's
+ * overrides have nowhere to go: Global follows the app-wide settings, which
+ * live outside the database.
  *
- * `groups` is rebuilt without the four columns, with the same care as
+ * `groups` is rebuilt with only auto-show left, with the same care as
  * [MIGRATION_14_15] over `card_group_cross_ref`, which cascades from it.
  */
 private val MIGRATION_15_16 = object : Migration(15, 16) {
     private val settings = listOf(
+        "cardsPerSession" to "INTEGER",
+        "randomizeDueCards" to "INTEGER",
+        "randomizeBucketHours" to "INTEGER",
         "practiceDays" to "TEXT",
         "maximumInterval" to "INTEGER",
         "fsrsRetention" to "INTEGER",
@@ -719,9 +721,6 @@ private val MIGRATION_15_16 = object : Migration(15, 16) {
     )
 
     override suspend fun migrate(connection: SQLiteConnection) {
-        // A learning group's own session size: new, so nothing to copy. The
-        // card groups keep theirs as overrides of it.
-        connection.execSQL("ALTER TABLE `learning_groups` ADD COLUMN `cardsPerSession` INTEGER")
         settings.forEach { (column, type) ->
             connection.execSQL("ALTER TABLE `learning_groups` ADD COLUMN `$column` $type")
             connection.execSQL("""
@@ -746,21 +745,16 @@ private val MIGRATION_15_16 = object : Migration(15, 16) {
                 `description` TEXT NOT NULL,
                 `learningGroupId` INTEGER,
                 `created` INTEGER NOT NULL,
-                `cardsPerSession` INTEGER,
                 `autoShowAnswer` INTEGER,
-                `randomizeDueCards` INTEGER,
-                `randomizeBucketHours` INTEGER,
                 FOREIGN KEY(`learningGroupId`) REFERENCES `learning_groups`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL
             )
         """)
         connection.execSQL("""
             INSERT INTO `groups_new` (
-                `id`, `name`, `description`, `learningGroupId`, `created`,
-                `cardsPerSession`, `autoShowAnswer`, `randomizeDueCards`, `randomizeBucketHours`
+                `id`, `name`, `description`, `learningGroupId`, `created`, `autoShowAnswer`
             )
             SELECT
-                `id`, `name`, `description`, `learningGroupId`, `created`,
-                `cardsPerSession`, `autoShowAnswer`, `randomizeDueCards`, `randomizeBucketHours`
+                `id`, `name`, `description`, `learningGroupId`, `created`, `autoShowAnswer`
             FROM `groups`
         """)
         connection.execSQL("DROP TABLE `groups`")

@@ -121,13 +121,13 @@ class GroupSettingsExportTest {
 
         val result = CardImportExport.applyGroupSettings(group, settings)
 
-        assertEquals(5, result.cardsPerSession)
         assertEquals(true, result.autoShowAnswer)
-        assertEquals(false, result.randomizeDueCards)
-        assertEquals(72, result.randomizeBucketHours)
 
-        // The learning settings in the same map are for the learning group.
+        // The rest of the same map is for the learning group.
         val learning = CardImportExport.applyLearningGroupSettings(LearningGroup(id = 1, name = "Test"), settings)
+        assertEquals(5, learning.cardsPerSession)
+        assertEquals(false, learning.randomizeDueCards)
+        assertEquals(72, learning.randomizeBucketHours)
         assertEquals("1,3,5", learning.practiceDays)
         assertEquals(365, learning.maximumInterval)
     }
@@ -143,9 +143,10 @@ class GroupSettingsExportTest {
 
         val result = CardImportExport.applyGroupSettings(group, settings)
 
-        assertNull(result.cardsPerSession)
         assertNull(result.autoShowAnswer)
-        assertNull(CardImportExport.applyLearningGroupSettings(LearningGroup(id = 1, name = "Test"), settings).maximumInterval)
+        val learning = CardImportExport.applyLearningGroupSettings(LearningGroup(id = 1, name = "Test"), settings)
+        assertNull(learning.cardsPerSession)
+        assertNull(learning.maximumInterval)
     }
 
     @Test
@@ -153,22 +154,18 @@ class GroupSettingsExportTest {
         val group = Group(
             id = 1,
             name = "Test",
-            cardsPerSession = 5,
-            autoShowAnswer = true,
-            randomizeBucketHours = 72
+            autoShowAnswer = true
         )
 
         val result = CardImportExport.applyGroupSettings(group, emptyMap())
 
-        assertNull(result.cardsPerSession)
         assertNull(result.autoShowAnswer)
-        assertNull(result.randomizeBucketHours)
     }
 
     @Test
     fun `applyGroupSettings - preserves non-settings fields`() {
         val group = Group(id = 42, name = "MyGroup", description = "desc", learningGroupId = 7L, created = 12345L)
-        val settings = mapOf("cardsPerSession" to "3")
+        val settings = mapOf("autoShowAnswer" to "true")
 
         val result = CardImportExport.applyGroupSettings(group, settings)
 
@@ -177,7 +174,7 @@ class GroupSettingsExportTest {
         assertEquals("desc", result.description)
         assertEquals(7L, result.learningGroupId)
         assertEquals(12345L, result.created)
-        assertEquals(3, result.cardsPerSession)
+        assertEquals(true, result.autoShowAnswer)
     }
 
     // ==================== Group settings in the export ====================
@@ -190,7 +187,7 @@ class GroupSettingsExportTest {
         )
 
         val groups = listOf(
-            Group(id = 1, name = "CustomGroup", cardsPerSession = 5, randomizeBucketHours = 6)
+            Group(id = 1, name = "CustomGroup", autoShowAnswer = true)
         )
 
         val output = ByteArrayOutputStream()
@@ -205,8 +202,7 @@ class GroupSettingsExportTest {
         val content = output.toString(Charsets.UTF_8.name())
         assertTrue(
             content.contains(
-                "groups:\n  - name: \"CustomGroup\"\n    cardsPerSession: 5\n" +
-                    "    randomizeBucketHours: 6\n"
+                "groups:\n  - name: \"CustomGroup\"\n    autoShowAnswer: true\n"
             )
         )
     }
@@ -220,7 +216,7 @@ class GroupSettingsExportTest {
 
         val groups = listOf(
             Group(id = 1, name = "DefaultGroup"),  // No custom settings
-            Group(id = 2, name = "CustomGroup", cardsPerSession = 3)
+            Group(id = 2, name = "CustomGroup", autoShowAnswer = false)
         )
 
         val output = ByteArrayOutputStream()
@@ -300,10 +296,7 @@ class GroupSettingsExportTest {
         val groups = listOf(
             Group(
                 id = 1, name = "Epee Drills",
-                cardsPerSession = 8,
-                autoShowAnswer = false,
-                randomizeDueCards = true,
-                randomizeBucketHours = 168
+                autoShowAnswer = false
             )
         )
 
@@ -329,19 +322,14 @@ class GroupSettingsExportTest {
         val settings = CardImportExport.lastParsedGroupSettings
         assertEquals(1, settings.size)
         val drillSettings = settings["Epee Drills"]!!
-        assertEquals("8", drillSettings["cardsPerSession"])
         assertEquals("false", drillSettings["autoShowAnswer"])
-        assertEquals("true", drillSettings["randomizeDueCards"])
-        assertEquals("168", drillSettings["randomizeBucketHours"])
+        assertNull(drillSettings["cardsPerSession"])
         assertNull(drillSettings["practiceDays"])
 
         // Apply and verify
         val baseGroup = Group(id = 1, name = "Epee Drills")
         val applied = CardImportExport.applyGroupSettings(baseGroup, drillSettings)
-        assertEquals(8, applied.cardsPerSession)
         assertEquals(false, applied.autoShowAnswer)
-        assertEquals(true, applied.randomizeDueCards)
-        assertEquals(168, applied.randomizeBucketHours)
     }
 
     @Test
@@ -359,7 +347,7 @@ class GroupSettingsExportTest {
         )
 
         val groups = listOf(
-            Group(id = 1, name = "Advanced", learningGroupId = 5, cardsPerSession = 10)
+            Group(id = 1, name = "Advanced", learningGroupId = 5, autoShowAnswer = true)
         )
 
         // Export with both group states and group settings
@@ -393,7 +381,7 @@ class GroupSettingsExportTest {
 
         // Verify group settings
         val settings = CardImportExport.lastParsedGroupSettings
-        assertEquals("10", settings["Advanced"]?.get("cardsPerSession"))
+        assertEquals("true", settings["Advanced"]?.get("autoShowAnswer"))
         assertEquals("Advanced", settings["Advanced"]?.get(CardImportExport.LEARNING_GROUP_SETTING))
         assertTrue(groupRow.learningGroupState)
         assertEquals(mapOf("Advanced" to ""), CardImportExport.lastParsedLearningGroups)
@@ -461,11 +449,11 @@ class GroupSettingsExportTest {
     @Test
     fun `applyGroupSettings - ignores learning settings`() {
         val group = Group(id = 1, name = "Test", created = 0)
-        val settings = mapOf("fsrsRetention" to "85", "cardsPerSession" to "4")
+        val settings = mapOf("fsrsRetention" to "85", "cardsPerSession" to "4", "autoShowAnswer" to "true")
 
         val result = CardImportExport.applyGroupSettings(group, settings)
 
-        assertEquals(Group(id = 1, name = "Test", cardsPerSession = 4, created = 0), result)
+        assertEquals(Group(id = 1, name = "Test", autoShowAnswer = true, created = 0), result)
     }
 
     @Test
@@ -501,7 +489,7 @@ class GroupSettingsExportTest {
             id = 1, question = "Q1", answer = "A1",
             created = 0, modified = 0
         )
-        val group = Group(id = 1, name = "NoRetentionGroup", learningGroupId = 5, cardsPerSession = 5)
+        val group = Group(id = 1, name = "NoRetentionGroup", learningGroupId = 5, autoShowAnswer = true)
 
         val output = ByteArrayOutputStream()
         CardImportExport.exportCardsWithGroupStates(
@@ -524,10 +512,10 @@ class GroupSettingsExportTest {
             created = 0, modified = 0
         )
         val learningGroup = LearningGroup(
-            id = 5, name = "Bouting", cardsPerSession = 15, fsrsRetention = 85, fsrsEnableFuzzing = false,
-            practiceDays = "2,4", maximumInterval = 90, created = 0
+            id = 5, name = "Bouting", cardsPerSession = 15, randomizeDueCards = true, randomizeBucketHours = 24,
+            fsrsRetention = 85, fsrsEnableFuzzing = false, practiceDays = "2,4", maximumInterval = 90, created = 0
         )
-        val group = Group(id = 1, name = "FencingDrills", learningGroupId = 5, cardsPerSession = 4)
+        val group = Group(id = 1, name = "FencingDrills", learningGroupId = 5, autoShowAnswer = true)
 
         val output = ByteArrayOutputStream()
         CardImportExport.exportCardsWithGroupStates(
@@ -545,8 +533,9 @@ class GroupSettingsExportTest {
         assertEquals(learningGroup.copy(id = 0), restored)
 
         val drillSettings = CardImportExport.lastParsedGroupSettings.getValue("FencingDrills")
-        assertEquals("4", drillSettings["cardsPerSession"])
+        assertEquals("true", drillSettings["autoShowAnswer"])
         assertNull(drillSettings["fsrsRetention"])
+        assertNull(drillSettings["cardsPerSession"])
     }
 
     @Test

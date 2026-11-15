@@ -38,7 +38,7 @@ class YamlArchiveTest {
             ),
             out = out,
             images = NoImages,
-            groupSettings = listOf(Group(id = 9, name = "Footwork", cardsPerSession = 20)),
+            groupSettings = listOf(Group(id = 9, name = "Footwork", autoShowAnswer = true)),
             reviewLogs = listOf(reviewLog(cardId = 1)),
             cardQuestions = mapOf(1L to "Parry four"),
             opponents = listOf(Opponent(id = 3, name = "Alex", skillMultiplier = 1.25, created = 0, modified = 0)),
@@ -98,13 +98,13 @@ class YamlArchiveTest {
             fsrsState = "LEARNING", lastReview = 100L, nextReview = 200L
         )
         val learningGroup = LearningGroup(
-            id = 9, name = "Foot work", practiceDays = "1,3,5",
+            id = 9, name = "Foot work", cardsPerSession = 20, randomizeDueCards = false,
+            randomizeBucketHours = 6, practiceDays = "1,3,5",
             maximumInterval = 365, fsrsRetention = 85, fsrsEnableFuzzing = false,
             created = 0
         )
         val group = Group(
-            id = 9, name = "Foot work", learningGroupId = 9, cardsPerSession = 20, autoShowAnswer = true,
-            randomizeDueCards = false, randomizeBucketHours = 6, created = 0
+            id = 9, name = "Foot work", learningGroupId = 9, autoShowAnswer = true, created = 0
         )
         val log = reviewLog(
             cardId = 1, grade = 2, notes = "Late:\nhand dropped", groupName = "Foot work",

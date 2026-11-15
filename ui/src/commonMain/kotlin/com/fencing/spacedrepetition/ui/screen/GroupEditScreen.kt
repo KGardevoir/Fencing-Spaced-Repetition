@@ -25,9 +25,6 @@ import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.ui.components.AppIcons
-import com.fencing.spacedrepetition.ui.components.CardsPerSessionSlider
-import com.fencing.spacedrepetition.data.preferences.SettingsConstants
-import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -35,10 +32,7 @@ fun GroupEditScreen(
     group: Group,
     learningGroups: List<LearningGroup>,
     onCreateLearningGroup: (name: String, onCreated: (Long) -> Unit) -> Unit = { _, _ -> },
-    globalCardsPerSession: Int,
     globalAutoShowAnswer: Boolean,
-    globalRandomizeDueCards: Boolean,
-    globalRandomizeBucketHours: Int,
     onSave: (Group) -> Unit,
     onNavigateBack: () -> Unit
 ) {
@@ -48,33 +42,16 @@ fun GroupEditScreen(
     var description by rememberSaveable { mutableStateOf(group.description) }
     var learningGroupId by remember { mutableStateOf(group.learningGroupId) }
 
-    // Per-group settings overrides (null = use global)
-    // What the group practises when it does not override cards per session:
-    // its learning group's, or the global setting.
-    val inheritedCardsPerSession =
-        learningGroups.find { it.id == learningGroupId }?.cardsPerSession ?: globalCardsPerSession
-    var overrideCardsPerSession by remember { mutableStateOf(group.cardsPerSession != null) }
-    var cardsPerSession by remember { mutableIntStateOf(group.cardsPerSession ?: inheritedCardsPerSession) }
-
+    // The one per-group setting (null = use global); everything else is the
+    // learning group's.
     var overrideAutoShowAnswer by remember { mutableStateOf(group.autoShowAnswer != null) }
     var autoShowAnswer by remember { mutableStateOf(group.autoShowAnswer ?: globalAutoShowAnswer) }
-
-    var overrideRandomizeDueCards by remember { mutableStateOf(group.randomizeDueCards != null) }
-    var randomizeDueCards by remember { mutableStateOf(group.randomizeDueCards ?: globalRandomizeDueCards) }
-
-    var overrideRandomizeBucketHours by remember { mutableStateOf(group.randomizeBucketHours != null) }
-    var randomizeBucketHours by remember { mutableIntStateOf(group.randomizeBucketHours ?: globalRandomizeBucketHours) }
-
-    val bucketPresets = SettingsConstants.BUCKET_PRESETS
 
     fun buildUpdatedGroup() = group.copy(
         name = name.trim(),
         description = description.trim(),
         learningGroupId = learningGroupId,
-        cardsPerSession = if (overrideCardsPerSession) cardsPerSession else null,
-        autoShowAnswer = if (overrideAutoShowAnswer) autoShowAnswer else null,
-        randomizeDueCards = if (overrideRandomizeDueCards) randomizeDueCards else null,
-        randomizeBucketHours = if (overrideRandomizeBucketHours) randomizeBucketHours else null
+        autoShowAnswer = if (overrideAutoShowAnswer) autoShowAnswer else null
     )
 
     val isDirty = buildUpdatedGroup() != group
@@ -179,37 +156,11 @@ fun GroupEditScreen(
                 )
             }
             Text(
-                "Override settings for this group. Disabled overrides use the learning group's " +
-                    "cards per session, or else the global default.",
+                "Override the global setting for this group.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(12.dp))
-
-            // Cards per session override
-            SettingOverrideSection(
-                label = "Cards per Session",
-                overridden = overrideCardsPerSession,
-                onOverrideChange = {
-                    // Start an override from what the group practises now.
-                    if (it && !overrideCardsPerSession) cardsPerSession = inheritedCardsPerSession
-                    overrideCardsPerSession = it
-                }
-            ) {
-                CardsPerSessionSlider(
-                    if (overrideCardsPerSession) cardsPerSession else inheritedCardsPerSession,
-                    { cardsPerSession = it },
-                    enabled = overrideCardsPerSession
-                )
-                if (!overrideCardsPerSession) {
-                    Text(
-                        if (learningGroups.any { it.id == learningGroupId && it.cardsPerSession != null })
-                            "From the learning group" else "From the Global settings",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
 
             // Auto-show answer override
             SettingOverrideSection(
@@ -238,61 +189,9 @@ fun GroupEditScreen(
                 }
             }
 
-            // Randomize due cards override
-            SettingOverrideSection(
-                label = "Randomize Due Cards",
-                overridden = overrideRandomizeDueCards,
-                onOverrideChange = { overrideRandomizeDueCards = it }
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(enabled = overrideRandomizeDueCards) { randomizeDueCards = !randomizeDueCards },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        "Shuffle cards with similar due dates",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Switch(
-                        checked = randomizeDueCards,
-                        onCheckedChange = { randomizeDueCards = it },
-                        enabled = overrideRandomizeDueCards
-                    )
-                }
-            }
-
-            // Sampling bucket size override
-            SettingOverrideSection(
-                label = "Sampling Bucket Size",
-                overridden = overrideRandomizeBucketHours,
-                onOverrideChange = { overrideRandomizeBucketHours = it }
-            ) {
-                val currentBucketIndex = SettingsConstants.findPresetIndex(bucketPresets, randomizeBucketHours)
-                Text(
-                    bucketPresets[currentBucketIndex].second,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Slider(
-                    value = currentBucketIndex.toFloat(),
-                    onValueChange = { newIndex ->
-                        randomizeBucketHours = bucketPresets[newIndex.roundToInt()].first
-                    },
-                    valueRange = 0f..(bucketPresets.size - 1).toFloat(),
-                    steps = bucketPresets.size - 2,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = overrideRandomizeBucketHours
-                )
-            }
-
             Text(
-                "Practice days, maximum interval, desired retention and interval fuzzing " +
-                    "schedule learning progress, so they are set on the learning group " +
-                    "(on the Learning Groups screen); a Global group uses the Global ones there.",
+                "Cards per session, shuffling and scheduling are set on the learning group, " +
+                    "on the Learning Groups screen; a Global group uses the Global settings there.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp)

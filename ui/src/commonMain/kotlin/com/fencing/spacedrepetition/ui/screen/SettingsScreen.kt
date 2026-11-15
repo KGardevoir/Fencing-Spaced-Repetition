@@ -38,8 +38,6 @@ fun SettingsScreen(
     buildInfo: BuildInfo,
     themeMode: ThemeMode,
     autoShowAnswer: Boolean,
-    randomizeDueCards: Boolean,
-    randomizeBucketHours: Int,
     autoBackupEnabled: Boolean,
     autoBackupIntervalDays: Int,
     lastBackupTime: Long,
@@ -61,9 +59,7 @@ fun SettingsScreen(
     onPickBackupFolder: () -> Unit,
     onSetThemeMode: (ThemeMode) -> Unit,
     onSetAutoShowAnswer: (Boolean) -> Unit,
-    onSetRandomizeDueCards: (Boolean) -> Unit,
-    onSetRandomizeBucketHours: (Int) -> Unit,
-    /** Cards per session and the scheduling settings live with Global, on the Learning Groups screen. */
+    /** Cards per session, shuffling and scheduling live with Global, on the Learning Groups screen. */
     onOpenLearningGroups: () -> Unit,
     onSetAutoBackupEnabled: (Boolean) -> Unit,
     onSetAutoBackupIntervalDays: (Int) -> Unit,
@@ -74,8 +70,6 @@ fun SettingsScreen(
     onOpenLink: (String) -> Unit,
     onNavigateBack: () -> Unit
 ) {
-    val bucketPresets = SettingsConstants.BUCKET_PRESETS
-    val currentBucketIndex = SettingsConstants.findPresetIndex(bucketPresets, randomizeBucketHours)
 
 
 
@@ -192,74 +186,6 @@ fun SettingsScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Randomize due cards
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onSetRandomizeDueCards(!randomizeDueCards) }
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Randomize Due Cards",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    Text(
-                        text = "Shuffle cards with similar due dates for variety",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Switch(
-                    checked = randomizeDueCards,
-                    onCheckedChange = onSetRandomizeDueCards
-                )
-            }
-
-            // Randomization bucket size (only shown when randomization is enabled)
-            if (randomizeDueCards) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp, horizontal = 16.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Sampling Bucket Size",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Text(
-                            text = bucketPresets[currentBucketIndex].second,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    Slider(
-                        value = currentBucketIndex.toFloat(),
-                        onValueChange = { newIndex ->
-                            val presetValue = bucketPresets[newIndex.roundToInt()].first
-                            onSetRandomizeBucketHours(presetValue)
-                        },
-                        valueRange = 0f..(bucketPresets.size - 1).toFloat(),
-                        steps = bucketPresets.size - 2,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Text(
-                        text = "Cards due within the same bucket are shuffled randomly. Smaller buckets preserve due-date ordering more strictly.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
 
             Spacer(modifier = Modifier.height(16.dp))
             HorizontalDivider()
@@ -282,8 +208,8 @@ fun SettingsScreen(
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Learning Settings", style = MaterialTheme.typography.bodyLarge)
                     Text(
-                        "Cards per session, practice days, maximum interval, retention and " +
-                            "fuzzing are set per learning group, with the defaults under Global.",
+                        "Cards per session, shuffling, practice days, maximum interval, retention " +
+                            "and fuzzing are set per learning group, with the defaults under Global.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

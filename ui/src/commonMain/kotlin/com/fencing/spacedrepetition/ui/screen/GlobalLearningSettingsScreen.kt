@@ -13,7 +13,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.algorithm.ScheduleEstimate
+import com.fencing.spacedrepetition.ui.components.BucketSizeSlider
 import com.fencing.spacedrepetition.ui.components.CardsPerSessionSlider
+import com.fencing.spacedrepetition.ui.components.RandomizeDueCardsSwitch
 import com.fencing.spacedrepetition.ui.components.FsrsRetentionPreview
 import com.fencing.spacedrepetition.ui.components.FuzzingSwitch
 import com.fencing.spacedrepetition.ui.components.MaximumIntervalSlider
@@ -32,6 +34,8 @@ import com.fencing.spacedrepetition.ui.components.RetentionSelector
 fun GlobalLearningSettingsScreen(
     totalCards: Int,
     cardsPerSession: Int,
+    randomizeDueCards: Boolean,
+    randomizeBucketHours: Int,
     practiceDays: Set<Int>,
     maximumInterval: Int,
     fsrsRetention: Int,
@@ -39,6 +43,8 @@ fun GlobalLearningSettingsScreen(
     practiceScheduleEstimate: ScheduleEstimate?,
     historyWindowDays: Int,
     onSetCardsPerSession: (Int) -> Unit,
+    onSetRandomizeDueCards: (Boolean) -> Unit,
+    onSetRandomizeBucketHours: (Int) -> Unit,
     onSetPracticeDays: (Set<Int>) -> Unit,
     onSetMaximumInterval: (Int) -> Unit,
     onSetFsrsRetention: (Int) -> Unit,
@@ -77,6 +83,15 @@ fun GlobalLearningSettingsScreen(
 
             GlobalSetting("Cards per Session", "Number of cards to practice each session") {
                 CardsPerSessionSlider(cardsPerSession, onSetCardsPerSession)
+            }
+            GlobalSetting("Randomize Due Cards", null) {
+                RandomizeDueCardsSwitch(randomizeDueCards, onSetRandomizeDueCards)
+            }
+            // Only matters while shuffling is on, as on the Settings screen it came from.
+            if (randomizeDueCards) {
+                GlobalSetting("Sampling Bucket Size", null) {
+                    BucketSizeSlider(randomizeBucketHours, onSetRandomizeBucketHours)
+                }
             }
             GlobalSetting("Practice Days", "Cards are scheduled to come due on days you practice.") {
                 PracticeDaysPicker(practiceDays, onSetPracticeDays)

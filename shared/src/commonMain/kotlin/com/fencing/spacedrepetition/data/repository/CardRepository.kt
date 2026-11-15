@@ -227,15 +227,15 @@ class CardRepository(
     fun getCardWithGroups(cardId: Long): Flow<CardWithGroups?> = cardDao.getCardWithGroups(cardId)
 
     suspend fun getDueCardsByGroup(groupId: Long, limit: Int = 100): List<Card> {
-        val group = groupDao.getGroupById(groupId)
-        val shouldRandomize = group?.randomizeDueCards ?: preferences.randomizeDueCards.first()
+        val learningGroup = learningGroupFor(groupId)
+        val shouldRandomize = learningGroup?.randomizeDueCards ?: preferences.randomizeDueCards.first()
         val cards = if (shouldRandomize) {
             cardDao.getDueCardsByGroup(groupId, limit = Int.MAX_VALUE)
         } else {
             cardDao.getDueCardsByGroup(groupId, limit = limit)
         }
         return if (shouldRandomize) {
-            val bucketHours = group?.randomizeBucketHours ?: preferences.randomizeBucketHours.first()
+            val bucketHours = learningGroup?.randomizeBucketHours ?: preferences.randomizeBucketHours.first()
             randomizeCardsByBucket(cards, bucketHours).take(limit)
         } else {
             cards
@@ -244,8 +244,7 @@ class CardRepository(
 
     suspend fun getCardsByGroupSync(groupId: Long): List<Card> {
         val cards = cardDao.getCardsByGroupSync(groupId)
-        val group = groupDao.getGroupById(groupId)
-        val shouldRandomize = group?.randomizeDueCards ?: preferences.randomizeDueCards.first()
+        val shouldRandomize = learningGroupFor(groupId)?.randomizeDueCards ?: preferences.randomizeDueCards.first()
         return if (shouldRandomize) {
             cards.shuffled()
         } else {

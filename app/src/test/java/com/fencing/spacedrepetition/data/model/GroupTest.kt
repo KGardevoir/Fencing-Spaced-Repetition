@@ -21,7 +21,7 @@ class GroupTest {
 
     @Test
     fun `hasCustomSettings - cardsPerSession override`() {
-        val group = Group(name = "Test", cardsPerSession = 5)
+        val group = LearningGroup(name = "Test", cardsPerSession = 5)
         assertTrue(group.hasCustomSettings())
     }
 
@@ -33,13 +33,13 @@ class GroupTest {
 
     @Test
     fun `hasCustomSettings - randomizeDueCards override`() {
-        val group = Group(name = "Test", randomizeDueCards = false)
+        val group = LearningGroup(name = "Test", randomizeDueCards = false)
         assertTrue(group.hasCustomSettings())
     }
 
     @Test
     fun `hasCustomSettings - randomizeBucketHours override`() {
-        val group = Group(name = "Test", randomizeBucketHours = 72)
+        val group = LearningGroup(name = "Test", randomizeBucketHours = 72)
         assertTrue(group.hasCustomSettings())
     }
 
@@ -69,13 +69,15 @@ class GroupTest {
 
     @Test
     fun `hasCustomSettings - multiple overrides`() {
-        val group = Group(
+        val group = LearningGroup(
             name = "Test",
             cardsPerSession = 10,
-            autoShowAnswer = false,
-            randomizeBucketHours = 180
+            randomizeBucketHours = 180,
+            fsrsRetention = 85
         )
         assertTrue(group.hasCustomSettings())
+        // A card group's only setting is auto-show.
+        assertTrue(Group(name = "Test", autoShowAnswer = false).hasCustomSettings())
     }
 
     // ==================== parsePracticeDays TESTS ====================

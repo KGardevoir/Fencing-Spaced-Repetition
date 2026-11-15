@@ -13,11 +13,11 @@ package com.fencing.spacedrepetition.util
 //     version: 5
 //     learningGroups:            # shared learning progress; absent = Global
 //       - name: Bouting
-//         cardsPerSession: 15    # its session size, and
+//         cardsPerSession: 15    # how its sessions are drawn, and
 //         fsrsRetention: 85      # the settings that schedule it
 //     groups:                    # only those with settings or a learning group
 //       - name: Footwork
-//         cardsPerSession: 20
+//         autoShowAnswer: true
 //         learningGroup: Bouting
 //     opponents:
 //       - name: Alex
@@ -59,9 +59,9 @@ package com.fencing.spacedrepetition.util
 // group is put in a learning group of its own name, which is what learning
 // independently has become.
 //
-// Files written before the learning settings moved to learning groups carry
-// practiceDays, maximumInterval, fsrsRetention and fsrsEnableFuzzing on the
-// groups instead. They still import: a group's learning settings go to its
+// Files written before the settings moved to learning groups carry
+// cardsPerSession, randomizeDueCards, randomizeBucketHours, practiceDays,
+// maximumInterval, fsrsRetention and fsrsEnableFuzzing on the groups instead. They still import: a group's learning settings go to its
 // learning group, where the file gives that learning group none of its own.
 //
 // Every field with a sensible default is left out when it holds that default,
@@ -127,6 +127,8 @@ internal data class ArchiveLearningGroup(
     val name: String,
     val description: String = "",
     val cardsPerSession: Int? = null,
+    val randomizeDueCards: Boolean? = null,
+    val randomizeBucketHours: Int? = null,
     val practiceDays: String? = null,
     val maximumInterval: Int? = null,
     val fsrsRetention: Int? = null,
@@ -138,12 +140,12 @@ internal data class ArchiveGroup(
     val name: String,
     /** The name of the learning group it practises against; absent for Global. */
     val learningGroup: String? = null,
-    val cardsPerSession: Int? = null,
     val autoShowAnswer: Boolean? = null,
+    // Read, never written: older files kept these here, before they moved
+    // to [ArchiveLearningGroup].
+    val cardsPerSession: Int? = null,
     val randomizeDueCards: Boolean? = null,
     val randomizeBucketHours: Int? = null,
-    // Read, never written: older files kept the learning settings here,
-    // before they moved to [ArchiveLearningGroup].
     val practiceDays: String? = null,
     val maximumInterval: Int? = null,
     val fsrsRetention: Int? = null,
@@ -303,16 +305,15 @@ internal object ArchiveYaml {
     fun groupNode(group: Group, learningGroupName: String? = null) = ArchiveGroup(
         name = group.name,
         learningGroup = learningGroupName,
-        cardsPerSession = group.cardsPerSession,
-        autoShowAnswer = group.autoShowAnswer,
-        randomizeDueCards = group.randomizeDueCards,
-        randomizeBucketHours = group.randomizeBucketHours
+        autoShowAnswer = group.autoShowAnswer
     )
 
     fun learningGroupNode(learningGroup: LearningGroup) = ArchiveLearningGroup(
         name = learningGroup.name,
         description = learningGroup.description,
         cardsPerSession = learningGroup.cardsPerSession,
+        randomizeDueCards = learningGroup.randomizeDueCards,
+        randomizeBucketHours = learningGroup.randomizeBucketHours,
         practiceDays = learningGroup.practiceDays,
         maximumInterval = learningGroup.maximumInterval,
         fsrsRetention = learningGroup.fsrsRetention,
@@ -499,6 +500,8 @@ internal object ArchiveYaml {
     /** The same settings map as [groupSettings], for a learning group's own settings. */
     fun learningGroupSettings(learningGroup: ArchiveLearningGroup): Map<String, String> = buildMap {
         learningGroup.cardsPerSession?.let { put("cardsPerSession", it.toString()) }
+        learningGroup.randomizeDueCards?.let { put("randomizeDueCards", it.toString()) }
+        learningGroup.randomizeBucketHours?.let { put("randomizeBucketHours", it.toString()) }
         learningGroup.practiceDays?.let { put("practiceDays", it) }
         learningGroup.maximumInterval?.let { put("maximumInterval", it.toString()) }
         learningGroup.fsrsRetention?.let { put("fsrsRetention", it.toString()) }
