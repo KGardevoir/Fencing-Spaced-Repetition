@@ -197,7 +197,17 @@ Files from before identifiers have no `uid`s and import exactly as before.
   fallback. Room validates the migrated schema against the entities on open,
   and `ConceptSchedulingDbTest` opens a real database built from the previous
   exported schema to prove it.
-- A version that has not been released may be amended; a released one never.
+- **A schema version is released the moment any build that uses it is
+  installed** -- a debug or CI build counts. After that it never changes:
+  Room records the schema's identity hash, and a phone whose database has
+  a different hash under the same version crashes on launch. Every change
+  goes in a new version with its own migration. (Version 18 was once
+  amended in place after debug builds were installed; 18 -> 19 brings
+  every one of those variants up to date, and `Migration18To19Test` fails
+  if the committed version 18 schema ever drifts from the released one.)
+- The exported schemas of the variants that were installed are kept in
+  `shared/src/jvmTest/resources/released-v18/`, and `ConceptSchedulingDbTest`
+  upgrades a database built from each.
 - Columns added with `ALTER TABLE ... DEFAULT x` need a matching
   `@ColumnInfo(defaultValue = "x")` on the entity, or Room rejects the
   migrated database.

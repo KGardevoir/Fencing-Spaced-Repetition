@@ -32,7 +32,7 @@ import com.fencing.spacedrepetition.util.Time
 
 @Database(
     entities = [Card::class, PracticeSession::class, ReviewLog::class, Group::class, CardGroupCrossRef::class, CardLearningState::class, LearningGroup::class, Opponent::class, Concept::class, CardConceptCrossRef::class, ConceptLearningState::class, ConceptLearningGroupCrossRef::class],
-    version = 18,
+    version = 19,
     exportSchema = true
 )
 @ColumnTypeConverters(Converters::class)
@@ -903,7 +903,6 @@ private val MIGRATION_17_18 = object : Migration(17, 18) {
                 `nextReview` INTEGER NOT NULL,
                 `created` INTEGER NOT NULL,
                 `modified` INTEGER NOT NULL,
-                `inGlobal` INTEGER NOT NULL DEFAULT 0,
                 `uid` TEXT NOT NULL DEFAULT ''
             )
         """)
@@ -942,18 +941,6 @@ private val MIGRATION_17_18 = object : Migration(17, 18) {
         """)
         connection.execSQL("CREATE INDEX IF NOT EXISTS `index_concept_learning_state_learningGroupId` ON `concept_learning_state` (`learningGroupId`)")
         connection.execSQL("CREATE INDEX IF NOT EXISTS `index_concept_learning_state_conceptId` ON `concept_learning_state` (`conceptId`)")
-
-        // Which learning groups offer each concept (Global is concepts.inGlobal).
-        connection.execSQL("""
-            CREATE TABLE IF NOT EXISTS `concept_learning_group` (
-                `conceptId` INTEGER NOT NULL,
-                `learningGroupId` INTEGER NOT NULL,
-                PRIMARY KEY(`conceptId`, `learningGroupId`),
-                FOREIGN KEY(`conceptId`) REFERENCES `concepts`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE,
-                FOREIGN KEY(`learningGroupId`) REFERENCES `learning_groups`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
-            )
-        """)
-        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_concept_learning_group_learningGroupId` ON `concept_learning_group` (`learningGroupId`)")
 
         // Stable identifiers. Every existing row gets a fresh random UUID;
         // from here on a row is made with one and keeps it for life, so a
@@ -995,6 +982,83 @@ private val MIGRATION_17_18 = object : Migration(17, 18) {
 }
 
 /**
+ * Where each learning concept is available: the learning groups that offer it
+ * (`concept_learning_group`) and whether Global does (`concepts.inGlobal`).
+ *
+ * Also brings any earlier build of version 18 up to date. Version 18 was
+ * changed in place while it was unreleased, and debug builds of each variant
+ * were installed: the first had concepts but no stable identifiers, reset
+ * times or the review's group identifier; the second had those but not the
+ * review's opponent identifier; the third -- what [MIGRATION_17_18] creates
+ * now -- has everything. A database is an older variant exactly when it is
+ * missing what came later, so every step below checks before it adds, and on
+ * the current variant only the availability is new.
+ */
+private val MIGRATION_18_19 = object : Migration(18, 19) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        // Suspending: on the browser target every database call is.
+        suspend fun columnsOf(table: String): Set<String> {
+            val statement = connection.prepare("PRAGMA table_info(`$table`)")
+            val columns = mutableSetOf<String>()
+            try {
+                while (statement.step()) columns += statement.getText(1)
+            } finally {
+                statement.close()
+            }
+            return columns
+        }
+        suspend fun addColumnIfMissing(table: String, column: String, definition: String): Boolean {
+            if (column in columnsOf(table)) return false
+            connection.execSQL("ALTER TABLE `$table` ADD COLUMN `$column` $definition")
+            return true
+        }
+
+        // Stable identifiers, on the variant from before them.
+        listOf("cards", "groups", "learning_groups", "opponents", "practice_sessions", "review_logs", "concepts")
+            .forEach { table ->
+                if (addColumnIfMissing(table, "uid", "TEXT NOT NULL DEFAULT ''")) {
+                    connection.execSQL("UPDATE `$table` SET `uid` = $RANDOM_UUID_SQL")
+                }
+                connection.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_${table}_uid` ON `$table` (`uid`)")
+            }
+        if (addColumnIfMissing("review_logs", "groupUid", "TEXT")) {
+            connection.execSQL("""
+                UPDATE `review_logs` SET `groupUid` = (
+                    SELECT g.`uid` FROM `groups` g WHERE g.`name` = `review_logs`.`groupName`
+                    ORDER BY g.`id` LIMIT 1
+                )
+                WHERE `groupName` IS NOT NULL
+            """)
+        }
+        addColumnIfMissing("cards", "lastReset", "INTEGER NOT NULL DEFAULT 0")
+        addColumnIfMissing("card_learning_state", "lastReset", "INTEGER NOT NULL DEFAULT 0")
+
+        // The review's opponent identifier, on the two variants before it.
+        if (addColumnIfMissing("review_logs", "opponentUid", "TEXT")) {
+            connection.execSQL("""
+                UPDATE `review_logs` SET `opponentUid` = (
+                    SELECT o.`uid` FROM `opponents` o WHERE o.`id` = `review_logs`.`opponentId`
+                )
+                WHERE `opponentId` IS NOT NULL
+            """)
+        }
+
+        // New in 19: where each concept is available.
+        addColumnIfMissing("concepts", "inGlobal", "INTEGER NOT NULL DEFAULT 0")
+        connection.execSQL("""
+            CREATE TABLE IF NOT EXISTS `concept_learning_group` (
+                `conceptId` INTEGER NOT NULL,
+                `learningGroupId` INTEGER NOT NULL,
+                PRIMARY KEY(`conceptId`, `learningGroupId`),
+                FOREIGN KEY(`conceptId`) REFERENCES `concepts`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE,
+                FOREIGN KEY(`learningGroupId`) REFERENCES `learning_groups`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+        """)
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_concept_learning_group_learningGroupId` ON `concept_learning_group` (`learningGroupId`)")
+    }
+}
+
+/**
  * A version 4 UUID, in canonical lower-case form, as an SQLite expression --
  * evaluated afresh for every row an UPDATE touches. SQLite has no uuid()
  * of its own.
@@ -1028,4 +1092,5 @@ val ALL_MIGRATIONS: Array<Migration> = arrayOf(
     MIGRATION_15_16,
     MIGRATION_16_17,
     MIGRATION_17_18,
+    MIGRATION_18_19,
 )

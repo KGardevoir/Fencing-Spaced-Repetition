@@ -512,12 +512,12 @@ class ConceptSchedulingDbTest {
     }
 
     /**
-     * The real version-17 database, built from the schema Room exported for
+     * A real database at [version], built from the schema Room exported for
      * it rather than from the migration tests' hand-written v11, which is
      * simplified in places Room would object to.
      */
-    private fun createSchemaV17(path: String) {
-        val json = File("schemas/com.fencing.spacedrepetition.data.AppDatabase/17.json").readText()
+    private fun createFromExportedSchema(schema: File, version: Int, path: String) {
+        val json = schema.readText()
         val token = Regex(""""(tableName|createSql)"\s*:\s*"((?:[^"\\]|\\.)*)"""")
         val setup = Regex(""""setupQueries"\s*:\s*\[(.*?)]""", RegexOption.DOT_MATCHES_ALL)
         fun unescape(s: String) = s.replace("\\\"", "\"").replace("\\\\", "\\")
@@ -532,23 +532,25 @@ class ConceptSchedulingDbTest {
             setup.find(json)!!.groupValues[1].let { list ->
                 Regex(""""((?:[^"\\]|\\.)*)"""").findAll(list).forEach { connection.execSQL(unescape(it.groupValues[1])) }
             }
-            connection.execSQL("PRAGMA user_version = 17")
+            connection.execSQL("PRAGMA user_version = $version")
         } finally {
             connection.close()
         }
     }
 
+    private fun openMigrated(path: String) = Room.databaseBuilder<AppDatabase>(name = path)
+        .setDriver(BundledSQLiteDriver())
+        .addMigrations(*ALL_MIGRATIONS)
+        .build()
+
     @Test
     fun `Room accepts a database migrated from version 17`() = runTest {
         val file = File.createTempFile("concepts-migration", ".db").apply { delete() }
         try {
-            createSchemaV17(file.absolutePath)
-            val migrated = Room.databaseBuilder<AppDatabase>(name = file.absolutePath)
-                .setDriver(BundledSQLiteDriver())
-                .addMigrations(*ALL_MIGRATIONS)
-                .build()
+            createFromExportedSchema(File("schemas/com.fencing.spacedrepetition.data.AppDatabase/17.json"), 17, file.absolutePath)
+            val migrated = openMigrated(file.absolutePath)
             try {
-                // Opening runs 17 -> 18 and validates every table against the entities.
+                // Opening runs 17 -> 18 -> 19 and validates every table against the entities.
                 assertEquals(0, migrated.conceptDao().getAllConceptsSync().size)
                 assertEquals(0, migrated.cardDao().getAllCardsAsList().size)
             } finally {
@@ -558,4 +560,93 @@ class ConceptSchedulingDbTest {
             file.delete()
         }
     }
+
+    /**
+     * Inserts a row with every NOT NULL column given a value -- [values] where
+     * given, else a zero or empty string -- whatever the variant's columns are.
+     */
+    private fun insertRow(path: String, table: String, values: Map<String, Any?>) {
+        val connection = BundledSQLiteDriver().open(path)
+        try {
+            val columns = mutableListOf<Pair<String, Boolean>>()
+            val info = connection.prepare("PRAGMA table_info(`$table`)")
+            try {
+                while (info.step()) columns += info.getText(1) to (info.getLong(3) == 1L)
+            } finally {
+                info.close()
+            }
+            val chosen = columns.filter { (name, notNull) -> name in values || notNull }
+            fun literal(v: Any?): String = when (v) {
+                null -> "NULL"
+                is String -> "'" + v.replace("'", "''") + "'"
+                else -> v.toString()
+            }
+            val sql = "INSERT INTO `$table` (" + chosen.joinToString { "`${it.first}`" } + ") VALUES (" +
+                chosen.joinToString { (name, _) -> if (name in values) literal(values[name]) else "0" } + ")"
+            connection.execSQL(sql)
+        } finally {
+            connection.close()
+        }
+    }
+
+    /**
+     * Every build of version 18 that was installed can be opened at 19. The
+     * schemas are the ones each build exported (src/jvmTest/resources/
+     * released-v18), so this is what a phone running each of them has.
+     */
+    private fun upgradesFromReleasedV18(commit: String) = runTest {
+        val file = File.createTempFile("v18-$commit", ".db").apply { delete() }
+        try {
+            createFromExportedSchema(File("src/jvmTest/resources/released-v18/18-$commit.json"), 18, file.absolutePath)
+            val path = file.absolutePath
+            insertRow(path, "cards", mapOf("id" to 1, "question" to "Lunge", "answer" to "", "imagePaths" to "", "fsrsState" to "REVIEW", "category" to "", "tags" to "", "uid" to "seed-card"))
+            insertRow(path, "groups", mapOf("id" to 2, "name" to "Footwork", "description" to "", "uid" to "seed-group"))
+            insertRow(path, "card_group_cross_ref", mapOf("cardId" to 1, "groupId" to 2))
+            insertRow(path, "opponents", mapOf("id" to 3, "name" to "Alex", "notes" to "", "skillMultiplier" to 1.0, "uid" to "seed-opponent"))
+            insertRow(path, "review_logs", mapOf(
+                "id" to 4, "cardId" to 1, "reviewTime" to 1000, "grade" to 3, "algorithm" to "FSRS",
+                "stateBefore" to "", "stateAfter" to "", "groupName" to "Footwork", "notes" to "",
+                "imagePaths" to "", "opponentId" to 3, "stabilityMultiplier" to 1.0,
+                // Only where the variant has these columns, as its reviews would.
+                "uid" to "seed-review", "groupUid" to "seed-group", "opponentUid" to "seed-opponent"
+            ))
+            insertRow(path, "concepts", mapOf("id" to 5, "name" to "Distance", "description" to "", "fsrsState" to "NEW", "uid" to "seed-concept"))
+            insertRow(path, "card_concept_cross_ref", mapOf("cardId" to 1, "conceptId" to 5))
+
+            val migrated = openMigrated(path)
+            try {
+                val card = migrated.cardDao().getCardById(1)!!
+                val group = migrated.groupDao().getGroupById(2)!!
+                val alex = migrated.opponentDao().getOpponentById(3)!!
+                val concept = migrated.conceptDao().getConceptById(5)!!
+                val log = migrated.reviewLogDao().getAllReviewLogsSync().single()
+                assertEquals("Lunge", card.question)
+                // Everything kept, and every record identified (filled in on
+                // the variant from before identifiers).
+                listOf(card.uid, group.uid, alex.uid, concept.uid, log.uid).forEach {
+                    assertTrue(it.isNotBlank(), "a record without an identifier")
+                }
+                assertEquals(listOf(5L), migrated.conceptDao().getConceptsForCardSync(1).map { it.id })
+                // The review's group and opponent are identified on every variant.
+                assertEquals(alex.uid, log.opponentUid)
+                assertEquals(group.uid, log.groupUid)
+                // New in 19: availability, empty to start with.
+                assertTrue(!concept.inGlobal)
+                assertTrue(migrated.conceptDao().getAllConceptLearningGroupsSync().isEmpty())
+            } finally {
+                migrated.close()
+            }
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun `upgrades the first version 18 build, from before identifiers`() = upgradesFromReleasedV18("9a9b31d")
+
+    @Test
+    fun `upgrades the version 18 build from before review opponent identifiers`() = upgradesFromReleasedV18("2a77072")
+
+    @Test
+    fun `upgrades the last version 18 build`() = upgradesFromReleasedV18("7141ca0")
 }
