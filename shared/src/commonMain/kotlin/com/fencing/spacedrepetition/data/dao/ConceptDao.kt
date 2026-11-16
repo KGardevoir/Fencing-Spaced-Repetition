@@ -28,6 +28,9 @@ interface ConceptDao {
     @Query("SELECT * FROM concepts WHERE id IN (:conceptIds)")
     suspend fun getConceptsByIds(conceptIds: List<Long>): List<Concept>
 
+    @Query("SELECT * FROM concepts WHERE uid = :uid LIMIT 1")
+    suspend fun getConceptByUid(uid: String): Concept?
+
     @Query("SELECT * FROM concepts WHERE name = :name COLLATE NOCASE LIMIT 1")
     suspend fun getConceptByName(name: String): Concept?
 

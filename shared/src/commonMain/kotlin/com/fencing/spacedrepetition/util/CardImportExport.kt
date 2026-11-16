@@ -212,6 +212,7 @@ object CardImportExport {
      * learning-group ones are keyed by learning group name.
      */
     data class ParsedConcept(
+        val uid: String? = null,
         val name: String,
         val description: String = "",
         val globalState: com.fencing.spacedrepetition.data.model.ConceptLearningState? = null,
@@ -260,6 +261,8 @@ object CardImportExport {
         lastParsedLearningGroups = emptyMap()
         lastParsedLearningGroupSettings = emptyMap()
         lastParsedConceptLearningGroups = emptySet()
+        lastParsedGroupUids = emptyMap()
+        lastParsedLearningGroupUids = emptyMap()
         lastParsedOpponents = emptyList()
         lastParsedReviewHistory = emptyList()
         lastParsedSessions = emptyList()
@@ -310,7 +313,9 @@ object CardImportExport {
             .associate { it.name.trim() to ArchiveYaml.learningGroupSettings(it) }
             .filterValues { it.isNotEmpty() }
         lastParsedConceptLearningGroups = learningGroups.filter { it.useConcepts }.map { it.name.trim() }.toSet()
-        lastParsedGroupSettings = ArchiveYaml
+        lastParsedLearningGroupUids = learningGroups
+            .mapNotNull { lg -> lg.uid?.takeIf { it.isNotBlank() }?.let { lg.name.trim() to it } }.toMap()
+        val groups = ArchiveYaml
             .decodeSection(document, KEY_GROUPS, ArchiveGroup.serializer(), errors)
             .filter { it.name.isNotBlank() }
         lastParsedGroupSettings = groups.associate { it.name.trim() to ArchiveYaml.groupSettings(it) }
@@ -1102,8 +1107,7 @@ object CardImportExport {
         val uid: String? = null,
         val cardUid: String? = null,
         val groupUid: String? = null,
-        val sessionUid: String? = null,
-        val opponentUid: String? = null
+        val sessionUid: String? = null
     )
 
     /**
@@ -1198,7 +1202,6 @@ object CardImportExport {
                 fightDifficulty = p.fightDifficulty,
                 stabilityMultiplier = p.stabilityMultiplier,
                 groupUid = p.groupUid,
-                opponentUid = p.opponentUid,
                 uid = p.uid ?: newUid()
             )
         }

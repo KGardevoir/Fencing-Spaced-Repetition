@@ -149,7 +149,9 @@ internal data class ArchiveLearningGroup(
     val fsrsRetention: Int? = null,
     val fsrsEnableFuzzing: Boolean? = null,
     /** Schedules by learning concept; absent (off) in every file from before concepts. */
-    val useConcepts: Boolean = false
+    val useConcepts: Boolean = false,
+    /** Stable identifier (see docs/DESIGN.md, "Identity"); absent in files from before them. */
+    val uid: String? = null
 )
 
 @Serializable
@@ -177,7 +179,9 @@ internal data class ArchiveConcept(
     val name: String,
     val description: String = "",
     val state: ArchiveState? = null,
-    val learningStates: List<ArchiveLearningState> = emptyList()
+    val learningStates: List<ArchiveLearningState> = emptyList(),
+    /** Stable identifier (see docs/DESIGN.md, "Identity"); absent in files from before them. */
+    val uid: String? = null
 )
 
 @Serializable
@@ -284,9 +288,7 @@ internal data class ArchiveReviewLog(
     /** The group's stable identifier; [group] is its name at the time. */
     val groupUid: String? = null,
     /** The session's stable identifier; [session] is its start time. */
-    val sessionUid: String? = null,
-    /** The opponent's stable identifier; [opponent] is their name. */
-    val opponentUid: String? = null
+    val sessionUid: String? = null
 )
 
 // ==========================================================================
@@ -371,11 +373,13 @@ internal object ArchiveYaml {
         maximumInterval = learningGroup.maximumInterval,
         fsrsRetention = learningGroup.fsrsRetention,
         fsrsEnableFuzzing = learningGroup.fsrsEnableFuzzing,
-        useConcepts = learningGroup.useConcepts
+        useConcepts = learningGroup.useConcepts,
+        uid = learningGroup.uid
     )
 
     /** One concept and its states; a state still at its defaults is left out. */
     fun conceptNode(concept: Concept, learningStates: Map<String, ConceptLearningState>) = ArchiveConcept(
+        uid = concept.uid,
         name = concept.name,
         description = concept.description,
         state = stateNode(concept.globalState()).takeIf { it != ArchiveState() },
@@ -410,6 +414,7 @@ internal object ArchiveYaml {
 
     /** A concept read back, its states as entities keyed by learning group name ("" = Global). */
     fun parsedConcept(concept: ArchiveConcept) = CardImportExport.ParsedConcept(
+        uid = concept.uid?.takeIf { it.isNotBlank() },
         name = concept.name.trim(),
         description = concept.description,
         globalState = concept.state?.let { conceptState(it) },
@@ -540,8 +545,7 @@ internal object ArchiveYaml {
         uid = log.uid,
         cardUid = cardUid,
         groupUid = log.groupUid,
-        sessionUid = sessionUid,
-        opponentUid = log.opponentUid
+        sessionUid = sessionUid
     )
 
     /** One session, with its notes and their pictures inlined. */
@@ -667,8 +671,7 @@ internal object ArchiveYaml {
         uid = log.uid?.takeIf { it.isNotBlank() },
         cardUid = log.cardUid?.takeIf { it.isNotBlank() },
         groupUid = log.groupUid?.takeIf { it.isNotBlank() },
-        sessionUid = log.sessionUid?.takeIf { it.isNotBlank() },
-        opponentUid = log.opponentUid?.takeIf { it.isNotBlank() }
+        sessionUid = log.sessionUid?.takeIf { it.isNotBlank() }
     )
 
     fun parsedSession(session: ArchiveSession) = CardImportExport.ParsedSession(
@@ -725,7 +728,7 @@ internal object ArchiveYaml {
                 lineNumber = lineNumber,
                 imageData = card.images
             )
-        }.copy(conceptNames = concepts)
+        }.copy(conceptNames = concepts, uid = card.uid?.takeIf { it.isNotBlank() })
         val learning = card.learningStates.filter { it.learningGroup.isNotBlank() }.map { learningState ->
             parsedCard(
                 question, answer, lineNumber, emptyList(), emptyList(),

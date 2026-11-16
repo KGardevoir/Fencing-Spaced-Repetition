@@ -33,7 +33,7 @@ class Migration17To18Test {
                     "id", "name", "description",
                     "fsrsStability", "fsrsDifficulty", "fsrsElapsedDays", "fsrsScheduledDays",
                     "fsrsReps", "fsrsLapses", "fsrsState", "lastReview", "nextReview",
-                    "created", "modified",
+                    "created", "modified", "uid",
                 ),
                 db.columnsOf("concepts")
             )
@@ -66,6 +66,54 @@ class Migration17To18Test {
     }
 
     @Test
+    fun `every existing row gets its own stable identifier`() = runTest {
+        MigrationHarness(foreignKeys = true).use { db ->
+            db.seedV17()
+            db.exec("INSERT INTO `groups` (`id`, `name`, `description`, `created`) VALUES (10, 'Footwork', '', 0), (11, 'Footwork', '', 0), (12, 'Blade', '', 0)")
+            db.exec("INSERT INTO `opponents` (`name`, `skillMultiplier`, `notes`, `created`, `modified`) VALUES ('Alex', 1.0, '', 0, 0)")
+            db.migrate(from = 17)
+
+            val uuid = Regex("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
+            listOf("cards", "groups", "learning_groups", "opponents").forEach { table ->
+                val uids = db.queryTexts("SELECT `uid` FROM `$table`")
+                assertTrue(uids.isNotEmpty(), table)
+                assertTrue(uids.all { uuid.matches(it) }, "$table: $uids")
+                assertEquals(uids.size, uids.toSet().size, "$table uids must be unique")
+            }
+            assertTrue("index_cards_uid" in db.indexNames())
+        }
+    }
+
+    @Test
+    fun `review logs learn which group they were made in, by identifier`() = runTest {
+        MigrationHarness(foreignKeys = true).use { db ->
+            db.seedV17()
+            // Two groups share a name; the oldest is the one a log meant.
+            db.exec("INSERT INTO `groups` (`id`, `name`, `description`, `created`) VALUES (10, 'Footwork', '', 0), (11, 'Footwork', '', 0)")
+            db.exec(
+                """
+                INSERT INTO `review_logs` (`id`, `cardId`, `reviewTime`, `grade`, `algorithm`, `stateBefore`,
+                    `stateAfter`, `scheduledDays`, `elapsedDays`, `groupName`, `notes`, `imagePaths`,
+                    `stabilityMultiplier`)
+                VALUES (1, 1, 100, 3, 'FSRS', '', '', 1, 0, 'Footwork', '', '', 1.0),
+                       (2, 1, 200, 3, 'FSRS', '', '', 1, 0, NULL, '', '', 1.0),
+                       (3, 1, 300, 3, 'FSRS', '', '', 1, 0, 'Gone', '', '', 1.0)
+                """
+            )
+            db.migrate(from = 17)
+
+            assertEquals(
+                db.queryText("SELECT `uid` FROM `groups` WHERE `id` = 10"),
+                db.queryText("SELECT `groupUid` FROM `review_logs` WHERE `id` = 1")
+            )
+            assertEquals(0L, db.queryLong("SELECT COUNT(*) FROM `review_logs` WHERE `id` IN (2, 3) AND `groupUid` IS NOT NULL"))
+            // Nothing has been reset yet.
+            assertEquals(0L, db.queryLong("SELECT `lastReset` FROM `cards` WHERE `id` = 1"))
+            assertTrue("lastReset" in db.columnsOf("card_learning_state"))
+        }
+    }
+
+    @Test
     fun `deleting a card, concept or learning group cascades to the concept rows`() = runTest {
         MigrationHarness(foreignKeys = true).use { db ->
             db.seedV17()
@@ -75,9 +123,9 @@ class Migration17To18Test {
                 """
                 INSERT INTO `concepts` (`id`, `name`, `description`, `fsrsStability`, `fsrsDifficulty`,
                     `fsrsElapsedDays`, `fsrsScheduledDays`, `fsrsReps`, `fsrsLapses`, `fsrsState`,
-                    `lastReview`, `nextReview`, `created`, `modified`)
-                VALUES (7, 'Distance', '', 0, 0, 0, 0, 0, 0, 'NEW', 0, 0, 0, 0),
-                       (8, 'Timing', '', 0, 0, 0, 0, 0, 0, 'NEW', 0, 0, 0, 0)
+                    `lastReview`, `nextReview`, `created`, `modified`, `uid`)
+                VALUES (7, 'Distance', '', 0, 0, 0, 0, 0, 0, 'NEW', 0, 0, 0, 0, 'c-7'),
+                       (8, 'Timing', '', 0, 0, 0, 0, 0, 0, 'NEW', 0, 0, 0, 0, 'c-8')
                 """
             )
             db.exec("INSERT INTO `card_concept_cross_ref` VALUES (1, 7), (2, 7), (2, 8)")

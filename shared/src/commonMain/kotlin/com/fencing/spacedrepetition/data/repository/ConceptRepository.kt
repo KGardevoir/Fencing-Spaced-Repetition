@@ -98,7 +98,7 @@ class ConceptRepository(private val conceptDao: ConceptDao) {
     ): Map<String, Long> {
         val ids = mutableMapOf<String, Long>()
         parsed.forEach { concept ->
-            val id = getOrCreateConcept(concept.name, concept.description)
+            val id = adoptConcept(concept)
             ids[concept.name] = id
             conceptDao.getConceptById(id)?.let { existing ->
                 val global = (concept.globalState ?: ConceptLearningState(id, 0L)).copy(conceptId = id)
@@ -119,6 +119,29 @@ class ConceptRepository(private val conceptDao: ConceptDao) {
             if (name.isNotBlank()) ids[name] = getOrCreateConcept(name)
         }
         return ids
+    }
+
+    /**
+     * The concept an import means: the one with the file's stable identifier
+     * (renamed to the file's name if it differs and the name is free), else
+     * the one with its name, else a new one carrying the file's identifier.
+     */
+    private suspend fun adoptConcept(concept: com.fencing.spacedrepetition.util.CardImportExport.ParsedConcept): Long {
+        concept.uid?.let { uid ->
+            conceptDao.getConceptByUid(uid)?.let { existing ->
+                val clash = conceptDao.getConceptByName(concept.name)
+                if (existing.name != concept.name && (clash == null || clash.id == existing.id)) {
+                    conceptDao.updateConcept(existing.copy(name = concept.name, modified = Time.now()))
+                }
+                return existing.id
+            }
+            if (conceptDao.getConceptByName(concept.name) == null) {
+                return conceptDao.insertConcept(
+                    Concept(name = concept.name.trim(), description = concept.description.trim(), uid = uid)
+                )
+            }
+        }
+        return getOrCreateConcept(concept.name, concept.description)
     }
 
     /** Import support: write a concept's Global state onto it. */

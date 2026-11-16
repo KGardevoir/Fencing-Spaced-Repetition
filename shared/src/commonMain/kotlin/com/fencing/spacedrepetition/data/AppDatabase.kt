@@ -873,10 +873,12 @@ private val MIGRATION_16_17 = object : Migration(16, 17) {
 }
 
 /**
- * Learning concepts: global tags on cards that carry the learning state, with
- * one Global state on the concept itself and one per learning group, plus the
- * per-learning-group switch that turns concept scheduling on. Additive only:
- * every concept starts empty and every learning group starts switched off.
+ * Learning concepts -- global tags on cards whose state is derived from the
+ * cards' history, with one Global state on the concept and one per learning
+ * group, and the per-learning-group switch that turns concept scheduling on
+ * -- plus stable identifiers on every record, the group a review was made in
+ * by identifier, and the time each set of card progress was last reset.
+ * Additive only: no table is rebuilt.
  */
 private val MIGRATION_17_18 = object : Migration(17, 18) {
     override suspend fun migrate(connection: SQLiteConnection) {
@@ -899,10 +901,12 @@ private val MIGRATION_17_18 = object : Migration(17, 18) {
                 `lastReview` INTEGER NOT NULL,
                 `nextReview` INTEGER NOT NULL,
                 `created` INTEGER NOT NULL,
-                `modified` INTEGER NOT NULL
+                `modified` INTEGER NOT NULL,
+                `uid` TEXT NOT NULL DEFAULT ''
             )
         """)
         connection.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_concepts_name` ON `concepts` (`name`)")
+        connection.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_concepts_uid` ON `concepts` (`uid`)")
 
         connection.execSQL("""
             CREATE TABLE IF NOT EXISTS `card_concept_cross_ref` (
@@ -936,8 +940,47 @@ private val MIGRATION_17_18 = object : Migration(17, 18) {
         """)
         connection.execSQL("CREATE INDEX IF NOT EXISTS `index_concept_learning_state_learningGroupId` ON `concept_learning_state` (`learningGroupId`)")
         connection.execSQL("CREATE INDEX IF NOT EXISTS `index_concept_learning_state_conceptId` ON `concept_learning_state` (`conceptId`)")
+
+        // Stable identifiers. Every existing row gets a fresh random UUID;
+        // from here on a row is made with one and keeps it for life, so a
+        // rename -- or a trip to another device -- no longer changes what a
+        // record is. See docs/DESIGN.md, "Identity".
+        listOf("cards", "groups", "learning_groups", "opponents", "practice_sessions", "review_logs").forEach { table ->
+            connection.execSQL("ALTER TABLE `$table` ADD COLUMN `uid` TEXT NOT NULL DEFAULT ''")
+            connection.execSQL("UPDATE `$table` SET `uid` = $RANDOM_UUID_SQL")
+            connection.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_${table}_uid` ON `$table` (`uid`)")
+        }
+
+        // Which group a review was made in, by its stable identifier rather
+        // than its name. Filled from the name as best it can be: the oldest
+        // group of that name, since names were never unique. A log naming a
+        // group that no longer exists keeps no identifier.
+        connection.execSQL("ALTER TABLE `review_logs` ADD COLUMN `groupUid` TEXT")
+        connection.execSQL("""
+            UPDATE `review_logs` SET `groupUid` = (
+                SELECT g.`uid` FROM `groups` g WHERE g.`name` = `review_logs`.`groupName`
+                ORDER BY g.`id` LIMIT 1
+            )
+            WHERE `groupName` IS NOT NULL
+        """)
+
+        // When each set of progress was last reset; 0 is never. Reviews before
+        // a reset stop counting towards what is derived from history.
+        connection.execSQL("ALTER TABLE `cards` ADD COLUMN `lastReset` INTEGER NOT NULL DEFAULT 0")
+        connection.execSQL("ALTER TABLE `card_learning_state` ADD COLUMN `lastReset` INTEGER NOT NULL DEFAULT 0")
     }
 }
+
+/**
+ * A version 4 UUID, in canonical lower-case form, as an SQLite expression --
+ * evaluated afresh for every row an UPDATE touches. SQLite has no uuid()
+ * of its own.
+ */
+private const val RANDOM_UUID_SQL =
+    "lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || " +
+        "substr(lower(hex(randomblob(2))), 2) || '-' || " +
+        "substr('89ab', 1 + (abs(random()) % 4), 1) || substr(lower(hex(randomblob(2))), 2) || '-' || " +
+        "lower(hex(randomblob(6)))"
 
 /**
  * Every migration, oldest first. The SQL is identical on every platform, so

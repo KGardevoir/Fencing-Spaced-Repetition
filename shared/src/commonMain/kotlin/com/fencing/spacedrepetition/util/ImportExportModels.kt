@@ -42,7 +42,11 @@ data class ParsedCard(
      */
     val learningGroupState: Boolean = false,
     /** The concepts the card is tagged with, by name. Carried on its own (Global) record. */
-    val conceptNames: List<String> = emptyList()
+    val conceptNames: List<String> = emptyList(),
+    /** The card's stable identifier, on its own record; null in files from before them. */
+    val uid: String? = null,
+    /** When this record's progress was last reset (0 never); null when the file does not say. */
+    val lastReset: Long? = null
 ) {
     // Every full-format row carries a state context ("GLOBAL" or a group
     // name); the two-column simple format carries none.

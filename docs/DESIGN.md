@@ -15,6 +15,7 @@ another device -- has a **stable unique identifier**, `uid`:
 | Card group | `groups` | yes |
 | Learning group | `learning_groups` | yes |
 | Opponent (a person) | `opponents` | yes |
+| Learning concept | `concepts` | yes |
 | Practice session | `practice_sessions` | yes |
 | Review log | `review_logs` | yes |
 
@@ -31,14 +32,14 @@ Rules:
   and may change at any time. Nothing should depend on a name staying the
   same. Where a name is stored for history (`review_logs.groupName`), it is a
   snapshot for display; the identity is alongside it (`review_logs.groupUid`).
-- **Join records have no `uid` of their own.** Card-group links and
-  per-learning-group states (`card_learning_state`) are identified by the
-  records they join.
+- **Join records have no `uid` of their own.** Card-group and card-concept
+  links, and per-learning-group states (`card_learning_state`,
+  `concept_learning_state`), are identified by the records they join.
 - **New references use the `uid`.** Anything that records "which group /
   card / session" beyond a local foreign key -- history, exports -- records
   the `uid`, and may keep a name next to it for people and for older readers.
 
-Existing rows got a fresh `uid` in the 17 -> 22 migration. Review logs got
+Existing rows got a fresh `uid` in the 17 -> 18 migration. Review logs got
 their `groupUid` from the oldest group with the name they recorded, the best
 that could be done once names were all there was; a log naming a group that
 no longer exists has none.
@@ -64,6 +65,31 @@ no context. Because the group is found by `uid`, renaming a group keeps its
 history where it was; moving a group to another learning group moves its
 history with it.
 
+## Learning concepts
+
+Concepts are global tags on cards (`card_concept_cross_ref`). A concept's
+learning state is **derived, never accumulated**: it is the replay of the
+review history of the cards that carry it, oldest first, separately for each
+learning context.
+
+- A practice session is **one** concept review, graded with the rounded mean
+  of its cards' grades; skips are left out. A review outside a session is a
+  review of its own.
+- The replay uses each review's own group's scheduling settings, with
+  interval fuzzing off, so rederiving always gives the same state.
+- A concept whose cards have no counted history is new.
+- The result is stored -- Global on the concept, one `concept_learning_state`
+  row per learning group -- only so drawing a session needs no replay.
+
+It is rederived whenever its inputs change: a card is tagged or untagged, a
+session is graded, a card is graded in the editor, a card is deleted or reset,
+history is imported, or a group's learning group, name or existence changes.
+
+Scheduling *by* concept is opt-in per context: each learning group has a
+`useConcepts` switch and Global has a setting. Where it is on, a session draws
+the due concepts and shows the cards covering the most of them; elsewhere,
+cards are scheduled one by one. The switch never changes what is derived.
+
 ## Resets
 
 Resetting progress does not delete history. It records **when**:
@@ -73,34 +99,11 @@ Resetting progress does not delete history. It records **when**:
   A full reset stamps every learning group, whether the card held a state
   there or not.
 
-Anything derived from history should count **only reviews after the reset**
-in that context. The reviews before it stay in the review log and on the History
+Anything derived from history counts **only reviews after the reset** in that
+context. The reviews before it stay in the review log and on the History
 screen; they are history, not progress. A reset time of 0 means never.
 
 ## History
-
-History is the practice sessions (`practice_sessions`) and the review logs
-(`review_logs`). Every entry has its own `uid`, and every review records what
-it refers to so that it stays attributable through renames, deletions and
-trips between devices:
-
-| A review refers to | Locally | By identifier |
-|---|---|---|
-| its card | `cardId` (deleting a card deletes its reviews) | `cardUid` in exports |
-| its session | `sessionId` | `sessionUid` in exports |
-| its card group | -- | `groupUid` (plus `groupName`, the name at the time, for display) |
-| its opponent | `opponentId`, a soft reference | `opponentUid` |
-
-The opponent reference is soft on purpose: deleting an opponent leaves their
-reviews in the history. Those reviews keep `opponentUid`, so when the
-opponent comes back -- by import, under any local id or name -- the reviews
-are theirs again: after every import, reviews missing an `opponentUid` take
-the one of their local opponent, and every identified review is pointed at
-whichever local opponent has its `uid`. Changing a review's (or a session's)
-opponent from the History screen sets both halves together.
-
-A session's own `cardIds` list is local and is not exported; an import
-rebuilds it from the session's reviews.
 
 The review log is the source of truth for progress that is derived, so it
 must not double count:
@@ -120,9 +123,8 @@ Every record in an archive carries its `uid`, and every reference carries the
 referenced record's `uid` where one exists:
 
 - `cards[].uid`, `groups[].uid`, `learningGroups[].uid`, `opponents[].uid`,
-  `sessions[].uid`
-- `reviewHistory[].uid`, plus `cardUid`, `groupUid`, `sessionUid` and
-  `opponentUid`
+  `concepts[].uid`, `sessions[].uid`
+- `reviewHistory[].uid`, plus `cardUid`, `groupUid` and `sessionUid`
 - `state.lastReset` and `learningStates[].lastReset`
 
 Names stay in the file too, for people reading it and for references inside
@@ -144,18 +146,9 @@ Files from before identifiers have no `uid`s and import exactly as before.
 
 - Every schema change has a migration; there is deliberately no destructive
   fallback. Room validates the migrated schema against the entities on open,
-  and `IdentityDbTest` opens a real database built from the previous exported
-  schema to prove it.
-- **A schema version is released the moment any build that uses it is
-  installed** -- a debug or CI build counts. After that it never changes:
-  Room records the schema's identity hash, and a phone whose database has a
-  different hash under the same version crashes on launch. Every change goes
-  in a new version with its own migration.
-- **Versions 18 to 21 are skipped.** Builds of the learning-concepts work
-  used them (with identifiers and concepts together) and are installed on
-  devices, so this line goes from 17 straight to 22, identifiers only
-  (`MIGRATION_17_22`, `MIGRATION_SKIPPED_VERSIONS`). The concepts work
-  continues from 22, with a path from its own 21 as well.
+  and `ConceptSchedulingDbTest` opens a real database built from the previous
+  exported schema to prove it.
+- A version that has not been released may be amended; a released one never.
 - Columns added with `ALTER TABLE ... DEFAULT x` need a matching
   `@ColumnInfo(defaultValue = "x")` on the entity, or Room rejects the
   migrated database.

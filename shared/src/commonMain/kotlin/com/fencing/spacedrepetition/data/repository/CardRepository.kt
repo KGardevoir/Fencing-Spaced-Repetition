@@ -33,7 +33,8 @@ internal data class ConceptReviewEvent(
     val time: Long,
     val grade: Grade,
     val groupName: String?,
-    val stabilityMultiplier: Double
+    val stabilityMultiplier: Double,
+    val groupUid: String? = null
 )
 
 class CardRepository(
@@ -133,6 +134,7 @@ class CardRepository(
                 )
             }
         }
+        rederiveConceptsForCards(listOf(cardId))
     }
 
     /** Resets the state [cardId] keeps in the learning group that [groupId] practises against. */
@@ -149,6 +151,7 @@ class CardRepository(
     suspend fun resetCardStateInLearningGroup(cardId: Long, learningGroupId: Long) {
         val now = Time.now()
         groupDao.insertLearningState(CardLearningState(cardId, learningGroupId, modified = now, lastReset = now))
+        rederiveConceptsForCards(listOf(cardId))
     }
 
     fun getCardCount(): Flow<Int> = cardDao.getCardCount()
@@ -177,7 +180,7 @@ class CardRepository(
     /**
      * Add imported reviews to the history, leaving out any already in it.
      *
-     * The history is what progress is derived from, so a
+     * The history is what card and concept progress is derived from, so a
      * review imported twice would count twice. A review is already here when
      * its stable identifier is, or -- for files from before identifiers --
      * when the same card has a review at the same moment with the same grade.
@@ -508,7 +511,9 @@ class CardRepository(
         parsedCards.groupBy { it.concept }.forEach { (question, records) ->
             val names = records.flatMap { it.conceptNames }.toSet()
             if (names.isEmpty()) return@forEach
-            val card = cardDao.findCardByQuestion(question) ?: return@forEach
+            val card = records.firstNotNullOfOrNull { it.uid }?.let { cardDao.findCardByUid(it) }
+                ?: cardDao.findCardByQuestion(question)
+                ?: return@forEach
             conceptDao.deleteAllConceptsForCard(card.id)
             names.forEach { name ->
                 conceptIds[name]?.let { conceptDao.insertCardConceptCrossRef(CardConceptCrossRef(card.id, it)) }
@@ -762,8 +767,17 @@ class CardRepository(
         val cardsByConcept = conceptDao.getAllCardConceptCrossRefsSync()
             .groupBy({ it.conceptId }, { it.cardId })
         val logsByCard = reviewLogDao.getAllReviewLogsSync().groupBy { it.cardId }
-        val groupsByName = groupDao.getAllGroups().first().groupBy { it.name }.mapValues { it.value.first() }
+        val groups = GroupLookup(groupDao.getAllGroups().first())
         val learningGroupIds = groupDao.getAllLearningGroups().first().map { it.id }.toSet()
+        // When each card's progress was last reset, per context: the card's
+        // own for Global, its learning-group state's for each learning group.
+        val globalResets = cardDao.getAllCardsAsList().associate { it.id to it.lastReset }
+        val learningGroupResets = groupDao.getAllLearningStatesSync()
+            .associate { (it.cardId to it.learningGroupId) to it.lastReset }
+        fun resetOf(cardId: Long, context: ContextKey): Long = when (val lg = context.learningGroupId) {
+            null -> globalResets[cardId] ?: 0L
+            else -> learningGroupResets[cardId to lg] ?: 0L
+        }
 
         concepts.forEach { concept ->
             val logs = cardsByConcept[concept.id].orEmpty().flatMap { logsByCard[it].orEmpty() }
@@ -771,13 +785,16 @@ class CardRepository(
             if (onlyWithHistory && logs.isEmpty()) return@forEach
 
             val byContext = logs.mapNotNull { log ->
-                when (val name = log.groupName) {
-                    null, GROUP_NAME_CARD_EDIT -> ContextKey(null) to log
-                    else -> groupsByName[name]?.let { ContextKey(it.learningGroupId) to log }
+                val context = when {
+                    log.groupUid == null && (log.groupName == null || log.groupName == GROUP_NAME_CARD_EDIT) ->
+                        ContextKey(null)
+                    else -> groups.of(log)?.let { ContextKey(it.learningGroupId) } ?: return@mapNotNull null
                 }
+                // Only progress since the card was last reset in that context.
+                if (log.reviewTime <= resetOf(log.cardId, context)) null else context to log
             }.groupBy({ it.first }, { it.second })
 
-            val global = replayConceptHistory(concept.id, 0L, byContext[ContextKey(null)].orEmpty(), groupsByName)
+            val global = replayConceptHistory(concept.id, 0L, byContext[ContextKey(null)].orEmpty(), groups)
                 ?: ConceptLearningState(concept.id, 0L)
             conceptDao.updateConcept(concept.withGlobalState(global))
 
@@ -785,7 +802,7 @@ class CardRepository(
             byContext.forEach { (key, contextLogs) ->
                 val learningGroupId = key.learningGroupId ?: return@forEach
                 if (learningGroupId !in learningGroupIds) return@forEach
-                replayConceptHistory(concept.id, learningGroupId, contextLogs, groupsByName)
+                replayConceptHistory(concept.id, learningGroupId, contextLogs, groups)
                     ?.let { conceptDao.upsertConceptLearningState(it) }
             }
         }
@@ -794,18 +811,31 @@ class CardRepository(
     /** A learning context: a learning group's id, or null for Global. */
     private data class ContextKey(val learningGroupId: Long?)
 
+    /**
+     * Finds the group a review was made in: by its stable identifier, or --
+     * for a review recorded or imported without one -- by the name it noted,
+     * the oldest group of that name winning, as the migration did.
+     */
+    private class GroupLookup(groups: List<Group>) {
+        private val byUid = groups.associateBy { it.uid }
+        private val byName = groups.sortedBy { it.id }.groupBy { it.name }.mapValues { it.value.first() }
+        fun of(log: ReviewLog): Group? = of(log.groupUid, log.groupName)
+        fun of(uid: String?, name: String?): Group? =
+            if (uid != null) byUid[uid] else name?.let { byName[it] }
+    }
+
     /** Replay one context's logs into a state, or null when they hold no review. */
     private suspend fun replayConceptHistory(
         conceptId: Long,
         learningGroupId: Long,
         logs: List<ReviewLog>,
-        groupsByName: Map<String, Group>
+        groups: GroupLookup
     ): ConceptLearningState? {
         val events = conceptReviewEvents(logs)
         if (events.isEmpty()) return null
         var state = ConceptLearningState(conceptId, learningGroupId)
         events.forEach { event ->
-            val groupId = event.groupName?.let { groupsByName[it]?.id }
+            val groupId = groups.of(event.groupUid, event.groupName)?.id
             state = scheduleConceptState(state, event.grade, event.time, groupId, event.stabilityMultiplier)
         }
         return state
@@ -1478,6 +1508,7 @@ class CardRepository(
                         time = first.reviewTime,
                         grade = combineConceptGrades(session.map { Grade.fromValue(it.grade)!! }),
                         groupName = first.groupName,
+                        groupUid = first.groupUid,
                         stabilityMultiplier = first.stabilityMultiplier
                     )
                 }

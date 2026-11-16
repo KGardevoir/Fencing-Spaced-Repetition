@@ -174,7 +174,7 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for complete deployment instructions, includi
 
 ## Database Schema
 
-Every user record (cards, groups, learning groups, opponents, sessions, review logs) carries a stable `uid` that survives renames and travels in exports; row ids are local. See [docs/DESIGN.md](docs/DESIGN.md).
+Every user record (cards, groups, learning groups, opponents, concepts, sessions, review logs) carries a stable `uid` that survives renames and travels in exports; row ids are local. See [docs/DESIGN.md](docs/DESIGN.md).
 
 ### Cards
 Question and description content, category, tags, image paths, FSRS scheduling parameters, review scheduling timestamps, and when its progress was last reset.
@@ -250,7 +250,7 @@ Source files carry [SPDX](https://spdx.dev/) identifiers
 
 ## Documentation
 
-- [docs/DESIGN.md](docs/DESIGN.md) - Design notes: stable identifiers, learning contexts, resets, history, archive matching
+- [docs/DESIGN.md](docs/DESIGN.md) - Design notes: stable identifiers, learning contexts, derived concept state, resets, archive matching
 - [DEPLOYMENT.md](DEPLOYMENT.md) - Complete Google Play Store deployment guide
 - [KEYSTORE_SETUP.md](KEYSTORE_SETUP.md) - Keystore creation and signing guide
 - [PRIVACY_POLICY.md](PRIVACY_POLICY.md) - Privacy policy and data handling

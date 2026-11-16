@@ -19,6 +19,7 @@ import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.preferences.SchedulingPreferences
 import com.fencing.spacedrepetition.util.Time
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import java.io.File
@@ -107,14 +108,16 @@ class ConceptSchedulingDbTest {
     private val day = 86_400_000L
 
     /** A review in a card's history, written directly so its time can be chosen. */
-    private suspend fun log(cardId: Long, grade: Grade, time: Long, group: String? = null, session: Long? = null) =
-        db.reviewLogDao().insertReviewLog(
-            ReviewLog(
-                cardId = cardId, sessionId = session, reviewTime = time, grade = grade.value,
-                algorithm = "FSRS", stateBefore = "", stateAfter = "", scheduledDays = 0, elapsedDays = 0,
-                groupName = group
-            )
-        )
+    private suspend fun log(
+        cardId: Long, grade: Grade, time: Long, group: String? = null, session: Long? = null,
+        groupUid: String? = null, uid: String? = null
+    ) = db.reviewLogDao().insertReviewLog(
+        ReviewLog(
+            cardId = cardId, sessionId = session, reviewTime = time, grade = grade.value,
+            algorithm = "FSRS", stateBefore = "", stateAfter = "", scheduledDays = 0, elapsedDays = 0,
+            groupName = group, groupUid = groupUid
+        ).let { if (uid != null) it.copy(uid = uid) else it }
+    )
 
     private suspend fun global(conceptId: Long) = db.conceptDao().getConceptById(conceptId)!!
 
@@ -307,6 +310,137 @@ class ConceptSchedulingDbTest {
         // Switching a learning group off takes effect at once.
         db.groupDao().setLearningGroupUseConcepts(on, false)
         assertEquals(listOf(onlyA), repo.drawCards(1, onGroup).map { it.id })
+    }
+
+    // ==================== stable identifiers ====================
+
+    @Test
+    fun `a renamed group's history still counts where the group learns`() = runTest {
+        val learningGroupId = db.groupDao().insertLearningGroup(LearningGroup(name = "Bouting"))
+        val groupId = db.groupDao().insertGroup(Group(name = "Footwork", learningGroupId = learningGroupId))
+        val group = db.groupDao().getGroupById(groupId)!!
+        val a = concept("A")
+        val c = card("c"); tag(c, a)
+        log(c, Grade.GOOD, Time.now() - 3 * day, group = "Footwork", groupUid = group.uid)
+
+        db.groupDao().updateGroup(group.copy(name = "Footwork (renamed)"))
+        repo.rederiveConcepts()
+        assertEquals(1, db.conceptDao().getConceptLearningState(a, learningGroupId)!!.fsrsReps)
+        assertEquals(0, global(a).fsrsReps)
+    }
+
+    @Test
+    fun `new reviews record the group's stable identifier`() = runTest {
+        val groupId = db.groupDao().insertGroup(Group(name = "Footwork"))
+        val c = db.cardDao().getCardById(card("c"))!!
+        repo.reviewCard(c, Grade.GOOD, groupId = groupId)
+        val log = db.reviewLogDao().getAllReviewLogsSync().single()
+        assertEquals(db.groupDao().getGroupById(groupId)!!.uid, log.groupUid)
+        assertTrue(log.uid.isNotBlank())
+    }
+
+    @Test
+    fun `every new record is made with its own identifier`() = runTest {
+        val uids = listOf(
+            db.cardDao().getCardById(card("one"))!!.uid,
+            db.cardDao().getCardById(card("two"))!!.uid,
+            db.groupDao().getGroupById(db.groupDao().insertGroup(Group(name = "G")))!!.uid,
+            db.conceptDao().getConceptById(concept("C"))!!.uid
+        )
+        assertEquals(uids.size, uids.toSet().size)
+        assertTrue(uids.all { Regex("[0-9a-f-]{36}").matches(it) })
+    }
+
+    @Test
+    fun `imported history is not counted twice`() = runTest {
+        val c = card("c")
+        val t = Time.now() - day
+        val first = ReviewLog(cardId = c, sessionId = null, reviewTime = t, grade = 3, algorithm = "FSRS",
+            stateBefore = "", stateAfter = "", scheduledDays = 0, elapsedDays = 0)
+        assertEquals(1, repo.importReviewLogs(listOf(first)))
+        // The same review again: by identifier, and -- for a file from before
+        // identifiers -- by card, moment and grade.
+        assertEquals(0, repo.importReviewLogs(listOf(first)))
+        assertEquals(0, repo.importReviewLogs(listOf(first.copy(uid = "fresh-from-an-old-file"))))
+        assertEquals(1, repo.importReviewLogs(listOf(first.copy(uid = "another", reviewTime = t + 1))))
+        assertEquals(2, db.reviewLogDao().getAllReviewLogsSync().size)
+    }
+
+    @Test
+    fun `an imported card is found by identifier even after its question changed`() = runTest {
+        val id = card("Old question")
+        val uid = db.cardDao().getCardById(id)!!.uid
+        val parsed = com.fencing.spacedrepetition.util.ParsedCard(
+            concept = "New question", answer = "", lineNumber = 1, stateContext = "GLOBAL", uid = uid
+        )
+        repo.importCardsWithGroupStates(listOf(parsed), emptyMap()) {
+            com.fencing.spacedrepetition.util.CardImportExport.parsedCardToCard(it)
+        }
+        val cards = db.cardDao().getAllCardsAsList()
+        assertEquals(1, cards.size)
+        assertEquals("New question", cards.single().question)
+        assertEquals(uid, cards.single().uid)
+    }
+
+    @Test
+    fun `an imported group renamed elsewhere is renamed here, not duplicated`() = runTest {
+        val groups = GroupRepository(db.groupDao(), db.cardDao())
+        val id = db.groupDao().insertGroup(Group(name = "Footwork"))
+        val uid = db.groupDao().getGroupById(id)!!.uid
+        groups.adoptGroupIdentities(mapOf("Footwork drills" to uid, "Brand new" to "uid-new"))
+        assertEquals("Footwork drills", db.groupDao().getGroupById(id)!!.name)
+        assertEquals("uid-new", db.groupDao().getGroupByName("Brand new")!!.uid)
+        assertEquals(2, db.groupDao().getGroupCount().first())
+    }
+
+    // ==================== resets ====================
+
+    @Test
+    fun `resetting a card sets aside the reviews before it`() = runTest {
+        val a = concept("A")
+        val c = card("c"); tag(c, a)
+        val t0 = Time.now() - 30 * day
+        log(c, Grade.GOOD, t0)
+        log(c, Grade.GOOD, t0 + 5 * day)
+        repo.rederiveConcepts()
+        assertEquals(2, global(a).fsrsReps)
+
+        repo.resetCardState(c)
+        val reset = db.cardDao().getCardById(c)!!
+        assertTrue(reset.lastReset > t0 + 5 * day)
+        assertEquals(0, global(a).fsrsReps)
+
+        // Progress after the reset counts again.
+        log(c, Grade.EASY, Time.now() + 1)
+        repo.rederiveConcepts()
+        assertEquals(1, global(a).fsrsReps)
+        // The history itself is all still there.
+        assertEquals(3, db.reviewLogDao().getAllReviewLogsSync().size)
+    }
+
+    @Test
+    fun `resetting in a learning group leaves Global's history counting`() = runTest {
+        val learningGroupId = db.groupDao().insertLearningGroup(LearningGroup(name = "Bouting"))
+        val groupId = db.groupDao().insertGroup(Group(name = "Footwork", learningGroupId = learningGroupId))
+        val groupUid = db.groupDao().getGroupById(groupId)!!.uid
+        val a = concept("A")
+        val c = card("c"); tag(c, a)
+        val t0 = Time.now() - 10 * day
+        log(c, Grade.GOOD, t0, group = "Footwork", groupUid = groupUid)
+        log(c, Grade.GOOD, t0 + day)
+        repo.rederiveConcepts()
+        assertEquals(1, db.conceptDao().getConceptLearningState(a, learningGroupId)!!.fsrsReps)
+
+        repo.resetCardStateInLearningGroup(c, learningGroupId)
+        assertTrue(db.groupDao().getLearningState(c, learningGroupId)!!.lastReset > t0)
+        assertNull(db.conceptDao().getConceptLearningState(a, learningGroupId))
+        assertEquals(1, global(a).fsrsReps)
+
+        // A full reset stamps every learning group, held or not.
+        val other = db.groupDao().insertLearningGroup(LearningGroup(name = "Drills"))
+        repo.resetCardState(c, resetGroupStates = true)
+        assertTrue(db.groupDao().getLearningState(c, other)!!.lastReset > 0)
+        assertEquals(0, global(a).fsrsReps)
     }
 
     /**

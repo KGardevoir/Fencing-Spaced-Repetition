@@ -50,7 +50,10 @@ data class LearningGroup(
      * concepts. Off -- the default -- keeps card-by-card scheduling.
      */
     @ColumnInfo(defaultValue = "0")
-    val useConcepts: Boolean = false
+    val useConcepts: Boolean = false,
+    /** Stable identifier, unique and kept for life; see docs/DESIGN.md, "Identity". */
+    @ColumnInfo(defaultValue = "''")
+    val uid: String = newUid()
 ) {
     /** Returns true if any setting override is set */
     fun hasCustomSettings(): Boolean =

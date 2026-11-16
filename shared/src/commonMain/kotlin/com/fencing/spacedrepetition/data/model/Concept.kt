@@ -8,6 +8,8 @@ import androidx.room3.ForeignKey
 import androidx.room3.Index
 import androidx.room3.PrimaryKey
 import com.fencing.spacedrepetition.util.Time
+import androidx.room3.ColumnInfo
+import com.fencing.spacedrepetition.util.newUid
 
 /**
  * A learning concept: the thing that is actually being learnt, which cards
@@ -28,7 +30,7 @@ import com.fencing.spacedrepetition.util.Time
  */
 @Entity(
     tableName = "concepts",
-    indices = [Index(value = ["name"], unique = true)]
+    indices = [Index(value = ["name"], unique = true), Index(value = ["uid"], unique = true)]
 )
 data class Concept(
     @PrimaryKey(autoGenerate = true)
@@ -48,7 +50,10 @@ data class Concept(
     val nextReview: Long = 0L,
 
     val created: Long = Time.now(),
-    val modified: Long = Time.now()
+    val modified: Long = Time.now(),
+    /** Stable identifier, unique and kept for life; see docs/DESIGN.md, "Identity". */
+    @ColumnInfo(defaultValue = "''")
+    val uid: String = newUid()
 ) {
     /** The Global state, in the same shape a learning group's state has. */
     fun globalState(): ConceptLearningState = ConceptLearningState(

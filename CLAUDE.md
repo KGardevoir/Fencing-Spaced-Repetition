@@ -26,7 +26,7 @@ This is an Android app (Kotlin + Jetpack Compose) for practicing martial arts an
 
 ## Design Notes
 
-Read [docs/DESIGN.md](docs/DESIGN.md) before changing the schema, the archive format, or scheduling. In short: every user record has a stable `uid` (never a name or a local row id) for identity and cross-device matching; resets record a time and only later reviews count. Keep that document up to date with any change to those rules.
+Read [docs/DESIGN.md](docs/DESIGN.md) before changing the schema, the archive format, or scheduling. In short: every user record has a stable `uid` (never a name or a local row id) for identity and cross-device matching; concept state is derived from card history; resets record a time and only later reviews count. Keep that document up to date with any change to those rules.
 
 ## Key Directories
 

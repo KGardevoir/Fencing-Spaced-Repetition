@@ -128,4 +128,47 @@ class ConceptArchiveTest {
         assertEquals(setOf("Bouting", "Drills"), CardImportExport.lastParsedLearningGroups.keys)
         assertEquals(setOf("Bouting"), CardImportExport.lastParsedConceptLearningGroups)
     }
+
+    @Test
+    fun identifiersAndResetTimesRoundTrip() {
+        val card = Card(id = 1, question = "Lunge", answer = "", lastReset = 1234L, fsrsReps = 2, fsrsState = "REVIEW")
+        val lg = LearningGroup(id = 5, name = "Bouting")
+        val out = StringBuilder()
+        CardImportExport.exportCardsWithGroupStates(
+            listOf(
+                CardWithGroupStates(
+                    card, listOf("Footwork"),
+                    mapOf("Bouting" to com.fencing.spacedrepetition.data.model.CardLearningState(1, 5, fsrsReps = 1, lastReset = 99L)),
+                    conceptNames = listOf("Distance")
+                )
+            ),
+            out, noImages,
+            groupSettings = listOf(com.fencing.spacedrepetition.data.model.Group(id = 3, name = "Footwork", learningGroupId = 5)),
+            learningGroups = listOf(lg),
+            concepts = listOf(ConceptWithStates(Concept(id = 1, name = "Distance")))
+        )
+        val text = out.toString()
+        val (parsed, errors) = CardImportExport.parseCards(text.lines())
+        assertEquals(emptyList(), errors)
+        val own = parsed.first { it.isGlobalState }
+        assertEquals(card.uid, own.uid)
+        assertEquals(1234L, own.lastReset)
+        assertEquals(99L, parsed.first { it.learningGroupState }.lastReset)
+        assertEquals(mapOf("Footwork" to (CardImportExport.lastParsedGroupUids["Footwork"] ?: "")), CardImportExport.lastParsedGroupUids)
+        assertTrue(CardImportExport.lastParsedGroupUids.getValue("Footwork").isNotBlank())
+        assertEquals(lg.uid, CardImportExport.lastParsedLearningGroupUids["Bouting"])
+        assertTrue(CardImportExport.lastParsedConcepts.single().uid!!.isNotBlank())
+    }
+
+    @Test
+    fun aGroupWithoutSettingsIsStillListedSoItsIdentifierTravels() {
+        val group = com.fencing.spacedrepetition.data.model.Group(id = 1, name = "Plain")
+        val out = StringBuilder()
+        CardImportExport.exportCardsWithGroupStates(
+            listOf(CardWithGroupStates(Card(id = 1, question = "Q", answer = ""), listOf("Plain"))),
+            out, noImages, groupSettings = listOf(group)
+        )
+        CardImportExport.parseCards(out.toString().lines())
+        assertEquals(mapOf("Plain" to group.uid), CardImportExport.lastParsedGroupUids)
+    }
 }
