@@ -41,10 +41,8 @@ data class ParsedCard(
      * independently instead.
      */
     val learningGroupState: Boolean = false,
-    /** The card's stable identifier, on its own record; null in files from before them. */
-    val uid: String? = null,
-    /** When this record's progress was last reset (0 never); null when the file does not say. */
-    val lastReset: Long? = null
+    /** The concepts the card is tagged with, by name. Carried on its own (Global) record. */
+    val conceptNames: List<String> = emptyList()
 ) {
     // Every full-format row carries a state context ("GLOBAL" or a group
     // name); the two-column simple format carries none.
@@ -68,5 +66,15 @@ data class CardWithGroupNames(
 data class CardWithGroupStates(
     val card: Card,
     val groupNames: List<String>,
-    val learningStates: Map<String, com.fencing.spacedrepetition.data.model.CardLearningState> = emptyMap()
+    val learningStates: Map<String, com.fencing.spacedrepetition.data.model.CardLearningState> = emptyMap(),
+    val conceptNames: List<String> = emptyList()
+)
+
+/**
+ * A learning concept for export: the concept with its Global state, and its
+ * state in each learning group, keyed by learning group name.
+ */
+data class ConceptWithStates(
+    val concept: com.fencing.spacedrepetition.data.model.Concept,
+    val learningStates: Map<String, com.fencing.spacedrepetition.data.model.ConceptLearningState> = emptyMap()
 )

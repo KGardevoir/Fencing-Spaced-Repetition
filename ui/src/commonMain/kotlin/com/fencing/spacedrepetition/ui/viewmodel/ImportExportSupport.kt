@@ -14,9 +14,11 @@ import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.repository.CardRepository
+import com.fencing.spacedrepetition.data.repository.ConceptRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.ui.ImportFile
 import com.fencing.spacedrepetition.util.CardImportExport
+import com.fencing.spacedrepetition.util.CardWithGroupStates
 import com.fencing.spacedrepetition.util.ExportResult
 import com.fencing.spacedrepetition.util.ImageReader
 import com.fencing.spacedrepetition.util.ImageStore
@@ -114,7 +116,12 @@ internal suspend fun GroupRepository.groupsForImport(parsedCards: List<ParsedCar
         // so one with none in the file has none.
         getLearningGroupById(id)?.let { learningGroup ->
             val settings = CardImportExport.lastParsedLearningGroupSettings[name].orEmpty()
-            updateLearningGroup(CardImportExport.applyLearningGroupSettings(learningGroup, settings))
+            updateLearningGroup(
+                CardImportExport.applyLearningGroupSettings(learningGroup, settings).copy(
+                    // The file says whether it schedules by concept, as it does its settings.
+                    useConcepts = name in CardImportExport.lastParsedConceptLearningGroups
+                )
+            )
         }
     }
     // An older file keeps learning settings on the groups. Each goes to the
@@ -150,6 +157,35 @@ internal suspend fun GroupRepository.groupsForImport(parsedCards: List<ParsedCar
         }
     }
     return ImportTargets(groupIds, learningGroupIds)
+}
+
+/**
+ * Creates the learning concepts an import carries or names, with their states,
+ * and tags the imported cards with them. After the cards, which are found by
+ * question.
+ */
+internal suspend fun importConceptsAndLinks(
+    parsedCards: List<ParsedCard>,
+    cards: CardRepository,
+    concepts: ConceptRepository,
+    groups: GroupRepository
+) {
+    val namedOnCards = parsedCards.flatMap { it.conceptNames }.toSet()
+    val parsedConcepts = CardImportExport.lastParsedConcepts
+    if (namedOnCards.isEmpty() && parsedConcepts.isEmpty()) return
+    val conceptIds = concepts.importConcepts(parsedConcepts, namedOnCards) { groups.ensureLearningGroup(it) }
+    cards.linkImportedConcepts(parsedCards, conceptIds)
+}
+
+/** [cardsWithStates] with each card's concept names filled in, for an export. */
+internal suspend fun ConceptRepository.withConceptNames(
+    cardsWithStates: List<CardWithGroupStates>
+): List<CardWithGroupStates> {
+    val names = getAllConceptsSync().associate { it.id to it.name }
+    val byCard = getAllCardConceptCrossRefsSync()
+        .groupBy({ it.cardId }, { names[it.conceptId] })
+        .mapValues { (_, n) -> n.filterNotNull().sorted() }
+    return cardsWithStates.map { it.copy(conceptNames = byCard[it.card.id].orEmpty()) }
 }
 
 /**

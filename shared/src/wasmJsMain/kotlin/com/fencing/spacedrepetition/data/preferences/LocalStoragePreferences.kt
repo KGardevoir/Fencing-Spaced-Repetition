@@ -61,6 +61,9 @@ class LocalStoragePreferences : AppPreferences {
         MutableStateFlow(readInt("fsrs_retention", Defaults.DEFAULT_FSRS_RETENTION))
     private val fsrsEnableFuzzingState =
         MutableStateFlow(readBoolean("fsrs_enable_fuzzing", Defaults.DEFAULT_FSRS_ENABLE_FUZZING))
+    private val globalConceptSchedulingState = MutableStateFlow(
+        readBoolean("global_concept_scheduling", Defaults.DEFAULT_GLOBAL_CONCEPT_SCHEDULING)
+    )
     private val autoBackupEnabledState =
         MutableStateFlow(readBoolean("auto_backup_enabled", Defaults.DEFAULT_AUTO_BACKUP_ENABLED))
     private val autoBackupUriState = MutableStateFlow(readString("auto_backup_uri"))
@@ -90,6 +93,7 @@ class LocalStoragePreferences : AppPreferences {
     override val randomizeBucketHours: Flow<Int> = randomizeBucketHoursState.asStateFlow()
     override val fsrsRetention: Flow<Int> = fsrsRetentionState.asStateFlow()
     override val fsrsEnableFuzzing: Flow<Boolean> = fsrsEnableFuzzingState.asStateFlow()
+    override val globalConceptScheduling: Flow<Boolean> = globalConceptSchedulingState.asStateFlow()
     override val autoBackupEnabled: Flow<Boolean> = autoBackupEnabledState.asStateFlow()
     override val autoBackupUri: Flow<String?> = autoBackupUriState.asStateFlow()
     override val autoBackupIntervalDays: Flow<Int> = autoBackupIntervalDaysState.asStateFlow()
@@ -143,6 +147,9 @@ class LocalStoragePreferences : AppPreferences {
 
     override suspend fun setFsrsEnableFuzzing(enabled: Boolean) =
         write("fsrs_enable_fuzzing", enabled.toString(), fsrsEnableFuzzingState, enabled)
+
+    override suspend fun setGlobalConceptScheduling(enabled: Boolean) =
+        write("global_concept_scheduling", enabled.toString(), globalConceptSchedulingState, enabled)
 
     override suspend fun setAutoBackupEnabled(enabled: Boolean) =
         write("auto_backup_enabled", enabled.toString(), autoBackupEnabledState, enabled)

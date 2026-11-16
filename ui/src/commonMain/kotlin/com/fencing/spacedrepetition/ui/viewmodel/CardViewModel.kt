@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.algorithm.RetentionPlanner
 import com.fencing.spacedrepetition.algorithm.ScheduleEstimate
 import com.fencing.spacedrepetition.data.model.Card
+import com.fencing.spacedrepetition.data.model.Concept
 import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.CardWithGroups
 import com.fencing.spacedrepetition.data.model.Grade
@@ -16,6 +17,7 @@ import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.repository.CardRepository
+import com.fencing.spacedrepetition.data.repository.ConceptRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
 import com.fencing.spacedrepetition.ui.BinaryExportFile
@@ -55,7 +57,8 @@ class CardViewModel(
     private val repository: CardRepository,
     private val groupRepository: GroupRepository,
     private val opponentRepository: OpponentRepository,
-    private val imageStore: ImageStore
+    private val imageStore: ImageStore,
+    private val conceptRepository: ConceptRepository
 ) : ViewModel() {
 
     val allCards: StateFlow<List<Card>> = repository.getAllCards()
@@ -228,11 +231,28 @@ class CardViewModel(
     fun getCardCountByGroup(groupId: Long): Flow<Int> =
         repository.getCardCountByGroup(groupId)
 
+    fun getConceptsForCard(cardId: Long): Flow<List<Concept>> = conceptRepository.getConceptsForCard(cardId)
+
+    val allConcepts: StateFlow<List<Concept>> = conceptRepository.getAllConcepts()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Create a concept from the card editor; [onCreated] gets its id. */
+    fun createConcept(name: String, onCreated: (Long) -> Unit) {
+        viewModelScope.launch {
+            try {
+                onCreated(conceptRepository.getOrCreateConcept(name))
+            } catch (e: Exception) {
+                // A blank name: nothing to create
+            }
+        }
+    }
+
     fun addCard(
         question: String,
         answer: String,
         groupIds: List<Long>,
         imagePaths: List<String> = emptyList(),
+        conceptIds: List<Long> = emptyList(),
         onSuccess: () -> Unit
     ) {
         viewModelScope.launch {
@@ -242,7 +262,8 @@ class CardViewModel(
                     answer = answer,
                     imagePaths = imagePaths
                 )
-                repository.insertCardWithGroups(card, groupIds)
+                val cardId = repository.insertCardWithGroups(card, groupIds)
+                if (conceptIds.isNotEmpty()) repository.setCardConcepts(cardId, conceptIds)
                 onSuccess()
             } catch (e: Exception) {
                 // Handle error
@@ -250,11 +271,12 @@ class CardViewModel(
         }
     }
 
-    fun updateCard(card: Card, groupIds: List<Long>, onSuccess: () -> Unit) {
+    fun updateCard(card: Card, groupIds: List<Long>, conceptIds: List<Long>?, onSuccess: () -> Unit) {
         viewModelScope.launch {
             try {
                 repository.updateCard(card.copy(modified = Time.now()))
                 repository.updateCardGroups(card.id, groupIds)
+                conceptIds?.let { repository.setCardConcepts(card.id, it) }
                 onSuccess()
             } catch (e: Exception) {
                 // Handle error
@@ -494,7 +516,11 @@ class CardViewModel(
                     )
                 }
 
+                importConceptsAndLinks(parsedCards, repository, conceptRepository, groupRepository)
                 importOpponentsAndHistory()
+                // With the history in, concepts are derived from it -- except
+                // those with none, which keep the state the file brought.
+                repository.rederiveConcepts(onlyWithHistory = true)
 
                 _importExportState.value = ImportExportState.ImportSuccess(
                     importedCount = importedCount,
@@ -729,6 +755,7 @@ class CardViewModel(
         }
         val images = imageStore.exportReader(cardsWithStates.map { it.card }, reviewLogs, sessions)
         val learningGroups = groupRepository.getAllLearningGroupsSync()
+        val concepts = repository.getAllConceptsWithStates()
 
         return file.write { out ->
             CardImportExport.exportCardsWithGroupStates(
@@ -741,7 +768,8 @@ class CardViewModel(
                 cardQuestions = cardQuestions,
                 opponents = opponents,
                 opponentNamesById = opponents.associate { it.id to it.name },
-                sessions = sessions
+                sessions = sessions,
+                concepts = concepts
             )
         }.asImportExportState()
     }

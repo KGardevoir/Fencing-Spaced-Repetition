@@ -15,10 +15,18 @@ package com.fencing.spacedrepetition.util
 //       - name: Bouting
 //         cardsPerSession: 15    # how its sessions are drawn, and
 //         fsrsRetention: 85      # the settings that schedule it
+//         useConcepts: true      # schedules by learning concept; absent = off
 //     groups:                    # only those with settings or a learning group
 //       - name: Footwork
 //         autoShowAnswer: true
 //         learningGroup: Bouting
+//     concepts:                  # learning concepts; what tagged cards schedule by
+//       - name: Distance
+//         state:                 # Global; absent while new
+//           ...
+//         learningStates:        # one per learning group it is learnt in
+//           - learningGroup: Bouting
+//             ...
 //     opponents:
 //       - name: Alex
 //         skillMultiplier: 1.25
@@ -30,6 +38,8 @@ package com.fencing.spacedrepetition.util
 //         images: ["<base64>"]
 //         groups:
 //           - Footwork
+//         concepts:              # the learning concepts it is tagged with
+//           - Distance
 //         state:                 # absent on a card nobody has practised
 //           nextReview: 1774000000000
 //           ...
@@ -78,6 +88,8 @@ import com.charleskorn.kaml.MultiLineStringStyle
 import com.charleskorn.kaml.SingleLineStringStyle
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardLearningState
+import com.fencing.spacedrepetition.data.model.Concept
+import com.fencing.spacedrepetition.data.model.ConceptLearningState
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.data.model.Opponent
@@ -100,6 +112,7 @@ internal data class ArchiveDocument(
     val version: Int = ArchiveYaml.VERSION,
     val learningGroups: List<ArchiveLearningGroup> = emptyList(),
     val groups: List<ArchiveGroup> = emptyList(),
+    val concepts: List<ArchiveConcept> = emptyList(),
     val opponents: List<ArchiveOpponent> = emptyList(),
     val cards: List<ArchiveCard> = emptyList(),
     val sessions: List<ArchiveSession> = emptyList(),
@@ -135,8 +148,8 @@ internal data class ArchiveLearningGroup(
     val maximumInterval: Int? = null,
     val fsrsRetention: Int? = null,
     val fsrsEnableFuzzing: Boolean? = null,
-    /** Stable identifier (see docs/DESIGN.md, "Identity"); absent in files from before them. */
-    val uid: String? = null
+    /** Schedules by learning concept; absent (off) in every file from before concepts. */
+    val useConcepts: Boolean = false
 )
 
 @Serializable
@@ -158,6 +171,15 @@ internal data class ArchiveGroup(
     val uid: String? = null
 )
 
+/** A learning concept, its Global state, and its state in each learning group. */
+@Serializable
+internal data class ArchiveConcept(
+    val name: String,
+    val description: String = "",
+    val state: ArchiveState? = null,
+    val learningStates: List<ArchiveLearningState> = emptyList()
+)
+
 @Serializable
 internal data class ArchiveOpponent(
     val name: String,
@@ -176,6 +198,11 @@ internal data class ArchiveCard(
     val description: String? = null,
     val images: List<String> = emptyList(),
     val groups: List<String> = emptyList(),
+    /**
+     * Learning concepts, by name. Plural, and not to be confused with the
+     * singular `concept:` above, which is an old name for the question.
+     */
+    val concepts: List<String> = emptyList(),
     val state: ArchiveState? = null,
     val learningStates: List<ArchiveLearningState> = emptyList(),
     /** Per-group states from before learning groups; read, never written. */
@@ -280,6 +307,7 @@ internal object ArchiveYaml {
     const val KEY_VERSION = "version"
     const val KEY_REVIEW_HISTORY = "reviewHistory"
     const val KEY_SESSIONS = "sessions"
+    const val KEY_CONCEPTS = "concepts"
 
     /** The state context a card's own state is filed under. */
     const val GLOBAL_STATE = "GLOBAL"
@@ -343,7 +371,72 @@ internal object ArchiveYaml {
         maximumInterval = learningGroup.maximumInterval,
         fsrsRetention = learningGroup.fsrsRetention,
         fsrsEnableFuzzing = learningGroup.fsrsEnableFuzzing,
-        uid = learningGroup.uid
+        useConcepts = learningGroup.useConcepts
+    )
+
+    /** One concept and its states; a state still at its defaults is left out. */
+    fun conceptNode(concept: Concept, learningStates: Map<String, ConceptLearningState>) = ArchiveConcept(
+        name = concept.name,
+        description = concept.description,
+        state = stateNode(concept.globalState()).takeIf { it != ArchiveState() },
+        learningStates = learningStates.mapNotNull { (name, learning) ->
+            val node = stateNode(learning)
+            if (node == ArchiveState()) null else ArchiveLearningState(
+                learningGroup = name,
+                nextReview = node.nextReview,
+                lastReview = node.lastReview,
+                stability = node.stability,
+                difficulty = node.difficulty,
+                fsrsState = node.fsrsState,
+                reps = node.reps,
+                lapses = node.lapses,
+                scheduledDays = node.scheduledDays,
+                elapsedDays = node.elapsedDays
+            )
+        }
+    )
+
+    private fun stateNode(state: ConceptLearningState) = ArchiveState(
+        nextReview = state.nextReview,
+        lastReview = state.lastReview,
+        stability = state.fsrsStability,
+        difficulty = state.fsrsDifficulty,
+        fsrsState = state.fsrsState,
+        reps = state.fsrsReps,
+        lapses = state.fsrsLapses,
+        scheduledDays = state.fsrsScheduledDays,
+        elapsedDays = state.fsrsElapsedDays
+    )
+
+    /** A concept read back, its states as entities keyed by learning group name ("" = Global). */
+    fun parsedConcept(concept: ArchiveConcept) = CardImportExport.ParsedConcept(
+        name = concept.name.trim(),
+        description = concept.description,
+        globalState = concept.state?.let { conceptState(it) },
+        learningStates = concept.learningStates
+            .filter { it.learningGroup.isNotBlank() }
+            .associate {
+                it.learningGroup.trim() to conceptState(
+                    ArchiveState(
+                        it.nextReview, it.lastReview, it.stability, it.difficulty, it.fsrsState,
+                        it.reps, it.lapses, it.scheduledDays, it.elapsedDays
+                    )
+                )
+            }
+    )
+
+    private fun conceptState(state: ArchiveState) = ConceptLearningState(
+        conceptId = 0L,
+        learningGroupId = 0L,
+        fsrsStability = state.stability,
+        fsrsDifficulty = state.difficulty,
+        fsrsElapsedDays = state.elapsedDays,
+        fsrsScheduledDays = state.scheduledDays,
+        fsrsReps = state.reps,
+        fsrsLapses = state.lapses,
+        fsrsState = state.fsrsState,
+        lastReview = state.lastReview,
+        nextReview = state.nextReview
     )
 
     fun opponentNode(opponent: Opponent) = ArchiveOpponent(
@@ -365,7 +458,8 @@ internal object ArchiveYaml {
         card: Card,
         groupNames: List<String>,
         learningStates: Map<String, CardLearningState>,
-        images: ImageReader
+        images: ImageReader,
+        conceptNames: List<String> = emptyList()
     ): ArchiveCard {
         val state = ArchiveState(
             nextReview = card.nextReview,
@@ -384,6 +478,7 @@ internal object ArchiveYaml {
             answer = card.answer.ifEmpty { null },
             images = card.imagePaths.mapNotNull { CardImportExport.encodeImageToBase64(it, images) },
             groups = groupNames.filter { it.isNotBlank() },
+            concepts = conceptNames.filter { it.isNotBlank() },
             state = state.takeIf { it != ArchiveState() },
             learningStates = learningStates.map { (name, learning) ->
                 ArchiveLearningState(
@@ -607,6 +702,7 @@ internal object ArchiveYaml {
         // A blank group name is not a group. Left in, an import would create
         // one called "" and quietly file cards under it.
         val groups = card.groups.filter { it.isNotBlank() }
+        val concepts = card.concepts.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         val own = when {
             card.state != null ->
                 parsedCard(question, answer, lineNumber, card.images, groups, GLOBAL_STATE, card.state)
@@ -615,7 +711,7 @@ internal object ArchiveYaml {
             // question-and-answer list and drops the groups. Every
             // scheduling field stays null, which is what a card nobody has
             // practised looks like.
-            groups.isNotEmpty() -> ParsedCard(
+            groups.isNotEmpty() || concepts.isNotEmpty() -> ParsedCard(
                 concept = question,
                 answer = answer,
                 lineNumber = lineNumber,
@@ -629,7 +725,7 @@ internal object ArchiveYaml {
                 lineNumber = lineNumber,
                 imageData = card.images
             )
-        }.copy(uid = card.uid?.takeIf { it.isNotBlank() })
+        }.copy(conceptNames = concepts)
         val learning = card.learningStates.filter { it.learningGroup.isNotBlank() }.map { learningState ->
             parsedCard(
                 question, answer, lineNumber, emptyList(), emptyList(),

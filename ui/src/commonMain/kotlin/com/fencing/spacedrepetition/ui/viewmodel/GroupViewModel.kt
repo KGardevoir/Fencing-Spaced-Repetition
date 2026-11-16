@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.data.repository.CardRepository
+import com.fencing.spacedrepetition.data.repository.ConceptRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.ui.ExportFile
 import com.fencing.spacedrepetition.ui.ImportFile
@@ -36,7 +37,8 @@ import kotlinx.coroutines.launch
 class GroupViewModel(
     private val groupRepository: GroupRepository,
     private val cardRepository: CardRepository,
-    private val imageStore: ImageStore
+    private val imageStore: ImageStore,
+    private val conceptRepository: ConceptRepository
 ) : ViewModel() {
 
     val allGroups: StateFlow<List<Group>> = groupRepository.getAllGroups()
@@ -107,7 +109,9 @@ class GroupViewModel(
 
     fun deleteGroups(groups: List<Group>) {
         viewModelScope.launch {
-            groups.forEach { groupRepository.deleteGroup(it) }
+            groupRepository.deleteGroup(group)
+            // Reviews naming the group can no longer be placed in a context.
+            cardRepository.rederiveConcepts()
         }
     }
 
@@ -123,6 +127,11 @@ class GroupViewModel(
                     groupRepository.setLearningGroup(updated.id, updated.learningGroupId)
                 }
                 groupRepository.updateGroup(updated)
+                // Concept history is placed by group, so a group changing
+                // learning group (or name) moves where its reviews count.
+                if (updated.learningGroupId != previous.learningGroupId || updated.name != previous.name) {
+                    cardRepository.rederiveConcepts()
+                }
                 onSuccess()
             } catch (e: Exception) {
                 // Handle error
@@ -157,6 +166,7 @@ class GroupViewModel(
                         wasIn && !isIn -> groupRepository.setLearningGroup(group.id, null)
                     }
                 }
+                cardRepository.rederiveConcepts()
                 onSuccess()
             } catch (e: Exception) {
                 // Handle error
@@ -181,7 +191,9 @@ class GroupViewModel(
 
     fun deleteLearningGroups(learningGroups: List<LearningGroup>) {
         viewModelScope.launch {
-            learningGroups.forEach { groupRepository.deleteLearningGroup(it) }
+            groupRepository.deleteLearningGroup(learningGroup)
+            // Its groups learn Global now, and so does their history.
+            cardRepository.rederiveConcepts()
         }
     }
 
@@ -214,7 +226,9 @@ class GroupViewModel(
         viewModelScope.launch {
             _importExportState.value = ImportExportState.Loading
             try {
-                val cardsWithStates = groupRepository.getCardsByGroupWithStates(groupId)
+                val cardsWithStates = conceptRepository.withConceptNames(
+                    groupRepository.getCardsByGroupWithStates(groupId)
+                )
                 if (cardsWithStates.isEmpty()) {
                     _importExportState.value =
                         ImportExportState.Error("No cards to export in this group")
@@ -226,6 +240,7 @@ class GroupViewModel(
                     .filter { it.name in exportedGroupNames }
                 val images = imageStore.exportReader(cardsWithStates.map { it.card })
                 val learningGroups = groupRepository.getAllLearningGroupsSync()
+                val concepts = cardRepository.getAllConceptsWithStates()
 
                 _importExportState.value = file.write { out ->
                     CardImportExport.exportCardsWithGroupStates(
@@ -233,7 +248,8 @@ class GroupViewModel(
                         out = out,
                         images = images,
                         groupSettings = groups,
-                        learningGroups = learningGroups
+                        learningGroups = learningGroups,
+                        concepts = concepts
                     )
                 }.asImportExportState()
             } catch (e: Exception) {
@@ -294,6 +310,8 @@ class GroupViewModel(
                         groupId
                     )
                 }
+                importConceptsAndLinks(parsedCards, cardRepository, conceptRepository, groupRepository)
+                cardRepository.rederiveConcepts(onlyWithHistory = true)
 
                 _importExportState.value = ImportExportState.ImportSuccess(
                     importedCount = importedCount,

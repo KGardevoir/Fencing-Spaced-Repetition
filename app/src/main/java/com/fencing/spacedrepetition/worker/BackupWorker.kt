@@ -73,7 +73,8 @@ class BackupWorker(
             reviewLogDao = database.reviewLogDao(),
             groupDao = database.groupDao(),
             opponentDao = database.opponentDao(),
-            preferences = preferences
+            preferences = preferences,
+            conceptDao = database.conceptDao()
         )
         val groupRepository = GroupRepository(
             groupDao = database.groupDao(),
@@ -107,7 +108,8 @@ class BackupWorker(
                 val result = CardImportExport.exportCardsWithGroupStates(
                     cardsWithStates, outputStream, allGroups, reviewLogs, cardQuestions,
                     opponents, opponentNamesById, FileImageReader(applicationContext),
-                    sessions, groupRepository.getAllLearningGroupsSync()
+                    sessions, groupRepository.getAllLearningGroupsSync(),
+                    cardRepository.getAllConceptsWithStates()
                 )
                 outputStream.close()
                 result

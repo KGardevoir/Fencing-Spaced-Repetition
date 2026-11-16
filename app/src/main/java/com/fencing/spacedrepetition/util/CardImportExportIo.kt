@@ -92,7 +92,8 @@ fun CardImportExport.exportCardsWithGroupStates(
     opponentNamesById: Map<Long, String> = emptyMap(),
     images: ImageReader,
     sessions: List<PracticeSession> = emptyList(),
-    learningGroups: List<LearningGroup> = emptyList()
+    learningGroups: List<LearningGroup> = emptyList(),
+    concepts: List<ConceptWithStates> = emptyList()
 ): ExportResult = outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
     exportCardsWithGroupStates(
         cardsWithStates = cardsWithStates,
@@ -104,7 +105,8 @@ fun CardImportExport.exportCardsWithGroupStates(
         cardQuestions = cardQuestions,
         opponents = opponents,
         opponentNamesById = opponentNamesById,
-        sessions = sessions
+        sessions = sessions,
+        concepts = concepts
     )
 }
 

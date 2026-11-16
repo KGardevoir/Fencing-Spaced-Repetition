@@ -12,8 +12,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.CheckBox
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -41,12 +41,16 @@ import com.fencing.spacedrepetition.ui.components.rememberSelectionState
  * @param onEditLearningGroup opens the learning group editor; a learning
  *   group with id 0 is a new one.
  * @param onEditGlobal opens the Global settings.
+ * @param globalConceptScheduling whether Global schedules by learning concept;
+ *   each learning group carries its own switch. Shown on the rows, changed on
+ *   the settings screens.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LearningGroupsScreen(
     learningGroups: List<LearningGroup>,
     groups: List<Group>,
+    globalConceptScheduling: Boolean,
     onEditLearningGroup: (LearningGroup) -> Unit,
     onEditGlobal: () -> Unit,
     onDeleteLearningGroups: (List<LearningGroup>) -> Unit,
@@ -125,8 +129,8 @@ fun LearningGroupsScreen(
                     description = "",
                     members = globalGroups,
                     isGlobal = true,
-                    // Global is not a row anywhere: it cannot be selected or deleted.
-                    onClick = { if (!selection.active) onEditGlobal() }
+                    useConcepts = globalConceptScheduling,
+                    onEdit = onEditGlobal
                 )
             }
             items(learningGroups, key = { it.id }) { learningGroup ->
@@ -135,12 +139,9 @@ fun LearningGroupsScreen(
                     description = learningGroup.description,
                     members = groups.filter { it.learningGroupId == learningGroup.id },
                     isGlobal = false,
-                    selecting = selection.active,
-                    selected = learningGroup.id in selection.selected,
-                    onClick = {
-                        if (selection.active) selection.toggle(learningGroup.id) else onEditLearningGroup(learningGroup)
-                    },
-                    onLongPress = { if (!selection.active) selection.start(learningGroup.id) }
+                    useConcepts = learningGroup.useConcepts,
+                    onEdit = { onEditLearningGroup(learningGroup) },
+                    onDelete = { deleting = learningGroup }
                 )
             }
             // Room for the last row above the action button.
@@ -188,10 +189,9 @@ private fun LearningGroupRow(
     description: String,
     members: List<Group>,
     isGlobal: Boolean,
-    selecting: Boolean = false,
-    selected: Boolean = false,
-    onClick: () -> Unit = {},
-    onLongPress: () -> Unit = {}
+    useConcepts: Boolean,
+    onEdit: () -> Unit = {},
+    onDelete: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier
@@ -235,6 +235,21 @@ private fun LearningGroupRow(
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis
                 )
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                    Icon(
+                        Icons.Default.Lightbulb,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = if (useConcepts) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        if (useConcepts) "Schedules by learning concept" else "Schedules card by card",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }

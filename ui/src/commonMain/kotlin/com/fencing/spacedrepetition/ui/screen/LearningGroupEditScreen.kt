@@ -25,6 +25,7 @@ import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.ui.components.AppIcons
 import com.fencing.spacedrepetition.ui.components.BucketSizeSlider
 import com.fencing.spacedrepetition.ui.components.CardsPerSessionSlider
+import com.fencing.spacedrepetition.ui.components.ConceptSchedulingSwitch
 import com.fencing.spacedrepetition.ui.components.RandomizeDueCardsSwitch
 import com.fencing.spacedrepetition.ui.components.FuzzingSwitch
 import com.fencing.spacedrepetition.ui.components.MaximumIntervalSlider
@@ -73,6 +74,7 @@ fun LearningGroupEditScreen(
     var name by rememberSaveable { mutableStateOf(learningGroup.name) }
     var description by rememberSaveable { mutableStateOf(learningGroup.description) }
     var memberIds by remember { mutableStateOf(initialMemberIds) }
+    var useConcepts by rememberSaveable { mutableStateOf(learningGroup.useConcepts) }
 
     var overrideCardsPerSession by remember { mutableStateOf(learningGroup.cardsPerSession != null) }
     var cardsPerSession by remember { mutableIntStateOf(learningGroup.cardsPerSession ?: globalCardsPerSession) }
@@ -113,7 +115,8 @@ fun LearningGroupEditScreen(
         practiceDays = if (overridePracticeDays) practiceDays.sorted().joinToString(",") else null,
         maximumInterval = if (overrideMaximumInterval) maximumInterval else null,
         fsrsRetention = if (overrideFsrsRetention) fsrsRetention else null,
-        fsrsEnableFuzzing = if (overrideFsrsEnableFuzzing) fsrsEnableFuzzing else null
+        fsrsEnableFuzzing = if (overrideFsrsEnableFuzzing) fsrsEnableFuzzing else null,
+        useConcepts = useConcepts
     )
 
     val isDirty = buildUpdated() != learningGroup || memberIds != initialMemberIds
@@ -182,6 +185,8 @@ fun LearningGroupEditScreen(
                 maxLines = 3,
                 modifier = Modifier.fillMaxWidth()
             )
+            Spacer(modifier = Modifier.height(8.dp))
+            ConceptSchedulingSwitch(useConcepts) { useConcepts = it }
 
             Spacer(modifier = Modifier.height(16.dp))
             HorizontalDivider()

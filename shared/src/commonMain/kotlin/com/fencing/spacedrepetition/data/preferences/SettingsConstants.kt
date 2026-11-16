@@ -44,6 +44,7 @@ object SettingsConstants {
     const val DEFAULT_FSRS_RETENTION = 90
 
     const val DEFAULT_FSRS_ENABLE_FUZZING = false
+    const val DEFAULT_GLOBAL_CONCEPT_SCHEDULING = false
 
     const val DEFAULT_AUTO_BACKUP_ENABLED = false
     const val DEFAULT_AUTO_BACKUP_INTERVAL_DAYS = 1

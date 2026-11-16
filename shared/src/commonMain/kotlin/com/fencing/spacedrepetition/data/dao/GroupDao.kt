@@ -112,6 +112,9 @@ interface GroupDao {
     @Query("SELECT COUNT(DISTINCT cardId) FROM card_group_cross_ref WHERE groupId IN (:groupIds)")
     suspend fun countDistinctCardsInGroups(groupIds: List<Long>): Int
 
+    @Query("UPDATE learning_groups SET useConcepts = :useConcepts WHERE id = :learningGroupId")
+    suspend fun setLearningGroupUseConcepts(learningGroupId: Long, useConcepts: Boolean)
+
     @Query("UPDATE groups SET learningGroupId = :learningGroupId WHERE id = :groupId")
     suspend fun setLearningGroupForGroup(groupId: Long, learningGroupId: Long?)
 

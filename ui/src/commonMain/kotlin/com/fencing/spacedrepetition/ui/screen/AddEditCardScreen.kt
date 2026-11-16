@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.ui.components.AppIcons
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardLearningState
+import com.fencing.spacedrepetition.data.model.Concept
 import com.fencing.spacedrepetition.data.model.Grade
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.backhandler.BackHandler
@@ -55,12 +56,15 @@ fun AddEditCardScreen(
     cardGroups: List<Group>,
     learningStates: List<CardLearningState>,
     learningGroups: List<LearningGroup> = emptyList(),
+    allConcepts: List<Concept> = emptyList(),
+    cardConcepts: List<Concept> = emptyList(),
     cardToEdit: Card? = null,
     initialGroupId: Long? = null,
     onComputeGrade: (cardId: Long, grade: Grade, groupId: Long?, onComputed: (Card) -> Unit) -> Unit,
     onResetCardState: (cardId: Long, resetGroupStates: Boolean, onDone: () -> Unit) -> Unit,
     onResetCardStateInGroup: (cardId: Long, groupId: Long, onDone: () -> Unit) -> Unit,
-    onUpdateCard: (card: Card, groupIds: List<Long>, onSuccess: () -> Unit) -> Unit,
+    /** conceptIds is null when the concepts were not touched, leaving them as they are. */
+    onUpdateCard: (card: Card, groupIds: List<Long>, conceptIds: List<Long>?, onSuccess: () -> Unit) -> Unit,
     onRecordGradeFromEdit: (before: Card, after: Card, grade: Grade, groupId: Long?) -> Unit,
     onUpdateLearningState: (CardLearningState) -> Unit,
     onAddCard: (
@@ -68,9 +72,11 @@ fun AddEditCardScreen(
         answer: String,
         groupIds: List<Long>,
         imagePaths: List<String>,
+        conceptIds: List<Long>,
         onSuccess: () -> Unit
     ) -> Unit,
     onCreateGroup: (name: String, onCreated: (Long) -> Unit) -> Unit,
+    onCreateConcept: (name: String, onCreated: (Long) -> Unit) -> Unit = { _, _ -> },
     onNavigateBack: () -> Unit
 ) {
     var question by rememberSaveable { mutableStateOf(cardToEdit?.question ?: "") }
@@ -87,6 +93,13 @@ fun AddEditCardScreen(
         }
         mutableStateOf(initialIds.toSet())
     }
+
+    // Learning concepts. Untouched until the user changes them, so a save
+    // that races the concepts loading does not wipe them.
+    var selectedConceptIds by remember(cardConcepts) { mutableStateOf(cardConcepts.map { it.id }.toSet()) }
+    var conceptsTouched by rememberSaveable { mutableStateOf(false) }
+    var showConceptSelectionSheet by rememberSaveable { mutableStateOf(false) }
+    var showCreateConceptDialog by rememberSaveable { mutableStateOf(false) }
 
     var showGroupSelectionSheet by rememberSaveable { mutableStateOf(false) }
     var showAdvancedSettings by rememberSaveable { mutableStateOf(false) }
@@ -386,6 +399,75 @@ fun AddEditCardScreen(
                                         isDirty = true
                                     },
                                     label = { Text(group.name) },
+                                    trailingIcon = {
+                                        Icon(
+                                            Icons.Default.Close,
+                                            contentDescription = "Remove",
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Learning concepts
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showConceptSelectionSheet = true }
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Lightbulb,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Concepts", style = MaterialTheme.typography.titleMedium)
+                        }
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "Edit concepts",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (selectedConceptIds.isEmpty()) {
+                        Text(
+                            "No concepts (tap to add). Without concepts the card is always scheduled on its own.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Text(
+                            "Scheduled by these concepts where concept scheduling is on (see Learning Groups)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            allConcepts.filter { it.id in selectedConceptIds }.forEach { concept ->
+                                AssistChip(
+                                    onClick = {
+                                        selectedConceptIds = selectedConceptIds - concept.id
+                                        conceptsTouched = true
+                                        isDirty = true
+                                    },
+                                    label = { Text(concept.name) },
                                     trailingIcon = {
                                         Icon(
                                             Icons.Default.Close,
@@ -818,6 +900,83 @@ fun AddEditCardScreen(
                 }
             }
 
+            Spacer(modifier = Modifier.weight(1f))
+
+            // Save button
+            Button(
+                onClick = {
+                    if (question.isNotBlank()) {
+                        if (isEditing && cardToEdit != null) {
+                            // Build updated card with learning state if advanced settings were used
+                            val updatedCard = cardToEdit.copy(
+                                question = question,
+                                answer = answerFieldValue.text,
+                                imagePaths = imagePaths,
+                                // FSRS state
+                                fsrsStability = fsrsStability.toDoubleOrNull() ?: cardToEdit.fsrsStability,
+                                fsrsDifficulty = fsrsDifficulty.toDoubleOrNull() ?: cardToEdit.fsrsDifficulty,
+                                fsrsReps = fsrsReps.toIntOrNull() ?: cardToEdit.fsrsReps,
+                                fsrsLapses = fsrsLapses.toIntOrNull() ?: cardToEdit.fsrsLapses,
+                                fsrsState = fsrsState,
+                                fsrsElapsedDays = fsrsElapsedDays.toIntOrNull() ?: cardToEdit.fsrsElapsedDays,
+                                fsrsScheduledDays = fsrsScheduledDays.toIntOrNull() ?: cardToEdit.fsrsScheduledDays,
+                                // Review timing
+                                lastReview = lastReview,
+                                nextReview = nextReview
+                            )
+                            onUpdateCard(
+                                updatedCard,
+                                selectedGroupIds.toList(),
+                                if (conceptsTouched) selectedConceptIds.toList() else null
+                            ) {
+                                // Record a history entry if a grade was applied via the grade buttons
+                                val grade = appliedGrade
+                                if (grade != null && cardToEdit != null) {
+                                    onRecordGradeFromEdit(cardToEdit, updatedCard, grade, appliedGradeGroupId)
+                                }
+                                // Save independent learning state changes
+                                learningGroupEdits.forEach { (learningGroupId, edit) ->
+                                    val existingState = learningStates.find { it.learningGroupId == learningGroupId }
+                                    if (existingState != null) {
+                                        val updatedState = existingState.copy(
+                                            fsrsStability = edit.fsrsStability.toDoubleOrNull() ?: existingState.fsrsStability,
+                                            fsrsDifficulty = edit.fsrsDifficulty.toDoubleOrNull() ?: existingState.fsrsDifficulty,
+                                            fsrsReps = edit.fsrsReps.toIntOrNull() ?: existingState.fsrsReps,
+                                            fsrsLapses = edit.fsrsLapses.toIntOrNull() ?: existingState.fsrsLapses,
+                                            fsrsState = edit.fsrsState
+                                        )
+                                        onUpdateLearningState(updatedState)
+                                    }
+                                }
+                                isDirty = false
+                                onNavigateBack()
+                            }
+                        } else {
+                            onAddCard(
+                                question,
+                                answerFieldValue.text,
+                                selectedGroupIds.toList(),
+                                imagePaths,
+                                selectedConceptIds.toList()
+                            ) { isDirty = false; onNavigateBack() }
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                enabled = question.isNotBlank()
+            ) {
+                Icon(
+                    if (isEditing) Icons.Default.Save else Icons.Default.Add,
+                    contentDescription = null
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (isEditing) "Save Changes" else "Add Card",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
         } // end scrollable Column
         // Markdown toolbar pinned above the keyboard
         MarkdownKeyboardToolbar(markdownToolbarState)
@@ -1051,6 +1210,133 @@ fun AddEditCardScreen(
                 }
             )
         }
+    }
+
+    // Concept selection bottom sheet
+    if (showConceptSelectionSheet) {
+        var conceptQuery by rememberSaveable { mutableStateOf("") }
+        ModalBottomSheet(onDismissRequest = { showConceptSelectionSheet = false }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Text("Select Concepts", style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.height(8.dp))
+                if (allConcepts.size > 8) {
+                    OutlinedTextField(
+                        value = conceptQuery,
+                        onValueChange = { conceptQuery = it },
+                        placeholder = { Text("Search concepts") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                if (allConcepts.isEmpty()) {
+                    Text(
+                        "No concepts yet. Create one below.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    val listed = allConcepts.filter {
+                        conceptQuery.isBlank() || it.name.contains(conceptQuery.trim(), ignoreCase = true)
+                    }
+                    LazyColumn(modifier = Modifier.weight(1f, fill = false).fillMaxWidth()) {
+                        items(listed, key = { it.id }) { concept ->
+                            val checked = concept.id in selectedConceptIds
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selectedConceptIds =
+                                            if (checked) selectedConceptIds - concept.id
+                                            else selectedConceptIds + concept.id
+                                        conceptsTouched = true
+                                        isDirty = true
+                                    }
+                                    .padding(vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = checked,
+                                    onCheckedChange = { on ->
+                                        selectedConceptIds =
+                                            if (on) selectedConceptIds + concept.id
+                                            else selectedConceptIds - concept.id
+                                        conceptsTouched = true
+                                        isDirty = true
+                                    }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(concept.name, style = MaterialTheme.typography.bodyLarge)
+                                    if (concept.description.isNotEmpty()) {
+                                        Text(
+                                            concept.description,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedButton(
+                    onClick = { showCreateConceptDialog = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Create New Concept")
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = { showConceptSelectionSheet = false },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Done") }
+                Spacer(modifier = Modifier.height(32.dp))
+            }
+        }
+    }
+
+    // Create new concept dialog
+    if (showCreateConceptDialog) {
+        var newConceptName by rememberSaveable { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showCreateConceptDialog = false },
+            icon = { Icon(Icons.Default.Lightbulb, contentDescription = null) },
+            title = { Text("Create New Concept") },
+            text = {
+                OutlinedTextField(
+                    value = newConceptName,
+                    onValueChange = { newConceptName = it },
+                    label = { Text("Concept Name") },
+                    supportingText = { Text("An existing concept of the same name is reused") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onCreateConcept(newConceptName) { newId ->
+                            selectedConceptIds = selectedConceptIds + newId
+                            conceptsTouched = true
+                            isDirty = true
+                            showCreateConceptDialog = false
+                        }
+                    },
+                    enabled = newConceptName.isNotBlank()
+                ) { Text("Create") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateConceptDialog = false }) { Text("Cancel") }
+            }
+        )
     }
 
     // Create new group dialog

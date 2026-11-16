@@ -12,12 +12,14 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.backhandler.BackHandler
 import com.fencing.spacedrepetition.BuildInfo
 import com.fencing.spacedrepetition.data.model.CardLearningState
+import com.fencing.spacedrepetition.data.model.Concept
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.ui.navigation.Destination
 import com.fencing.spacedrepetition.ui.navigation.Navigator
 import com.fencing.spacedrepetition.ui.navigation.rememberNavigator
 import com.fencing.spacedrepetition.ui.screen.AddEditCardScreen
 import com.fencing.spacedrepetition.ui.screen.CardListScreen
+import com.fencing.spacedrepetition.ui.screen.ConceptsScreen
 import com.fencing.spacedrepetition.ui.screen.GradingScreen
 import com.fencing.spacedrepetition.ui.screen.GroupEditScreen
 import com.fencing.spacedrepetition.ui.screen.GroupListScreen
@@ -31,6 +33,7 @@ import com.fencing.spacedrepetition.ui.screen.PracticeScreen
 import com.fencing.spacedrepetition.ui.screen.RetentionReportScreen
 import com.fencing.spacedrepetition.ui.screen.SettingsScreen
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.ConceptViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
@@ -64,6 +67,7 @@ fun App(
     historyViewModel: HistoryViewModel,
     opponentViewModel: OpponentViewModel,
     retentionReportViewModel: RetentionReportViewModel,
+    conceptViewModel: ConceptViewModel,
     buildInfo: BuildInfo,
     transfer: FileTransfer,
     onOpenLink: (String) -> Unit,
@@ -172,6 +176,7 @@ fun App(
                 onNavigateToCards = { navigator.go(Destination.CardList) },
                 onNavigateToGroups = { navigator.go(Destination.GroupList) },
                 onNavigateToLearningGroups = { navigator.go(Destination.LearningGroups) },
+                onNavigateToConcepts = { navigator.go(Destination.Concepts) },
                 onNavigateToSettings = { navigator.go(Destination.Settings) },
                 onNavigateToHistory = { navigator.go(Destination.History) },
                 onNavigateToRetention = { navigator.go(Destination.RetentionReport) },
@@ -383,9 +388,12 @@ fun App(
             val learningGroups by groupViewModel.learningGroups.collectAsState()
             val groups by groupViewModel.allGroups.collectAsState()
 
+            val globalConceptScheduling by settingsViewModel.globalConceptScheduling.collectAsState()
+
             LearningGroupsScreen(
                 learningGroups = learningGroups,
                 groups = groups,
+                globalConceptScheduling = globalConceptScheduling,
                 onEditLearningGroup = { navigator.go(Destination.EditLearningGroup(it)) },
                 onEditGlobal = { navigator.go(Destination.GlobalLearningSettings) },
                 onDeleteLearningGroups = groupViewModel::deleteLearningGroups,
@@ -402,6 +410,7 @@ fun App(
             val maximumInterval by settingsViewModel.maximumInterval.collectAsState()
             val fsrsRetention by settingsViewModel.fsrsRetention.collectAsState()
             val fsrsEnableFuzzing by settingsViewModel.fsrsEnableFuzzing.collectAsState()
+            val conceptScheduling by settingsViewModel.globalConceptScheduling.collectAsState()
             val practiceScheduleEstimate by cardViewModel.practiceScheduleEstimate.collectAsState()
             val historyWindowDays by cardViewModel.historyWindowDays.collectAsState()
 
@@ -414,6 +423,7 @@ fun App(
                 maximumInterval = maximumInterval,
                 fsrsRetention = fsrsRetention,
                 fsrsEnableFuzzing = fsrsEnableFuzzing,
+                conceptScheduling = conceptScheduling,
                 practiceScheduleEstimate = practiceScheduleEstimate,
                 historyWindowDays = historyWindowDays,
                 onSetCardsPerSession = settingsViewModel::setCardsPerSession,
@@ -423,6 +433,7 @@ fun App(
                 onSetMaximumInterval = settingsViewModel::setMaximumInterval,
                 onSetFsrsRetention = settingsViewModel::setFsrsRetention,
                 onSetFsrsEnableFuzzing = settingsViewModel::setFsrsEnableFuzzing,
+                onSetConceptScheduling = settingsViewModel::setGlobalConceptScheduling,
                 onSetHistoryWindowDays = cardViewModel::setHistoryWindowDays,
                 onNavigateBack = { navigator.back() }
             )
@@ -459,6 +470,26 @@ fun App(
                 onSave = { updated, memberIds ->
                     groupViewModel.saveLearningGroup(updated, memberIds) { navigator.back() }
                 },
+                onNavigateBack = { navigator.back() }
+            )
+        }
+
+        Destination.Concepts -> {
+            val concepts by conceptViewModel.concepts.collectAsState()
+            val allCards by conceptViewModel.allCards.collectAsState()
+            val error by conceptViewModel.error.collectAsState()
+            val globalConceptScheduling by settingsViewModel.globalConceptScheduling.collectAsState()
+
+            ConceptsScreen(
+                concepts = concepts,
+                globalConceptScheduling = globalConceptScheduling,
+                onNavigateToLearningGroups = { navigator.go(Destination.LearningGroups) },
+                allCards = allCards,
+                error = error,
+                onSaveConcept = conceptViewModel::saveConcept,
+                onDeleteConcept = conceptViewModel::deleteConcept,
+                onRederiveAll = conceptViewModel::rederiveAll,
+                onClearError = conceptViewModel::clearError,
                 onNavigateBack = { navigator.back() }
             )
         }
@@ -592,12 +623,19 @@ private fun CardEditor(
             ?: flowOf(emptyList<CardLearningState>())
     }
     val learningStates by learningStatesFlow.collectAsState(initial = emptyList())
+    val allConcepts by cardViewModel.allConcepts.collectAsState()
+    val cardConceptsFlow = remember(cardToEdit?.id) {
+        cardToEdit?.let { cardViewModel.getConceptsForCard(it.id) } ?: flowOf(emptyList<Concept>())
+    }
+    val cardConcepts by cardConceptsFlow.collectAsState(initial = emptyList())
 
     AddEditCardScreen(
         allGroups = allGroups,
         cardGroups = cardGroups,
         learningStates = learningStates,
         learningGroups = learningGroups,
+        allConcepts = allConcepts,
+        cardConcepts = cardConcepts,
         cardToEdit = cardToEdit,
         initialGroupId = initialGroupId,
         onComputeGrade = { cardId, grade, groupId, onComputed ->
@@ -614,10 +652,11 @@ private fun CardEditor(
             cardViewModel.recordGradeFromEdit(before, after, grade, groupId)
         },
         onUpdateLearningState = { cardViewModel.updateLearningState(it) },
-        onAddCard = { question, answer, groupIds, imagePaths, onSuccess ->
-            cardViewModel.addCard(question, answer, groupIds, imagePaths, onSuccess)
+        onAddCard = { question, answer, groupIds, imagePaths, conceptIds, onSuccess ->
+            cardViewModel.addCard(question, answer, groupIds, imagePaths, conceptIds, onSuccess)
         },
         onCreateGroup = { name, onCreated -> groupViewModel.addGroup(name, onSuccess = onCreated) },
+        onCreateConcept = cardViewModel::createConcept,
         onNavigateBack = onNavigateBack
     )
 }

@@ -5,6 +5,7 @@ package com.fencing.spacedrepetition.data.repository
 
 import com.fencing.spacedrepetition.algorithm.FSRSAlgorithm
 import com.fencing.spacedrepetition.data.dao.CardDao
+import com.fencing.spacedrepetition.data.dao.ConceptDao
 import com.fencing.spacedrepetition.data.dao.GroupDao
 import com.fencing.spacedrepetition.data.dao.OpponentDao
 import com.fencing.spacedrepetition.data.dao.PracticeSessionDao
@@ -12,6 +13,7 @@ import com.fencing.spacedrepetition.data.dao.ReviewLogDao
 import com.fencing.spacedrepetition.data.model.*
 import com.fencing.spacedrepetition.data.preferences.SchedulingPreferences
 import com.fencing.spacedrepetition.util.CardWithGroupStates
+import com.fencing.spacedrepetition.util.ConceptWithStates
 import com.fencing.spacedrepetition.util.ParsedCard
 import com.fencing.spacedrepetition.util.Time
 import kotlinx.coroutines.flow.Flow
@@ -26,13 +28,22 @@ const val GROUP_NAME_CARD_EDIT = "card_edit"
  */
 private const val ALGORITHM_NAME = "FSRS"
 
+/** One review of a concept, as replayed from its cards' history. */
+internal data class ConceptReviewEvent(
+    val time: Long,
+    val grade: Grade,
+    val groupName: String?,
+    val stabilityMultiplier: Double
+)
+
 class CardRepository(
     private val cardDao: CardDao,
     private val sessionDao: PracticeSessionDao,
     private val reviewLogDao: ReviewLogDao,
     private val groupDao: GroupDao,
     private val opponentDao: OpponentDao,
-    private val preferences: SchedulingPreferences
+    private val preferences: SchedulingPreferences,
+    private val conceptDao: ConceptDao
 ) {
     private val fsrsAlgorithm = FSRSAlgorithm()
 
@@ -81,14 +92,14 @@ class CardRepository(
 
     suspend fun updateCard(card: Card) = cardDao.updateCard(card)
 
-    suspend fun deleteCard(card: Card) {
-        cardDao.deleteCard(card)
-        reviewLogDao.deleteReviewLogsByCard(card.id)
-    }
+    suspend fun deleteCard(card: Card) = deleteCardById(card.id)
 
+    /** Deletes the card and its history; its concepts are rederived without either. */
     suspend fun deleteCardById(cardId: Long) {
+        val conceptIds = conceptDao.getConceptsForCardSync(cardId).map { it.id }
         cardDao.deleteCardById(cardId)
         reviewLogDao.deleteReviewLogsByCard(cardId)
+        if (conceptIds.isNotEmpty()) rederiveConcepts(conceptIds)
     }
 
     suspend fun resetCardState(cardId: Long, resetGroupStates: Boolean = false) {
@@ -231,6 +242,8 @@ class CardRepository(
             fightDifficulty = fightDifficulty,
             stabilityMultiplier = stabilityMultiplier
         ))
+        // A new review in the card's history: its concepts follow.
+        rederiveConceptsForCards(listOf(cardBefore.id))
     }
 
     /**
@@ -485,6 +498,24 @@ class CardRepository(
         return importedCount
     }
 
+    /**
+     * Tag imported cards with the concepts their records list, finding each
+     * card by question. A card that lists any concepts has exactly those
+     * afterwards; one that lists none -- including every card in a file from
+     * before concepts -- keeps whatever it carries here.
+     */
+    suspend fun linkImportedConcepts(parsedCards: List<ParsedCard>, conceptIds: Map<String, Long>) {
+        parsedCards.groupBy { it.concept }.forEach { (question, records) ->
+            val names = records.flatMap { it.conceptNames }.toSet()
+            if (names.isEmpty()) return@forEach
+            val card = cardDao.findCardByQuestion(question) ?: return@forEach
+            conceptDao.deleteAllConceptsForCard(card.id)
+            names.forEach { name ->
+                conceptIds[name]?.let { conceptDao.insertCardConceptCrossRef(CardConceptCrossRef(card.id, it)) }
+            }
+        }
+    }
+
     suspend fun getAllCardsWithGroupNames(): List<Pair<Card, List<String>>> {
         val cardsWithGroups = cardDao.getAllCardsWithGroups().first()
         return cardsWithGroups.map { cardWithGroups ->
@@ -495,6 +526,10 @@ class CardRepository(
     suspend fun getAllCardsWithGroupStates(): List<CardWithGroupStates> {
         val cardsWithGroups = cardDao.getAllCardsWithGroups().first()
         val learningGroupNames = groupDao.getAllLearningGroups().first().associate { it.id to it.name }
+        val conceptNames = conceptDao.getAllConceptsSync().associate { it.id to it.name }
+        val conceptsByCard = conceptDao.getAllCardConceptCrossRefsSync()
+            .groupBy({ it.cardId }, { conceptNames[it.conceptId] })
+            .mapValues { (_, names) -> names.filterNotNull().sorted() }
         return cardsWithGroups.map { cardWithGroups ->
             val card = cardWithGroups.card
             val groups = cardWithGroups.groups
@@ -509,8 +544,323 @@ class CardRepository(
                     .toMap()
             }
 
-            CardWithGroupStates(card, groupNames, learningStates)
+            CardWithGroupStates(card, groupNames, learningStates, conceptsByCard[card.id].orEmpty())
         }
+    }
+
+    /** Every concept with its states, learning-group ones keyed by learning group name. */
+    suspend fun getAllConceptsWithStates(): List<ConceptWithStates> {
+        val learningGroupNames = groupDao.getAllLearningGroups().first().associate { it.id to it.name }
+        val statesByConcept = conceptDao.getAllConceptLearningStatesSync().groupBy { it.conceptId }
+        return conceptDao.getAllConceptsSync().map { concept ->
+            ConceptWithStates(
+                concept,
+                statesByConcept[concept.id].orEmpty()
+                    .mapNotNull { state -> learningGroupNames[state.learningGroupId]?.let { it to state } }
+                    .toMap()
+            )
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Learning concepts
+    // ---------------------------------------------------------------------
+
+    /** The learning group [groupId] practises against; null is Global (and no group). */
+    private suspend fun learningGroupIdFor(groupId: Long?): Long? =
+        groupId?.let { groupDao.getGroupById(it)?.learningGroupId }
+
+    /**
+     * Whether a learning context schedules by concept: Global's setting when
+     * [learningGroupId] is null, else that learning group's own switch. Off
+     * everywhere by default, which keeps card-by-card scheduling.
+     */
+    suspend fun usesConcepts(learningGroupId: Long?): Boolean =
+        if (learningGroupId == null) preferences.globalConceptScheduling.first()
+        else groupDao.getLearningGroupById(learningGroupId)?.useConcepts == true
+
+    /**
+     * Draw the cards for a session: by concept where the session's learning
+     * context has concept scheduling on ([drawCardsByConcept]), otherwise
+     * card by card, exactly as before concepts -- due cards first, topped up
+     * with the rest of the pool.
+     */
+    suspend fun drawCards(limit: Int, groupId: Long?): List<Card> {
+        if (usesConcepts(learningGroupIdFor(groupId))) return drawCardsByConcept(limit, groupId)
+        val dueCards = if (groupId != null) getDueCardsByGroup(groupId, limit) else getDueCards(limit)
+        if (dueCards.size >= limit) return dueCards.take(limit)
+        val allCards = if (groupId != null) getCardsByGroupSync(groupId) else getAllCardsSync()
+        return allCards.take(limit)
+    }
+
+    /**
+     * Every concept's state in one learning context: Global when
+     * [learningGroupId] is null, else that learning group's. A concept never
+     * practised in the learning group is new there -- the learning group is
+     * a separate set of progress, so it does not inherit Global's.
+     */
+    suspend fun conceptStatesIn(learningGroupId: Long?): Map<Long, ConceptLearningState> {
+        val concepts = conceptDao.getAllConceptsSync()
+        if (learningGroupId == null) return concepts.associate { it.id to it.globalState() }
+        val stored = conceptDao.getConceptLearningStatesForLearningGroup(learningGroupId)
+            .associateBy { it.conceptId }
+        return concepts.associate { concept ->
+            concept.id to (stored[concept.id] ?: ConceptLearningState(concept.id, learningGroupId))
+        }
+    }
+
+    /**
+     * Draw the cards for a session, scheduling by concept.
+     *
+     * Each card in the pool (the group's cards, or the whole collection) is
+     * either tagged with concepts or not. An untagged card is scheduled as it
+     * always was, by its own state. A tagged card has no due date of its own:
+     * what comes due is its concepts.
+     *
+     * The due units -- untagged cards and concepts -- are put in due order
+     * (bucket-shuffled when the group randomises), and taken in that order.
+     * An untagged card is simply taken. A concept that no card taken so far
+     * covers picks a card for itself: of the cards carrying it, the one
+     * carrying the most of the other uncovered due concepts, so each card
+     * shown practises as many of the due concepts as it can. Its concepts are
+     * then covered, and the walk goes on until the session is full.
+     *
+     * A session that the due units do not fill is topped up with the rest
+     * of the pool, soonest due first -- additional study, as before.
+     */
+    internal suspend fun drawCardsByConcept(limit: Int, groupId: Long?): List<Card> {
+        if (limit <= 0) return emptyList()
+        val pool = if (groupId != null) cardDao.getCardsByGroupSync(groupId) else cardDao.getAllCardsSync()
+        if (pool.isEmpty()) return emptyList()
+
+        // How a session is drawn is the learning group's to say, as for cards.
+        val learningGroup = learningGroupFor(groupId)
+        val learningGroupId = learningGroup?.id
+        val shouldRandomize = learningGroup?.randomizeDueCards ?: preferences.randomizeDueCards.first()
+        val bucketHours = learningGroup?.randomizeBucketHours ?: preferences.randomizeBucketHours.first()
+
+        val poolIds = pool.map { it.id }.toSet()
+        val conceptsByCard: Map<Long, Set<Long>> = conceptDao.getAllCardConceptCrossRefsSync()
+            .filter { it.cardId in poolIds }
+            .groupBy({ it.cardId }, { it.conceptId })
+            .mapValues { it.value.toSet() }
+        val conceptStates = if (conceptsByCard.isEmpty()) emptyMap() else conceptStatesIn(learningGroupId)
+
+        // An untagged card's due date in this context.
+        val cardLearningStates = if (learningGroupId == null) emptyMap() else
+            pool.filter { it.id !in conceptsByCard }.mapNotNull { card ->
+                groupDao.getLearningState(card.id, learningGroupId)?.let { card.id to it.nextReview }
+            }.toMap()
+        fun cardDue(card: Card): Long = cardLearningStates[card.id] ?: card.nextReview
+        fun conceptDue(conceptId: Long): Long = conceptStates[conceptId]?.nextReview ?: 0L
+        // A tagged card is as due as its most-due concept.
+        fun taggedDue(card: Card): Long =
+            conceptsByCard[card.id].orEmpty().minOfOrNull { conceptDue(it) } ?: cardDue(card)
+
+        val now = Time.now()
+        val units = buildList {
+            pool.filter { it.id !in conceptsByCard && cardDue(it) <= now }
+                .forEach { add(DueUnit.OfCard(it, cardDue(it))) }
+            conceptsByCard.values.flatten().toSet()
+                .filter { conceptDue(it) <= now }
+                .forEach { add(DueUnit.OfConcept(it, conceptDue(it))) }
+        }.sortedBy { it.due }
+        val ordered = if (shouldRandomize) shuffleByBucket(units, bucketHours) { it.due } else units
+
+        val selected = LinkedHashMap<Long, Card>()
+        val uncovered = units.filterIsInstance<DueUnit.OfConcept>().map { it.conceptId }.toMutableSet()
+        val tagged = pool.filter { it.id in conceptsByCard }
+
+        for (unit in ordered) {
+            if (selected.size >= limit) break
+            when (unit) {
+                is DueUnit.OfCard -> selected.getOrPut(unit.card.id) { unit.card }
+                is DueUnit.OfConcept -> {
+                    if (unit.conceptId !in uncovered) continue
+                    val candidates = tagged.filter {
+                        it.id !in selected && unit.conceptId in conceptsByCard.getValue(it.id)
+                    }
+                    if (candidates.isEmpty()) {
+                        uncovered -= unit.conceptId
+                        continue
+                    }
+                    val best = pickBestCoveringCard(candidates, conceptsByCard, uncovered, shouldRandomize)
+                    selected[best.id] = best
+                    uncovered -= conceptsByCard.getValue(best.id)
+                }
+            }
+        }
+
+        if (selected.size < limit) {
+            val rest = pool.filter { it.id !in selected }
+                .sortedBy { if (it.id in conceptsByCard) taggedDue(it) else cardDue(it) }
+            val fill = if (shouldRandomize) rest.shuffled() else rest
+            fill.take(limit - selected.size).forEach { selected[it.id] = it }
+        }
+        return selected.values.toList()
+    }
+
+    private sealed class DueUnit(val due: Long) {
+        class OfCard(val card: Card, due: Long) : DueUnit(due)
+        class OfConcept(val conceptId: Long, due: Long) : DueUnit(due)
+    }
+
+    // ---------- Deriving concept state from card history ----------
+    //
+    // A concept's learning state is not something a concept accumulates on
+    // its own: it is a function of the review history of the cards that carry
+    // it. Every learning context's state is rebuilt by replaying those cards'
+    // reviews, oldest first, so tagging a card with a concept immediately
+    // gives the concept what that card has already been through, untagging
+    // takes it away again, and a concept whose cards have no history is
+    // simply new. What is stored on the concept and in
+    // concept_learning_state is that replay's result, kept so that drawing a
+    // session does not have to replay anything.
+    //
+    // Which context a review belongs to is read from the group its log
+    // names, as it stands now: a group in a learning group counts towards
+    // that learning group, a group learning Global -- or no group, or a grade
+    // from the card editor -- towards Global. A log naming a group that no
+    // longer exists cannot be placed and is left out.
+    //
+    // The state is derived for every context the history reaches, whether
+    // or not that context schedules by concept; the switch only decides
+    // whether a session draws by it.
+
+    /** Rederive every concept carried by any of [cardIds]. */
+    suspend fun rederiveConceptsForCards(cardIds: Collection<Long>) {
+        if (cardIds.isEmpty()) return
+        val ids = conceptDao.getAllCardConceptCrossRefsSync()
+            .filter { it.cardId in cardIds }
+            .map { it.conceptId }
+            .toSet()
+        if (ids.isNotEmpty()) rederiveConcepts(ids)
+    }
+
+    /** Make [conceptIds] exactly the concepts [cardId] carries, and rederive every concept that changed. */
+    suspend fun setCardConcepts(cardId: Long, conceptIds: Collection<Long>) {
+        val before = conceptDao.getConceptsForCardSync(cardId).map { it.id }.toSet()
+        val after = conceptIds.toSet()
+        if (before == after) return
+        conceptDao.deleteAllConceptsForCard(cardId)
+        after.forEach { conceptDao.insertCardConceptCrossRef(CardConceptCrossRef(cardId, it)) }
+        rederiveConcepts((before - after) + (after - before))
+    }
+
+    /**
+     * Rebuild the state of [conceptIds] (every concept when null) in every
+     * learning context from their cards' review history.
+     *
+     * @param onlyWithHistory leave a concept whose cards have no history at
+     *   all as it is, rather than making it new. For imports, which may bring
+     *   a concept's state in a file without the history behind it.
+     */
+    suspend fun rederiveConcepts(conceptIds: Collection<Long>? = null, onlyWithHistory: Boolean = false) {
+        val concepts = if (conceptIds == null) conceptDao.getAllConceptsSync()
+            else conceptDao.getConceptsByIds(conceptIds.toList())
+        if (concepts.isEmpty()) return
+        val cardsByConcept = conceptDao.getAllCardConceptCrossRefsSync()
+            .groupBy({ it.conceptId }, { it.cardId })
+        val logsByCard = reviewLogDao.getAllReviewLogsSync().groupBy { it.cardId }
+        val groupsByName = groupDao.getAllGroups().first().groupBy { it.name }.mapValues { it.value.first() }
+        val learningGroupIds = groupDao.getAllLearningGroups().first().map { it.id }.toSet()
+
+        concepts.forEach { concept ->
+            val logs = cardsByConcept[concept.id].orEmpty().flatMap { logsByCard[it].orEmpty() }
+                .filter { it.grade != Grade.SKIP.value }
+            if (onlyWithHistory && logs.isEmpty()) return@forEach
+
+            val byContext = logs.mapNotNull { log ->
+                when (val name = log.groupName) {
+                    null, GROUP_NAME_CARD_EDIT -> ContextKey(null) to log
+                    else -> groupsByName[name]?.let { ContextKey(it.learningGroupId) to log }
+                }
+            }.groupBy({ it.first }, { it.second })
+
+            val global = replayConceptHistory(concept.id, 0L, byContext[ContextKey(null)].orEmpty(), groupsByName)
+                ?: ConceptLearningState(concept.id, 0L)
+            conceptDao.updateConcept(concept.withGlobalState(global))
+
+            conceptDao.deleteAllLearningStatesForConcept(concept.id)
+            byContext.forEach { (key, contextLogs) ->
+                val learningGroupId = key.learningGroupId ?: return@forEach
+                if (learningGroupId !in learningGroupIds) return@forEach
+                replayConceptHistory(concept.id, learningGroupId, contextLogs, groupsByName)
+                    ?.let { conceptDao.upsertConceptLearningState(it) }
+            }
+        }
+    }
+
+    /** A learning context: a learning group's id, or null for Global. */
+    private data class ContextKey(val learningGroupId: Long?)
+
+    /** Replay one context's logs into a state, or null when they hold no review. */
+    private suspend fun replayConceptHistory(
+        conceptId: Long,
+        learningGroupId: Long,
+        logs: List<ReviewLog>,
+        groupsByName: Map<String, Group>
+    ): ConceptLearningState? {
+        val events = conceptReviewEvents(logs)
+        if (events.isEmpty()) return null
+        var state = ConceptLearningState(conceptId, learningGroupId)
+        events.forEach { event ->
+            val groupId = event.groupName?.let { groupsByName[it]?.id }
+            state = scheduleConceptState(state, event.grade, event.time, groupId, event.stabilityMultiplier)
+        }
+        return state
+    }
+
+    /**
+     * One FSRS step of a concept at [now].
+     *
+     * Fuzz is always off here: a replay has to land on the same state every
+     * time it is run, or rederiving would move concepts about at random.
+     */
+    private suspend fun scheduleConceptState(
+        state: ConceptLearningState,
+        grade: Grade,
+        now: Long,
+        groupId: Long?,
+        stabilityMultiplier: Double
+    ): ConceptLearningState {
+        fsrsAlgorithm.setMaximumInterval(resolveMaximumInterval(groupId))
+        fsrsAlgorithm.setRequestRetention(resolveFsrsRetention(groupId))
+        fsrsAlgorithm.setEnableFuzzing(false)
+
+        val elapsedDays = if (state.lastReview == 0L) 0 else
+            ((now - state.lastReview) / (1000 * 60 * 60 * 24)).toInt()
+        val fsrsCard = FSRSAlgorithm.FSRSCard(
+            stability = state.fsrsStability,
+            difficulty = state.fsrsDifficulty,
+            elapsedDays = elapsedDays,
+            scheduledDays = state.fsrsScheduledDays,
+            reps = state.fsrsReps,
+            lapses = state.fsrsLapses,
+            state = FSRSAlgorithm.CardState.valueOf(state.fsrsState),
+            lastReview = state.lastReview
+        )
+        val rating = when (grade) {
+            Grade.SKIP -> throw IllegalArgumentException("SKIP grade should not be processed")
+            Grade.AGAIN -> FSRSAlgorithm.Rating.AGAIN
+            Grade.HARD -> FSRSAlgorithm.Rating.HARD
+            Grade.GOOD -> FSRSAlgorithm.Rating.GOOD
+            Grade.EASY -> FSRSAlgorithm.Rating.EASY
+        }
+        val newCard = fsrsAlgorithm.schedule(fsrsCard, rating, now, stabilityMultiplier).card
+        val adjustedDays = adjustForPracticeFrequency(newCard.scheduledDays, groupId, now)
+        return state.copy(
+            fsrsStability = newCard.stability,
+            fsrsDifficulty = newCard.difficulty,
+            fsrsElapsedDays = newCard.elapsedDays,
+            fsrsScheduledDays = adjustedDays,
+            fsrsReps = newCard.reps,
+            fsrsLapses = newCard.lapses,
+            fsrsState = newCard.state.name,
+            lastReview = now,
+            nextReview = now + (adjustedDays * 24 * 60 * 60 * 1000L),
+            modified = now
+        )
     }
 
     // Practice session operations
@@ -975,11 +1325,15 @@ class CardRepository(
     private suspend fun resolveFsrsEnableFuzzing(groupId: Long?): Boolean =
         learningGroupFor(groupId)?.fsrsEnableFuzzing ?: preferences.fsrsEnableFuzzing.first()
 
-    private suspend fun adjustForPracticeFrequency(scheduledDays: Int, groupId: Long? = null): Int {
+    private suspend fun adjustForPracticeFrequency(
+        scheduledDays: Int,
+        groupId: Long? = null,
+        now: Long = Time.now()
+    ): Int {
         val practiceDays = resolvePracticeDays(groupId)
         if (practiceDays.size >= 7 || practiceDays.isEmpty() || scheduledDays <= 1) return scheduledDays
 
-        val targetDow = isoDayOfWeekAfter(Time.now(), scheduledDays, Time.utcOffsetSeconds())
+        val targetDow = isoDayOfWeekAfter(now, scheduledDays, Time.utcOffsetSeconds())
 
         return scheduledDays + forwardDaysToNearestPracticeDay(targetDow, practiceDays)
     }
@@ -1048,21 +1402,8 @@ class CardRepository(
      * Cards within the same bucket are shuffled randomly; bucket ordering
      * is preserved so more-overdue cards still come first.
      */
-    private fun randomizeCardsByBucket(cards: List<Card>, bucketHours: Int): List<Card> {
-        if (cards.isEmpty()) return cards
-
-        val millisecondsPerBucket = bucketHours * 60 * 60 * 1000L
-
-        val grouped = cards.groupBy { card ->
-            card.nextReview / millisecondsPerBucket
-        }
-
-        return grouped.entries
-            .sortedBy { it.key }
-            .flatMap { (_, cardsInBucket) ->
-                cardsInBucket.shuffled()
-            }
-    }
+    private fun randomizeCardsByBucket(cards: List<Card>, bucketHours: Int): List<Card> =
+        shuffleByBucket(cards, bucketHours) { it.nextReview }
 
     companion object {
         /**
@@ -1097,6 +1438,76 @@ class CardRepository(
         }
 
         private const val MILLIS_PER_DAY = 86_400_000L
+
+        /**
+         * Shuffle [items] within time buckets of [bucketHours], keeping the
+         * buckets in order so the more overdue still come first.
+         */
+        internal fun <T> shuffleByBucket(items: List<T>, bucketHours: Int, due: (T) -> Long): List<T> {
+            if (items.isEmpty()) return items
+            val millisecondsPerBucket = bucketHours.coerceAtLeast(1) * 60 * 60 * 1000L
+            return items.groupBy { due(it) / millisecondsPerBucket }
+                .entries
+                .sortedBy { it.key }
+                .flatMap { (_, inBucket) -> inBucket.shuffled() }
+        }
+
+        /**
+         * The grade a concept gets from the grades of the cards carrying it:
+         * their mean, rounded half up to the nearest grade. Callers leave
+         * skipped cards out.
+         */
+        /**
+         * The concept reviews a set of card review logs implies, oldest first.
+         *
+         * The reviews of one practice session are one fight, so all of a
+         * session's logs make a single concept review, graded with the
+         * rounded mean of its cards' grades -- a concept on three cards of one
+         * session is reviewed once, not three times in the same minute. A log
+         * outside any session (graded from the card editor, or imported
+         * without one) is a review of its own. Skips say nothing and are left
+         * out; a session of nothing but skips is no review at all.
+         */
+        internal fun conceptReviewEvents(logs: List<ReviewLog>): List<ConceptReviewEvent> =
+            logs.filter { it.grade != Grade.SKIP.value && Grade.fromValue(it.grade) != null }
+                .groupBy { log -> log.sessionId?.let { "s$it" } ?: "l${log.id}:${log.reviewTime}" }
+                .values
+                .map { session ->
+                    val first = session.minBy { it.reviewTime }
+                    ConceptReviewEvent(
+                        time = first.reviewTime,
+                        grade = combineConceptGrades(session.map { Grade.fromValue(it.grade)!! }),
+                        groupName = first.groupName,
+                        stabilityMultiplier = first.stabilityMultiplier
+                    )
+                }
+                .sortedBy { it.time }
+
+        internal fun combineConceptGrades(grades: List<Grade>): Grade {
+            require(grades.isNotEmpty() && grades.none { it == Grade.SKIP })
+            val mean = grades.sumOf { it.value }.toDouble() / grades.size
+            val rounded = kotlin.math.floor(mean + 0.5).toInt().coerceIn(Grade.AGAIN.value, Grade.EASY.value)
+            return Grade.fromValue(rounded)!!
+        }
+
+        /**
+         * Of [candidates], the card carrying the most [uncovered] concepts;
+         * ties go to the card carrying the fewest concepts that are not due
+         * (it spends less of the session on what does not need it), then to
+         * a random one when randomising, else the lowest id.
+         */
+        internal fun pickBestCoveringCard(
+            candidates: List<Card>,
+            conceptsByCard: Map<Long, Set<Long>>,
+            uncovered: Set<Long>,
+            randomize: Boolean
+        ): Card {
+            val ordered = if (randomize) candidates.shuffled() else candidates.sortedBy { it.id }
+            return ordered.maxWith(
+                compareBy<Card> { card -> conceptsByCard.getValue(card.id).count { it in uncovered } }
+                    .thenByDescending { card -> conceptsByCard.getValue(card.id).count { it !in uncovered } }
+            )
+        }
 
         internal fun forwardDaysToNearestPracticeDay(targetDow: Int, practiceDays: Set<Int>): Int {
             if (practiceDays.contains(targetDow)) return 0

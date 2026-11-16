@@ -1,0 +1,359 @@
+// SPDX-FileCopyrightText: 2026 Enmar Abrams
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+package com.fencing.spacedrepetition.data.repository
+
+import androidx.room3.Room
+import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import androidx.sqlite.execSQL
+import com.fencing.spacedrepetition.data.ALL_MIGRATIONS
+import com.fencing.spacedrepetition.data.AppDatabase
+import com.fencing.spacedrepetition.data.model.Card
+import com.fencing.spacedrepetition.data.model.CardConceptCrossRef
+import com.fencing.spacedrepetition.data.model.CardGroupCrossRef
+import com.fencing.spacedrepetition.data.model.Concept
+import com.fencing.spacedrepetition.data.model.Grade
+import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.LearningGroup
+import com.fencing.spacedrepetition.data.model.ReviewLog
+import com.fencing.spacedrepetition.data.preferences.SchedulingPreferences
+import com.fencing.spacedrepetition.util.Time
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.runTest
+import java.io.File
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+/**
+ * Drawing cards by concept and grading concepts, against a real Room database.
+ */
+class ConceptSchedulingDbTest {
+
+    /** Global's concept-scheduling setting, which each test may flip. */
+    private var globalConcepts: Flow<Boolean> = flowOf(true)
+
+    private val prefs = object : SchedulingPreferences {
+        override val randomizeDueCards: Flow<Boolean> = flowOf(false)
+        override val randomizeBucketHours: Flow<Int> = flowOf(4)
+        override val maximumInterval: Flow<Int> = flowOf(36500)
+        override val practiceDays: Flow<Set<Int>> = flowOf((1..7).toSet())
+        override val fsrsRetention: Flow<Int> = flowOf(90)
+        override val fsrsEnableFuzzing: Flow<Boolean> = flowOf(false)
+        override val globalConceptScheduling: Flow<Boolean> get() = globalConcepts
+    }
+
+    private lateinit var db: AppDatabase
+    private lateinit var repo: CardRepository
+
+    @BeforeTest
+    fun setUp() {
+        db = Room.inMemoryDatabaseBuilder<AppDatabase>()
+            .setDriver(BundledSQLiteDriver())
+            .build()
+        repo = CardRepository(
+            db.cardDao(), db.practiceSessionDao(), db.reviewLogDao(), db.groupDao(),
+            db.opponentDao(), prefs, db.conceptDao()
+        )
+    }
+
+    @AfterTest
+    fun tearDown() = db.close()
+
+    private suspend fun card(question: String, nextReview: Long = 0L) =
+        db.cardDao().insertCard(Card(question = question, answer = "", nextReview = nextReview))
+
+    private suspend fun concept(name: String, nextReview: Long = 0L) =
+        db.conceptDao().insertConcept(Concept(name = name, nextReview = nextReview))
+
+    private suspend fun tag(cardId: Long, vararg conceptIds: Long) =
+        conceptIds.forEach { db.conceptDao().insertCardConceptCrossRef(CardConceptCrossRef(cardId, it)) }
+
+    @Test
+    fun `draws the cards that cover the most due concepts`() = runTest {
+        val a = concept("A"); val b = concept("B"); val c = concept("C")
+        val c1 = card("both A and B"); tag(c1, a, b)
+        val c2 = card("only A"); tag(c2, a)
+        val c3 = card("only C"); tag(c3, c)
+        val c4 = card("untagged")
+        val c5 = card("only B"); tag(c5, b)
+
+        val two = repo.drawCards(2, null).map { it.id }
+        assertEquals(listOf(c4, c1), two)
+
+        // A and B are covered by c1, so C's card is next, not c2 or c5.
+        val three = repo.drawCards(3, null).map { it.id }
+        assertEquals(listOf(c4, c1, c3), three)
+
+        // Asking for everything tops up with the rest of the pool.
+        assertEquals(setOf(c1, c2, c3, c4, c5), repo.drawCards(10, null).map { it.id }.toSet())
+    }
+
+    @Test
+    fun `a concept that is not due does not pull its cards in ahead of due ones`() = runTest {
+        val future = Time.now() + 10L * 86_400_000L
+        val notDue = concept("Later", nextReview = future)
+        val due = concept("Now")
+        val waiting = card("waiting"); tag(waiting, notDue)
+        val ready = card("ready"); tag(ready, due)
+
+        assertEquals(listOf(ready), repo.drawCards(1, null).map { it.id })
+    }
+
+    private val day = 86_400_000L
+
+    /** A review in a card's history, written directly so its time can be chosen. */
+    private suspend fun log(cardId: Long, grade: Grade, time: Long, group: String? = null, session: Long? = null) =
+        db.reviewLogDao().insertReviewLog(
+            ReviewLog(
+                cardId = cardId, sessionId = session, reviewTime = time, grade = grade.value,
+                algorithm = "FSRS", stateBefore = "", stateAfter = "", scheduledDays = 0, elapsedDays = 0,
+                groupName = group
+            )
+        )
+
+    private suspend fun global(conceptId: Long) = db.conceptDao().getConceptById(conceptId)!!
+
+    @Test
+    fun `tagging a card derives the concept's state from that card's history`() = runTest {
+        val a = concept("A")
+        val practised = card("practised")
+        val t0 = Time.now() - 20 * day
+        log(practised, Grade.GOOD, t0)
+        log(practised, Grade.GOOD, t0 + 3 * day)
+
+        repo.setCardConcepts(practised, listOf(a))
+        val derived = global(a)
+        assertEquals(2, derived.fsrsReps)
+        assertEquals(t0 + 3 * day, derived.lastReview)
+        assertTrue(derived.fsrsStability > 0)
+
+        // Untagging takes the history away again: no cards, no history, new.
+        repo.setCardConcepts(practised, emptyList())
+        assertEquals("NEW", global(a).fsrsState)
+        assertEquals(0, global(a).fsrsReps)
+        assertEquals(0L, global(a).nextReview)
+    }
+
+    @Test
+    fun `a concept whose cards have no history stays uninitialised`() = runTest {
+        val a = concept("A")
+        val fresh = card("fresh")
+        repo.setCardConcepts(fresh, listOf(a))
+        assertEquals("NEW", global(a).fsrsState)
+        assertEquals(0, global(a).fsrsReps)
+    }
+
+    @Test
+    fun `history from several cards interleaves in time order`() = runTest {
+        val a = concept("A"); val onlyOne = concept("only one")
+        val one = card("one"); val two = card("two")
+        val t0 = Time.now() - 30 * day
+        log(one, Grade.GOOD, t0)
+        log(two, Grade.AGAIN, t0 + 5 * day)
+        log(one, Grade.GOOD, t0 + 10 * day)
+
+        repo.setCardConcepts(one, listOf(a, onlyOne))
+        repo.setCardConcepts(two, listOf(a))
+        val derived = global(a)
+        assertEquals(3, derived.fsrsReps)
+        assertEquals(t0 + 10 * day, derived.lastReview)
+        // The second card's AGAIN, in the middle, leaves the concept weaker
+        // than the first card's history alone does.
+        assertEquals(2, global(onlyOne).fsrsReps)
+        assertTrue(derived.fsrsStability < global(onlyOne).fsrsStability)
+    }
+
+    @Test
+    fun `a session is one concept review, graded with the mean of its cards`() = runTest {
+        val learningGroupId = db.groupDao().insertLearningGroup(LearningGroup(name = "Bouting", useConcepts = true))
+        val groupId = db.groupDao().insertGroup(Group(name = "Footwork", learningGroupId = learningGroupId))
+        val a = concept("A"); val b = concept("B"); val skippedOnly = concept("C")
+        val c1 = card("A and B"); tag(c1, a, b)
+        val c2 = card("A"); tag(c2, a)
+        val c3 = card("skipped C"); tag(c3, skippedOnly)
+        listOf(c1, c2, c3).forEach { db.groupDao().insertCardGroupCrossRef(CardGroupCrossRef(it, groupId)) }
+
+        // Graded the way a practice session grades them.
+        val session = repo.createPracticeSession(listOf(c1, c2, c3))
+        val cards = listOf(c1, c2, c3).map { db.cardDao().getCardById(it)!! }
+        repo.reviewCardWithGroup(cards[0], Grade.GOOD, groupId, session)
+        repo.reviewCardWithGroup(cards[1], Grade.AGAIN, groupId, session)
+        repo.reviewCardWithGroup(cards[2], Grade.SKIP, groupId, session)
+        repo.rederiveConceptsForCards(listOf(c1, c2, c3))
+
+        val stateA = db.conceptDao().getConceptLearningState(a, learningGroupId)!!
+        val stateB = db.conceptDao().getConceptLearningState(b, learningGroupId)!!
+        assertEquals(1, stateA.fsrsReps)
+        assertEquals(1, stateB.fsrsReps)
+        // A: mean of GOOD and AGAIN is HARD, which is weaker than B's GOOD.
+        assertTrue(stateA.fsrsStability < stateB.fsrsStability)
+        // Skips say nothing about their concepts.
+        assertNull(db.conceptDao().getConceptLearningState(skippedOnly, learningGroupId))
+        // Global is separate progress; the learning group's history does not reach it.
+        assertEquals(0, global(a).fsrsReps)
+
+        // A Global review (no group) moves Global only.
+        repo.reviewCard(cards[0], Grade.EASY)
+        repo.rederiveConceptsForCards(listOf(c1))
+        assertEquals(1, global(a).fsrsReps)
+        assertEquals(1, db.conceptDao().getConceptLearningState(a, learningGroupId)!!.fsrsReps)
+
+        // Untagging c2 rederives A from c1 alone: GOOD, the same as B.
+        repo.setCardConcepts(c2, emptyList())
+        assertEquals(
+            stateB.fsrsStability,
+            db.conceptDao().getConceptLearningState(a, learningGroupId)!!.fsrsStability
+        )
+    }
+
+    @Test
+    fun `rederiving is deterministic and follows card deletion`() = runTest {
+        val a = concept("A")
+        val keep = card("keep"); val drop = card("drop")
+        val t0 = Time.now() - 40 * day
+        log(keep, Grade.GOOD, t0)
+        log(drop, Grade.HARD, t0 + day)
+        log(keep, Grade.EASY, t0 + 15 * day)
+        tag(keep, a); tag(drop, a)
+
+        repo.rederiveConcepts()
+        val first = global(a)
+        repo.rederiveConcepts()
+        assertEquals(first.globalState(), global(a).globalState())
+        assertEquals(3, first.fsrsReps)
+
+        repo.deleteCardById(drop)
+        assertEquals(2, global(a).fsrsReps)
+    }
+
+    @Test
+    fun `a review whose group no longer exists cannot be placed and is left out`() = runTest {
+        val a = concept("A")
+        val c = card("c")
+        log(c, Grade.GOOD, Time.now() - day, group = "Deleted group")
+        repo.setCardConcepts(c, listOf(a))
+        assertEquals(0, global(a).fsrsReps)
+    }
+
+    @Test
+    fun `an import keeps a concept's state when there is no history to derive it from`() = runTest {
+        val a = db.conceptDao().insertConcept(Concept(name = "A", fsrsReps = 4, fsrsState = "REVIEW", fsrsStability = 9.0))
+        val c = card("c"); tag(c, a)
+        repo.rederiveConcepts(onlyWithHistory = true)
+        assertEquals(4, global(a).fsrsReps)
+        // A full rederive is the rule, though: no history, new.
+        repo.rederiveConcepts()
+        assertEquals(0, global(a).fsrsReps)
+    }
+
+    @Test
+    fun `the group's learning group decides which concept state is due`() = runTest {
+        val learningGroupId = db.groupDao().insertLearningGroup(LearningGroup(name = "Bouting", useConcepts = true))
+        val groupId = db.groupDao().insertGroup(Group(name = "Footwork", learningGroupId = learningGroupId))
+        // Not due in Global, but never practised (so due) in the learning group.
+        val a = concept("A", nextReview = Time.now() + 30L * 86_400_000L)
+        val tagged = card("tagged", nextReview = Time.now() + 30L * 86_400_000L); tag(tagged, a)
+        db.groupDao().insertCardGroupCrossRef(CardGroupCrossRef(tagged, groupId))
+
+        assertEquals(listOf(tagged), repo.drawCards(1, groupId).map { it.id })
+    }
+
+    @Test
+    fun `with concept scheduling off Global draws card by card`() = runTest {
+        globalConcepts = flowOf(false)
+        val a = concept("A"); val b = concept("B")
+        // Card order is due order; tags make no difference.
+        val first = card("first", nextReview = 1L); tag(first, a)
+        val second = card("second", nextReview = 2L)
+        val third = card("third", nextReview = 3L); tag(third, a, b)
+
+        assertEquals(listOf(first, second), repo.drawCards(2, null).map { it.id })
+    }
+
+    @Test
+    fun `each learning group has its own switch, independent of Global`() = runTest {
+        globalConcepts = flowOf(true)
+        val off = db.groupDao().insertLearningGroup(LearningGroup(name = "Drills"))
+        val on = db.groupDao().insertLearningGroup(LearningGroup(name = "Bouting", useConcepts = true))
+        val offGroup = db.groupDao().insertGroup(Group(name = "Off", learningGroupId = off))
+        val onGroup = db.groupDao().insertGroup(Group(name = "On", learningGroupId = on))
+        val a = concept("A"); val b = concept("B")
+        val ab = card("A and B", nextReview = 5L); tag(ab, a, b)
+        val onlyA = card("only A", nextReview = 1L); tag(onlyA, a)
+        listOf(ab, onlyA).forEach {
+            db.groupDao().insertCardGroupCrossRef(CardGroupCrossRef(it, offGroup))
+            db.groupDao().insertCardGroupCrossRef(CardGroupCrossRef(it, onGroup))
+        }
+
+        assertTrue(repo.usesConcepts(on))
+        assertTrue(!repo.usesConcepts(off))
+        // Off: soonest-due card. On: the card covering the most due concepts.
+        assertEquals(listOf(onlyA), repo.drawCards(1, offGroup).map { it.id })
+        assertEquals(listOf(ab), repo.drawCards(1, onGroup).map { it.id })
+
+        // State is derived in both, whether or not they schedule by it.
+        val card = db.cardDao().getCardById(ab)!!
+        repo.reviewCardWithGroup(card, Grade.GOOD, offGroup)
+        repo.reviewCardWithGroup(card, Grade.GOOD, onGroup)
+        repo.rederiveConceptsForCards(listOf(ab))
+        assertEquals(1, db.conceptDao().getConceptLearningState(a, off)!!.fsrsReps)
+        assertEquals(1, db.conceptDao().getConceptLearningState(a, on)!!.fsrsReps)
+
+        // Switching a learning group off takes effect at once.
+        db.groupDao().setLearningGroupUseConcepts(on, false)
+        assertEquals(listOf(onlyA), repo.drawCards(1, onGroup).map { it.id })
+    }
+
+    /**
+     * The real version-17 database, built from the schema Room exported for
+     * it rather than from the migration tests' hand-written v11, which is
+     * simplified in places Room would object to.
+     */
+    private fun createSchemaV17(path: String) {
+        val json = File("schemas/com.fencing.spacedrepetition.data.AppDatabase/17.json").readText()
+        val token = Regex(""""(tableName|createSql)"\s*:\s*"((?:[^"\\]|\\.)*)"""")
+        val setup = Regex(""""setupQueries"\s*:\s*\[(.*?)]""", RegexOption.DOT_MATCHES_ALL)
+        fun unescape(s: String) = s.replace("\\\"", "\"").replace("\\\\", "\\")
+        val connection = BundledSQLiteDriver().open(path)
+        try {
+            var table = ""
+            token.findAll(json).forEach { match ->
+                val value = unescape(match.groupValues[2])
+                if (match.groupValues[1] == "tableName") table = value
+                else connection.execSQL(value.replace("\${TABLE_NAME}", table))
+            }
+            setup.find(json)!!.groupValues[1].let { list ->
+                Regex(""""((?:[^"\\]|\\.)*)"""").findAll(list).forEach { connection.execSQL(unescape(it.groupValues[1])) }
+            }
+            connection.execSQL("PRAGMA user_version = 17")
+        } finally {
+            connection.close()
+        }
+    }
+
+    @Test
+    fun `Room accepts a database migrated from version 17`() = runTest {
+        val file = File.createTempFile("concepts-migration", ".db").apply { delete() }
+        try {
+            createSchemaV17(file.absolutePath)
+            val migrated = Room.databaseBuilder<AppDatabase>(name = file.absolutePath)
+                .setDriver(BundledSQLiteDriver())
+                .addMigrations(*ALL_MIGRATIONS)
+                .build()
+            try {
+                // Opening runs 17 -> 18 and validates every table against the entities.
+                assertEquals(0, migrated.conceptDao().getAllConceptsSync().size)
+                assertEquals(0, migrated.cardDao().getAllCardsAsList().size)
+            } finally {
+                migrated.close()
+            }
+        } finally {
+            file.delete()
+        }
+    }
+}

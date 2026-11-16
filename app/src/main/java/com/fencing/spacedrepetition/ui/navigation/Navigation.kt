@@ -29,6 +29,7 @@ import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.ConceptViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.RetentionReportViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
@@ -57,6 +58,7 @@ fun AppNavigation(
     historyViewModel: HistoryViewModel,
     opponentViewModel: OpponentViewModel,
     retentionReportViewModel: RetentionReportViewModel,
+    conceptViewModel: ConceptViewModel,
     navigator: Navigator
 ) {
     val context = LocalContext.current
@@ -86,6 +88,7 @@ fun AppNavigation(
         historyViewModel = historyViewModel,
         opponentViewModel = opponentViewModel,
         retentionReportViewModel = retentionReportViewModel,
+        conceptViewModel = conceptViewModel,
         buildInfo = BuildInfo(
             versionName = BuildConfig.VERSION_NAME,
             versionCode = BuildConfig.VERSION_CODE,

@@ -172,6 +172,13 @@ object CardImportExport {
         private set
 
     /**
+     * Of [lastParsedLearningGroups], the ones that schedule by learning concept.
+     * The others were declared with it off.
+     */
+    var lastParsedConceptLearningGroups: Set<String> = emptySet()
+        private set
+
+    /**
      * The settings that belong to a learning group, which older files wrote
      * on the groups.
      */
@@ -195,6 +202,21 @@ object CardImportExport {
     /** Parsed opponents from an import file (populated after calling parseCards) */
     var lastParsedOpponents: List<ParsedOpponent> = emptyList()
         private set
+
+    /** Parsed learning concepts from an import file (populated after calling parseCards) */
+    var lastParsedConcepts: List<ParsedConcept> = emptyList()
+        private set
+
+    /**
+     * A learning concept an import found. States carry no ids yet; the
+     * learning-group ones are keyed by learning group name.
+     */
+    data class ParsedConcept(
+        val name: String,
+        val description: String = "",
+        val globalState: com.fencing.spacedrepetition.data.model.ConceptLearningState? = null,
+        val learningStates: Map<String, com.fencing.spacedrepetition.data.model.ConceptLearningState> = emptyMap()
+    )
 
     /** Parsed practice sessions from an import file (populated after calling parseCards) */
     var lastParsedSessions: List<ParsedSession> = emptyList()
@@ -237,11 +259,11 @@ object CardImportExport {
         lastParsedGroupSettings = emptyMap()
         lastParsedLearningGroups = emptyMap()
         lastParsedLearningGroupSettings = emptyMap()
-        lastParsedGroupUids = emptyMap()
-        lastParsedLearningGroupUids = emptyMap()
+        lastParsedConceptLearningGroups = emptySet()
         lastParsedOpponents = emptyList()
         lastParsedReviewHistory = emptyList()
         lastParsedSessions = emptyList()
+        lastParsedConcepts = emptyList()
 
         val firstContentLine = lines.firstOrNull { it.isNotBlank() }?.trim()
             ?: return Pair(emptyList(), emptyList())
@@ -287,9 +309,8 @@ object CardImportExport {
         lastParsedLearningGroupSettings = learningGroups
             .associate { it.name.trim() to ArchiveYaml.learningGroupSettings(it) }
             .filterValues { it.isNotEmpty() }
-        lastParsedLearningGroupUids = learningGroups
-            .mapNotNull { lg -> lg.uid?.takeIf { it.isNotBlank() }?.let { lg.name.trim() to it } }.toMap()
-        val groups = ArchiveYaml
+        lastParsedConceptLearningGroups = learningGroups.filter { it.useConcepts }.map { it.name.trim() }.toSet()
+        lastParsedGroupSettings = ArchiveYaml
             .decodeSection(document, KEY_GROUPS, ArchiveGroup.serializer(), errors)
             .filter { it.name.isNotBlank() }
         lastParsedGroupSettings = groups.associate { it.name.trim() to ArchiveYaml.groupSettings(it) }
@@ -306,6 +327,10 @@ object CardImportExport {
         lastParsedSessions = ArchiveYaml
             .decodeSection(document, ArchiveYaml.KEY_SESSIONS, ArchiveSession.serializer(), errors)
             .map { ArchiveYaml.parsedSession(it) }
+        lastParsedConcepts = ArchiveYaml
+            .decodeSection(document, ArchiveYaml.KEY_CONCEPTS, ArchiveConcept.serializer(), errors)
+            .map { ArchiveYaml.parsedConcept(it) }
+            .filter { it.name.isNotEmpty() }
 
         val cards = mutableListOf<ParsedCard>()
         ArchiveYaml.cardEntries(document).forEach { entry ->
@@ -722,12 +747,18 @@ object CardImportExport {
         cardQuestions: Map<Long, String> = emptyMap(),
         opponents: List<Opponent> = emptyList(),
         opponentNamesById: Map<Long, String> = emptyMap(),
-        sessions: List<PracticeSession> = emptyList()
+        sessions: List<PracticeSession> = emptyList(),
+        concepts: List<ConceptWithStates> = emptyList()
     ): ExportResult {
         return try {
-            val cards = cardsWithStates.map { (card, groupNames, learningStates) ->
-                ArchiveYaml.cardNode(card, groupNames, learningStates, images)
+            var rowCount = 0
+            val cards = cardsWithStates.map { (card, groupNames, learningStates, conceptNames) ->
+                rowCount += 1 + learningStates.size
+                ArchiveYaml.cardNode(card, groupNames, learningStates, images, conceptNames)
             }
+            // Only the concepts the written cards carry.
+            val writtenConceptNames = cardsWithStates.flatMap { it.conceptNames }.toSet()
+            val writtenConcepts = concepts.filter { it.concept.name in writtenConceptNames }
             val learningGroupNames = learningGroups.associate { it.id to it.name }
             // Every group a written card is in -- so the file carries each
             // one's stable identifier -- plus any with settings or a learning
@@ -737,7 +768,9 @@ object CardImportExport {
                 it.name in referencedGroupNames || it.hasCustomSettings() || it.learningGroupId in learningGroupNames
             }
             // Only the learning groups the written groups use.
-            val writtenLearningGroupIds = writtenGroups.mapNotNull { it.learningGroupId }.toSet()
+            val conceptLearningGroupNames = writtenConcepts.flatMap { it.learningStates.keys }.toSet()
+            val writtenLearningGroupIds = writtenGroups.mapNotNull { it.learningGroupId }.toSet() +
+                learningGroups.filter { it.name in conceptLearningGroupNames }.map { it.id }
 
             val startBySessionId = sessions.associate { it.id to it.startTime }
             val uidBySessionId = sessions.associate { it.id to it.uid }
@@ -775,6 +808,7 @@ object CardImportExport {
                     },
                     // The opponents, so the review logs can name them and an
                     // import can find them again.
+                    concepts = writtenConcepts.map { ArchiveYaml.conceptNode(it.concept, it.learningStates) },
                     opponents = opponents.map { ArchiveYaml.opponentNode(it) },
                     cards = cards,
                     sessions = sessionNodes,

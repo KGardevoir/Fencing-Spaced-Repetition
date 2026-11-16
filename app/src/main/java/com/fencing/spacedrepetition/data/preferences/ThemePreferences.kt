@@ -29,6 +29,7 @@ class ThemePreferences(private val context: Context) : AppPreferences {
     private val RANDOMIZE_BUCKET_HOURS_KEY = intPreferencesKey("randomize_bucket_hours")
     private val FSRS_RETENTION_KEY = intPreferencesKey("fsrs_retention")
     private val FSRS_ENABLE_FUZZING_KEY = booleanPreferencesKey("fsrs_enable_fuzzing")
+    private val GLOBAL_CONCEPT_SCHEDULING_KEY = booleanPreferencesKey("global_concept_scheduling")
     private val AUTO_BACKUP_ENABLED_KEY = booleanPreferencesKey("auto_backup_enabled")
     private val AUTO_BACKUP_URI_KEY = stringPreferencesKey("auto_backup_uri")
     private val AUTO_BACKUP_INTERVAL_DAYS_KEY = intPreferencesKey("auto_backup_interval_days")
@@ -133,6 +134,11 @@ class ThemePreferences(private val context: Context) : AppPreferences {
     override val fsrsEnableFuzzing: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
             preferences[FSRS_ENABLE_FUZZING_KEY] ?: DEFAULT_FSRS_ENABLE_FUZZING
+        }
+
+    override val globalConceptScheduling: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[GLOBAL_CONCEPT_SCHEDULING_KEY] ?: SettingsConstants.DEFAULT_GLOBAL_CONCEPT_SCHEDULING
         }
 
     override val autoBackupEnabled: Flow<Boolean> = context.dataStore.data
@@ -253,6 +259,12 @@ class ThemePreferences(private val context: Context) : AppPreferences {
     override suspend fun setFsrsEnableFuzzing(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[FSRS_ENABLE_FUZZING_KEY] = enabled
+        }
+    }
+
+    override suspend fun setGlobalConceptScheduling(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[GLOBAL_CONCEPT_SCHEDULING_KEY] = enabled
         }
     }
 

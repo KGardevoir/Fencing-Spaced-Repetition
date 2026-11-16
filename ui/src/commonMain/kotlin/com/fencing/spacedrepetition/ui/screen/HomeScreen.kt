@@ -82,6 +82,7 @@ fun HomeScreen(
     onNavigateToCards: () -> Unit,
     onNavigateToGroups: () -> Unit,
     onNavigateToLearningGroups: () -> Unit,
+    onNavigateToConcepts: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToHistory: () -> Unit,
     onNavigateToRetention: () -> Unit,
@@ -105,6 +106,9 @@ fun HomeScreen(
                     }
                     IconButton(onClick = onNavigateToLearningGroups) {
                         Icon(AppIcons.LearningGroup, "Learning Groups")
+                    }
+                    IconButton(onClick = onNavigateToConcepts) {
+                        Icon(Icons.Default.Lightbulb, "Learning Concepts")
                     }
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(Icons.Default.Settings, "Settings")

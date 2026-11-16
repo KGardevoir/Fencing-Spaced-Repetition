@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.algorithm.ScheduleEstimate
+import com.fencing.spacedrepetition.ui.components.ConceptSchedulingSwitch
 import com.fencing.spacedrepetition.ui.components.BucketSizeSlider
 import com.fencing.spacedrepetition.ui.components.CardsPerSessionSlider
 import com.fencing.spacedrepetition.ui.components.RandomizeDueCardsSwitch
@@ -40,6 +41,7 @@ fun GlobalLearningSettingsScreen(
     maximumInterval: Int,
     fsrsRetention: Int,
     fsrsEnableFuzzing: Boolean,
+    conceptScheduling: Boolean,
     practiceScheduleEstimate: ScheduleEstimate?,
     historyWindowDays: Int,
     onSetCardsPerSession: (Int) -> Unit,
@@ -49,6 +51,7 @@ fun GlobalLearningSettingsScreen(
     onSetMaximumInterval: (Int) -> Unit,
     onSetFsrsRetention: (Int) -> Unit,
     onSetFsrsEnableFuzzing: (Boolean) -> Unit,
+    onSetConceptScheduling: (Boolean) -> Unit,
     onSetHistoryWindowDays: (Int) -> Unit,
     onNavigateBack: () -> Unit
 ) {
@@ -80,7 +83,11 @@ fun GlobalLearningSettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            GlobalSetting("Cards per Session", null) {
+            Spacer(modifier = Modifier.height(16.dp))
+            // Not a default: Global's own switch. Each learning group has one of its own.
+            ConceptSchedulingSwitch(conceptScheduling, onSetConceptScheduling)
+
+            GlobalSetting("Cards per Session", "Number of cards to practice each session") {
                 CardsPerSessionSlider(cardsPerSession, onSetCardsPerSession)
             }
             GlobalSetting("Randomize Due Cards", null) {

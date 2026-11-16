@@ -173,24 +173,13 @@ class PracticeViewModel(
         }
     }
 
-    private suspend fun drawCards(numberOfCards: Int, groupId: Long?): List<Card> {
-        // Get due cards (randomized from the full pool if setting is enabled)
-        val dueCards = if (groupId != null) {
-            repository.getDueCardsByGroup(groupId, limit = numberOfCards)
-        } else {
-            repository.getDueCards(limit = numberOfCards)
-        }
-
-        // If we have enough due cards, use those
-        // Otherwise, get all cards to allow additional studying
-        if (dueCards.size >= numberOfCards) return dueCards.take(numberOfCards)
-        val allCards = if (groupId != null) {
-            repository.getCardsByGroupSync(groupId)
-        } else {
-            repository.getAllCardsSync()
-        }
-        return allCards.take(numberOfCards)
-    }
+    /**
+     * Due cards first, then the rest of the pool as additional study -- by
+     * learning concept where the group's learning context has that switched
+     * on, card by card otherwise. See [CardRepository.drawCards].
+     */
+    private suspend fun drawCards(numberOfCards: Int, groupId: Long?): List<Card> =
+        repository.drawCards(numberOfCards, groupId)
 
     fun nextCard() {
         val currentIndex = _currentCardIndex.value
@@ -351,6 +340,9 @@ class PracticeViewModel(
                             cardsWithGrades, sid, opponentId, fightDifficulty
                         )
                     }
+                    // The session is now in these cards' history, and their
+                    // concepts are derived from that history.
+                    repository.rederiveConceptsForCards(cardsWithGrades.map { it.first.id })
                 }
 
                 // Complete the session, and with it what was noted about the

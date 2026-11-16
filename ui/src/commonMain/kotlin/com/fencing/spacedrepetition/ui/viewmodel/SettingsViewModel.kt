@@ -54,6 +54,9 @@ class SettingsViewModel(
     val fsrsEnableFuzzing: StateFlow<Boolean> = themePreferences.fsrsEnableFuzzing
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsConstants.DEFAULT_FSRS_ENABLE_FUZZING)
 
+    val globalConceptScheduling: StateFlow<Boolean> = themePreferences.globalConceptScheduling
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsConstants.DEFAULT_GLOBAL_CONCEPT_SCHEDULING)
+
     val autoBackupEnabled: StateFlow<Boolean> = themePreferences.autoBackupEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsConstants.DEFAULT_AUTO_BACKUP_ENABLED)
 
@@ -164,6 +167,12 @@ class SettingsViewModel(
     fun setFsrsRetention(percent: Int) {
         viewModelScope.launch {
             themePreferences.setFsrsRetention(percent)
+        }
+    }
+
+    fun setGlobalConceptScheduling(enabled: Boolean) {
+        viewModelScope.launch {
+            themePreferences.setGlobalConceptScheduling(enabled)
         }
     }
 

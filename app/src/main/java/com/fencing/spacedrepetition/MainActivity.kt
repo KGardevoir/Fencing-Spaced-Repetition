@@ -19,6 +19,7 @@ import com.fencing.spacedrepetition.data.AppDatabase
 import com.fencing.spacedrepetition.data.getDatabase
 import com.fencing.spacedrepetition.data.preferences.ThemePreferences
 import com.fencing.spacedrepetition.data.repository.CardRepository
+import com.fencing.spacedrepetition.data.repository.ConceptRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
 import com.fencing.spacedrepetition.util.FileImageStore
@@ -37,6 +38,7 @@ import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.RetentionReportViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.ConceptViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
 import com.fencing.spacedrepetition.worker.BackupScheduler
@@ -68,8 +70,10 @@ class MainActivity : ComponentActivity() {
             reviewLogDao = database.reviewLogDao(),
             groupDao = database.groupDao(),
             opponentDao = database.opponentDao(),
-            preferences = themePreferences
+            preferences = themePreferences,
+            conceptDao = database.conceptDao()
         )
+        val conceptRepository = ConceptRepository(database.conceptDao())
 
         // Ensure the auto-backup schedule matches the persisted setting on every launch,
         // since WorkManager's periodic work registration can be lost (e.g. data cleared).
@@ -103,13 +107,13 @@ class MainActivity : ComponentActivity() {
                 ) {
                     // Create ViewModels with repositories
                     val cardViewModel: CardViewModel = viewModel(
-                        factory = CardViewModelFactory(repository, groupRepository, opponentRepository, imageStore)
+                        factory = CardViewModelFactory(repository, groupRepository, opponentRepository, imageStore, conceptRepository)
                     )
                     val practiceViewModel: PracticeViewModel = viewModel(
                         factory = PracticeViewModelFactory(repository, opponentRepository)
                     )
                     val groupViewModel: GroupViewModel = viewModel(
-                        factory = GroupViewModelFactory(groupRepository, repository, imageStore)
+                        factory = GroupViewModelFactory(groupRepository, repository, imageStore, conceptRepository)
                     )
                     val historyViewModel: HistoryViewModel = viewModel(
                         factory = HistoryViewModelFactory(repository, opponentRepository)
@@ -122,6 +126,9 @@ class MainActivity : ComponentActivity() {
                     )
                     // Owns the back stack so it survives Activity recreation.
                     val navigationViewModel: NavigationViewModel = viewModel()
+                    val conceptViewModel: ConceptViewModel = viewModel(
+                        factory = ConceptViewModelFactory(conceptRepository, repository, groupRepository)
+                    )
 
                     AppNavigation(
                         cardViewModel = cardViewModel,
@@ -131,6 +138,7 @@ class MainActivity : ComponentActivity() {
                         historyViewModel = historyViewModel,
                         opponentViewModel = opponentViewModel,
                         retentionReportViewModel = retentionReportViewModel,
+                        conceptViewModel = conceptViewModel,
                         navigator = navigationViewModel.navigator
                     )
                 }
@@ -145,12 +153,13 @@ class CardViewModelFactory(
     private val repository: CardRepository,
     private val groupRepository: GroupRepository,
     private val opponentRepository: OpponentRepository,
-    private val imageStore: ImageStore
+    private val imageStore: ImageStore,
+    private val conceptRepository: ConceptRepository
 ) : androidx.lifecycle.ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(CardViewModel::class.java)) {
-            return CardViewModel(repository, groupRepository, opponentRepository, imageStore) as T
+            return CardViewModel(repository, groupRepository, opponentRepository, imageStore, conceptRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
@@ -172,12 +181,27 @@ class PracticeViewModelFactory(
 class GroupViewModelFactory(
     private val groupRepository: GroupRepository,
     private val cardRepository: CardRepository,
-    private val imageStore: ImageStore
+    private val imageStore: ImageStore,
+    private val conceptRepository: ConceptRepository
 ) : androidx.lifecycle.ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(GroupViewModel::class.java)) {
-            return GroupViewModel(groupRepository, cardRepository, imageStore) as T
+            return GroupViewModel(groupRepository, cardRepository, imageStore, conceptRepository) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
+    }
+}
+
+class ConceptViewModelFactory(
+    private val conceptRepository: ConceptRepository,
+    private val cardRepository: CardRepository,
+    private val groupRepository: GroupRepository
+) : androidx.lifecycle.ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(ConceptViewModel::class.java)) {
+            return ConceptViewModel(conceptRepository, cardRepository, groupRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

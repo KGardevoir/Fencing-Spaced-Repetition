@@ -224,6 +224,9 @@ class GroupRepository(
      * same learning group holds it -- keeps it: that is the progress being
      * shared.
      */
+    suspend fun setLearningGroupUseConcepts(learningGroupId: Long, useConcepts: Boolean) =
+        groupDao.setLearningGroupUseConcepts(learningGroupId, useConcepts)
+
     suspend fun setLearningGroup(groupId: Long, learningGroupId: Long?) {
         groupDao.setLearningGroupForGroup(groupId, learningGroupId)
         if (learningGroupId == null) return

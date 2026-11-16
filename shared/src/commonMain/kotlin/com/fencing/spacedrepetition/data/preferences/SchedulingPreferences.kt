@@ -34,4 +34,11 @@ interface SchedulingPreferences {
 
     /** Whether FSRS applies its interval fuzz. */
     val fsrsEnableFuzzing: Flow<Boolean>
+
+    /**
+     * Whether Global -- the learning context of every group in no learning
+     * group -- schedules tagged cards by their learning concepts. Off keeps
+     * card-by-card scheduling. Learning groups each have their own switch.
+     */
+    val globalConceptScheduling: Flow<Boolean>
 }

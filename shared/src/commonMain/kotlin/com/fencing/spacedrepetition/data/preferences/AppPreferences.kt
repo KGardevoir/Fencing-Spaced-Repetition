@@ -57,6 +57,7 @@ interface AppPreferences : SchedulingPreferences {
     suspend fun setRandomizeBucketHours(hours: Int)
     suspend fun setFsrsRetention(percent: Int)
     suspend fun setFsrsEnableFuzzing(enabled: Boolean)
+    suspend fun setGlobalConceptScheduling(enabled: Boolean)
     suspend fun setAutoBackupEnabled(enabled: Boolean)
     suspend fun setAutoBackupUri(uri: String?)
     suspend fun setAutoBackupIntervalDays(days: Int)
