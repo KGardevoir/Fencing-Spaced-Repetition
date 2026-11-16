@@ -61,6 +61,8 @@ fun CardListScreen(
     /** Every concept, for the concept filter row; empty hides the row. */
     concepts: List<com.fencing.spacedrepetition.data.model.Concept> = emptyList(),
     selectedConceptFilters: Set<Long> = emptySet(),
+    /** Each card's concepts, by card id, shown on the card the way its groups are. */
+    conceptsByCard: Map<Long, List<com.fencing.spacedrepetition.data.model.Concept>> = emptyMap(),
     onToggleConceptFilter: (Long) -> Unit = {},
     searchQuery: String,
     cardCount: Int,
@@ -456,6 +458,7 @@ fun CardListScreen(
                         CardListItem(
                             card = card,
                             groups = cardGroups,
+                            concepts = conceptsByCard[card.id].orEmpty(),
                             learningStates = learningStates,
                             learningGroups = learningGroups,
                             isSelectionMode = isSelectionMode,
@@ -893,6 +896,7 @@ fun ExportGroupSelectionDialog(
 fun CardListItem(
     card: Card,
     groups: List<Group>,
+    concepts: List<com.fencing.spacedrepetition.data.model.Concept> = emptyList(),
     learningStates: List<CardLearningState> = emptyList(),
     learningGroups: List<LearningGroup> = emptyList(),
     isSelectionMode: Boolean = false,
@@ -1025,6 +1029,30 @@ fun CardListItem(
                                     )
                                 }
                             }
+                            // Concepts, the same way: the first, and how many more.
+                            if (concepts.isNotEmpty()) {
+                                AssistChip(
+                                    onClick = { },
+                                    label = {
+                                        Text(concepts.first().name, style = MaterialTheme.typography.labelSmall)
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.Lightbulb,
+                                            contentDescription = "Concept",
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                    },
+                                    modifier = Modifier.height(24.dp)
+                                )
+                                if (concepts.size > 1) {
+                                    Text(
+                                        "+${concepts.size - 1}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
                             if (card.isDisabled) {
                                 AssistChip(
                                     onClick = { },
@@ -1088,6 +1116,30 @@ fun CardListItem(
                                 leadingIcon = {
                                     Icon(
                                         AppIcons.CardGroups,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                modifier = Modifier.height(28.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                // Concepts display
+                if (concepts.isNotEmpty()) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        concepts.forEach { concept ->
+                            AssistChip(
+                                onClick = { },
+                                label = { Text(concept.name, style = MaterialTheme.typography.labelSmall) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Lightbulb,
                                         contentDescription = null,
                                         modifier = Modifier.size(16.dp)
                                     )

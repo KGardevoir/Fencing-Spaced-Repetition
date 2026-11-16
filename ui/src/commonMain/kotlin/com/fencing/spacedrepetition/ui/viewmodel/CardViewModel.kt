@@ -249,6 +249,16 @@ class CardViewModel(
     val allConcepts: StateFlow<List<Concept>> = conceptRepository.getAllConcepts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** Each card's concepts, by card id, sorted by name -- for showing them on the card list. */
+    val conceptsByCard: StateFlow<Map<Long, List<Concept>>> = combine(
+        conceptRepository.getAllConcepts(),
+        conceptRepository.getAllCardConceptCrossRefs()
+    ) { concepts, refs ->
+        val byId = concepts.associateBy { it.id }
+        refs.groupBy({ it.cardId }, { byId[it.conceptId] })
+            .mapValues { (_, list) -> list.filterNotNull().sortedBy { it.name.lowercase() } }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
     /** Which learning groups offer which concepts, for the card editor. */
     val conceptLearningGroups: StateFlow<List<ConceptLearningGroupCrossRef>> =
         conceptRepository.getAllConceptLearningGroups()

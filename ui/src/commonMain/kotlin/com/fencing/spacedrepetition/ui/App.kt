@@ -259,6 +259,7 @@ fun App(
             val selectedGroupFilters by cardViewModel.selectedGroupFilters.collectAsState()
             val selectedConceptFilters by cardViewModel.selectedConceptFilters.collectAsState()
             val conceptsForFilter by cardViewModel.allConcepts.collectAsState()
+            val conceptsByCard by cardViewModel.conceptsByCard.collectAsState()
             val learningGroups by groupViewModel.learningGroups.collectAsState()
             val showDisabledFilter by cardViewModel.showDisabledFilter.collectAsState()
             val searchQuery by cardViewModel.searchQuery.collectAsState()
@@ -278,6 +279,7 @@ fun App(
                 concepts = conceptsForFilter,
                 selectedConceptFilters = selectedConceptFilters,
                 onToggleConceptFilter = cardViewModel::toggleConceptFilter,
+                conceptsByCard = conceptsByCard,
                 searchQuery = searchQuery,
                 cardCount = cardCount,
                 importExportState = importExportState,
