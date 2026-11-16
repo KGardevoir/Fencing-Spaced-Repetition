@@ -37,6 +37,7 @@ import com.fencing.spacedrepetition.algorithm.RetentionPoint
 import com.fencing.spacedrepetition.algorithm.RetentionReport
 import com.fencing.spacedrepetition.algorithm.RetentionSummary
 import com.fencing.spacedrepetition.algorithm.StabilityPoint
+import com.fencing.spacedrepetition.algorithm.wilsonInterval
 import kotlin.math.ln
 import kotlin.math.exp
 import com.fencing.spacedrepetition.util.formatDate
@@ -435,7 +436,7 @@ private fun CardRow(card: CardRetention, metric: TrendMetric, expanded: Boolean,
                     TrendMetric.RECALL -> if (card.history.isEmpty()) {
                         DetailNote("No graded reviews here yet.")
                     } else {
-                        Text("Review history", style = MaterialTheme.typography.labelLarge)
+                        Text("Recall over this card's reviews", style = MaterialTheme.typography.labelLarge)
                         CardHistoryChart(card)
                         GradeLegend()
                     }
@@ -718,12 +719,18 @@ private fun TrendChart(points: List<RetentionPoint>, period: RetentionPeriod) {
 }
 
 /**
- * One dot per review, coloured by grade and placed at the predicted recall
- * just before it, over a dashed line of those predictions: a red dot high up
- * is a card forgotten when FSRS expected it to be remembered.
+ * The card's own recall as it has gone so far: after each review, the share
+ * of its reviews up to then that were not Again, with a 95 % error bar -- the
+ * per-card counterpart of the group recall trend. Each dot is coloured by the
+ * grade of that review, so the review that moved the line is visible, and
+ * FSRS's prediction just before each review is the dashed line.
+ *
+ * With a handful of reviews the bars are long, and that is the point: two
+ * passes out of two is not evidence of a well-known card.
  */
 @Composable
 private fun CardHistoryChart(card: CardRetention) {
+    val lineColor = MaterialTheme.colorScheme.primary
     val predictedColor = MaterialTheme.colorScheme.tertiary
     val gridColor = MaterialTheme.colorScheme.outlineVariant
     val gradeColors = gradeColors()
@@ -731,40 +738,91 @@ private fun CardHistoryChart(card: CardRetention) {
     val labelStyle = MaterialTheme.typography.labelSmall
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
 
+    // Running recall and its interval after each review.
+    val running = remember(history) {
+        var recalled = 0
+        history.mapIndexed { i, p ->
+            if (p.grade >= 2) recalled++
+            val n = i + 1
+            Triple(recalled.toDouble() / n, wilsonInterval(recalled, n)!!, p)
+        }
+    }
+    val lowest = running.minOf { (_, interval, p) -> minOf(interval.start, p.predicted ?: 1.0) }
+    val yMin = if (lowest >= 0.5) 0.5 else (lowest * 10).toInt() / 10.0
+
     Column {
-        Canvas(Modifier.fillMaxWidth().height(72.dp)) {
-            val w = size.width
-            val h = size.height
-            val pad = 6.dp.toPx()
-            fun x(i: Int) = if (history.size == 1) w / 2 else pad + (w - 2 * pad) * i / (history.size - 1)
-            fun y(v: Double) = pad + ((h - 2 * pad) * (1 - v)).toFloat()
-
-            drawLine(gridColor, Offset(0f, y(1.0)), Offset(w, y(1.0)), strokeWidth = 1f)
-            drawLine(gridColor, Offset(0f, y(0.5)), Offset(w, y(0.5)), strokeWidth = 1f)
-
-            val predicted = history.mapIndexedNotNull { i, p -> p.predicted?.let { Offset(x(i), y(it)) } }
-            if (predicted.size > 1) {
-                drawPath(
-                    Path().apply {
-                        moveTo(predicted[0].x, predicted[0].y)
-                        predicted.drop(1).forEach { lineTo(it.x, it.y) }
-                    },
-                    predictedColor,
-                    style = Stroke(width = 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 5f)))
-                )
+        Row {
+            Column(
+                Modifier.height(96.dp).width(36.dp).padding(end = 4.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("100%", style = labelStyle, color = labelColor)
+                Text(percent(yMin), style = labelStyle, color = labelColor)
             }
-            history.forEachIndexed { i, p ->
-                val color = gradeColors[p.grade.coerceIn(1, 4) - 1]
-                drawCircle(color, radius = 4.5.dp.toPx(), center = Offset(x(i), y(p.predicted ?: 1.0)))
+            Canvas(Modifier.weight(1f).height(96.dp)) {
+                val w = size.width
+                val h = size.height
+                val pad = 6.dp.toPx()
+                fun x(i: Int) = if (running.size == 1) w / 2 else pad + (w - 2 * pad) * i / (running.size - 1)
+                fun y(v: Double) = (h * (1 - (v - yMin) / (1.0 - yMin))).toFloat().coerceIn(0f, h)
+
+                listOf(0f, h / 2, h).forEach { gy ->
+                    drawLine(gridColor, Offset(0f, gy), Offset(w, gy), strokeWidth = 1f)
+                }
+
+                val predicted = running.mapIndexedNotNull { i, (_, _, p) -> p.predicted?.let { Offset(x(i), y(it)) } }
+                if (predicted.size > 1) {
+                    drawPath(
+                        Path().apply {
+                            moveTo(predicted[0].x, predicted[0].y)
+                            predicted.drop(1).forEach { lineTo(it.x, it.y) }
+                        },
+                        predictedColor,
+                        style = Stroke(width = 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 5f)))
+                    )
+                }
+
+                val cap = 3.dp.toPx()
+                val stroke = 1.5.dp.toPx()
+                val barColor = lineColor.copy(alpha = 0.45f)
+                running.forEachIndexed { i, (_, interval, _) ->
+                    val cx = x(i)
+                    val top = y(interval.endInclusive)
+                    val bottom = y(interval.start)
+                    drawLine(barColor, Offset(cx, top), Offset(cx, bottom), strokeWidth = stroke)
+                    drawLine(barColor, Offset(cx - cap, top), Offset(cx + cap, top), strokeWidth = stroke)
+                    drawLine(barColor, Offset(cx - cap, bottom), Offset(cx + cap, bottom), strokeWidth = stroke)
+                }
+
+                val pts = running.mapIndexed { i, (rate, _, _) -> Offset(x(i), y(rate)) }
+                if (pts.size > 1) {
+                    drawPath(
+                        Path().apply {
+                            moveTo(pts[0].x, pts[0].y)
+                            pts.drop(1).forEach { lineTo(it.x, it.y) }
+                        },
+                        lineColor,
+                        style = Stroke(width = 2.dp.toPx())
+                    )
+                }
+                running.forEachIndexed { i, (_, _, p) ->
+                    drawCircle(gradeColors[p.grade.coerceIn(1, 4) - 1], radius = 4.dp.toPx(), center = pts[i])
+                }
             }
         }
-        Row(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().padding(start = 36.dp)) {
             Text(formatDateWithoutYear(history.first().reviewTime), style = labelStyle, color = labelColor)
             Spacer(Modifier.weight(1f))
             if (history.size > 1) {
                 Text(formatDateWithoutYear(history.last().reviewTime), style = labelStyle, color = labelColor)
             }
         }
+        val (rate, interval, _) = running.last()
+        Text(
+            "Recall ${percent(rate)} (95% CI ${range(interval)}) over ${history.size} review${if (history.size == 1) "" else "s"}",
+            style = labelStyle,
+            color = labelColor
+        )
     }
 }
 
@@ -944,6 +1002,7 @@ private fun GradeLegend() {
                 Text(label, style = MaterialTheme.typography.labelSmall)
             }
         }
+        LegendItem(MaterialTheme.colorScheme.primary, "Recall ± 95%", dashed = false)
         LegendItem(MaterialTheme.colorScheme.tertiary, "Predicted", dashed = true)
     }
 }
