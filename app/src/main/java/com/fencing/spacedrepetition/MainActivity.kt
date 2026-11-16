@@ -35,6 +35,7 @@ import com.fencing.spacedrepetition.ui.theme.FencingSpacedRepetitionTheme
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.RetentionReportViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
@@ -116,6 +117,9 @@ class MainActivity : ComponentActivity() {
                     val opponentViewModel: OpponentViewModel = viewModel(
                         factory = OpponentViewModelFactory(opponentRepository)
                     )
+                    val retentionReportViewModel: RetentionReportViewModel = viewModel(
+                        factory = RetentionReportViewModelFactory(repository, groupRepository)
+                    )
                     // Owns the back stack so it survives Activity recreation.
                     val navigationViewModel: NavigationViewModel = viewModel()
 
@@ -126,6 +130,7 @@ class MainActivity : ComponentActivity() {
                         settingsViewModel = settingsViewModel,
                         historyViewModel = historyViewModel,
                         opponentViewModel = opponentViewModel,
+                        retentionReportViewModel = retentionReportViewModel,
                         navigator = navigationViewModel.navigator
                     )
                 }
@@ -239,5 +244,18 @@ class WorkManagerBackups(
 
     override suspend fun runNow() {
         BackupScheduler.runNow(application)
+    }
+}
+
+class RetentionReportViewModelFactory(
+    private val repository: CardRepository,
+    private val groupRepository: GroupRepository
+) : androidx.lifecycle.ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(RetentionReportViewModel::class.java)) {
+            return RetentionReportViewModel(repository, groupRepository) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
     }
 }

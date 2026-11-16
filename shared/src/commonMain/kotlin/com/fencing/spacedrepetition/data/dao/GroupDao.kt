@@ -130,4 +130,11 @@ interface GroupDao {
 
     @Query("DELETE FROM card_learning_state WHERE cardId = :cardId")
     suspend fun deleteAllLearningStatesForCard(cardId: Long)
+
+    // Whole-table reads, for reports that look at every card in every group
+    @Query("SELECT * FROM card_learning_state")
+    fun getAllLearningStates(): Flow<List<CardLearningState>>
+
+    @Query("SELECT * FROM card_group_cross_ref")
+    fun getAllCardGroupCrossRefs(): Flow<List<CardGroupCrossRef>>
 }

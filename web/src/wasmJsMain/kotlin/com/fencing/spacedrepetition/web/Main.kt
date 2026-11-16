@@ -28,6 +28,7 @@ import com.fencing.spacedrepetition.ui.theme.FencingSpacedRepetitionTheme
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.RetentionReportViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
@@ -79,6 +80,7 @@ fun main() {
         }
         val historyViewModel = remember { HistoryViewModel(cardRepository, opponentRepository) }
         val opponentViewModel = remember { OpponentViewModel(opponentRepository) }
+        val retentionReportViewModel = remember { RetentionReportViewModel(cardRepository, groupRepository) }
         // The browser's answer to "back up now" is a download, and it needs
         // the card view model to produce one -- so the settings view model is
         // created after it rather than beside the others.
@@ -101,6 +103,7 @@ fun main() {
                     settingsViewModel = settingsViewModel,
                     historyViewModel = historyViewModel,
                     opponentViewModel = opponentViewModel,
+                    retentionReportViewModel = retentionReportViewModel,
                     buildInfo = webBuildInfo(),
                     transfer = remember {
                         browserFileTransfer(scope, cardViewModel, groupViewModel)

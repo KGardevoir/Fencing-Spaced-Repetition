@@ -80,6 +80,7 @@ class HomeScreenTest {
                     onNavigateToLearningGroups = {},
                     onNavigateToSettings = {},
                     onNavigateToHistory = {},
+                    onNavigateToRetention = {},
                     onNavigateToOpponents = {}
                 )
             }

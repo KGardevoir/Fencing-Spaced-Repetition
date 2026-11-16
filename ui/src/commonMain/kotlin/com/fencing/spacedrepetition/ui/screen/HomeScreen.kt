@@ -84,6 +84,7 @@ fun HomeScreen(
     onNavigateToLearningGroups: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToHistory: () -> Unit,
+    onNavigateToRetention: () -> Unit,
     onNavigateToOpponents: () -> Unit
 ) {
     var showGroupSelectionDialog by remember { mutableStateOf(false) }
@@ -304,6 +305,21 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(text = "History")
                 }
+            }
+
+            OutlinedButton(
+                onClick = onNavigateToRetention,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+            ) {
+                Icon(
+                    Icons.Default.Insights,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(text = "Retention")
             }
 
             Spacer(modifier = Modifier.height(8.dp))

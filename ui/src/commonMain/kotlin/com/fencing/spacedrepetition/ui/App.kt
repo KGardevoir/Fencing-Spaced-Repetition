@@ -28,12 +28,14 @@ import com.fencing.spacedrepetition.ui.screen.LearningGroupEditScreen
 import com.fencing.spacedrepetition.ui.screen.LearningGroupsScreen
 import com.fencing.spacedrepetition.ui.screen.OpponentsScreen
 import com.fencing.spacedrepetition.ui.screen.PracticeScreen
+import com.fencing.spacedrepetition.ui.screen.RetentionReportScreen
 import com.fencing.spacedrepetition.ui.screen.SettingsScreen
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.RetentionReportViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
 import com.fencing.spacedrepetition.util.backupReminder
 import kotlinx.coroutines.flow.flowOf
@@ -61,6 +63,7 @@ fun App(
     settingsViewModel: SettingsViewModel,
     historyViewModel: HistoryViewModel,
     opponentViewModel: OpponentViewModel,
+    retentionReportViewModel: RetentionReportViewModel,
     buildInfo: BuildInfo,
     transfer: FileTransfer,
     onOpenLink: (String) -> Unit,
@@ -171,6 +174,7 @@ fun App(
                 onNavigateToLearningGroups = { navigator.go(Destination.LearningGroups) },
                 onNavigateToSettings = { navigator.go(Destination.Settings) },
                 onNavigateToHistory = { navigator.go(Destination.History) },
+                onNavigateToRetention = { navigator.go(Destination.RetentionReport) },
                 onNavigateToOpponents = { navigator.go(Destination.Opponents) }
             )
         }
@@ -486,6 +490,18 @@ fun App(
                 onUpdateSessionNotes = historyViewModel::updateSessionNotes,
                 onUpdateSessionOpponent = historyViewModel::updateSessionOpponent,
                 onCreateOpponent = historyViewModel::createOpponent,
+                onNavigateBack = { navigator.back() }
+            )
+        }
+
+        Destination.RetentionReport -> {
+            val report by retentionReportViewModel.report.collectAsState()
+            val period by retentionReportViewModel.period.collectAsState()
+
+            RetentionReportScreen(
+                report = report,
+                period = period,
+                onPeriodChange = retentionReportViewModel::setPeriod,
                 onNavigateBack = { navigator.back() }
             )
         }

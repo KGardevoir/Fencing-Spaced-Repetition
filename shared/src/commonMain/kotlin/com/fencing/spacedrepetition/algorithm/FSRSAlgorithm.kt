@@ -301,6 +301,17 @@ class FSRSAlgorithm(
         return (w[4] - exp(w[5] * (g - 1)) + 1).coerceIn(1.0, 10.0)
     }
 
+    /**
+     * The probability of recalling a card [elapsedDays] after its last review,
+     * given its [stability]. Fractional days are allowed, so a report can ask
+     * "how likely is this card to be remembered right now" between reviews.
+     * A card with no stability has never been learned and returns 0.
+     */
+    fun retrievability(elapsedDays: Double, stability: Double): Double {
+        if (stability <= 0.0) return 0.0
+        return (1.0 + getFactor() * elapsedDays.coerceAtLeast(0.0) / stability).pow(getDecay())
+    }
+
     private fun forgettingCurve(elapsedDays: Int, stability: Double): Double {
         // FSRS-6: R(t, S) = (1 + factor * t / S)^(-w[20])
         return (1.0 + getFactor() * elapsedDays / stability).pow(getDecay())
