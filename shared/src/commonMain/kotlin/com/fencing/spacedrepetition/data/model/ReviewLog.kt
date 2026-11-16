@@ -65,6 +65,13 @@ data class ReviewLog(
      * the group being renamed.
      */
     val groupUid: String? = null,
+
+    /**
+     * The stable identifier of the opponent the review was against, or null.
+     * Kept when the opponent is deleted, so re-adding them (by import) puts
+     * the review back with them, and it is what an export names them by.
+     */
+    val opponentUid: String? = null,
     /** Stable identifier, unique and kept for life; see docs/DESIGN.md, "Identity". */
     @ColumnInfo(defaultValue = "''")
     val uid: String = newUid()

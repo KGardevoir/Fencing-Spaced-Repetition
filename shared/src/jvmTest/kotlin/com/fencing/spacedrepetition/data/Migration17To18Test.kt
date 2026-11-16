@@ -114,6 +114,31 @@ class Migration17To18Test {
     }
 
     @Test
+    fun `review logs learn who they were against, by identifier`() = runTest {
+        MigrationHarness(foreignKeys = true).use { db ->
+            db.seedV17()
+            db.exec("INSERT INTO `opponents` (`id`, `name`, `skillMultiplier`, `notes`, `created`, `modified`) VALUES (4, 'Alex', 1.0, '', 0, 0)")
+            db.exec(
+                """
+                INSERT INTO `review_logs` (`id`, `cardId`, `reviewTime`, `grade`, `algorithm`, `stateBefore`,
+                    `stateAfter`, `scheduledDays`, `elapsedDays`, `notes`, `imagePaths`, `stabilityMultiplier`, `opponentId`)
+                VALUES (1, 1, 100, 3, 'FSRS', '', '', 1, 0, '', '', 1.0, 4),
+                       (2, 1, 200, 3, 'FSRS', '', '', 1, 0, '', '', 1.0, NULL),
+                       (3, 1, 300, 3, 'FSRS', '', '', 1, 0, '', '', 1.0, 99)
+                """
+            )
+            db.migrate(from = 17)
+
+            assertEquals(
+                db.queryText("SELECT `uid` FROM `opponents` WHERE `id` = 4"),
+                db.queryText("SELECT `opponentUid` FROM `review_logs` WHERE `id` = 1")
+            )
+            // No opponent, or one already deleted: nothing to identify.
+            assertEquals(0L, db.queryLong("SELECT COUNT(*) FROM `review_logs` WHERE `id` IN (2, 3) AND `opponentUid` IS NOT NULL"))
+        }
+    }
+
+    @Test
     fun `deleting a card, concept or learning group cascades to the concept rows`() = runTest {
         MigrationHarness(foreignKeys = true).use { db ->
             db.seedV17()

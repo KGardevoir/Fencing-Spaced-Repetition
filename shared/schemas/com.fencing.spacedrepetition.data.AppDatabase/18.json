@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 18,
-    "identityHash": "38ef4fd173218ff0afa206040f6d6b04",
+    "identityHash": "6fed5d00559f72d11cefe21a22a693f5",
     "entities": [
       {
         "tableName": "cards",
@@ -228,7 +228,7 @@
       },
       {
         "tableName": "review_logs",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `cardId` INTEGER NOT NULL, `sessionId` INTEGER, `reviewTime` INTEGER NOT NULL, `grade` INTEGER NOT NULL, `algorithm` TEXT NOT NULL, `stateBefore` TEXT NOT NULL, `stateAfter` TEXT NOT NULL, `scheduledDays` INTEGER NOT NULL, `elapsedDays` INTEGER NOT NULL, `groupName` TEXT, `notes` TEXT NOT NULL, `imagePaths` TEXT NOT NULL, `opponentId` INTEGER, `fightDifficulty` INTEGER, `stabilityMultiplier` REAL NOT NULL, `groupUid` TEXT, `uid` TEXT NOT NULL DEFAULT '')",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `cardId` INTEGER NOT NULL, `sessionId` INTEGER, `reviewTime` INTEGER NOT NULL, `grade` INTEGER NOT NULL, `algorithm` TEXT NOT NULL, `stateBefore` TEXT NOT NULL, `stateAfter` TEXT NOT NULL, `scheduledDays` INTEGER NOT NULL, `elapsedDays` INTEGER NOT NULL, `groupName` TEXT, `notes` TEXT NOT NULL, `imagePaths` TEXT NOT NULL, `opponentId` INTEGER, `fightDifficulty` INTEGER, `stabilityMultiplier` REAL NOT NULL, `groupUid` TEXT, `opponentUid` TEXT, `uid` TEXT NOT NULL DEFAULT '')",
         "fields": [
           {
             "fieldPath": "id",
@@ -325,6 +325,11 @@
           {
             "fieldPath": "groupUid",
             "columnName": "groupUid",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "opponentUid",
+            "columnName": "opponentUid",
             "affinity": "TEXT"
           },
           {
@@ -1121,7 +1126,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '38ef4fd173218ff0afa206040f6d6b04')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '6fed5d00559f72d11cefe21a22a693f5')"
     ]
   }
 }

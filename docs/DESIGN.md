@@ -105,6 +105,29 @@ screen; they are history, not progress. A reset time of 0 means never.
 
 ## History
 
+History is the practice sessions (`practice_sessions`) and the review logs
+(`review_logs`). Every entry has its own `uid`, and every review records what
+it refers to so that it stays attributable through renames, deletions and
+trips between devices:
+
+| A review refers to | Locally | By identifier |
+|---|---|---|
+| its card | `cardId` (deleting a card deletes its reviews) | `cardUid` in exports |
+| its session | `sessionId` | `sessionUid` in exports |
+| its card group | -- | `groupUid` (plus `groupName`, the name at the time, for display) |
+| its opponent | `opponentId`, a soft reference | `opponentUid` |
+
+The opponent reference is soft on purpose: deleting an opponent leaves their
+reviews in the history. Those reviews keep `opponentUid`, so when the
+opponent comes back -- by import, under any local id or name -- the reviews
+are theirs again: after every import, reviews missing an `opponentUid` take
+the one of their local opponent, and every identified review is pointed at
+whichever local opponent has its `uid`. Changing a review's (or a session's)
+opponent from the History screen sets both halves together.
+
+A session's own `cardIds` list is local and is not exported; an import
+rebuilds it from the session's reviews.
+
 The review log is the source of truth for progress that is derived, so it
 must not double count:
 
@@ -124,7 +147,8 @@ referenced record's `uid` where one exists:
 
 - `cards[].uid`, `groups[].uid`, `learningGroups[].uid`, `opponents[].uid`,
   `concepts[].uid`, `sessions[].uid`
-- `reviewHistory[].uid`, plus `cardUid`, `groupUid` and `sessionUid`
+- `reviewHistory[].uid`, plus `cardUid`, `groupUid`, `sessionUid` and
+  `opponentUid`
 - `state.lastReset` and `learningStates[].lastReset`
 
 Names stay in the file too, for people reading it and for references inside

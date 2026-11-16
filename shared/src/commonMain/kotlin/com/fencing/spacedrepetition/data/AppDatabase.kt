@@ -956,6 +956,15 @@ private val MIGRATION_17_18 = object : Migration(17, 18) {
         // group of that name, since names were never unique. A log naming a
         // group that no longer exists keeps no identifier.
         connection.execSQL("ALTER TABLE `review_logs` ADD COLUMN `groupUid` TEXT")
+        // And who it was against, by identifier; the local opponentId is a soft
+        // reference that a deleted opponent leaves dangling.
+        connection.execSQL("ALTER TABLE `review_logs` ADD COLUMN `opponentUid` TEXT")
+        connection.execSQL("""
+            UPDATE `review_logs` SET `opponentUid` = (
+                SELECT o.`uid` FROM `opponents` o WHERE o.`id` = `review_logs`.`opponentId`
+            )
+            WHERE `opponentId` IS NOT NULL
+        """)
         connection.execSQL("""
             UPDATE `review_logs` SET `groupUid` = (
                 SELECT g.`uid` FROM `groups` g WHERE g.`name` = `review_logs`.`groupName`

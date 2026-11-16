@@ -15,6 +15,7 @@ import com.fencing.spacedrepetition.data.model.Concept
 import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.LearningGroup
+import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.preferences.SchedulingPreferences
 import com.fencing.spacedrepetition.util.Time
@@ -391,6 +392,42 @@ class ConceptSchedulingDbTest {
         assertEquals("Footwork drills", db.groupDao().getGroupById(id)!!.name)
         assertEquals("uid-new", db.groupDao().getGroupByName("Brand new")!!.uid)
         assertEquals(2, db.groupDao().getGroupCount().first())
+    }
+
+    @Test
+    fun `reviews record who they were against, and find them again after a re-import`() = runTest {
+        val opponentId = db.opponentDao().insertOpponent(Opponent(name = "Alex"))
+        val alex = db.opponentDao().getOpponentById(opponentId)!!
+        val c = db.cardDao().getCardById(card("c"))!!
+        repo.reviewCard(c, Grade.GOOD, opponentId = opponentId)
+        val log = db.reviewLogDao().getAllReviewLogsSync().single()
+        assertEquals(alex.uid, log.opponentUid)
+
+        // Deleted: the review keeps who it was. Re-added by an import, under
+        // a new local id and even a new name: the review is theirs again.
+        db.opponentDao().deleteOpponent(alex)
+        val readded = db.opponentDao().insertOpponent(Opponent(name = "Alexandra", uid = alex.uid))
+        repo.reconcileOpponentReferences()
+        assertEquals(readded, db.reviewLogDao().getAllReviewLogsSync().single().opponentId)
+    }
+
+    @Test
+    fun `changing a review's opponent from history changes who it identifies`() = runTest {
+        val alex = db.opponentDao().insertOpponent(Opponent(name = "Alex"))
+        val sam = db.opponentDao().insertOpponent(Opponent(name = "Sam"))
+        val session = repo.createPracticeSession(emptyList())
+        val c = db.cardDao().getCardById(card("c"))!!
+        repo.reviewCard(c, Grade.GOOD, sessionId = session, opponentId = alex)
+
+        repo.updateSessionOpponent(session, sam)
+        val log = db.reviewLogDao().getAllReviewLogsSync().single()
+        assertEquals(sam, log.opponentId)
+        assertEquals(db.opponentDao().getOpponentById(sam)!!.uid, log.opponentUid)
+
+        repo.updateReviewLogOpponent(log, null)
+        val cleared = db.reviewLogDao().getAllReviewLogsSync().single()
+        assertNull(cleared.opponentId)
+        assertNull(cleared.opponentUid)
     }
 
     // ==================== resets ====================

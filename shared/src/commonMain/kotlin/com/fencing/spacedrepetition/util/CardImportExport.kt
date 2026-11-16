@@ -1107,7 +1107,8 @@ object CardImportExport {
         val uid: String? = null,
         val cardUid: String? = null,
         val groupUid: String? = null,
-        val sessionUid: String? = null
+        val sessionUid: String? = null,
+        val opponentUid: String? = null
     )
 
     /**
@@ -1202,6 +1203,7 @@ object CardImportExport {
                 fightDifficulty = p.fightDifficulty,
                 stabilityMultiplier = p.stabilityMultiplier,
                 groupUid = p.groupUid,
+                opponentUid = p.opponentUid,
                 uid = p.uid ?: newUid()
             )
         }

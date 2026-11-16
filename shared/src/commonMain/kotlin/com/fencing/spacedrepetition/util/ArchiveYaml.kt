@@ -288,7 +288,9 @@ internal data class ArchiveReviewLog(
     /** The group's stable identifier; [group] is its name at the time. */
     val groupUid: String? = null,
     /** The session's stable identifier; [session] is its start time. */
-    val sessionUid: String? = null
+    val sessionUid: String? = null,
+    /** The opponent's stable identifier; [opponent] is their name. */
+    val opponentUid: String? = null
 )
 
 // ==========================================================================
@@ -545,7 +547,8 @@ internal object ArchiveYaml {
         uid = log.uid,
         cardUid = cardUid,
         groupUid = log.groupUid,
-        sessionUid = sessionUid
+        sessionUid = sessionUid,
+        opponentUid = log.opponentUid
     )
 
     /** One session, with its notes and their pictures inlined. */
@@ -671,7 +674,8 @@ internal object ArchiveYaml {
         uid = log.uid?.takeIf { it.isNotBlank() },
         cardUid = log.cardUid?.takeIf { it.isNotBlank() },
         groupUid = log.groupUid?.takeIf { it.isNotBlank() },
-        sessionUid = log.sessionUid?.takeIf { it.isNotBlank() }
+        sessionUid = log.sessionUid?.takeIf { it.isNotBlank() },
+        opponentUid = log.opponentUid?.takeIf { it.isNotBlank() }
     )
 
     fun parsedSession(session: ArchiveSession) = CardImportExport.ParsedSession(
