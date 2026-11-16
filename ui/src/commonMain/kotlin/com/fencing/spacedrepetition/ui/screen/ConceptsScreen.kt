@@ -24,7 +24,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.Concept
 import com.fencing.spacedrepetition.data.model.ConceptLearningState
 import com.fencing.spacedrepetition.data.model.LearningGroup
@@ -44,7 +43,9 @@ import com.fencing.spacedrepetition.util.formatDate
  * learning groups therefore shows two lines of progress.
  *
  * @param onSaveConcept creates the concept when its id is 0 and updates it
- *   otherwise; the set is the cards that should carry it afterwards.
+ *   otherwise; the set is the learning groups it should belong to afterwards
+ *   (Global is the concept's own `inGlobal`). Cards are tagged from the card
+ *   editor, which offers a concept only where it belongs.
  * A concept's progress is derived from the review history of the cards it
  * is on, so it is shown here but not edited: change the cards, and the
  * progress follows. [onRederiveAll] rebuilds every concept from history.
@@ -56,7 +57,7 @@ fun ConceptsScreen(
     /** Whether Global schedules by concept; each learning group carries its own flag. */
     globalConceptScheduling: Boolean,
     onNavigateToLearningGroups: () -> Unit,
-    allCards: List<Card>,
+    learningGroups: List<LearningGroup>,
     error: String?,
     onSaveConcept: (Concept, Set<Long>) -> Unit,
     onDeleteConcept: (Concept) -> Unit,
@@ -111,7 +112,9 @@ fun ConceptsScreen(
         ) {
             item {
                 Text(
-                    "Tag cards with the concepts they practise. A concept's progress is derived from " +
+                    "Tag cards with the concepts they practise, from the card editor. A concept " +
+                        "can be picked for a card learnt in a context it is available in. " +
+                        "A concept's progress is derived from " +
                         "its cards' review history, so tagging a card brings its history along. " +
                         "Where concept scheduling is on, a " +
                         "tagged card is scheduled by its concepts: a session draws the concepts that " +
@@ -152,6 +155,7 @@ fun ConceptsScreen(
                 ConceptRow(
                     summary = summary,
                     globalConceptScheduling = globalConceptScheduling,
+                    learningGroups = learningGroups,
                     onEdit = { editing = summary },
                     onDelete = { deleting = summary }
                 )
@@ -167,9 +171,9 @@ fun ConceptsScreen(
             summary = concepts.find { it.concept.id == summary.concept.id && summary.concept.id != 0L } ?: summary,
             globalConceptScheduling = globalConceptScheduling,
             concepts = concepts.map { it.concept },
-            allCards = allCards,
-            onSave = { updated, cardIds ->
-                onSaveConcept(updated, cardIds)
+            learningGroups = learningGroups,
+            onSave = { updated, learningGroupIds ->
+                onSaveConcept(updated, learningGroupIds)
                 editing = null
             },
             onDismiss = { editing = null }
@@ -238,6 +242,7 @@ fun ConceptsScreen(
 private fun ConceptRow(
     summary: ConceptSummary,
     globalConceptScheduling: Boolean,
+    learningGroups: List<LearningGroup>,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -267,10 +272,30 @@ private fun ConceptRow(
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    "${summary.cardIds.size} card${if (summary.cardIds.size == 1) "" else "s"}",
+                    "Used by ${summary.cardIds.size} card${if (summary.cardIds.size == 1) "" else "s"}",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
+                val availableIn = buildList {
+                    if (concept.inGlobal) add("Global")
+                    learningGroups.filter { it.id in summary.learningGroupIds }.forEach { add(it.name) }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        AppIcons.LearningGroup,
+                        contentDescription = "Available in",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        if (availableIn.isEmpty()) "Not available for new tags yet"
+                        else "Available in " + availableIn.joinToString(", "),
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         AppIcons.CardGroups,
@@ -330,15 +355,20 @@ internal fun describeState(state: ConceptLearningState): String = when {
 }
 
 /**
- * A concept's name and description, the cards that carry it, and -- for one
- * that exists -- a reset per learning context.
+ * A concept's name and description, where it is available -- the learning
+ * contexts whose cards may be tagged with it -- and, for one that exists, its
+ * progress.
+ *
+ * Only contexts that schedule by concept are offered. A learning group the
+ * concept already belongs to whose switch has since been turned off is not
+ * shown, and is kept as it is: switching it back on brings the concept back.
  */
 @Composable
 private fun ConceptEditDialog(
     summary: ConceptSummary,
     globalConceptScheduling: Boolean,
     concepts: List<Concept>,
-    allCards: List<Card>,
+    learningGroups: List<LearningGroup>,
     onSave: (Concept, Set<Long>) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -346,14 +376,19 @@ private fun ConceptEditDialog(
     val isNew = concept.id == 0L
     var name by rememberSaveable { mutableStateOf(concept.name) }
     var description by rememberSaveable { mutableStateOf(concept.description) }
-    var cardIds by remember { mutableStateOf(summary.cardIds) }
-    var cardQuery by rememberSaveable { mutableStateOf("") }
+    var inGlobal by rememberSaveable { mutableStateOf(concept.inGlobal) }
+    val offered = learningGroups.filter { it.useConcepts }
+    var checkedLearningGroups by remember { mutableStateOf(summary.learningGroupIds.filter { id -> offered.any { it.id == id } }.toSet()) }
 
     val nameTaken = concepts.any { it.id != concept.id && it.name.equals(name.trim(), ignoreCase = true) }
-    // Ticked cards first, so what the concept already holds is in view.
-    val listedCards = allCards
-        .filter { cardQuery.isBlank() || it.question.contains(cardQuery.trim(), ignoreCase = true) }
-        .sortedWith(compareBy<Card> { it.id !in cardIds }.thenBy { it.question.lowercase() })
+    fun save() {
+        // Learning groups not shown -- switched off -- keep their link.
+        val hidden = summary.learningGroupIds.filter { id -> offered.none { it.id == id } }
+        onSave(
+            concept.copy(name = name.trim(), description = description.trim(), inGlobal = inGlobal),
+            hidden.toSet() + checkedLearningGroups
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -408,54 +443,42 @@ private fun ConceptEditDialog(
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        "Cards (${cardIds.size})",
+                        "Available in",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    if (allCards.size > 8) {
-                        OutlinedTextField(
-                            value = cardQuery,
-                            onValueChange = { cardQuery = it },
-                            placeholder = { Text("Search cards") },
-                            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                        )
-                    }
-                    if (allCards.isEmpty()) {
+                    Text(
+                        "Cards learnt here can be tagged with this concept. Only learning " +
+                            "contexts that schedule by concept are listed.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (!globalConceptScheduling && offered.isEmpty()) {
                         Text(
-                            "No cards yet.",
+                            "No learning context schedules by concept yet. Turn it on for a " +
+                                "learning group, or for Global, on the Learning Groups screen.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(top = 4.dp)
                         )
                     }
                 }
-                items(listedCards, key = { it.id }) { card ->
-                    val checked = card.id in cardIds
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { cardIds = if (checked) cardIds - card.id else cardIds + card.id }
-                            .padding(vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Checkbox(
-                            checked = checked,
-                            onCheckedChange = { cardIds = if (it) cardIds + card.id else cardIds - card.id }
-                        )
-                        Text(
-                            card.question,
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                if (globalConceptScheduling) {
+                    item {
+                        AvailabilityRow("Global", Icons.Default.Public, inGlobal) { inGlobal = it }
+                    }
+                }
+                items(offered, key = { it.id }) { learningGroup ->
+                    AvailabilityRow(learningGroup.name, AppIcons.LearningGroup, learningGroup.id in checkedLearningGroups) {
+                        checkedLearningGroups =
+                            if (it) checkedLearningGroups + learningGroup.id else checkedLearningGroups - learningGroup.id
                     }
                 }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { onSave(concept.copy(name = name.trim(), description = description.trim()), cardIds) },
+                onClick = { save() },
                 enabled = name.isNotBlank() && !nameTaken
             ) { Text(if (isNew) "Add" else "Save") }
         },
@@ -463,4 +486,25 @@ private fun ConceptEditDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+}
+
+@Composable
+private fun AvailabilityRow(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) }
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Checkbox(checked = checked, onCheckedChange = onCheckedChange)
+        Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge)
+    }
 }

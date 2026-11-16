@@ -80,5 +80,7 @@ data class CardWithGroupStates(
  */
 data class ConceptWithStates(
     val concept: com.fencing.spacedrepetition.data.model.Concept,
-    val learningStates: Map<String, com.fencing.spacedrepetition.data.model.ConceptLearningState> = emptyMap()
+    val learningStates: Map<String, com.fencing.spacedrepetition.data.model.ConceptLearningState> = emptyMap(),
+    /** The learning groups the concept is available in, by name; Global is the concept's `inGlobal`. */
+    val availableIn: List<String> = emptyList()
 )

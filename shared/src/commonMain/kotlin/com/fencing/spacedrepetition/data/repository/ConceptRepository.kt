@@ -6,6 +6,7 @@ package com.fencing.spacedrepetition.data.repository
 import com.fencing.spacedrepetition.data.dao.ConceptDao
 import com.fencing.spacedrepetition.data.model.CardConceptCrossRef
 import com.fencing.spacedrepetition.data.model.Concept
+import com.fencing.spacedrepetition.data.model.ConceptLearningGroupCrossRef
 import com.fencing.spacedrepetition.data.model.ConceptLearningState
 import com.fencing.spacedrepetition.util.Time
 import kotlinx.coroutines.flow.Flow
@@ -48,14 +49,18 @@ class ConceptRepository(private val conceptDao: ConceptDao) {
         return conceptDao.insertConcept(Concept(name = trimmed, description = description.trim()))
     }
 
+    fun getAllConceptLearningGroups(): Flow<List<ConceptLearningGroupCrossRef>> =
+        conceptDao.getAllConceptLearningGroups()
+
     /**
      * Create [concept] when its id is 0, otherwise rename/redescribe it, and
-     * make [cardIds] exactly the cards carrying it. Its learning state is
-     * left alone either way.
+     * make [learningGroupIds] exactly the learning groups it belongs to (Global
+     * is [Concept.inGlobal]). Which cards carry it, and its learning state,
+     * are left alone: cards are tagged from the card editor.
      *
      * @return the concept's id, or null when the name belongs to another concept.
      */
-    suspend fun saveConcept(concept: Concept, cardIds: Set<Long>?): Long? {
+    suspend fun saveConcept(concept: Concept, learningGroupIds: Set<Long>): Long? {
         val name = concept.name.trim()
         if (name.isEmpty()) return null
         val clash = conceptDao.getConceptByName(name)
@@ -66,14 +71,33 @@ class ConceptRepository(private val conceptDao: ConceptDao) {
         } else {
             val existing = conceptDao.getConceptById(concept.id) ?: return null
             conceptDao.updateConcept(
-                existing.copy(name = name, description = concept.description.trim(), modified = Time.now())
+                existing.copy(
+                    name = name,
+                    description = concept.description.trim(),
+                    inGlobal = concept.inGlobal,
+                    modified = Time.now()
+                )
             )
             concept.id
         }
-        if (cardIds != null) {
-            conceptDao.deleteAllCardsForConcept(id)
-            cardIds.forEach { conceptDao.insertCardConceptCrossRef(CardConceptCrossRef(it, id)) }
+        conceptDao.deleteLearningGroupsForConcept(id)
+        learningGroupIds.forEach { conceptDao.insertConceptLearningGroup(ConceptLearningGroupCrossRef(id, it)) }
+        return id
+    }
+
+    /**
+     * The concept named [name] -- found, or created -- made available in the
+     * learning [contexts] (a learning group's id, or null for Global) on top
+     * of wherever it already was. What the card editor's "Create New Concept"
+     * does, so a concept created for a card can be picked for it.
+     */
+    suspend fun getOrCreateConceptIn(name: String, contexts: Set<Long?>): Long {
+        val id = getOrCreateConcept(name)
+        if (null in contexts) {
+            conceptDao.getConceptById(id)?.takeIf { !it.inGlobal }
+                ?.let { conceptDao.updateConcept(it.copy(inGlobal = true, modified = Time.now())) }
         }
+        contexts.filterNotNull().forEach { conceptDao.insertConceptLearningGroup(ConceptLearningGroupCrossRef(id, it)) }
         return id
     }
 
@@ -107,6 +131,15 @@ class ConceptRepository(private val conceptDao: ConceptDao) {
                         description = concept.description.ifBlank { existing.description }
                     )
                 )
+            }
+            // Where it is available, when the file says: a file from before
+            // availability says neither, and leaves it as it is here.
+            if (concept.inGlobal || concept.availableIn.isNotEmpty()) {
+                conceptDao.getConceptById(id)?.let { conceptDao.updateConcept(it.copy(inGlobal = concept.inGlobal)) }
+                conceptDao.deleteLearningGroupsForConcept(id)
+                concept.availableIn.forEach { name ->
+                    conceptDao.insertConceptLearningGroup(ConceptLearningGroupCrossRef(id, learningGroupId(name)))
+                }
             }
             conceptDao.deleteAllLearningStatesForConcept(id)
             concept.learningStates.forEach { (learningGroupName, state) ->

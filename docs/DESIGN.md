@@ -85,6 +85,25 @@ It is rederived whenever its inputs change: a card is tagged or untagged, a
 session is graded, a card is graded in the editor, a card is deleted or reset,
 history is imported, or a group's learning group, name or existence changes.
 
+### Tagging and availability
+
+Cards are tagged with concepts from the **card editor**; the Concepts screen
+defines concepts and where they are available, and shows how many cards use
+each, but does not tag cards.
+
+A concept is **available** in learning contexts: the learning groups it is
+linked to (`concept_learning_group`) and Global when `concepts.inGlobal`. Only
+contexts that schedule by concept can be chosen. The card editor offers a
+concept for a card only when it is available in one of the card's learning
+contexts -- its groups' learning groups, or Global for a group in none and for
+a card in no group -- and that context schedules by concept
+(`offeredConceptIds`). Availability limits what can be *added*: a card already
+tagged with a concept that is not offered keeps it, shown so it can be
+removed. "Create New Concept" in the card editor makes the concept available
+in the card's concept-scheduling contexts. A link to a learning group whose
+switch is later turned off is kept, and is offered again when it is turned
+back on.
+
 Scheduling *by* concept is opt-in per context: each learning group has a
 `useConcepts` switch and Global has a setting. Where it is on, a session draws
 the due concepts and shows the cards covering the most of them; elsewhere,
@@ -150,6 +169,9 @@ referenced record's `uid` where one exists:
 - `reviewHistory[].uid`, plus `cardUid`, `groupUid`, `sessionUid` and
   `opponentUid`
 - `state.lastReset` and `learningStates[].lastReset`
+- `concepts[].global` and `concepts[].availableIn` (learning group names);
+  a file from before availability says neither, and an import then leaves
+  the concept's availability as it is
 
 Names stay in the file too, for people reading it and for references inside
 the file (a card's `groups:` list names groups listed under `groups:`). Every

@@ -181,7 +181,11 @@ internal data class ArchiveConcept(
     val state: ArchiveState? = null,
     val learningStates: List<ArchiveLearningState> = emptyList(),
     /** Stable identifier (see docs/DESIGN.md, "Identity"); absent in files from before them. */
-    val uid: String? = null
+    val uid: String? = null,
+    /** Offered for cards learnt in Global. */
+    val global: Boolean = false,
+    /** The learning groups it is offered in, by name. */
+    val availableIn: List<String> = emptyList()
 )
 
 @Serializable
@@ -380,8 +384,14 @@ internal object ArchiveYaml {
     )
 
     /** One concept and its states; a state still at its defaults is left out. */
-    fun conceptNode(concept: Concept, learningStates: Map<String, ConceptLearningState>) = ArchiveConcept(
+    fun conceptNode(
+        concept: Concept,
+        learningStates: Map<String, ConceptLearningState>,
+        availableIn: List<String> = emptyList()
+    ) = ArchiveConcept(
         uid = concept.uid,
+        global = concept.inGlobal,
+        availableIn = availableIn,
         name = concept.name,
         description = concept.description,
         state = stateNode(concept.globalState()).takeIf { it != ArchiveState() },
@@ -417,6 +427,8 @@ internal object ArchiveYaml {
     /** A concept read back, its states as entities keyed by learning group name ("" = Global). */
     fun parsedConcept(concept: ArchiveConcept) = CardImportExport.ParsedConcept(
         uid = concept.uid?.takeIf { it.isNotBlank() },
+        inGlobal = concept.global,
+        availableIn = concept.availableIn.map { it.trim() }.filter { it.isNotEmpty() },
         name = concept.name.trim(),
         description = concept.description,
         globalState = concept.state?.let { conceptState(it) },

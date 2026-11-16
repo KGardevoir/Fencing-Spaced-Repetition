@@ -199,4 +199,25 @@ class ConceptArchiveTest {
         assertEquals(session.uid, CardImportExport.lastParsedSessions.single().uid)
         assertEquals(alex.uid, CardImportExport.lastParsedOpponents.single().uid)
     }
+
+    @Test
+    fun whereAConceptIsAvailableRoundTrips() {
+        val bouting = LearningGroup(id = 5, name = "Bouting", useConcepts = true)
+        val text = export(
+            cards = listOf(
+                CardWithGroupStates(Card(id = 1, question = "Lunge", answer = ""), emptyList(),
+                    conceptNames = listOf("Distance"))
+            ),
+            concepts = listOf(
+                ConceptWithStates(Concept(id = 1, name = "Distance", inGlobal = true), availableIn = listOf("Bouting"))
+            ),
+            learningGroups = listOf(bouting)
+        )
+        // The learning group it is available in is written, so the name resolves.
+        assertTrue(CardImportExport.parseCards(text.lines()).second.isEmpty())
+        assertEquals(setOf("Bouting"), CardImportExport.lastParsedLearningGroups.keys)
+        val parsed = CardImportExport.lastParsedConcepts.single()
+        assertTrue(parsed.inGlobal)
+        assertEquals(listOf("Bouting"), parsed.availableIn)
+    }
 }

@@ -13,6 +13,9 @@ import androidx.compose.ui.backhandler.BackHandler
 import com.fencing.spacedrepetition.BuildInfo
 import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.Concept
+import com.fencing.spacedrepetition.data.model.conceptContexts
+import com.fencing.spacedrepetition.data.model.learningContextsOf
+import com.fencing.spacedrepetition.data.model.offeredConceptIds
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.ui.navigation.Destination
 import com.fencing.spacedrepetition.ui.navigation.Navigator
@@ -253,6 +256,8 @@ fun App(
             val allCardsWithGroups by cardViewModel.allCardsWithGroups.collectAsState()
             val groups by groupViewModel.allGroups.collectAsState()
             val selectedGroupFilters by cardViewModel.selectedGroupFilters.collectAsState()
+            val selectedConceptFilters by cardViewModel.selectedConceptFilters.collectAsState()
+            val conceptsForFilter by cardViewModel.allConcepts.collectAsState()
             val learningGroups by groupViewModel.learningGroups.collectAsState()
             val showDisabledFilter by cardViewModel.showDisabledFilter.collectAsState()
             val searchQuery by cardViewModel.searchQuery.collectAsState()
@@ -269,6 +274,9 @@ fun App(
                 groups = groups,
                 selectedGroupFilters = selectedGroupFilters,
                 showDisabledFilter = showDisabledFilter,
+                concepts = conceptsForFilter,
+                selectedConceptFilters = selectedConceptFilters,
+                onToggleConceptFilter = cardViewModel::toggleConceptFilter,
                 searchQuery = searchQuery,
                 cardCount = cardCount,
                 importExportState = importExportState,
@@ -318,6 +326,7 @@ fun App(
         is Destination.AddCard -> CardEditor(
             cardViewModel = cardViewModel,
             groupViewModel = groupViewModel,
+            settingsViewModel = settingsViewModel,
             cardToEdit = null,
             initialGroupId = destination.initialGroupId,
             onNavigateBack = { navigator.back() }
@@ -326,6 +335,7 @@ fun App(
         is Destination.EditCard -> CardEditor(
             cardViewModel = cardViewModel,
             groupViewModel = groupViewModel,
+            settingsViewModel = settingsViewModel,
             cardToEdit = destination.card,
             initialGroupId = null,
             onNavigateBack = { navigator.back() }
@@ -476,7 +486,7 @@ fun App(
 
         Destination.Concepts -> {
             val concepts by conceptViewModel.concepts.collectAsState()
-            val allCards by conceptViewModel.allCards.collectAsState()
+            val conceptLearningGroups by conceptViewModel.learningGroups.collectAsState()
             val error by conceptViewModel.error.collectAsState()
             val globalConceptScheduling by settingsViewModel.globalConceptScheduling.collectAsState()
 
@@ -484,7 +494,7 @@ fun App(
                 concepts = concepts,
                 globalConceptScheduling = globalConceptScheduling,
                 onNavigateToLearningGroups = { navigator.go(Destination.LearningGroups) },
-                allCards = allCards,
+                learningGroups = conceptLearningGroups,
                 error = error,
                 onSaveConcept = conceptViewModel::saveConcept,
                 onDeleteConcept = conceptViewModel::deleteConcept,
@@ -608,6 +618,7 @@ fun App(
 private fun CardEditor(
     cardViewModel: CardViewModel,
     groupViewModel: GroupViewModel,
+    settingsViewModel: SettingsViewModel,
     cardToEdit: com.fencing.spacedrepetition.data.model.Card?,
     initialGroupId: Long?,
     onNavigateBack: () -> Unit
@@ -628,6 +639,19 @@ private fun CardEditor(
         cardToEdit?.let { cardViewModel.getConceptsForCard(it.id) } ?: flowOf(emptyList<Concept>())
     }
     val cardConcepts by cardConceptsFlow.collectAsState(initial = emptyList())
+    val conceptLinks by cardViewModel.conceptLearningGroups.collectAsState()
+    val globalConceptScheduling by settingsViewModel.globalConceptScheduling.collectAsState()
+    // Where this card can take concepts: its groups' learning contexts that
+    // schedule by concept, and the concepts available in them.
+    val conceptContextsFor = { groupIds: Set<Long> ->
+        conceptContexts(learningContextsOf(groupIds, allGroups), globalConceptScheduling, learningGroups)
+    }
+    val offeredConceptIdsFor = { groupIds: Set<Long> ->
+        offeredConceptIds(
+            allConcepts, conceptLinks, learningContextsOf(groupIds, allGroups),
+            globalConceptScheduling, learningGroups
+        )
+    }
 
     AddEditCardScreen(
         allGroups = allGroups,
@@ -656,6 +680,8 @@ private fun CardEditor(
             cardViewModel.addCard(question, answer, groupIds, imagePaths, conceptIds, onSuccess)
         },
         onCreateGroup = { name, onCreated -> groupViewModel.addGroup(name, onSuccess = onCreated) },
+        conceptContextsFor = conceptContextsFor,
+        offeredConceptIdsFor = offeredConceptIdsFor,
         onCreateConcept = cardViewModel::createConcept,
         onNavigateBack = onNavigateBack
     )

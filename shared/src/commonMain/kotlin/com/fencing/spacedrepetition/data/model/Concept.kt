@@ -51,6 +51,12 @@ data class Concept(
 
     val created: Long = Time.now(),
     val modified: Long = Time.now(),
+    /**
+     * Whether the concept is offered for cards learnt in Global. Which
+     * learning groups offer it is [ConceptLearningGroupCrossRef].
+     */
+    @ColumnInfo(defaultValue = "0")
+    val inGlobal: Boolean = false,
     /** Stable identifier, unique and kept for life; see docs/DESIGN.md, "Identity". */
     @ColumnInfo(defaultValue = "''")
     val uid: String = newUid()
@@ -85,6 +91,36 @@ data class Concept(
         modified = state.modified
     )
 }
+
+/**
+ * Which learning groups a concept belongs to: the card editor offers a
+ * concept only for cards learnt in a learning context it belongs to -- one
+ * of these learning groups, or Global when [Concept.inGlobal] -- and only
+ * where that context schedules by concept.
+ */
+@Entity(
+    tableName = "concept_learning_group",
+    primaryKeys = ["conceptId", "learningGroupId"],
+    foreignKeys = [
+        ForeignKey(
+            entity = Concept::class,
+            parentColumns = ["id"],
+            childColumns = ["conceptId"],
+            onDelete = ForeignKey.CASCADE
+        ),
+        ForeignKey(
+            entity = LearningGroup::class,
+            parentColumns = ["id"],
+            childColumns = ["learningGroupId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index("learningGroupId")]
+)
+data class ConceptLearningGroupCrossRef(
+    val conceptId: Long,
+    val learningGroupId: Long
+)
 
 /** Which concepts a card is tagged with. */
 @Entity(

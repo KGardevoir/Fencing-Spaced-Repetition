@@ -11,6 +11,7 @@ import androidx.room3.Query
 import androidx.room3.Update
 import com.fencing.spacedrepetition.data.model.CardConceptCrossRef
 import com.fencing.spacedrepetition.data.model.Concept
+import com.fencing.spacedrepetition.data.model.ConceptLearningGroupCrossRef
 import com.fencing.spacedrepetition.data.model.ConceptLearningState
 import kotlinx.coroutines.flow.Flow
 
@@ -83,6 +84,22 @@ interface ConceptDao {
 
     @Query("DELETE FROM card_concept_cross_ref WHERE conceptId = :conceptId")
     suspend fun deleteAllCardsForConcept(conceptId: Long)
+
+    // Which learning groups offer a concept
+    @Query("SELECT * FROM concept_learning_group")
+    fun getAllConceptLearningGroups(): Flow<List<ConceptLearningGroupCrossRef>>
+
+    @Query("SELECT * FROM concept_learning_group")
+    suspend fun getAllConceptLearningGroupsSync(): List<ConceptLearningGroupCrossRef>
+
+    @Query("SELECT learningGroupId FROM concept_learning_group WHERE conceptId = :conceptId")
+    suspend fun getLearningGroupIdsForConcept(conceptId: Long): List<Long>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertConceptLearningGroup(link: ConceptLearningGroupCrossRef)
+
+    @Query("DELETE FROM concept_learning_group WHERE conceptId = :conceptId")
+    suspend fun deleteLearningGroupsForConcept(conceptId: Long)
 
     // Learning-group states
     @Query("SELECT * FROM concept_learning_state")

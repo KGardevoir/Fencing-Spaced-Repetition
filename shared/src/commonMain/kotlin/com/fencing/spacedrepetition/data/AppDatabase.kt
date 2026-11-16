@@ -21,6 +21,7 @@ import com.fencing.spacedrepetition.data.model.CardConceptCrossRef
 import com.fencing.spacedrepetition.data.model.CardGroupCrossRef
 import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.Concept
+import com.fencing.spacedrepetition.data.model.ConceptLearningGroupCrossRef
 import com.fencing.spacedrepetition.data.model.ConceptLearningState
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.LearningGroup
@@ -30,7 +31,7 @@ import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.util.Time
 
 @Database(
-    entities = [Card::class, PracticeSession::class, ReviewLog::class, Group::class, CardGroupCrossRef::class, CardLearningState::class, LearningGroup::class, Opponent::class, Concept::class, CardConceptCrossRef::class, ConceptLearningState::class],
+    entities = [Card::class, PracticeSession::class, ReviewLog::class, Group::class, CardGroupCrossRef::class, CardLearningState::class, LearningGroup::class, Opponent::class, Concept::class, CardConceptCrossRef::class, ConceptLearningState::class, ConceptLearningGroupCrossRef::class],
     version = 18,
     exportSchema = true
 )
@@ -902,6 +903,7 @@ private val MIGRATION_17_18 = object : Migration(17, 18) {
                 `nextReview` INTEGER NOT NULL,
                 `created` INTEGER NOT NULL,
                 `modified` INTEGER NOT NULL,
+                `inGlobal` INTEGER NOT NULL DEFAULT 0,
                 `uid` TEXT NOT NULL DEFAULT ''
             )
         """)
@@ -940,6 +942,18 @@ private val MIGRATION_17_18 = object : Migration(17, 18) {
         """)
         connection.execSQL("CREATE INDEX IF NOT EXISTS `index_concept_learning_state_learningGroupId` ON `concept_learning_state` (`learningGroupId`)")
         connection.execSQL("CREATE INDEX IF NOT EXISTS `index_concept_learning_state_conceptId` ON `concept_learning_state` (`conceptId`)")
+
+        // Which learning groups offer each concept (Global is concepts.inGlobal).
+        connection.execSQL("""
+            CREATE TABLE IF NOT EXISTS `concept_learning_group` (
+                `conceptId` INTEGER NOT NULL,
+                `learningGroupId` INTEGER NOT NULL,
+                PRIMARY KEY(`conceptId`, `learningGroupId`),
+                FOREIGN KEY(`conceptId`) REFERENCES `concepts`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE,
+                FOREIGN KEY(`learningGroupId`) REFERENCES `learning_groups`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+        """)
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_concept_learning_group_learningGroupId` ON `concept_learning_group` (`learningGroupId`)")
 
         // Stable identifiers. Every existing row gets a fresh random UUID;
         // from here on a row is made with one and keeps it for life, so a

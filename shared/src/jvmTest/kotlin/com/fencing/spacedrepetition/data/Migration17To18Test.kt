@@ -33,10 +33,12 @@ class Migration17To18Test {
                     "id", "name", "description",
                     "fsrsStability", "fsrsDifficulty", "fsrsElapsedDays", "fsrsScheduledDays",
                     "fsrsReps", "fsrsLapses", "fsrsState", "lastReview", "nextReview",
-                    "created", "modified", "uid",
+                    "created", "modified", "inGlobal", "uid",
                 ),
                 db.columnsOf("concepts")
             )
+            assertEquals(setOf("conceptId", "learningGroupId"), db.columnsOf("concept_learning_group"))
+            assertTrue("index_concept_learning_group_learningGroupId" in db.indexNames())
             assertEquals(setOf("cardId", "conceptId"), db.columnsOf("card_concept_cross_ref"))
             assertEquals(
                 setOf(

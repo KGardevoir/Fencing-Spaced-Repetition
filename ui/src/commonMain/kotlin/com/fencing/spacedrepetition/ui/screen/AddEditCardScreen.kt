@@ -76,7 +76,15 @@ fun AddEditCardScreen(
         onSuccess: () -> Unit
     ) -> Unit,
     onCreateGroup: (name: String, onCreated: (Long) -> Unit) -> Unit,
-    onCreateConcept: (name: String, onCreated: (Long) -> Unit) -> Unit = { _, _ -> },
+    /**
+     * The card's learning contexts that schedule by concept, for the groups
+     * selected (learning group ids, null for Global): where concepts can be
+     * offered at all, and where one created here is made available.
+     */
+    conceptContextsFor: (groupIds: Set<Long>) -> Set<Long?> = { emptySet() },
+    /** Of [allConcepts], the ones available in some of those contexts. */
+    offeredConceptIdsFor: (groupIds: Set<Long>) -> Set<Long> = { emptySet() },
+    onCreateConcept: (name: String, contexts: Set<Long?>, onCreated: (Long) -> Unit) -> Unit = { _, _, _ -> },
     onNavigateBack: () -> Unit
 ) {
     var question by rememberSaveable { mutableStateOf(cardToEdit?.question ?: "") }
@@ -1215,6 +1223,11 @@ fun AddEditCardScreen(
     // Concept selection bottom sheet
     if (showConceptSelectionSheet) {
         var conceptQuery by rememberSaveable { mutableStateOf("") }
+        // Offered: concepts available where this card is learnt. A concept the
+        // card already carries is listed too, so it can be taken off.
+        val contexts = conceptContextsFor(selectedGroupIds)
+        val offered = offeredConceptIdsFor(selectedGroupIds)
+        val pickable = allConcepts.filter { it.id in offered || it.id in selectedConceptIds }
         ModalBottomSheet(onDismissRequest = { showConceptSelectionSheet = false }) {
             Column(
                 modifier = Modifier
@@ -1223,7 +1236,7 @@ fun AddEditCardScreen(
             ) {
                 Text("Select Concepts", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(8.dp))
-                if (allConcepts.size > 8) {
+                if (pickable.size > 8) {
                     OutlinedTextField(
                         value = conceptQuery,
                         onValueChange = { conceptQuery = it },
@@ -1233,14 +1246,26 @@ fun AddEditCardScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                 }
-                if (allConcepts.isEmpty()) {
+                if (contexts.isEmpty()) {
                     Text(
-                        "No concepts yet. Create one below.",
+                        "This card's groups don't schedule by concept. Turn concept scheduling " +
+                            "on for their learning group (or Global) on the Learning Groups screen.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                if (pickable.isEmpty()) {
+                    if (contexts.isNotEmpty()) {
+                        Text(
+                            "No concepts are available in this card's learning groups. Create one " +
+                                "below, or make one available from the Concepts screen.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 } else {
-                    val listed = allConcepts.filter {
+                    val listed = pickable.filter {
                         conceptQuery.isBlank() || it.name.contains(conceptQuery.trim(), ignoreCase = true)
                     }
                     LazyColumn(modifier = Modifier.weight(1f, fill = false).fillMaxWidth()) {
@@ -1272,7 +1297,13 @@ fun AddEditCardScreen(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Column {
                                     Text(concept.name, style = MaterialTheme.typography.bodyLarge)
-                                    if (concept.description.isNotEmpty()) {
+                                    if (concept.id !in offered) {
+                                        Text(
+                                            "Not available in this card's learning groups",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    } else if (concept.description.isNotEmpty()) {
                                         Text(
                                             concept.description,
                                             style = MaterialTheme.typography.bodySmall,
@@ -1287,6 +1318,7 @@ fun AddEditCardScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 OutlinedButton(
                     onClick = { showCreateConceptDialog = true },
+                    enabled = contexts.isNotEmpty(),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null)
@@ -1315,7 +1347,9 @@ fun AddEditCardScreen(
                     value = newConceptName,
                     onValueChange = { newConceptName = it },
                     label = { Text("Concept Name") },
-                    supportingText = { Text("An existing concept of the same name is reused") },
+                    supportingText = {
+                        Text("Made available in this card's learning groups. An existing concept of the same name is reused.")
+                    },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1323,7 +1357,7 @@ fun AddEditCardScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        onCreateConcept(newConceptName) { newId ->
+                        onCreateConcept(newConceptName, conceptContextsFor(selectedGroupIds)) { newId ->
                             selectedConceptIds = selectedConceptIds + newId
                             conceptsTouched = true
                             isDirty = true

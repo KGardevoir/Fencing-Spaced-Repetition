@@ -9,6 +9,7 @@ import com.fencing.spacedrepetition.algorithm.RetentionPlanner
 import com.fencing.spacedrepetition.algorithm.ScheduleEstimate
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.Concept
+import com.fencing.spacedrepetition.data.model.ConceptLearningGroupCrossRef
 import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.CardWithGroups
 import com.fencing.spacedrepetition.data.model.Grade
@@ -107,6 +108,14 @@ class CardViewModel(
     private val _selectedGroupFilters = MutableStateFlow<Set<Long>>(emptySet())
     val selectedGroupFilters: StateFlow<Set<Long>> = _selectedGroupFilters.asStateFlow()
 
+    /** Concepts to filter the card list by: a card carrying any of them is shown. */
+    private val _selectedConceptFilters = MutableStateFlow<Set<Long>>(emptySet())
+    val selectedConceptFilters: StateFlow<Set<Long>> = _selectedConceptFilters.asStateFlow()
+
+    fun toggleConceptFilter(conceptId: Long) {
+        _selectedConceptFilters.update { if (conceptId in it) it - conceptId else it + conceptId }
+    }
+
     private val _showDisabledFilter = MutableStateFlow(false)
     val showDisabledFilter: StateFlow<Boolean> = _showDisabledFilter.asStateFlow()
 
@@ -135,15 +144,18 @@ class CardViewModel(
     @OptIn(ExperimentalCoroutinesApi::class)
     val filteredCards: StateFlow<List<Card>> = _showDisabledFilter.flatMapLatest { showDisabled ->
         combine(
-            allCardsWithGroups,
-            _selectedGroupFilters,
+            combine(allCardsWithGroups, conceptRepository.getAllCardConceptCrossRefs()) { cards, refs -> cards to refs },
+            combine(_selectedGroupFilters, _selectedConceptFilters) { groups, concepts -> groups to concepts },
             searchQuery,
             _cardSortOption,
             _sortDirection
-        ) { cardsWithGroups, groupIds, query, sortOption, direction ->
+        ) { (cardsWithGroups, conceptRefs), (groupIds, conceptIds), query, sortOption, direction ->
+            val cardsWithSelectedConcepts = if (conceptIds.isEmpty()) emptySet() else
+                conceptRefs.filter { it.conceptId in conceptIds }.map { it.cardId }.toSet()
             var filtered = cardsWithGroups
                 .filter { it.card.isDisabled == showDisabled }
                 .filter { groupIds.isEmpty() || it.groups.any { g -> g.id in groupIds } }
+                .filter { conceptIds.isEmpty() || it.card.id in cardsWithSelectedConcepts }
                 .map { it.card }
 
             // Apply search filter
@@ -181,6 +193,7 @@ class CardViewModel(
 
     fun clearGroupFilters() {
         _selectedGroupFilters.value = emptySet()
+        _selectedConceptFilters.value = emptySet()
         _showDisabledFilter.value = false
     }
 
@@ -236,11 +249,20 @@ class CardViewModel(
     val allConcepts: StateFlow<List<Concept>> = conceptRepository.getAllConcepts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    /** Create a concept from the card editor; [onCreated] gets its id. */
-    fun createConcept(name: String, onCreated: (Long) -> Unit) {
+    /** Which learning groups offer which concepts, for the card editor. */
+    val conceptLearningGroups: StateFlow<List<ConceptLearningGroupCrossRef>> =
+        conceptRepository.getAllConceptLearningGroups()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /**
+     * Create a concept from the card editor -- or find the one of that name --
+     * available in [contexts], the card's learning contexts that schedule by
+     * concept, so it can be picked for the card. [onCreated] gets its id.
+     */
+    fun createConcept(name: String, contexts: Set<Long?>, onCreated: (Long) -> Unit) {
         viewModelScope.launch {
             try {
-                onCreated(conceptRepository.getOrCreateConcept(name))
+                onCreated(conceptRepository.getOrCreateConceptIn(name, contexts))
             } catch (e: Exception) {
                 // A blank name: nothing to create
             }

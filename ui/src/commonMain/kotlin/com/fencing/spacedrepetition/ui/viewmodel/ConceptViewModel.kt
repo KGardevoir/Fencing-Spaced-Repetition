@@ -5,7 +5,6 @@ package com.fencing.spacedrepetition.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.Concept
 import com.fencing.spacedrepetition.data.model.ConceptLearningState
 import com.fencing.spacedrepetition.data.model.Group
@@ -31,12 +30,15 @@ import kotlinx.coroutines.launch
  *   in: Global (key null) when any of its groups learns Global, and each
  *   learning group one of its groups is in -- plus any context it already
  *   holds progress in, so nothing learnt disappears from view.
+ * @param learningGroupIds the learning groups the concept belongs to -- where
+ *   the card editor offers it; Global is [Concept.inGlobal].
  */
 data class ConceptSummary(
     val concept: Concept,
     val cardIds: Set<Long>,
     val groups: List<Group>,
-    val states: List<Pair<LearningGroup?, ConceptLearningState>>
+    val states: List<Pair<LearningGroup?, ConceptLearningState>>,
+    val learningGroupIds: Set<Long> = emptySet()
 )
 
 class ConceptViewModel(
@@ -48,10 +50,7 @@ class ConceptViewModel(
     val learningGroups: StateFlow<List<LearningGroup>> = groupRepository.getAllLearningGroups()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val allCards: StateFlow<List<Card>> = cardRepository.getAllCards()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val concepts: StateFlow<List<ConceptSummary>> = combine(
+    private val summaries = combine(
         conceptRepository.getAllConcepts(),
         conceptRepository.getAllCardConceptCrossRefs(),
         conceptRepository.getAllConceptLearningStates(),
@@ -83,6 +82,14 @@ class ConceptViewModel(
 
             ConceptSummary(concept, cardIds, groups, states)
         }
+    }
+
+    val concepts: StateFlow<List<ConceptSummary>> = combine(
+        summaries,
+        conceptRepository.getAllConceptLearningGroups()
+    ) { summaries, links ->
+        val learningGroupsByConcept = links.groupBy({ it.conceptId }, { it.learningGroupId })
+        summaries.map { it.copy(learningGroupIds = learningGroupsByConcept[it.concept.id].orEmpty().toSet()) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _error = MutableStateFlow<String?>(null)
@@ -93,16 +100,13 @@ class ConceptViewModel(
     }
 
     /**
-     * Create or update [concept], and make [cardIds] the cards carrying it;
-     * its state is then rederived from those cards' history.
+     * Create or update [concept] -- its name, description and whether Global
+     * offers it -- and make [learningGroupIds] the learning groups that do.
      */
-    fun saveConcept(concept: Concept, cardIds: Set<Long>) {
+    fun saveConcept(concept: Concept, learningGroupIds: Set<Long>) {
         viewModelScope.launch {
-            val id = conceptRepository.saveConcept(concept, cardIds)
-            if (id == null) {
+            if (conceptRepository.saveConcept(concept, learningGroupIds) == null) {
                 _error.value = "A concept called \"${concept.name.trim()}\" already exists"
-            } else {
-                cardRepository.rederiveConcepts(listOf(id))
             }
         }
     }

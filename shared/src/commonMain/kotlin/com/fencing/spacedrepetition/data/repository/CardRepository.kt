@@ -557,12 +557,14 @@ class CardRepository(
     suspend fun getAllConceptsWithStates(): List<ConceptWithStates> {
         val learningGroupNames = groupDao.getAllLearningGroups().first().associate { it.id to it.name }
         val statesByConcept = conceptDao.getAllConceptLearningStatesSync().groupBy { it.conceptId }
+        val availability = conceptDao.getAllConceptLearningGroupsSync().groupBy({ it.conceptId }, { it.learningGroupId })
         return conceptDao.getAllConceptsSync().map { concept ->
             ConceptWithStates(
                 concept,
                 statesByConcept[concept.id].orEmpty()
                     .mapNotNull { state -> learningGroupNames[state.learningGroupId]?.let { it to state } }
-                    .toMap()
+                    .toMap(),
+                availableIn = availability[concept.id].orEmpty().mapNotNull { learningGroupNames[it] }.sorted()
             )
         }
     }

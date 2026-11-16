@@ -58,6 +58,10 @@ fun CardListScreen(
     groups: List<Group>,
     selectedGroupFilters: Set<Long>,
     showDisabledFilter: Boolean,
+    /** Every concept, for the concept filter row; empty hides the row. */
+    concepts: List<com.fencing.spacedrepetition.data.model.Concept> = emptyList(),
+    selectedConceptFilters: Set<Long> = emptySet(),
+    onToggleConceptFilter: (Long) -> Unit = {},
     searchQuery: String,
     cardCount: Int,
     importExportState: ImportExportState,
@@ -338,7 +342,7 @@ fun CardListScreen(
             ) {
                 item {
                     FilterChip(
-                        selected = selectedGroupFilters.isEmpty() && !showDisabledFilter,
+                        selected = selectedGroupFilters.isEmpty() && selectedConceptFilters.isEmpty() && !showDisabledFilter,
                         onClick = onClearGroupFilters,
                         label = { Text("All") }
                     )
@@ -366,6 +370,31 @@ fun CardListScreen(
                 }
             }
 
+            // Concept filter chips: a card carrying any selected concept is shown.
+            if (concepts.isNotEmpty()) {
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(concepts, key = { it.id }) { concept ->
+                        FilterChip(
+                            selected = concept.id in selectedConceptFilters,
+                            onClick = { onToggleConceptFilter(concept.id) },
+                            label = { Text(concept.name) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Lightbulb,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+
             // Cards list
             if (allCards.isEmpty()) {
                 Box(
@@ -389,6 +418,7 @@ fun CardListScreen(
                                 showDisabledFilter && selectedGroupFilters.isNotEmpty() -> "No disabled cards in selected groups"
                                 showDisabledFilter -> "No disabled cards"
                                 selectedGroupFilters.isNotEmpty() -> "No cards in selected groups"
+                                selectedConceptFilters.isNotEmpty() -> "No cards with the selected concepts"
                                 else -> "No cards yet"
                             },
                             style = MaterialTheme.typography.titleMedium,

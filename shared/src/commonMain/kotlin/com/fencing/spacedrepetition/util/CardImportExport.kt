@@ -213,6 +213,8 @@ object CardImportExport {
      */
     data class ParsedConcept(
         val uid: String? = null,
+        val inGlobal: Boolean = false,
+        val availableIn: List<String> = emptyList(),
         val name: String,
         val description: String = "",
         val globalState: com.fencing.spacedrepetition.data.model.ConceptLearningState? = null,
@@ -773,7 +775,8 @@ object CardImportExport {
                 it.name in referencedGroupNames || it.hasCustomSettings() || it.learningGroupId in learningGroupNames
             }
             // Only the learning groups the written groups use.
-            val conceptLearningGroupNames = writtenConcepts.flatMap { it.learningStates.keys }.toSet()
+            val conceptLearningGroupNames =
+                writtenConcepts.flatMap { it.learningStates.keys + it.availableIn }.toSet()
             val writtenLearningGroupIds = writtenGroups.mapNotNull { it.learningGroupId }.toSet() +
                 learningGroups.filter { it.name in conceptLearningGroupNames }.map { it.id }
 
@@ -813,7 +816,7 @@ object CardImportExport {
                     },
                     // The opponents, so the review logs can name them and an
                     // import can find them again.
-                    concepts = writtenConcepts.map { ArchiveYaml.conceptNode(it.concept, it.learningStates) },
+                    concepts = writtenConcepts.map { ArchiveYaml.conceptNode(it.concept, it.learningStates, it.availableIn) },
                     opponents = opponents.map { ArchiveYaml.opponentNode(it) },
                     cards = cards,
                     sessions = sessionNodes,

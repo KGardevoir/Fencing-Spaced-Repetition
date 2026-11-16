@@ -430,6 +430,37 @@ class ConceptSchedulingDbTest {
         assertNull(cleared.opponentUid)
     }
 
+    // ==================== availability ====================
+
+    @Test
+    fun `saving a concept sets where it is available and leaves its cards alone`() = runTest {
+        val concepts = ConceptRepository(db.conceptDao())
+        val bouting = db.groupDao().insertLearningGroup(LearningGroup(name = "Bouting", useConcepts = true))
+        val a = concept("A")
+        val c = card("c"); tag(c, a)
+
+        concepts.saveConcept(db.conceptDao().getConceptById(a)!!.copy(inGlobal = true), setOf(bouting))
+        assertTrue(db.conceptDao().getConceptById(a)!!.inGlobal)
+        assertEquals(listOf(bouting), db.conceptDao().getLearningGroupIdsForConcept(a))
+        assertEquals(listOf(c), db.conceptDao().getCardIdsForConcept(a))
+
+        concepts.saveConcept(db.conceptDao().getConceptById(a)!!.copy(inGlobal = false), emptySet())
+        assertTrue(db.conceptDao().getLearningGroupIdsForConcept(a).isEmpty())
+        assertEquals(listOf(c), db.conceptDao().getCardIdsForConcept(a))
+    }
+
+    @Test
+    fun `a concept created from the card editor is available where the card is learnt`() = runTest {
+        val concepts = ConceptRepository(db.conceptDao())
+        val bouting = db.groupDao().insertLearningGroup(LearningGroup(name = "Bouting", useConcepts = true))
+        val id = concepts.getOrCreateConceptIn("Distance", setOf(bouting, null))
+        assertTrue(db.conceptDao().getConceptById(id)!!.inGlobal)
+        assertEquals(listOf(bouting), db.conceptDao().getLearningGroupIdsForConcept(id))
+        // Asking again for the same name finds it, adding nothing twice.
+        assertEquals(id, concepts.getOrCreateConceptIn("distance", setOf(bouting)))
+        assertEquals(listOf(bouting), db.conceptDao().getLearningGroupIdsForConcept(id))
+    }
+
     // ==================== resets ====================
 
     @Test
