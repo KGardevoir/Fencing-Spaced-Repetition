@@ -92,17 +92,20 @@ defines concepts and where they are available, and shows how many cards use
 each, but does not tag cards.
 
 A concept is **available** in learning contexts: the learning groups it is
-linked to (`concept_learning_group`) and Global when `concepts.inGlobal`. Only
-contexts that schedule by concept can be chosen. The card editor offers a
-concept for a card only when it is available in one of the card's learning
-contexts -- its groups' learning groups, or Global for a group in none and for
-a card in no group -- and that context schedules by concept
-(`offeredConceptIds`). Availability limits what can be *added*: a card already
+linked to (`concept_learning_group`) and Global when `concepts.inGlobal`. The
+card editor offers a concept for a card only when it is available in one of
+the card's learning contexts -- its groups' learning groups, or Global for a
+group in none and for a card in no group (`offeredConceptIds`).
+
+**Tagging is always allowed**, whether or not a context schedules by concept.
+Where concept scheduling is off, the app says so instead of preventing
+anything: the concept dialog marks those contexts, the concept list marks
+them "(scheduling off)", and the card editor notes that the card is scheduled
+card by card there. The tags are kept and take effect when the switch is
+turned on. Availability limits what can be *added*: a card already
 tagged with a concept that is not offered keeps it, shown so it can be
 removed. "Create New Concept" in the card editor makes the concept available
-in the card's concept-scheduling contexts. A link to a learning group whose
-switch is later turned off is kept, and is offered again when it is turned
-back on.
+in all of the card's learning contexts.
 
 Scheduling *by* concept is opt-in per context: each learning group has a
 `useConcepts` switch and Global has a setting. Where it is on, a session draws

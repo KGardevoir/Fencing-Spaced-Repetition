@@ -276,9 +276,11 @@ private fun ConceptRow(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
+                // Each place it is available, marked where concept scheduling is off.
+                fun label(name: String, on: Boolean) = if (on) name else "$name (scheduling off)"
                 val availableIn = buildList {
-                    if (concept.inGlobal) add("Global")
-                    learningGroups.filter { it.id in summary.learningGroupIds }.forEach { add(it.name) }
+                    if (concept.inGlobal) add(label("Global", globalConceptScheduling))
+                    learningGroups.filter { it.id in summary.learningGroupIds }.forEach { add(label(it.name, it.useConcepts)) }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
@@ -359,9 +361,9 @@ internal fun describeState(state: ConceptLearningState): String = when {
  * contexts whose cards may be tagged with it -- and, for one that exists, its
  * progress.
  *
- * Only contexts that schedule by concept are offered. A learning group the
- * concept already belongs to whose switch has since been turned off is not
- * shown, and is kept as it is: switching it back on brings the concept back.
+ * Every learning context can be chosen: tagging is always allowed. One whose
+ * concept scheduling is off says so -- its cards can carry the concept, but
+ * are scheduled card by card until the switch is turned on.
  */
 @Composable
 private fun ConceptEditDialog(
@@ -377,16 +379,13 @@ private fun ConceptEditDialog(
     var name by rememberSaveable { mutableStateOf(concept.name) }
     var description by rememberSaveable { mutableStateOf(concept.description) }
     var inGlobal by rememberSaveable { mutableStateOf(concept.inGlobal) }
-    val offered = learningGroups.filter { it.useConcepts }
-    var checkedLearningGroups by remember { mutableStateOf(summary.learningGroupIds.filter { id -> offered.any { it.id == id } }.toSet()) }
+    var checkedLearningGroups by remember { mutableStateOf(summary.learningGroupIds) }
 
     val nameTaken = concepts.any { it.id != concept.id && it.name.equals(name.trim(), ignoreCase = true) }
     fun save() {
-        // Learning groups not shown -- switched off -- keep their link.
-        val hidden = summary.learningGroupIds.filter { id -> offered.none { it.id == id } }
         onSave(
             concept.copy(name = name.trim(), description = description.trim(), inGlobal = inGlobal),
-            hidden.toSet() + checkedLearningGroups
+            checkedLearningGroups.filter { id -> learningGroups.any { it.id == id } }.toSet()
         )
     }
 
@@ -448,28 +447,23 @@ private fun ConceptEditDialog(
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        "Cards learnt here can be tagged with this concept. Only learning " +
-                            "contexts that schedule by concept are listed.",
+                        "Cards learnt here can be tagged with this concept.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    if (!globalConceptScheduling && offered.isEmpty()) {
-                        Text(
-                            "No learning context schedules by concept yet. Turn it on for a " +
-                                "learning group, or for Global, on the Learning Groups screen.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
+                }
+                item {
+                    AvailabilityRow("Global", Icons.Default.Public, inGlobal, schedulingOn = globalConceptScheduling) {
+                        inGlobal = it
                     }
                 }
-                if (globalConceptScheduling) {
-                    item {
-                        AvailabilityRow("Global", Icons.Default.Public, inGlobal) { inGlobal = it }
-                    }
-                }
-                items(offered, key = { it.id }) { learningGroup ->
-                    AvailabilityRow(learningGroup.name, AppIcons.LearningGroup, learningGroup.id in checkedLearningGroups) {
+                items(learningGroups, key = { it.id }) { learningGroup ->
+                    AvailabilityRow(
+                        learningGroup.name,
+                        AppIcons.LearningGroup,
+                        learningGroup.id in checkedLearningGroups,
+                        schedulingOn = learningGroup.useConcepts
+                    ) {
                         checkedLearningGroups =
                             if (it) checkedLearningGroups + learningGroup.id else checkedLearningGroups - learningGroup.id
                     }
@@ -493,6 +487,8 @@ private fun AvailabilityRow(
     label: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     checked: Boolean,
+    /** Whether this context schedules by concept; off is noted, not prevented. */
+    schedulingOn: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
     Row(
@@ -505,6 +501,15 @@ private fun AvailabilityRow(
         Checkbox(checked = checked, onCheckedChange = onCheckedChange)
         Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.width(8.dp))
-        Text(label, style = MaterialTheme.typography.bodyLarge)
+        Column {
+            Text(label, style = MaterialTheme.typography.bodyLarge)
+            if (!schedulingOn) {
+                Text(
+                    "Concept scheduling is off here: tags are kept, cards are scheduled one by one",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.tertiary
+                )
+            }
+        }
     }
 }

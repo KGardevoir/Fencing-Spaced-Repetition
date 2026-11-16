@@ -77,13 +77,17 @@ fun AddEditCardScreen(
     ) -> Unit,
     onCreateGroup: (name: String, onCreated: (Long) -> Unit) -> Unit,
     /**
-     * The card's learning contexts that schedule by concept, for the groups
-     * selected (learning group ids, null for Global): where concepts can be
-     * offered at all, and where one created here is made available.
+     * The card's learning contexts for the groups selected (learning group
+     * ids, null for Global): where a concept created here is made available.
      */
-    conceptContextsFor: (groupIds: Set<Long>) -> Set<Long?> = { emptySet() },
+    cardContextsFor: (groupIds: Set<Long>) -> Set<Long?> = { setOf(null) },
     /** Of [allConcepts], the ones available in some of those contexts. */
     offeredConceptIdsFor: (groupIds: Set<Long>) -> Set<Long> = { emptySet() },
+    /**
+     * A note when some of those contexts do not schedule by concept, or null.
+     * Tagging is always allowed; the note says where the tags have no effect.
+     */
+    schedulingOffNoteFor: (groupIds: Set<Long>) -> String? = { null },
     onCreateConcept: (name: String, contexts: Set<Long?>, onCreated: (Long) -> Unit) -> Unit = { _, _, _ -> },
     onNavigateBack: () -> Unit
 ) {
@@ -458,11 +462,16 @@ fun AddEditCardScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
-                        Text(
-                            "Scheduled by these concepts where concept scheduling is on (see Learning Groups)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        val schedulingOffNote = schedulingOffNoteFor(selectedGroupIds)
+                        if (schedulingOffNote != null) {
+                            SchedulingOffNote(schedulingOffNote)
+                        } else {
+                            Text(
+                                "This card is scheduled by these concepts",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         Spacer(modifier = Modifier.height(4.dp))
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1225,8 +1234,8 @@ fun AddEditCardScreen(
         var conceptQuery by rememberSaveable { mutableStateOf("") }
         // Offered: concepts available where this card is learnt. A concept the
         // card already carries is listed too, so it can be taken off.
-        val contexts = conceptContextsFor(selectedGroupIds)
         val offered = offeredConceptIdsFor(selectedGroupIds)
+        val schedulingOffNote = schedulingOffNoteFor(selectedGroupIds)
         val pickable = allConcepts.filter { it.id in offered || it.id in selectedConceptIds }
         ModalBottomSheet(onDismissRequest = { showConceptSelectionSheet = false }) {
             Column(
@@ -1246,24 +1255,17 @@ fun AddEditCardScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                 }
-                if (contexts.isEmpty()) {
-                    Text(
-                        "This card's groups don't schedule by concept. Turn concept scheduling " +
-                            "on for their learning group (or Global) on the Learning Groups screen.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                schedulingOffNote?.let {
+                    SchedulingOffNote(it)
                     Spacer(modifier = Modifier.height(8.dp))
                 }
                 if (pickable.isEmpty()) {
-                    if (contexts.isNotEmpty()) {
-                        Text(
-                            "No concepts are available in this card's learning groups. Create one " +
-                                "below, or make one available from the Concepts screen.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Text(
+                        "No concepts are available in this card's learning groups. Create one " +
+                            "below, or make one available from the Concepts screen.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 } else {
                     val listed = pickable.filter {
                         conceptQuery.isBlank() || it.name.contains(conceptQuery.trim(), ignoreCase = true)
@@ -1318,7 +1320,6 @@ fun AddEditCardScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 OutlinedButton(
                     onClick = { showCreateConceptDialog = true },
-                    enabled = contexts.isNotEmpty(),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null)
@@ -1357,7 +1358,7 @@ fun AddEditCardScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        onCreateConcept(newConceptName, conceptContextsFor(selectedGroupIds)) { newId ->
+                        onCreateConcept(newConceptName, cardContextsFor(selectedGroupIds)) { newId ->
                             selectedConceptIds = selectedConceptIds + newId
                             conceptsTouched = true
                             isDirty = true
@@ -1719,3 +1720,17 @@ private fun formatReviewStatus(fsrsState: String, nextReview: Long): String = wh
     else -> formatDate(nextReview)
 }
 
+/** Says where concept scheduling is off: tagging still works, the tags just have no effect there. */
+@Composable
+private fun SchedulingOffNote(text: String) {
+    Row(verticalAlignment = Alignment.Top) {
+        Icon(
+            Icons.Default.Info,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp).padding(top = 2.dp),
+            tint = MaterialTheme.colorScheme.tertiary
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+    }
+}

@@ -14,6 +14,7 @@ import com.fencing.spacedrepetition.BuildInfo
 import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.Concept
 import com.fencing.spacedrepetition.data.model.conceptContexts
+import com.fencing.spacedrepetition.data.model.contextName
 import com.fencing.spacedrepetition.data.model.learningContextsOf
 import com.fencing.spacedrepetition.data.model.offeredConceptIds
 import com.fencing.spacedrepetition.data.model.Group
@@ -641,16 +642,24 @@ private fun CardEditor(
     val cardConcepts by cardConceptsFlow.collectAsState(initial = emptyList())
     val conceptLinks by cardViewModel.conceptLearningGroups.collectAsState()
     val globalConceptScheduling by settingsViewModel.globalConceptScheduling.collectAsState()
-    // Where this card can take concepts: its groups' learning contexts that
-    // schedule by concept, and the concepts available in them.
-    val conceptContextsFor = { groupIds: Set<Long> ->
-        conceptContexts(learningContextsOf(groupIds, allGroups), globalConceptScheduling, learningGroups)
-    }
+    // Where this card is learnt, the concepts available there, and -- when
+    // some of those contexts do not schedule by concept -- a note saying so.
+    // Tagging is allowed either way.
+    val cardContextsFor = { groupIds: Set<Long> -> learningContextsOf(groupIds, allGroups) }
     val offeredConceptIdsFor = { groupIds: Set<Long> ->
-        offeredConceptIds(
-            allConcepts, conceptLinks, learningContextsOf(groupIds, allGroups),
-            globalConceptScheduling, learningGroups
-        )
+        offeredConceptIds(allConcepts, conceptLinks, learningContextsOf(groupIds, allGroups))
+    }
+    val schedulingOffNoteFor = { groupIds: Set<Long> ->
+        val contexts = learningContextsOf(groupIds, allGroups)
+        val on = conceptContexts(contexts, globalConceptScheduling, learningGroups)
+        val off = (contexts - on).map { contextName(it, learningGroups) }.sorted()
+        when {
+            off.isEmpty() -> null
+            on.isEmpty() -> "Concept scheduling is off for ${off.joinToString(", ")}. Tags are kept, " +
+                "but this card is scheduled card by card until it is turned on."
+            else -> "Concept scheduling is off in ${off.joinToString(", ")}: there, this card is " +
+                "scheduled card by card."
+        }
     }
 
     AddEditCardScreen(
@@ -680,8 +689,9 @@ private fun CardEditor(
             cardViewModel.addCard(question, answer, groupIds, imagePaths, conceptIds, onSuccess)
         },
         onCreateGroup = { name, onCreated -> groupViewModel.addGroup(name, onSuccess = onCreated) },
-        conceptContextsFor = conceptContextsFor,
+        cardContextsFor = cardContextsFor,
         offeredConceptIdsFor = offeredConceptIdsFor,
+        schedulingOffNoteFor = schedulingOffNoteFor,
         onCreateConcept = cardViewModel::createConcept,
         onNavigateBack = onNavigateBack
     )

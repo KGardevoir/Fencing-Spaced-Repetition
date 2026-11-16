@@ -25,9 +25,8 @@ class ConceptAvailabilityTest {
         ConceptLearningGroupCrossRef(102, 2)
     )
 
-    private fun offered(groupIds: Set<Long>, globalOn: Boolean = true) = offeredConceptIds(
-        concepts, links, learningContextsOf(groupIds, groups), globalOn, learningGroups
-    )
+    private fun offered(groupIds: Set<Long>) =
+        offeredConceptIds(concepts, links, learningContextsOf(groupIds, groups))
 
     @Test
     fun `a card is learnt in its groups' learning contexts, or Global with none`() {
@@ -43,11 +42,16 @@ class ConceptAvailabilityTest {
     }
 
     @Test
-    fun `a context with concept scheduling off offers nothing`() {
-        // Blade belongs to Drills, which does not schedule by concept.
-        assertEquals(emptySet(), offered(setOf(11L)))
-        // Global switched off: Tempo is not offered to a Global card.
-        assertEquals(emptySet(), offered(setOf(12L), globalOn = false))
+    fun `tagging is allowed where concept scheduling is off`() {
+        // Blade belongs to Drills, which does not schedule by concept: still offered.
+        assertEquals(setOf(102L), offered(setOf(11L)))
+    }
+
+    @Test
+    fun `concept contexts are the ones whose switch is on`() {
         assertEquals(setOf<Long?>(1L), conceptContexts(setOf(1L, 2L, null), false, learningGroups))
+        assertEquals(setOf<Long?>(1L, null), conceptContexts(setOf(1L, 2L, null), true, learningGroups))
+        assertEquals("Global", contextName(null, learningGroups))
+        assertEquals("Drills", contextName(2L, learningGroups))
     }
 }

@@ -8,34 +8,30 @@ package com.fencing.spacedrepetition.data.model
  *
  * A card is learnt in the learning contexts of its groups -- each group's
  * learning group, or Global for a group in none and for a card in no group at
- * all. A concept is offered when it belongs to one of those contexts (a
- * learning group it is linked to, or Global when [Concept.inGlobal]) and that
- * context schedules by concept.
+ * all. A concept is offered when it is available in one of those contexts: a
+ * learning group it is linked to, or Global when [Concept.inGlobal].
  *
- * Only offering is restricted. A card already tagged with a concept that is
- * not offered keeps the tag; the editor shows it so it can be removed.
+ * Whether a context schedules by concept does not matter here: tagging is
+ * always allowed, and a context with concept scheduling off simply does not
+ * use the tags to draw sessions (see [conceptContexts], which the editor uses
+ * to say so). Only offering is restricted; a card already tagged with a
+ * concept that is not offered keeps the tag.
  *
  * @param cardContexts the card's learning contexts: learning group ids, null for Global.
- * @param globalSchedulesByConcept Global's concept-scheduling switch.
- * @param learningGroups every learning group, for its switch.
  */
 fun offeredConceptIds(
     concepts: List<Concept>,
     links: List<ConceptLearningGroupCrossRef>,
-    cardContexts: Set<Long?>,
-    globalSchedulesByConcept: Boolean,
-    learningGroups: List<LearningGroup>
+    cardContexts: Set<Long?>
 ): Set<Long> {
-    val usable = conceptContexts(cardContexts, globalSchedulesByConcept, learningGroups)
-    if (usable.isEmpty()) return emptySet()
     val learningGroupsByConcept = links.groupBy({ it.conceptId }, { it.learningGroupId })
     return concepts.filter { concept ->
-        (null in usable && concept.inGlobal) ||
-            learningGroupsByConcept[concept.id].orEmpty().any { it in usable }
+        (null in cardContexts && concept.inGlobal) ||
+            learningGroupsByConcept[concept.id].orEmpty().any { it in cardContexts }
     }.map { it.id }.toSet()
 }
 
-/** Of [cardContexts], the ones that schedule by concept: where a concept can be offered at all. */
+/** Of [cardContexts], the ones that schedule by concept -- where tags affect what is drawn. */
 fun conceptContexts(
     cardContexts: Set<Long?>,
     globalSchedulesByConcept: Boolean,
@@ -49,3 +45,7 @@ fun conceptContexts(
 fun learningContextsOf(groupIds: Collection<Long>, groups: List<Group>): Set<Long?> =
     if (groupIds.isEmpty()) setOf(null)
     else groups.filter { it.id in groupIds }.map { it.learningGroupId }.toSet()
+
+/** A context's name for notes: the learning group's, or "Global". */
+fun contextName(context: Long?, learningGroups: List<LearningGroup>): String =
+    if (context == null) "Global" else learningGroups.find { it.id == context }?.name ?: "a learning group"
