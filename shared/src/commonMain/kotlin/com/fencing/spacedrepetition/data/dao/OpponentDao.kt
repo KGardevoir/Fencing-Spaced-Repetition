@@ -36,6 +36,10 @@ interface OpponentDao {
     @Query("DELETE FROM opponents WHERE id = :id")
     suspend fun deleteOpponentById(id: Long)
 
+    /** Point every review fought against [fromId] at [toId] instead. */
+    @Query("UPDATE review_logs SET opponentId = :toId WHERE opponentId = :fromId")
+    suspend fun reassignReviewLogs(fromId: Long, toId: Long)
+
     @Query("SELECT COUNT(*) FROM opponents")
     fun getOpponentCount(): Flow<Int>
 }

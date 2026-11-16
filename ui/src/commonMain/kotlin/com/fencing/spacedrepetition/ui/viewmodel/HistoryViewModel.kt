@@ -160,6 +160,20 @@ class HistoryViewModel(
         }
     }
 
+    /**
+     * Fold [source] into [target] across all of history. If the history was
+     * filtered to [source], the filter follows the reviews to [target].
+     */
+    fun mergeOpponents(source: Opponent, target: Opponent) {
+        viewModelScope.launch {
+            if (opponentRepository.mergeOpponents(sourceId = source.id, targetId = target.id) &&
+                _opponentFilter.value == source.id
+            ) {
+                _opponentFilter.value = target.id
+            }
+        }
+    }
+
     /** Create a new opponent inline from the history editor. Returns the new id, or -1 on conflict. */
     suspend fun createOpponent(name: String, skillMultiplier: Double): Long =
         opponentRepository.insertOpponent(Opponent(name = name, skillMultiplier = skillMultiplier))

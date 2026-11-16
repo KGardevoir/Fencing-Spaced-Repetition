@@ -39,6 +39,36 @@ class OpponentRepository(private val opponentDao: OpponentDao) {
     suspend fun deleteOpponentById(id: Long) = opponentDao.deleteOpponentById(id)
 
     /**
+     * Folds [sourceId] into [targetId]: every review logged against the source
+     * is relinked to the target, the source's notes are appended to the
+     * target's, and the source is deleted. The target keeps its name and skill
+     * multiplier. Past reviews keep the stability multiplier they were graded
+     * with, so FSRS state is untouched -- this is the same metadata-only
+     * relabel as reassigning a session's opponent, applied to all of them.
+     *
+     * Relinking runs before the delete, so an interruption between the two
+     * leaves a harmless leftover opponent with no history rather than
+     * orphaned reviews. Returns false if either id is missing or they match.
+     */
+    suspend fun mergeOpponents(sourceId: Long, targetId: Long): Boolean {
+        if (sourceId == targetId) return false
+        val source = opponentDao.getOpponentById(sourceId) ?: return false
+        val target = opponentDao.getOpponentById(targetId) ?: return false
+
+        opponentDao.reassignReviewLogs(fromId = sourceId, toId = targetId)
+
+        val sourceNotes = source.notes.trim()
+        if (sourceNotes.isNotEmpty() && !target.notes.contains(sourceNotes)) {
+            val merged = if (target.notes.isBlank()) sourceNotes
+                else "${target.notes.trimEnd()}\n\n${source.name}: $sourceNotes"
+            opponentDao.updateOpponent(target.copy(notes = merged, modified = Time.now()))
+        }
+
+        opponentDao.deleteOpponent(source)
+        return true
+    }
+
+    /**
      * Ensures each named opponent exists, creating missing ones with the supplied
      * skill multiplier and notes. Existing opponents (matched by name) are left
      * untouched — their current local values take precedence over imported ones.

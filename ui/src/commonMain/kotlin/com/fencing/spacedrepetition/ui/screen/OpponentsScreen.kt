@@ -15,6 +15,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.filled.MergeType
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Warning
@@ -27,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Opponent
+import com.fencing.spacedrepetition.ui.components.MergeOpponentsDialog
 import com.fencing.spacedrepetition.ui.components.SelectionAction
 import com.fencing.spacedrepetition.ui.components.SelectionTopBar
 import com.fencing.spacedrepetition.ui.components.rememberSelectionState
@@ -41,12 +43,15 @@ fun OpponentsScreen(
     onUpdateOpponent: (opponent: Opponent, onDone: () -> Unit) -> Unit,
     onDeleteOpponents: (List<Opponent>) -> Unit,
     onClearError: () -> Unit,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onMergeOpponents: (source: Opponent, target: Opponent) -> Unit = { _, _ -> }
 ) {
     var editing by remember { mutableStateOf<Opponent?>(null) }
     var showAdd by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<List<Opponent>?>(null) }
     var showMenu by remember { mutableStateOf(false) }
+    /** Non-null while the merge dialog is open: the ids to preselect (merge away, keep). */
+    var pendingMerge by remember { mutableStateOf<Pair<Long?, Long?>?>(null) }
     val selection = rememberSelectionState(opponents.map { it.id })
 
     Scaffold(
@@ -57,6 +62,15 @@ fun OpponentsScreen(
                     onExit = selection::exit,
                     onSelectAll = { selection.selectAll(opponents.map { it.id }) },
                     actions = listOf(
+                        // One selected: who to merge away. Two: merge the first into the second.
+                        SelectionAction(
+                            "Merge",
+                            Icons.Default.MergeType,
+                            enabled = opponents.size >= 2 && selection.selected.size in 1..2
+                        ) {
+                            val picked = opponents.filter { it.id in selection.selected }.map { it.id }
+                            pendingMerge = picked.getOrNull(0) to picked.getOrNull(1)
+                        },
                         SelectionAction("Delete", Icons.Default.Delete, destructive = true) {
                             pendingDelete = opponents.filter { it.id in selection.selected }
                         }
@@ -80,6 +94,12 @@ fun OpponentsScreen(
                                 onClick = { showMenu = false; selection.start() },
                                 enabled = opponents.isNotEmpty(),
                                 leadingIcon = { Icon(Icons.Default.CheckBox, contentDescription = null) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Merge Opponents") },
+                                onClick = { showMenu = false; pendingMerge = null to null },
+                                enabled = opponents.size >= 2,
+                                leadingIcon = { Icon(Icons.Default.MergeType, contentDescription = null) }
                             )
                         }
                     }
@@ -183,6 +203,20 @@ fun OpponentsScreen(
                 }
             },
             errorMessage = error
+        )
+    }
+
+    pendingMerge?.let { (sourceId, targetId) ->
+        MergeOpponentsDialog(
+            opponents = opponents,
+            initialSourceId = sourceId,
+            initialTargetId = targetId,
+            onDismiss = { pendingMerge = null },
+            onMerge = { from, into ->
+                onMergeOpponents(from, into)
+                pendingMerge = null
+                selection.exit()
+            }
         )
     }
 

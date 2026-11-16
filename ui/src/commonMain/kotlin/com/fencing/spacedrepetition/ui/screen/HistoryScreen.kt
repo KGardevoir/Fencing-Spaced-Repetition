@@ -30,6 +30,7 @@ import com.fencing.spacedrepetition.data.repository.GROUP_NAME_CARD_EDIT
 import com.fencing.spacedrepetition.ui.components.CardImagesDisplay
 import com.fencing.spacedrepetition.ui.components.CardImagesEdit
 import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
+import com.fencing.spacedrepetition.ui.components.MergeOpponentsDialog
 import com.fencing.spacedrepetition.ui.components.MarkdownKeyboardToolbar
 import com.fencing.spacedrepetition.ui.components.MarkdownText
 import com.fencing.spacedrepetition.ui.components.MarkdownToolbarState
@@ -64,8 +65,10 @@ fun HistoryScreen(
     onUpdateSessionNotes: (PracticeSession, String, List<String>) -> Unit,
     onUpdateSessionOpponent: (PracticeSession, Long?) -> Unit,
     onCreateOpponent: suspend (String, Double) -> Long,
+    onMergeOpponents: (source: Opponent, target: Opponent) -> Unit,
     onNavigateBack: () -> Unit
 ) {
+    var showMerge by remember { mutableStateOf(false) }
     val markdownToolbarState = rememberMarkdownToolbarState()
     val hasActiveFilters = searchQuery.isNotBlank() || selectedGroup != null || opponentFilter != null
 
@@ -103,7 +106,8 @@ fun HistoryScreen(
                 OpponentFilterRow(
                     opponents = opponents,
                     selected = opponentFilter,
-                    onSelect = onSetOpponentFilter
+                    onSelect = onSetOpponentFilter,
+                    onMerge = { showMerge = true }
                 )
             }
 
@@ -191,6 +195,20 @@ fun HistoryScreen(
             }
         }
     }
+
+    if (showMerge) {
+        MergeOpponentsDialog(
+            opponents = opponents,
+            // Filtering to someone first is the natural way to spot a duplicate,
+            // so start from whoever is filtered.
+            initialSourceId = opponentFilter?.takeIf { id -> opponents.any { it.id == id } },
+            onDismiss = { showMerge = false },
+            onMerge = { source, target ->
+                onMergeOpponents(source, target)
+                showMerge = false
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -269,12 +287,13 @@ private fun SearchAndFilterBar(
     }
 }
 
-/** Horizontal row of filter chips: All · Solo · each opponent. */
+/** Horizontal row of filter chips: All · Solo · each opponent · Merge… */
 @Composable
 private fun OpponentFilterRow(
     opponents: List<Opponent>,
     selected: Long?,
-    onSelect: (Long?) -> Unit
+    onSelect: (Long?) -> Unit,
+    onMerge: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -299,6 +318,15 @@ private fun OpponentFilterRow(
                 selected = selected == opponent.id,
                 onClick = { onSelect(opponent.id) },
                 label = { Text(opponent.name) }
+            )
+        }
+        if (opponents.size >= 2) {
+            AssistChip(
+                onClick = onMerge,
+                label = { Text("Merge…") },
+                leadingIcon = {
+                    Icon(Icons.Default.MergeType, contentDescription = null, modifier = Modifier.size(18.dp))
+                }
             )
         }
     }
