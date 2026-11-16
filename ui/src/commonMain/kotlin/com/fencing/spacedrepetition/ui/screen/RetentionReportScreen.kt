@@ -238,7 +238,18 @@ private fun GroupsTab(
     var menuOpen by remember { mutableStateOf(false) }
 
     val selected = resolve(report, selectionFromKey(selectedKey)) ?: return
-    val shown = selected.cards.filter { query.isBlank() || it.question.contains(query, ignoreCase = true) }
+    val shown = selected.cards
+        .filter { query.isBlank() || it.question.contains(query, ignoreCase = true) }
+        .let { cards ->
+            when (metric) {
+                // Already weakest first by predicted recall.
+                TrendMetric.RECALL -> cards
+                // Least stable first; cards not yet learned at the bottom.
+                TrendMetric.STABILITY -> cards.sortedWith(
+                    compareBy<CardRetention> { !it.isLearned }.thenBy { it.stabilityDays }
+                )
+            }
+        }
 
     fun choose(selection: GroupSelection) {
         selectedKey = selection.key()
@@ -333,6 +344,7 @@ private fun GroupsTab(
         items(shown, key = { "card-${selected.selection.key()}-${it.cardId}" }) { card ->
             CardRow(
                 card = card,
+                metric = metric,
                 expanded = expandedCard == card.cardId,
                 onClick = { expandedCard = if (expandedCard == card.cardId) null else card.cardId }
             )
@@ -365,7 +377,7 @@ private fun MenuPercent(value: Double?) {
 }
 
 @Composable
-private fun CardRow(card: CardRetention, expanded: Boolean, onClick: () -> Unit) {
+private fun CardRow(card: CardRetention, metric: TrendMetric, expanded: Boolean, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -382,13 +394,24 @@ private fun CardRow(card: CardRetention, expanded: Boolean, onClick: () -> Unit)
                     modifier = Modifier.weight(1f)
                 )
                 Spacer(Modifier.width(8.dp))
-                Text(
-                    card.retrievabilityNow?.let(::percent) ?: "New",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = retentionColor(card.retrievabilityNow)
-                )
+                when (metric) {
+                    TrendMetric.RECALL -> Text(
+                        card.retrievabilityNow?.let(::percent) ?: "New",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = retentionColor(card.retrievabilityNow)
+                    )
+                    TrendMetric.STABILITY -> Text(
+                        if (card.isLearned) days(card.stabilityDays) else "New",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (card.isLearned) MaterialTheme.colorScheme.secondary
+                            else MaterialTheme.colorScheme.outline
+                    )
+                }
             }
-            RetentionBar(card.retrievabilityNow)
+            when (metric) {
+                TrendMetric.RECALL -> RetentionBar(card.retrievabilityNow)
+                TrendMetric.STABILITY -> StabilityBar(card.stabilityDays.takeIf { card.isLearned })
+            }
             Text(
                 buildList {
                     add(stateLabel(card.state))
@@ -408,24 +431,29 @@ private fun CardRow(card: CardRetention, expanded: Boolean, onClick: () -> Unit)
                     DetailLine("Difficulty", card.difficulty.toOneDecimal() + " / 10")
                     DetailLine("Reviews", card.reps.toString())
                 }
-                if (card.history.isEmpty()) {
-                    Text(
-                        "No graded reviews here yet.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    Text("Review history", style = MaterialTheme.typography.labelLarge)
-                    CardHistoryChart(card)
-                    GradeLegend()
-                }
-                if (card.stabilityHistory.isNotEmpty()) {
-                    Text("Stability after each review", style = MaterialTheme.typography.labelLarge)
-                    CardStabilityChart(card)
+                when (metric) {
+                    TrendMetric.RECALL -> if (card.history.isEmpty()) {
+                        DetailNote("No graded reviews here yet.")
+                    } else {
+                        Text("Review history", style = MaterialTheme.typography.labelLarge)
+                        CardHistoryChart(card)
+                        GradeLegend()
+                    }
+                    TrendMetric.STABILITY -> if (card.stabilityHistory.isEmpty()) {
+                        DetailNote("No stability recorded here yet.")
+                    } else {
+                        Text("Stability after each review", style = MaterialTheme.typography.labelLarge)
+                        CardStabilityChart(card)
+                    }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun DetailNote(text: String) {
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable
@@ -569,6 +597,30 @@ private fun RetentionBar(value: Double?) {
             Box(
                 Modifier
                     .fillMaxWidth(value.toFloat().coerceIn(0f, 1f))
+                    .fillMaxHeight()
+                    .background(fill)
+            )
+        }
+    }
+}
+
+/** Stability on a log scale where a full bar is a year: 1 day is a sliver, a month about half. */
+@Composable
+private fun StabilityBar(stabilityDays: Double?) {
+    val track = MaterialTheme.colorScheme.surfaceVariant
+    val fill = MaterialTheme.colorScheme.secondary
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(6.dp)
+            .clip(RoundedCornerShape(3.dp))
+            .background(track)
+    ) {
+        if (stabilityDays != null) {
+            val fraction = (ln(1 + stabilityDays) / ln(1 + 365.0)).toFloat().coerceIn(0f, 1f)
+            Box(
+                Modifier
+                    .fillMaxWidth(fraction)
                     .fillMaxHeight()
                     .background(fill)
             )
