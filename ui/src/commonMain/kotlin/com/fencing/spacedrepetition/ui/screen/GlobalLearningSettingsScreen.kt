@@ -87,7 +87,7 @@ fun GlobalLearningSettingsScreen(
             // Not a default: Global's own switch. Each learning group has one of its own.
             ConceptSchedulingSwitch(conceptScheduling, onSetConceptScheduling)
 
-            GlobalSetting("Cards per Session", "Number of cards to practice each session") {
+            GlobalSetting("Cards per Session", null) {
                 CardsPerSessionSlider(cardsPerSession, onSetCardsPerSession)
             }
             GlobalSetting("Randomize Due Cards", null) {

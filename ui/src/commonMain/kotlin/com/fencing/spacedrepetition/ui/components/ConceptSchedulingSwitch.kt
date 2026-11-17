@@ -37,7 +37,7 @@ fun ConceptSchedulingSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit
         Column(modifier = Modifier.weight(1f)) {
             Text("Schedule by Learning Concept", style = MaterialTheme.typography.bodyLarge)
             Text(
-                "Tagged cards are drawn by their due concepts. Off keeps card-by-card scheduling.",
+                "Draw tagged cards by due concept.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

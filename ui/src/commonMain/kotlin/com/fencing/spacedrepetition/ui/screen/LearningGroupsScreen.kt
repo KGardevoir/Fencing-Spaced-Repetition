@@ -253,7 +253,7 @@ private fun LearningGroupRow(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        if (useConcepts) "Schedules by learning concept" else "Schedules card by card",
+                        if (useConcepts) "By concept" else "By card",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
