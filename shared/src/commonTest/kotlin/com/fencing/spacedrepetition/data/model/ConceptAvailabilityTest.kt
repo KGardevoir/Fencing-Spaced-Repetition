@@ -5,6 +5,7 @@ package com.fencing.spacedrepetition.data.model
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class ConceptAvailabilityTest {
 
@@ -61,7 +62,7 @@ class ConceptAvailabilityTest {
         val withIt = concepts + anywhere
         for (groupIds in listOf(setOf(10L), setOf(11L), setOf(12L), emptySet())) {
             val offered = offeredConceptIds(withIt, links, learningContextsOf(groupIds, groups))
-            assert(103L in offered) { "not offered for $groupIds" }
+            assertTrue(103L in offered, "not offered for $groupIds")
         }
         // Restricted concepts stay restricted.
         assertEquals(setOf(100L, 103L), offeredConceptIds(withIt, links, learningContextsOf(setOf(10L), groups)))
