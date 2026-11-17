@@ -67,8 +67,6 @@ fun CardListScreen(
     selectedCardIds: Set<Long>,
     learningStatesFor: @Composable (Long) -> List<CardLearningState>,
     learningGroups: List<LearningGroup> = emptyList(),
-    /** Whether Global schedules by concept; each learning group carries its own switch. */
-    globalConceptScheduling: Boolean = false,
     onUpdateSearchQuery: (String) -> Unit,
     onClearGroupFilters: () -> Unit,
     onToggleGroupFilter: (Long) -> Unit,
@@ -110,16 +108,6 @@ fun CardListScreen(
     var showBulkDeleteDialog by remember { mutableStateOf(false) }
     var showBulkGroupDialog by remember { mutableStateOf(false) }
     var showBulkResetDialog by remember { mutableStateOf(false) }
-    // Resetting a card where concepts schedule would reset the concepts'
-    // progress from it too, so reset is offered only where none do.
-    fun schedulesByConcept(cardIds: Collection<Long>): Boolean = cardIds.any { cardId ->
-        val cardGroups = allCardsWithGroups.find { it.card.id == cardId }?.groups.orEmpty()
-        val contexts = if (cardGroups.isEmpty()) setOf<Long?>(null) else cardGroups.map { it.learningGroupId }.toSet()
-        contexts.any { context ->
-            if (context == null) globalConceptScheduling
-            else learningGroups.find { it.id == context }?.useConcepts ?: globalConceptScheduling
-        }
-    }
     var showGroupSelectionDialog by remember { mutableStateOf(false) }
     var showCsvGroupSelectionForExport by remember { mutableStateOf(false) }
     var showExportHistoryDialog by remember { mutableStateOf(false) }
@@ -146,11 +134,7 @@ fun CardListScreen(
                     onSelectAll = onSelectAllCards,
                     actions = listOf(
                         SelectionAction("Change groups", AppIcons.CardGroups) { showBulkGroupDialog = true },
-                        if (schedulesByConcept(selectedCardIds)) {
-                            SelectionAction("Reset (concept scheduling on)", Icons.Default.Refresh, enabled = false) {}
-                        } else {
-                            SelectionAction("Reset state", Icons.Default.Refresh) { showBulkResetDialog = true }
-                        },
+                        SelectionAction("Reset state", Icons.Default.Refresh) { showBulkResetDialog = true },
                         SelectionAction("Disable", Icons.Default.Block) { onSetSelectedCardsDisabled(true) },
                         SelectionAction("Enable", Icons.Default.PlayArrow) { onSetSelectedCardsDisabled(false) },
                         SelectionAction("Delete", Icons.Default.Delete, destructive = true) { showBulkDeleteDialog = true }

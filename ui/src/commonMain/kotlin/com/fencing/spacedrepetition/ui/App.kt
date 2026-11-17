@@ -258,7 +258,6 @@ fun App(
             val isSelectionMode by cardViewModel.isSelectionMode.collectAsState()
             val selectedCardIds by cardViewModel.selectedCardIds.collectAsState()
 
-            val cardsGlobalConceptScheduling by settingsViewModel.globalConceptScheduling.collectAsState()
             CardListScreen(
                 allCards = allCards,
                 allCardsWithGroups = allCardsWithGroups,
@@ -277,7 +276,6 @@ fun App(
                         .collectAsState(initial = emptyList()).value
                 },
                 learningGroups = learningGroups,
-                globalConceptScheduling = cardsGlobalConceptScheduling,
                 onUpdateSearchQuery = cardViewModel::updateSearchQuery,
                 onClearGroupFilters = cardViewModel::clearGroupFilters,
                 onToggleGroupFilter = cardViewModel::toggleGroupFilter,
