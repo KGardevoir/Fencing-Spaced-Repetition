@@ -291,7 +291,7 @@ private fun ConceptRow(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        if (availableIn.isEmpty()) "Not available for new tags yet"
+                        if (availableIn.isEmpty()) "Available everywhere"
                         else "Available in " + availableIn.joinToString(", "),
                         style = MaterialTheme.typography.bodyMedium,
                         maxLines = 2,
@@ -431,7 +431,9 @@ private fun ConceptEditDialog(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    items(summary.states, key = { it.first?.id ?: 0L }) { entry ->
+                    // Keys are per section: progress and availability rows are both
+                    // per learning group, and share this list.
+                    items(summary.states, key = { "progress-${it.first?.id ?: "global"}" }) { entry ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(modifier = Modifier.weight(1f)) {
                                 StateLine(entry.first, entry.second, entry.first?.useConcepts ?: globalConceptScheduling)
@@ -447,7 +449,8 @@ private fun ConceptEditDialog(
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        "Cards learnt here can be tagged with this concept.",
+                        "Cards learnt here can be tagged with this concept. Leave everything " +
+                            "unticked to make it available everywhere.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -457,7 +460,7 @@ private fun ConceptEditDialog(
                         inGlobal = it
                     }
                 }
-                items(learningGroups, key = { it.id }) { learningGroup ->
+                items(learningGroups, key = { "available-${it.id}" }) { learningGroup ->
                     AvailabilityRow(
                         learningGroup.name,
                         AppIcons.LearningGroup,

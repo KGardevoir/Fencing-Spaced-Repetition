@@ -92,7 +92,11 @@ defines concepts and where they are available, and shows how many cards use
 each, but does not tag cards.
 
 A concept is **available** in learning contexts: the learning groups it is
-linked to (`concept_learning_group`) and Global when `concepts.inGlobal`. The
+linked to (`concept_learning_group`) and Global when `concepts.inGlobal`. A
+concept with **no availability set** -- neither -- is **available
+everywhere**: setting availability restricts a concept. So every concept made
+before availability existed, and every one imported from a file from before
+it, stays usable without anyone setting anything. The
 card editor offers a concept for a card only when it is available in one of
 the card's learning contexts -- its groups' learning groups, or Global for a
 group in none and for a card in no group (`offeredConceptIds`).

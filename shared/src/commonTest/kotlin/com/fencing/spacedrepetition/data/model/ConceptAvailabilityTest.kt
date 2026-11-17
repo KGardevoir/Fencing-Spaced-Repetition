@@ -54,4 +54,16 @@ class ConceptAvailabilityTest {
         assertEquals("Global", contextName(null, learningGroups))
         assertEquals("Drills", contextName(2L, learningGroups))
     }
+
+    @Test
+    fun `a concept with no availability set is available everywhere`() {
+        val anywhere = Concept(id = 103, name = "Footwork")
+        val withIt = concepts + anywhere
+        for (groupIds in listOf(setOf(10L), setOf(11L), setOf(12L), emptySet())) {
+            val offered = offeredConceptIds(withIt, links, learningContextsOf(groupIds, groups))
+            assert(103L in offered) { "not offered for $groupIds" }
+        }
+        // Restricted concepts stay restricted.
+        assertEquals(setOf(100L, 103L), offeredConceptIds(withIt, links, learningContextsOf(setOf(10L), groups)))
+    }
 }
