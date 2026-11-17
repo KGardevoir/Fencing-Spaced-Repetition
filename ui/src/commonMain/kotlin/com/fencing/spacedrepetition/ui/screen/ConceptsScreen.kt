@@ -112,15 +112,7 @@ fun ConceptsScreen(
         ) {
             item {
                 Text(
-                    "Tag cards with the concepts they practise, from the card editor. A concept " +
-                        "can be picked for a card learnt in a context it is available in. " +
-                        "A concept's progress is derived from " +
-                        "its cards' review history, so tagging a card brings its history along. " +
-                        "Where concept scheduling is on, a " +
-                        "tagged card is scheduled by its concepts: a session draws the concepts that " +
-                        "are due and shows the cards covering the most of them, and each card's grade " +
-                        "is passed on to its concepts. Progress is kept per learning group, like a " +
-                        "card's. Everywhere else cards are scheduled one by one, as before.",
+                    "Tag cards with concepts from the card editor.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -154,7 +146,6 @@ fun ConceptsScreen(
             items(shown, key = { it.concept.id }) { summary ->
                 ConceptRow(
                     summary = summary,
-                    globalConceptScheduling = globalConceptScheduling,
                     learningGroups = learningGroups,
                     onEdit = { editing = summary },
                     onDelete = { deleting = summary }
@@ -241,7 +232,6 @@ fun ConceptsScreen(
 @Composable
 private fun ConceptRow(
     summary: ConceptSummary,
-    globalConceptScheduling: Boolean,
     learningGroups: List<LearningGroup>,
     onEdit: () -> Unit,
     onDelete: () -> Unit
@@ -260,62 +250,39 @@ private fun ConceptRow(
             Icon(Icons.Default.Lightbulb, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(concept.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                if (concept.description.isNotBlank()) {
-                    Text(
-                        concept.description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    "Used by ${summary.cardIds.size} card${if (summary.cardIds.size == 1) "" else "s"}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                // Each place it is available, marked where concept scheduling is off.
-                fun label(name: String, on: Boolean) = if (on) name else "$name (scheduling off)"
-                val availableIn = buildList {
-                    if (concept.inGlobal) add(label("Global", globalConceptScheduling))
-                    learningGroups.filter { it.id in summary.learningGroupIds }.forEach { add(label(it.name, it.useConcepts)) }
-                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        AppIcons.LearningGroup,
-                        contentDescription = "Available in",
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        if (availableIn.isEmpty()) "Available everywhere"
-                        else "Available in " + availableIn.joinToString(", "),
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                        concept.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "${summary.cardIds.size} card${if (summary.cardIds.size == 1) "" else "s"}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        AppIcons.CardGroups,
-                        contentDescription = "Groups",
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        if (summary.groups.isEmpty()) "In no groups"
-                        else summary.groups.joinToString(", ") { it.name },
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                summary.states.forEach { (learningGroup, state) ->
-                    StateLine(learningGroup, state, learningGroup?.useConcepts ?: globalConceptScheduling)
+                // Only when it is limited to particular learning groups: which.
+                // Global, or available everywhere, needs no line.
+                val restrictedTo = learningGroups.filter { it.id in summary.learningGroupIds }
+                if (!concept.inGlobal && restrictedTo.isNotEmpty()) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+                        Icon(
+                            AppIcons.LearningGroup,
+                            contentDescription = "Learning groups",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            restrictedTo.joinToString(", ") { it.name },
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
             Column {
