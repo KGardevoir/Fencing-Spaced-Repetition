@@ -29,6 +29,8 @@ import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.ui.components.AppIcons
+import com.fencing.spacedrepetition.ui.components.SelectionAction
+import com.fencing.spacedrepetition.ui.components.SelectionTopBar
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.CardWithGroups
@@ -126,51 +128,16 @@ fun CardListScreen(
     Scaffold(
         topBar = {
             if (isSelectionMode) {
-                // Selection mode top bar
-                TopAppBar(
-                    title = { Text("${selectedCardIds.size} selected") },
-                    navigationIcon = {
-                        IconButton(onClick = onExitSelectionMode) {
-                            Icon(Icons.Default.Close, "Exit selection")
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = onSelectAllCards) {
-                            Icon(Icons.Default.SelectAll, "Select all")
-                        }
-                        IconButton(
-                            onClick = { showBulkGroupDialog = true },
-                            enabled = selectedCardIds.isNotEmpty()
-                        ) {
-                            Icon(AppIcons.CardGroups, "Change groups")
-                        }
-                        IconButton(
-                            onClick = { showBulkResetDialog = true },
-                            enabled = selectedCardIds.isNotEmpty()
-                        ) {
-                            Icon(Icons.Default.Refresh, "Reset state")
-                        }
-                        IconButton(
-                            onClick = { onSetSelectedCardsDisabled(true) },
-                            enabled = selectedCardIds.isNotEmpty()
-                        ) {
-                            Icon(Icons.Default.Block, "Disable selected")
-                        }
-                        IconButton(
-                            onClick = { onSetSelectedCardsDisabled(false) },
-                            enabled = selectedCardIds.isNotEmpty()
-                        ) {
-                            Icon(Icons.Default.PlayArrow, "Enable selected")
-                        }
-                        IconButton(
-                            onClick = { showBulkDeleteDialog = true },
-                            enabled = selectedCardIds.isNotEmpty()
-                        ) {
-                            Icon(Icons.Default.Delete, "Delete selected")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                SelectionTopBar(
+                    selectedCount = selectedCardIds.size,
+                    onExit = onExitSelectionMode,
+                    onSelectAll = onSelectAllCards,
+                    actions = listOf(
+                        SelectionAction("Change groups", AppIcons.CardGroups) { showBulkGroupDialog = true },
+                        SelectionAction("Reset state", Icons.Default.Refresh) { showBulkResetDialog = true },
+                        SelectionAction("Disable", Icons.Default.Block) { onSetSelectedCardsDisabled(true) },
+                        SelectionAction("Enable", Icons.Default.PlayArrow) { onSetSelectedCardsDisabled(false) },
+                        SelectionAction("Delete", Icons.Default.Delete, destructive = true) { showBulkDeleteDialog = true }
                     )
                 )
             } else {

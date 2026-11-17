@@ -157,7 +157,7 @@ private fun OpponentsScreenBoundTo(viewModel: OpponentViewModel) {
             viewModel.addOpponent(name, multiplier, notes, onDone)
         },
         onUpdateOpponent = { opponent, onDone -> viewModel.updateOpponent(opponent, onDone) },
-        onDeleteOpponent = { viewModel.deleteOpponent(it) },
+        onDeleteOpponents = { viewModel.deleteOpponents(it) },
         onClearError = viewModel::clearError,
         onNavigateBack = {}
     )

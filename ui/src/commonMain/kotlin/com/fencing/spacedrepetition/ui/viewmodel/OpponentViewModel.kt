@@ -45,9 +45,9 @@ class OpponentViewModel(
         }
     }
 
-    fun deleteOpponent(opponent: Opponent, onDone: () -> Unit = {}) {
+    fun deleteOpponents(opponents: List<Opponent>, onDone: () -> Unit = {}) {
         viewModelScope.launch {
-            repository.deleteOpponent(opponent)
+            opponents.forEach { repository.deleteOpponent(it) }
             onDone()
         }
     }

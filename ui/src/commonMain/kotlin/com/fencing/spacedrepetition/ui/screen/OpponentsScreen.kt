@@ -3,7 +3,8 @@
 
 package com.fencing.spacedrepetition.ui.screen
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,7 +14,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -25,6 +27,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Opponent
+import com.fencing.spacedrepetition.ui.components.SelectionAction
+import com.fencing.spacedrepetition.ui.components.SelectionTopBar
+import com.fencing.spacedrepetition.ui.components.rememberSelectionState
 import com.fencing.spacedrepetition.util.toTwoDecimals
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -34,21 +39,49 @@ fun OpponentsScreen(
     error: String?,
     onAddOpponent: (name: String, skillMultiplier: Double, notes: String, onDone: (Long) -> Unit) -> Unit,
     onUpdateOpponent: (opponent: Opponent, onDone: () -> Unit) -> Unit,
-    onDeleteOpponent: (Opponent) -> Unit,
+    onDeleteOpponents: (List<Opponent>) -> Unit,
     onClearError: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
     var editing by remember { mutableStateOf<Opponent?>(null) }
     var showAdd by remember { mutableStateOf(false) }
-    var pendingDelete by remember { mutableStateOf<Opponent?>(null) }
+    var pendingDelete by remember { mutableStateOf<List<Opponent>?>(null) }
+    var showMenu by remember { mutableStateOf(false) }
+    val selection = rememberSelectionState(opponents.map { it.id })
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            if (selection.active) {
+                SelectionTopBar(
+                    selectedCount = selection.selected.size,
+                    onExit = selection::exit,
+                    onSelectAll = { selection.selectAll(opponents.map { it.id }) },
+                    actions = listOf(
+                        SelectionAction("Delete", Icons.Default.Delete, destructive = true) {
+                            pendingDelete = opponents.filter { it.id in selection.selected }
+                        }
+                    )
+                )
+            } else TopAppBar(
                 title = { Text("Opponents") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    Box {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                        }
+                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Select Opponents") },
+                                onClick = { showMenu = false; selection.start() },
+                                enabled = opponents.isNotEmpty(),
+                                leadingIcon = { Icon(Icons.Default.CheckBox, contentDescription = null) }
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -106,8 +139,12 @@ fun OpponentsScreen(
                     items(opponents, key = { it.id }) { opponent ->
                         OpponentRow(
                             opponent = opponent,
-                            onEdit = { editing = opponent },
-                            onDelete = { pendingDelete = opponent }
+                            selecting = selection.active,
+                            selected = opponent.id in selection.selected,
+                            onClick = {
+                                if (selection.active) selection.toggle(opponent.id) else editing = opponent
+                            },
+                            onLongPress = { if (!selection.active) selection.start(opponent.id) }
                         )
                     }
                 }
@@ -149,16 +186,21 @@ fun OpponentsScreen(
         )
     }
 
-    pendingDelete?.let { target ->
+    pendingDelete?.let { doomed ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = { Text("Delete ${target.name}?") },
+            icon = { Icon(Icons.Default.Delete, contentDescription = null) },
+            title = { Text("Delete ${doomed.singleOrNull()?.name ?: "${doomed.size} opponents"}?") },
             text = { Text("Past review history will keep the opponent ID but show as \"[deleted]\".") },
             confirmButton = {
-                TextButton(onClick = {
-                    onDeleteOpponent(target)
-                    pendingDelete = null
-                }) { Text("Delete") }
+                TextButton(
+                    onClick = {
+                        onDeleteOpponents(doomed)
+                        pendingDelete = null
+                        selection.exit()
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) { Text("Delete") }
             },
             dismissButton = {
                 TextButton(onClick = { pendingDelete = null }) { Text("Cancel") }
@@ -167,18 +209,22 @@ fun OpponentsScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun OpponentRow(
     opponent: Opponent,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit
+    selecting: Boolean,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onEdit),
+            .combinedClickable(onClick = onClick, onLongClick = onLongPress),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
         Row(
@@ -188,6 +234,7 @@ private fun OpponentRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            if (selecting) Checkbox(checked = selected, onCheckedChange = { onClick() })
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = opponent.name,
@@ -210,13 +257,6 @@ private fun OpponentRow(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-            }
-
-            IconButton(onClick = onEdit) {
-                Icon(Icons.Default.Edit, contentDescription = "Edit")
-            }
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = "Delete")
             }
         }
     }

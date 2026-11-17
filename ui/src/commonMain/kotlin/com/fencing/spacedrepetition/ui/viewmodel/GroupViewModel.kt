@@ -105,9 +105,9 @@ class GroupViewModel(
         }
     }
 
-    fun deleteGroup(group: Group) {
+    fun deleteGroups(groups: List<Group>) {
         viewModelScope.launch {
-            groupRepository.deleteGroup(group)
+            groups.forEach { groupRepository.deleteGroup(it) }
         }
     }
 
@@ -179,9 +179,9 @@ class GroupViewModel(
     suspend fun countCardsInGroups(groupIds: Set<Long>): Int =
         if (groupIds.isEmpty()) 0 else groupRepository.countCardsInGroups(groupIds)
 
-    fun deleteLearningGroup(learningGroup: LearningGroup) {
+    fun deleteLearningGroups(learningGroups: List<LearningGroup>) {
         viewModelScope.launch {
-            groupRepository.deleteLearningGroup(learningGroup)
+            learningGroups.forEach { groupRepository.deleteLearningGroup(it) }
         }
     }
 
