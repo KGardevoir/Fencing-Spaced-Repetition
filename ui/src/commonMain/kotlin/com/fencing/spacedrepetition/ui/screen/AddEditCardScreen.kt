@@ -214,7 +214,8 @@ fun AddEditCardScreen(
                 )
                 onUpdateCard(
                     updatedCard,
-                    selectedGroupIds.toList()
+                    selectedGroupIds.toList(),
+                    if (conceptsTouched) selectedConcepts() else null
                 ) {
                     // Record a history entry if a grade was applied via the grade buttons
                     val grade = appliedGrade
@@ -243,7 +244,8 @@ fun AddEditCardScreen(
                     question,
                     answerFieldValue.text,
                     selectedGroupIds.toList(),
-                    imagePaths
+                    imagePaths,
+                    selectedConcepts()
                 ) { isDirty = false; onNavigateBack() }
             }
         }
@@ -925,83 +927,6 @@ fun AddEditCardScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
-
-            // Save button
-            Button(
-                onClick = {
-                    if (question.isNotBlank()) {
-                        if (isEditing && cardToEdit != null) {
-                            // Build updated card with learning state if advanced settings were used
-                            val updatedCard = cardToEdit.copy(
-                                question = question,
-                                answer = answerFieldValue.text,
-                                imagePaths = imagePaths,
-                                // FSRS state
-                                fsrsStability = fsrsStability.toDoubleOrNull() ?: cardToEdit.fsrsStability,
-                                fsrsDifficulty = fsrsDifficulty.toDoubleOrNull() ?: cardToEdit.fsrsDifficulty,
-                                fsrsReps = fsrsReps.toIntOrNull() ?: cardToEdit.fsrsReps,
-                                fsrsLapses = fsrsLapses.toIntOrNull() ?: cardToEdit.fsrsLapses,
-                                fsrsState = fsrsState,
-                                fsrsElapsedDays = fsrsElapsedDays.toIntOrNull() ?: cardToEdit.fsrsElapsedDays,
-                                fsrsScheduledDays = fsrsScheduledDays.toIntOrNull() ?: cardToEdit.fsrsScheduledDays,
-                                // Review timing
-                                lastReview = lastReview,
-                                nextReview = nextReview
-                            )
-                            onUpdateCard(
-                                updatedCard,
-                                selectedGroupIds.toList(),
-                                if (conceptsTouched) selectedConcepts() else null
-                            ) {
-                                // Record a history entry if a grade was applied via the grade buttons
-                                val grade = appliedGrade
-                                if (grade != null && cardToEdit != null) {
-                                    onRecordGradeFromEdit(cardToEdit, updatedCard, grade, appliedGradeGroupId)
-                                }
-                                // Save independent learning state changes
-                                learningGroupEdits.forEach { (learningGroupId, edit) ->
-                                    val existingState = learningStates.find { it.learningGroupId == learningGroupId }
-                                    if (existingState != null) {
-                                        val updatedState = existingState.copy(
-                                            fsrsStability = edit.fsrsStability.toDoubleOrNull() ?: existingState.fsrsStability,
-                                            fsrsDifficulty = edit.fsrsDifficulty.toDoubleOrNull() ?: existingState.fsrsDifficulty,
-                                            fsrsReps = edit.fsrsReps.toIntOrNull() ?: existingState.fsrsReps,
-                                            fsrsLapses = edit.fsrsLapses.toIntOrNull() ?: existingState.fsrsLapses,
-                                            fsrsState = edit.fsrsState
-                                        )
-                                        onUpdateLearningState(updatedState)
-                                    }
-                                }
-                                isDirty = false
-                                onNavigateBack()
-                            }
-                        } else {
-                            onAddCard(
-                                question,
-                                answerFieldValue.text,
-                                selectedGroupIds.toList(),
-                                imagePaths,
-                                selectedConcepts()
-                            ) { isDirty = false; onNavigateBack() }
-                        }
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                enabled = question.isNotBlank()
-            ) {
-                Icon(
-                    if (isEditing) Icons.Default.Save else Icons.Default.Add,
-                    contentDescription = null
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = if (isEditing) "Save Changes" else "Add Card",
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
         } // end scrollable Column
         // Markdown toolbar pinned above the keyboard
         MarkdownKeyboardToolbar(markdownToolbarState)
