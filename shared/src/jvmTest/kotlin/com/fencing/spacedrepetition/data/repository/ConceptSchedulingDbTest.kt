@@ -689,6 +689,49 @@ class ConceptSchedulingDbTest {
         }
     }
 
+    @Test
+    fun `upgrades the released version 21`() = runTest {
+        val file = File.createTempFile("v21", ".db").apply { delete() }
+        try {
+            val path = file.absolutePath
+            createFromExportedSchema(File("src/jvmTest/resources/released/21-d06a7b4.json"), 21, path)
+            insertRow(path, "cards", mapOf("id" to 1, "question" to "Lunge", "answer" to "", "imagePaths" to "", "fsrsState" to "NEW", "category" to "", "tags" to "", "uid" to "seed-card"))
+            insertRow(path, "concepts", mapOf("id" to 5, "name" to "Distance", "description" to "", "fsrsState" to "NEW", "uid" to "seed-concept"))
+            insertRow(path, "card_concept_cross_ref", mapOf("cardId" to 1, "conceptId" to 5, "weight" to 2.0))
+            val migrated = openMigrated(path)
+            try {
+                // Opening runs 21 -> 23 and validates every table; nothing is lost.
+                assertEquals(listOf(2.0), migrated.conceptDao().getCardConceptLinksSync(1).map { it.weight })
+            } finally {
+                migrated.close()
+            }
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun `upgrades master's version 22, which has identifiers but no concepts`() = runTest {
+        val file = File.createTempFile("v22", ".db").apply { delete() }
+        try {
+            val path = file.absolutePath
+            createFromExportedSchema(File("src/jvmTest/resources/released/22-9e957ee.json"), 22, path)
+            insertRow(path, "cards", mapOf("id" to 1, "question" to "Lunge", "answer" to "", "imagePaths" to "", "fsrsState" to "NEW", "category" to "", "tags" to "", "uid" to "seed-card"))
+            insertRow(path, "learning_groups", mapOf("id" to 3, "name" to "Bouting", "description" to "", "uid" to "seed-lg"))
+            val migrated = openMigrated(path)
+            try {
+                // Opening runs 22 -> 23 and validates every table against the entities.
+                assertEquals("seed-card", migrated.cardDao().getCardById(1)!!.uid)
+                assertEquals(false, migrated.groupDao().getLearningGroupById(3)!!.useConcepts)
+                assertEquals(0, migrated.conceptDao().getAllConceptsSync().size)
+            } finally {
+                migrated.close()
+            }
+        } finally {
+            file.delete()
+        }
+    }
+
     // ==================== why a card was practised ====================
 
     @Test

@@ -32,7 +32,7 @@ import com.fencing.spacedrepetition.util.Time
 
 @Database(
     entities = [Card::class, PracticeSession::class, ReviewLog::class, Group::class, CardGroupCrossRef::class, CardLearningState::class, LearningGroup::class, Opponent::class, Concept::class, CardConceptCrossRef::class, ConceptLearningState::class, ConceptLearningGroupCrossRef::class],
-    version = 21,
+    version = 23,
     exportSchema = true
 )
 @ColumnTypeConverters(Converters::class)
@@ -1079,6 +1079,87 @@ private val MIGRATION_20_21 = object : Migration(20, 21) {
 }
 
 /**
+ * Stable identifiers on every record, the group and opponent a review was
+ * made in and against by identifier, and the time each set of card progress
+ * was last reset -- the identifiers part of 17 -> 18, without concepts.
+ *
+ * This is the path master's builds take (version 22 there), skipping 18 to
+ * 21, which builds of this concepts line used and installed. From 17, Room
+ * takes it to reach 23, finishing with [MIGRATION_22_23]; a database already
+ * on 18 to 21 follows the concepts line to 21 and then [MIGRATION_21_23].
+ * See docs/DESIGN.md, "Migrations".
+ */
+private val MIGRATION_17_22 = object : Migration(17, 22) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        listOf("cards", "groups", "learning_groups", "opponents", "practice_sessions", "review_logs").forEach { table ->
+            connection.execSQL("ALTER TABLE `$table` ADD COLUMN `uid` TEXT NOT NULL DEFAULT ''")
+            connection.execSQL("UPDATE `$table` SET `uid` = $RANDOM_UUID_SQL")
+            connection.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_${table}_uid` ON `$table` (`uid`)")
+        }
+        connection.execSQL("ALTER TABLE `review_logs` ADD COLUMN `groupUid` TEXT")
+        connection.execSQL("""
+            UPDATE `review_logs` SET `groupUid` = (
+                SELECT g.`uid` FROM `groups` g WHERE g.`name` = `review_logs`.`groupName`
+                ORDER BY g.`id` LIMIT 1
+            )
+            WHERE `groupName` IS NOT NULL
+        """)
+        connection.execSQL("ALTER TABLE `review_logs` ADD COLUMN `opponentUid` TEXT")
+        connection.execSQL("""
+            UPDATE `review_logs` SET `opponentUid` = (
+                SELECT o.`uid` FROM `opponents` o WHERE o.`id` = `review_logs`.`opponentId`
+            )
+            WHERE `opponentId` IS NOT NULL
+        """)
+        connection.execSQL("ALTER TABLE `cards` ADD COLUMN `lastReset` INTEGER NOT NULL DEFAULT 0")
+        connection.execSQL("ALTER TABLE `card_learning_state` ADD COLUMN `lastReset` INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+/**
+ * Versions the master line's [MIGRATION_17_22] steps over: 18 to 21 were
+ * this concepts line's, installed on devices before identifiers moved to
+ * master, so they can never be given another schema.
+ */
+internal val MIGRATION_SKIPPED_VERSIONS = setOf(18, 19, 20, 21)
+
+/**
+ * From master's 22 (identifiers, no concepts) to 23: everything this line
+ * added in 18 to 21 other than identifiers -- the concept tables, where
+ * each concept is available, tag weights, the learning group's concept
+ * switch, and why each card was practised. Every existing learning group
+ * keeps scheduling card by card.
+ */
+private val MIGRATION_22_23 = object : Migration(22, 23) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `learning_groups` ADD COLUMN `useConcepts` INTEGER NOT NULL DEFAULT 0")
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `concepts` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `description` TEXT NOT NULL, `fsrsStability` REAL NOT NULL, `fsrsDifficulty` REAL NOT NULL, `fsrsElapsedDays` INTEGER NOT NULL, `fsrsScheduledDays` INTEGER NOT NULL, `fsrsReps` INTEGER NOT NULL, `fsrsLapses` INTEGER NOT NULL, `fsrsState` TEXT NOT NULL, `lastReview` INTEGER NOT NULL, `nextReview` INTEGER NOT NULL, `created` INTEGER NOT NULL, `modified` INTEGER NOT NULL, `inGlobal` INTEGER NOT NULL DEFAULT 0, `uid` TEXT NOT NULL DEFAULT '')")
+        connection.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_concepts_name` ON `concepts` (`name`)")
+        connection.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_concepts_uid` ON `concepts` (`uid`)")
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `card_concept_cross_ref` (`cardId` INTEGER NOT NULL, `conceptId` INTEGER NOT NULL, `weight` REAL NOT NULL DEFAULT 1.0, PRIMARY KEY(`cardId`, `conceptId`), FOREIGN KEY(`cardId`) REFERENCES `cards`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`conceptId`) REFERENCES `concepts`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_card_concept_cross_ref_conceptId` ON `card_concept_cross_ref` (`conceptId`)")
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `concept_learning_state` (`conceptId` INTEGER NOT NULL, `learningGroupId` INTEGER NOT NULL, `fsrsStability` REAL NOT NULL, `fsrsDifficulty` REAL NOT NULL, `fsrsElapsedDays` INTEGER NOT NULL, `fsrsScheduledDays` INTEGER NOT NULL, `fsrsReps` INTEGER NOT NULL, `fsrsLapses` INTEGER NOT NULL, `fsrsState` TEXT NOT NULL, `lastReview` INTEGER NOT NULL, `nextReview` INTEGER NOT NULL, `modified` INTEGER NOT NULL, PRIMARY KEY(`conceptId`, `learningGroupId`), FOREIGN KEY(`conceptId`) REFERENCES `concepts`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`learningGroupId`) REFERENCES `learning_groups`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_concept_learning_state_learningGroupId` ON `concept_learning_state` (`learningGroupId`)")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_concept_learning_state_conceptId` ON `concept_learning_state` (`conceptId`)")
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `concept_learning_group` (`conceptId` INTEGER NOT NULL, `learningGroupId` INTEGER NOT NULL, PRIMARY KEY(`conceptId`, `learningGroupId`), FOREIGN KEY(`conceptId`) REFERENCES `concepts`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`learningGroupId`) REFERENCES `learning_groups`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_concept_learning_group_learningGroupId` ON `concept_learning_group` (`learningGroupId`)")
+        connection.execSQL("ALTER TABLE `review_logs` ADD COLUMN `selectionMode` TEXT")
+        connection.execSQL("ALTER TABLE `review_logs` ADD COLUMN `selectionReason` TEXT")
+        connection.execSQL("ALTER TABLE `review_logs` ADD COLUMN `selectionConcepts` TEXT")
+        connection.execSQL("ALTER TABLE `review_logs` ADD COLUMN `opponentSkillMultiplier` REAL")
+    }
+}
+
+/**
+ * From this line's 21 to 23: nothing to change. 23 is 21's schema under the
+ * number that joins it with master's 22; the version moves on so both lines
+ * meet at one schema.
+ */
+private val MIGRATION_21_23 = object : Migration(21, 23) {
+    override suspend fun migrate(connection: SQLiteConnection) = Unit
+}
+
+/**
  * A version 4 UUID, in canonical lower-case form, as an SQLite expression --
  * evaluated afresh for every row an UPDATE touches. SQLite has no uuid()
  * of its own.
@@ -1115,4 +1196,7 @@ val ALL_MIGRATIONS: Array<Migration> = arrayOf(
     MIGRATION_18_19,
     MIGRATION_19_20,
     MIGRATION_20_21,
+    MIGRATION_17_22,
+    MIGRATION_22_23,
+    MIGRATION_21_23,
 )

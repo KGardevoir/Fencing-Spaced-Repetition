@@ -41,6 +41,7 @@ class IdentityDbTest {
         override val practiceDays: Flow<Set<Int>> = flowOf((1..7).toSet())
         override val fsrsRetention: Flow<Int> = flowOf(90)
         override val fsrsEnableFuzzing: Flow<Boolean> = flowOf(false)
+        override val globalConceptScheduling: Flow<Boolean> = flowOf(false)
     }
 
     private lateinit var db: AppDatabase
@@ -52,7 +53,8 @@ class IdentityDbTest {
             .setDriver(BundledSQLiteDriver())
             .build()
         repo = CardRepository(
-            db.cardDao(), db.practiceSessionDao(), db.reviewLogDao(), db.groupDao(), db.opponentDao(), prefs
+            db.cardDao(), db.practiceSessionDao(), db.reviewLogDao(), db.groupDao(), db.opponentDao(), prefs,
+            db.conceptDao()
         )
     }
 
@@ -220,7 +222,7 @@ class IdentityDbTest {
                 .addMigrations(*ALL_MIGRATIONS)
                 .build()
             try {
-                // Opening runs 17 -> 22 and validates every table against the
+                // Opening runs 17 -> 22 -> 23 and validates every table against the
                 // entities; the backfill itself is Migration17To22Test's.
                 assertEquals(0, migrated.cardDao().getAllCardsAsList().size)
             } finally {

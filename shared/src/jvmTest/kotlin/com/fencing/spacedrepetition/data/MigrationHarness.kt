@@ -55,19 +55,21 @@ internal class MigrationHarness(
     }
 
     /**
-     * Run every registered migration from [from] up to [to], in order,
-     * following the chain as registered -- including the deliberate jump from
-     * 17 to 22 (see [com.fencing.spacedrepetition.data.MIGRATION_SKIPPED_VERSIONS]).
+     * Run the registered migrations from [from] up to [to], in order, taking
+     * at each version the path Room takes: the migration that goes furthest
+     * without passing [to]. From 17 that is 17 -> 22 when going to 22 or
+     * beyond, and 17 -> 18 otherwise (see MIGRATION_SKIPPED_VERSIONS).
      */
     suspend fun migrateThrough(from: Int, to: Int) {
         var version = from
         while (version < to) {
-            val next = ALL_MIGRATIONS.singleOrNull { it.startVersion == version }
-                ?: error("No migration from $version in ALL_MIGRATIONS")
+            val next = ALL_MIGRATIONS
+                .filter { it.startVersion == version && it.endVersion <= to }
+                .maxByOrNull { it.endVersion }
+                ?: error("No migration from $version towards $to in ALL_MIGRATIONS")
             next.migrate(connection)
             version = next.endVersion
         }
-        check(version == to) { "The chain from $from passes $to: it reached $version" }
     }
 
     fun count(table: String): Long =

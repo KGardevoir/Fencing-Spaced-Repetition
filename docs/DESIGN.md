@@ -39,7 +39,7 @@ Rules:
   card / session" beyond a local foreign key -- history, exports -- records
   the `uid`, and may keep a name next to it for people and for older readers.
 
-Existing rows got a fresh `uid` in the 17 -> 18 migration. Review logs got
+Existing rows got a fresh `uid` in the 17 -> 18 migration (17 -> 22 on master's line). Review logs got
 their `groupUid` from the oldest group with the name they recorded, the best
 that could be done once names were all there was; a log naming a group that
 no longer exists has none.
@@ -279,10 +279,20 @@ group's `description:` works the same way.
   amended in place after debug builds were installed; 18 -> 19 brings
   every one of those variants up to date, and `Migration18To19Test` fails
   if the committed version 18 schema ever drifts from the released one.)
+- **Two lines meet at 23.** Identifiers were first added here, at 18,
+  together with concepts; builds of 18 to 21 are installed. They were then
+  split out to master on their own, which skipped those numbers and went
+  17 -> 22 (`MIGRATION_17_22`, `MIGRATION_SKIPPED_VERSIONS`). 23 joins the
+  two: from master's 22, `MIGRATION_22_23` adds everything concepts brought
+  (tables, availability, weights, the switch, why a card was practised);
+  from this line's 21, `MIGRATION_21_23` has nothing to do, as 23 is 21's
+  schema under a new number. From 17, Room takes the longest step it can,
+  so it goes 17 -> 22 -> 23; a database on 18 to 21 goes on to 21, then 23.
+  `Migration22To23Test` checks both lines reach the same tables.
 - The exported schemas of the variants that were installed are kept in
   `shared/src/jvmTest/resources/released-v18/`, and `ConceptSchedulingDbTest`
   upgrades a database built from each. Each later released version's schema
-  is kept in `shared/src/jvmTest/resources/released/` (19 and 20 so far), with an
+  is kept in `shared/src/jvmTest/resources/released/` (19, 20, 21 and master's 22 so far), with an
   upgrade test from it and a guard test that fails if the committed schema
   for that version ever changes. Add one for each version you release.
 - Columns added with `ALTER TABLE ... DEFAULT x` need a matching
