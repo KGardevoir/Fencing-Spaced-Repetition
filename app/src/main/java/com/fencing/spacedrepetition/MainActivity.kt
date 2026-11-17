@@ -122,7 +122,9 @@ class MainActivity : ComponentActivity() {
                         factory = OpponentViewModelFactory(opponentRepository)
                     )
                     val retentionReportViewModel: RetentionReportViewModel = viewModel(
-                        factory = RetentionReportViewModelFactory(repository, groupRepository)
+                        factory = RetentionReportViewModelFactory(
+                            repository, groupRepository, conceptRepository, themePreferences.globalConceptScheduling
+                        )
                     )
                     // Owns the back stack so it survives Activity recreation.
                     val navigationViewModel: NavigationViewModel = viewModel()
@@ -273,12 +275,14 @@ class WorkManagerBackups(
 
 class RetentionReportViewModelFactory(
     private val repository: CardRepository,
-    private val groupRepository: GroupRepository
+    private val groupRepository: GroupRepository,
+    private val conceptRepository: ConceptRepository,
+    private val globalConceptScheduling: kotlinx.coroutines.flow.Flow<Boolean>
 ) : androidx.lifecycle.ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(RetentionReportViewModel::class.java)) {
-            return RetentionReportViewModel(repository, groupRepository) as T
+            return RetentionReportViewModel(repository, groupRepository, conceptRepository, globalConceptScheduling) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

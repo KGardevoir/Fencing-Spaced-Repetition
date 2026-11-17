@@ -9,6 +9,13 @@ import com.fencing.spacedrepetition.algorithm.RetentionPeriod
 import com.fencing.spacedrepetition.algorithm.RetentionReport
 import com.fencing.spacedrepetition.algorithm.RetentionReportBuilder
 import com.fencing.spacedrepetition.data.model.Card
+import com.fencing.spacedrepetition.data.model.CardConceptCrossRef
+import com.fencing.spacedrepetition.data.model.Concept
+import com.fencing.spacedrepetition.data.model.ConceptLearningState
+import com.fencing.spacedrepetition.data.repository.ConceptRepository
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import com.fencing.spacedrepetition.data.model.CardGroupCrossRef
 import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.Group
@@ -33,7 +40,10 @@ import kotlinx.coroutines.flow.stateIn
  */
 class RetentionReportViewModel(
     cardRepository: CardRepository,
-    groupRepository: GroupRepository
+    groupRepository: GroupRepository,
+    conceptRepository: ConceptRepository? = null,
+    /** Whether Global schedules by concept; each learning group carries its own switch. */
+    globalConceptScheduling: Flow<Boolean> = flowOf(false)
 ) : ViewModel() {
 
     private val _period = MutableStateFlow(RetentionPeriod.WEEK)
@@ -60,12 +70,30 @@ class RetentionReportViewModel(
         ::Inputs
     )
 
+    private data class ConceptInputs(
+        val concepts: List<Concept>,
+        val links: List<CardConceptCrossRef>,
+        val states: List<ConceptLearningState>,
+        val globalScheduling: Boolean
+    )
+
+    private val conceptInputs: Flow<ConceptInputs> = if (conceptRepository == null) {
+        globalConceptScheduling.map { ConceptInputs(emptyList(), emptyList(), emptyList(), it) }
+    } else combine(
+        conceptRepository.getAllConcepts(),
+        conceptRepository.getAllCardConceptCrossRefs(),
+        conceptRepository.getAllConceptLearningStates(),
+        globalConceptScheduling,
+        ::ConceptInputs
+    )
+
     /** null until the first computation finishes. */
     val report: StateFlow<RetentionReport?> = combine(
         inputs,
         cardRepository.getAllReviewLogs(),
-        _period
-    ) { i: Inputs, logs: List<ReviewLog>, period: RetentionPeriod ->
+        _period,
+        conceptInputs
+    ) { i: Inputs, logs: List<ReviewLog>, period: RetentionPeriod, c: ConceptInputs ->
         RetentionReportBuilder.build(
             cards = i.cards,
             groups = i.groups,
@@ -75,7 +103,11 @@ class RetentionReportViewModel(
             logs = logs,
             now = Time.now(),
             utcOffsetSeconds = Time.utcOffsetSeconds(),
-            period = period
+            period = period,
+            concepts = c.concepts,
+            cardConceptLinks = c.links,
+            conceptStates = c.states,
+            globalConceptScheduling = c.globalScheduling
         )
     }
         .flowOn(ioDispatcher)

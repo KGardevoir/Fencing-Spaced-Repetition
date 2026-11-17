@@ -84,7 +84,7 @@ fun main() {
         }
         val historyViewModel = remember { HistoryViewModel(cardRepository, opponentRepository) }
         val opponentViewModel = remember { OpponentViewModel(opponentRepository) }
-        val retentionReportViewModel = remember { RetentionReportViewModel(cardRepository, groupRepository) }
+        val retentionReportViewModel = remember { RetentionReportViewModel(cardRepository, groupRepository, conceptRepository, preferences.globalConceptScheduling) }
         val conceptViewModel = remember { ConceptViewModel(conceptRepository, cardRepository, groupRepository) }
         // The browser's answer to "back up now" is a download, and it needs
         // the card view model to produce one -- so the settings view model is
