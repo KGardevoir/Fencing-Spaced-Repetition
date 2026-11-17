@@ -709,9 +709,7 @@ object CardImportExport {
         sessions: List<PracticeSession> = emptyList()
     ): ExportResult {
         return try {
-            var rowCount = 0
             val cards = cardsWithStates.map { (card, groupNames, learningStates) ->
-                rowCount += 1 + learningStates.size
                 ArchiveYaml.cardNode(card, groupNames, learningStates, images)
             }
             val learningGroupNames = learningGroups.associate { it.id to it.name }
@@ -762,7 +760,8 @@ object CardImportExport {
                     reviewHistory = history
                 )
             )
-            ExportResult.Success(rowCount)
+            // Cards, not cards plus their learning-group states.
+            ExportResult.Success(cardsWithStates.size)
         } catch (e: Exception) {
             ExportResult.Error("Failed to write file: ${e.message}")
         }

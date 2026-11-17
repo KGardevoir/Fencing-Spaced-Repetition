@@ -256,7 +256,7 @@ class CardImportExportV2Test {
         val result = CardImportExport.exportCardsWithGroupStates(cardsWithStates, output, images = NoImages)
 
         assertTrue(result is ExportResult.Success)
-        assertEquals(2, (result as ExportResult.Success).exportedCount) // 1 global + 1 group-specific
+        assertEquals(1, (result as ExportResult.Success).exportedCount) // cards, not states
 
         val content = output.toString(Charsets.UTF_8.name())
 
@@ -300,7 +300,7 @@ class CardImportExportV2Test {
         val result = CardImportExport.exportCardsWithGroupStates(cardsWithStates, output, images = NoImages)
 
         assertTrue(result is ExportResult.Success)
-        assertEquals(4, (result as ExportResult.Success).exportedCount) // 1 global + 3 group-specific
+        assertEquals(1, (result as ExportResult.Success).exportedCount) // cards, not states
 
         val content = output.toString(Charsets.UTF_8.name())
         assertEquals(1, cardCount(content))
@@ -482,11 +482,8 @@ class CardImportExportV2Test {
         val result = CardImportExport.exportCardsWithGroupStates(cardsWithStates, output, images = NoImages)
 
         assertTrue(result is ExportResult.Success)
-        // Card1: 1 global + 1 group = 2
-        // Card2: 1 global + 1 group = 2
-        // Card3: 1 global = 1
-        // Total = 5
-        assertEquals(5, (result as ExportResult.Success).exportedCount)
+        // Three cards, whatever learning-group states they carry.
+        assertEquals(3, (result as ExportResult.Success).exportedCount)
 
         val content = output.toString(Charsets.UTF_8.name())
         assertEquals(3, cardCount(content))

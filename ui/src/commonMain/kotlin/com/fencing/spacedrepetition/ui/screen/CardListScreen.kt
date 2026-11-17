@@ -655,6 +655,7 @@ fun CardListScreen(
     if (showGroupSelectionDialog) {
         ExportGroupSelectionDialog(
             groups = groups,
+            initiallySelected = selectedGroupFilters,
             onDismiss = { showGroupSelectionDialog = false },
             onConfirm = { selectedGroupIds ->
                 showGroupSelectionDialog = false
@@ -714,6 +715,7 @@ fun CardListScreen(
     if (showCsvGroupSelectionForExport) {
         ExportGroupSelectionDialog(
             groups = groups,
+            initiallySelected = selectedGroupFilters,
             onDismiss = { showCsvGroupSelectionForExport = false },
             onConfirm = { selectedGroupIds ->
                 showCsvGroupSelectionForExport = false
@@ -789,10 +791,14 @@ fun BulkGroupDialog(
 @Composable
 fun ExportGroupSelectionDialog(
     groups: List<Group>,
+    /** Ticked to start with: the group filter chips active on the card list. */
+    initiallySelected: Set<Long> = emptySet(),
     onDismiss: () -> Unit,
     onConfirm: (List<Long>) -> Unit
 ) {
-    var selectedGroupIds by remember { mutableStateOf(setOf<Long>()) }
+    var selectedGroupIds by remember {
+        mutableStateOf(initiallySelected.filter { id -> groups.any { it.id == id } }.toSet())
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
