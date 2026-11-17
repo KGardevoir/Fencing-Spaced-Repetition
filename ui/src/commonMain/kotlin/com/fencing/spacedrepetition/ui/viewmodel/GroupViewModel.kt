@@ -109,7 +109,7 @@ class GroupViewModel(
 
     fun deleteGroups(groups: List<Group>) {
         viewModelScope.launch {
-            groupRepository.deleteGroup(group)
+            groups.forEach { groupRepository.deleteGroup(it) }
             // Reviews naming the group can no longer be placed in a context.
             cardRepository.rederiveConcepts()
         }
@@ -191,7 +191,7 @@ class GroupViewModel(
 
     fun deleteLearningGroups(learningGroups: List<LearningGroup>) {
         viewModelScope.launch {
-            groupRepository.deleteLearningGroup(learningGroup)
+            learningGroups.forEach { groupRepository.deleteLearningGroup(it) }
             // Its groups learn Global now, and so does their history.
             cardRepository.rederiveConcepts()
         }

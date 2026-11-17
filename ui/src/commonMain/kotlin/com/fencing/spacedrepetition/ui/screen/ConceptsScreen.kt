@@ -3,7 +3,9 @@
 
 package com.fencing.spacedrepetition.ui.screen
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,7 +13,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
@@ -28,6 +31,9 @@ import com.fencing.spacedrepetition.data.model.Concept
 import com.fencing.spacedrepetition.data.model.ConceptLearningState
 import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.ui.components.AppIcons
+import com.fencing.spacedrepetition.ui.components.SelectionAction
+import com.fencing.spacedrepetition.ui.components.SelectionTopBar
+import com.fencing.spacedrepetition.ui.components.rememberSelectionState
 import com.fencing.spacedrepetition.ui.viewmodel.ConceptSummary
 import com.fencing.spacedrepetition.util.Time
 import com.fencing.spacedrepetition.util.formatDate
@@ -60,13 +66,15 @@ fun ConceptsScreen(
     learningGroups: List<LearningGroup>,
     error: String?,
     onSaveConcept: (Concept, Set<Long>) -> Unit,
-    onDeleteConcept: (Concept) -> Unit,
+    onDeleteConcepts: (List<Concept>) -> Unit,
     onRederiveAll: () -> Unit,
     onClearError: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
     var editing by remember { mutableStateOf<ConceptSummary?>(null) }
-    var deleting by remember { mutableStateOf<ConceptSummary?>(null) }
+    var deleting by remember { mutableStateOf<List<ConceptSummary>?>(null) }
+    var showMenu by remember { mutableStateOf(false) }
+    val selection = rememberSelectionState(concepts.map { it.concept.id })
     var query by rememberSaveable { mutableStateOf("") }
     var confirmRederive by remember { mutableStateOf(false) }
 
@@ -78,7 +86,18 @@ fun ConceptsScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            if (selection.active) {
+                SelectionTopBar(
+                    selectedCount = selection.selected.size,
+                    onExit = selection::exit,
+                    onSelectAll = { selection.selectAll(shown.map { it.concept.id }) },
+                    actions = listOf(
+                        SelectionAction("Delete", Icons.Default.Delete, destructive = true) {
+                            deleting = concepts.filter { it.concept.id in selection.selected }
+                        }
+                    )
+                )
+            } else TopAppBar(
                 title = { Text("Learning Concepts") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
@@ -86,8 +105,23 @@ fun ConceptsScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { confirmRederive = true }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Rederive from card history")
+                    Box {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                        }
+                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Select Concepts") },
+                                onClick = { showMenu = false; selection.start() },
+                                enabled = concepts.isNotEmpty(),
+                                leadingIcon = { Icon(Icons.Default.CheckBox, contentDescription = null) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Rederive from card history") },
+                                onClick = { showMenu = false; confirmRederive = true },
+                                leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -147,11 +181,15 @@ fun ConceptsScreen(
                 ConceptRow(
                     summary = summary,
                     learningGroups = learningGroups,
-                    onEdit = { editing = summary },
-                    onDelete = { deleting = summary }
+                    selecting = selection.active,
+                    selected = summary.concept.id in selection.selected,
+                    onClick = {
+                        if (selection.active) selection.toggle(summary.concept.id) else editing = summary
+                    },
+                    onLongPress = { if (!selection.active) selection.start(summary.concept.id) }
                 )
             }
-            // Room for the last row's buttons above the action button.
+            // Room for the last row above the action button.
             item { Spacer(modifier = Modifier.height(72.dp)) }
         }
     }
@@ -171,25 +209,27 @@ fun ConceptsScreen(
         )
     }
 
-    deleting?.let { summary ->
-        val cardCount = summary.cardIds.size
+    deleting?.let { doomed ->
+        val cardCount = doomed.flatMap { it.cardIds }.toSet().size
+        val what = doomed.singleOrNull()?.let { "\"${it.concept.name}\"" } ?: "${doomed.size} concepts"
         AlertDialog(
             onDismissRequest = { deleting = null },
             icon = { Icon(Icons.Default.Delete, contentDescription = null) },
-            title = { Text("Delete Concept") },
+            title = { Text(if (doomed.size == 1) "Delete Concept" else "Delete Concepts") },
             text = {
                 Text(
-                    "Delete \"${summary.concept.name}\"? Its learning progress will be lost" +
-                        (if (cardCount > 0) ", and its $cardCount card${if (cardCount == 1) "" else "s"} " +
-                            "will go back to being scheduled on their own" else "") +
+                    "Delete $what? ${if (doomed.size == 1) "Its" else "Their"} learning progress will be lost" +
+                        (if (cardCount > 0) ", and $cardCount card${if (cardCount == 1) "" else "s"} " +
+                            "will lose ${if (doomed.size == 1) "it" else "them"}" else "") +
                         ". Cards are not deleted."
                 )
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        onDeleteConcept(summary.concept)
+                        onDeleteConcepts(doomed.map { it.concept })
                         deleting = null
+                        selection.exit()
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) { Text("Delete") }
@@ -229,25 +269,35 @@ fun ConceptsScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ConceptRow(
     summary: ConceptSummary,
     learningGroups: List<LearningGroup>,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit
+    selecting: Boolean,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit
 ) {
     val concept = summary.concept
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onEdit),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+            .combinedClickable(onClick = onClick, onLongClick = onLongPress),
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.secondaryContainer
+        )
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.Top
+            verticalAlignment = if (selecting) Alignment.CenterVertically else Alignment.Top
         ) {
-            Icon(Icons.Default.Lightbulb, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            if (selecting) {
+                Checkbox(checked = selected, onCheckedChange = { onClick() })
+            } else {
+                Icon(Icons.Default.Lightbulb, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            }
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -283,14 +333,6 @@ private fun ConceptRow(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                }
-            }
-            Column {
-                IconButton(onClick = onEdit) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit ${concept.name}")
-                }
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete ${concept.name}")
                 }
             }
         }

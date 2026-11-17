@@ -23,8 +23,6 @@ data class SelectionAction(
     val icon: ImageVector,
     /** Shown in the error colour, after a divider: deleting and the like. */
     val destructive: Boolean = false,
-    /** Greyed out when false, e.g. an action that does not apply to the rows selected. */
-    val enabled: Boolean = true,
     val onClick: () -> Unit
 )
 
@@ -53,10 +51,8 @@ class SelectionState {
         selected = if (id in selected) selected - id else selected + id
     }
 
-    /** Selects all of [ids] -- or, when they are all selected already, none. */
     fun selectAll(ids: Collection<Long>) {
-        val all = ids.toSet()
-        selected = if (all.isNotEmpty() && selected.containsAll(all)) selected - all else selected + all
+        selected = ids.toSet()
     }
 
     fun exit() {
@@ -120,12 +116,11 @@ fun SelectionTopBar(
 
 @Composable
 private fun ActionItem(action: SelectionAction, enabled: Boolean, close: () -> Unit) {
-    val enabled = enabled && action.enabled
     val color = if (action.destructive) MaterialTheme.colorScheme.error else LocalContentColor.current
     DropdownMenuItem(
         text = { Text(action.label, color = if (enabled) color else color.copy(alpha = 0.38f)) },
         onClick = { close(); action.onClick() },
-        enabled = enabled && action.enabled,
+        enabled = enabled,
         leadingIcon = {
             Icon(action.icon, contentDescription = null, tint = if (action.destructive) color else LocalContentColor.current)
         }

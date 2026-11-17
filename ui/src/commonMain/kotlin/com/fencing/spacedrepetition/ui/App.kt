@@ -500,7 +500,7 @@ fun App(
                 learningGroups = conceptLearningGroups,
                 error = error,
                 onSaveConcept = conceptViewModel::saveConcept,
-                onDeleteConcept = conceptViewModel::deleteConcept,
+                onDeleteConcepts = conceptViewModel::deleteConcepts,
                 onRederiveAll = conceptViewModel::rederiveAll,
                 onClearError = conceptViewModel::clearError,
                 onNavigateBack = { navigator.back() }

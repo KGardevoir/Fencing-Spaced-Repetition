@@ -111,8 +111,8 @@ class ConceptViewModel(
         }
     }
 
-    fun deleteConcept(concept: Concept) {
-        viewModelScope.launch { conceptRepository.deleteConcept(concept) }
+    fun deleteConcepts(concepts: List<Concept>) {
+        viewModelScope.launch { concepts.forEach { conceptRepository.deleteConcept(it) } }
     }
 
     /**

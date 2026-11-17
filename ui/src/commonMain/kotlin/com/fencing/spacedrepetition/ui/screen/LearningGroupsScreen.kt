@@ -12,7 +12,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material3.*
@@ -130,7 +131,8 @@ fun LearningGroupsScreen(
                     members = globalGroups,
                     isGlobal = true,
                     useConcepts = globalConceptScheduling,
-                    onEdit = onEditGlobal
+                    // Global is not a row anywhere: it cannot be selected or deleted.
+                    onClick = { if (!selection.active) onEditGlobal() }
                 )
             }
             items(learningGroups, key = { it.id }) { learningGroup ->
@@ -140,8 +142,12 @@ fun LearningGroupsScreen(
                     members = groups.filter { it.learningGroupId == learningGroup.id },
                     isGlobal = false,
                     useConcepts = learningGroup.useConcepts,
-                    onEdit = { onEditLearningGroup(learningGroup) },
-                    onDelete = { deleting = learningGroup }
+                    selecting = selection.active,
+                    selected = learningGroup.id in selection.selected,
+                    onClick = {
+                        if (selection.active) selection.toggle(learningGroup.id) else onEditLearningGroup(learningGroup)
+                    },
+                    onLongPress = { if (!selection.active) selection.start(learningGroup.id) }
                 )
             }
             // Room for the last row above the action button.
@@ -190,8 +196,10 @@ private fun LearningGroupRow(
     members: List<Group>,
     isGlobal: Boolean,
     useConcepts: Boolean,
-    onEdit: () -> Unit = {},
-    onDelete: () -> Unit = {}
+    selecting: Boolean = false,
+    selected: Boolean = false,
+    onClick: () -> Unit = {},
+    onLongPress: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier
