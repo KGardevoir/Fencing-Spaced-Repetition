@@ -73,6 +73,8 @@ fun CardListScreen(
     selectedCardIds: Set<Long>,
     learningStatesFor: @Composable (Long) -> List<CardLearningState>,
     learningGroups: List<LearningGroup> = emptyList(),
+    /** Whether Global schedules by concept; each learning group carries its own switch. */
+    globalConceptScheduling: Boolean = false,
     onUpdateSearchQuery: (String) -> Unit,
     onClearGroupFilters: () -> Unit,
     onToggleGroupFilter: (Long) -> Unit,
@@ -114,6 +116,28 @@ fun CardListScreen(
     var showBulkDeleteDialog by remember { mutableStateOf(false) }
     var showBulkGroupDialog by remember { mutableStateOf(false) }
     var showBulkResetDialog by remember { mutableStateOf(false) }
+    // A card's own ⋮ menu acts on that card by selecting just it; when the
+    // dialog it opens closes, selecting stops again.
+    var singleCardAction by remember { mutableStateOf(false) }
+    fun finishSingleCardAction() {
+        if (singleCardAction) { singleCardAction = false; onExitSelectionMode() }
+    }
+    LaunchedEffect(isSelectionMode) { if (!isSelectionMode) singleCardAction = false }
+    fun actOnCard(cardId: Long) {
+        singleCardAction = true
+        if (!isSelectionMode) onToggleSelectionMode()
+        if (cardId !in selectedCardIds) onToggleCardSelection(cardId)
+    }
+    // Resetting a card where concepts schedule would reset the concepts'
+    // progress from it too, so reset is offered only where none do.
+    fun schedulesByConcept(cardIds: Collection<Long>): Boolean = cardIds.any { cardId ->
+        val cardGroups = allCardsWithGroups.find { it.card.id == cardId }?.groups.orEmpty()
+        val contexts = if (cardGroups.isEmpty()) setOf<Long?>(null) else cardGroups.map { it.learningGroupId }.toSet()
+        contexts.any { context ->
+            if (context == null) globalConceptScheduling
+            else learningGroups.find { it.id == context }?.useConcepts ?: globalConceptScheduling
+        }
+    }
     var showGroupSelectionDialog by remember { mutableStateOf(false) }
     var showCsvGroupSelectionForExport by remember { mutableStateOf(false) }
     var showExportHistoryDialog by remember { mutableStateOf(false) }
@@ -140,7 +164,11 @@ fun CardListScreen(
                     onSelectAll = onSelectAllCards,
                     actions = listOf(
                         SelectionAction("Change groups", AppIcons.CardGroups) { showBulkGroupDialog = true },
-                        SelectionAction("Reset state", Icons.Default.Refresh) { showBulkResetDialog = true },
+                        if (schedulesByConcept(selectedCardIds)) {
+                            SelectionAction("Reset (concept scheduling on)", Icons.Default.Refresh, enabled = false) {}
+                        } else {
+                            SelectionAction("Reset state", Icons.Default.Refresh) { showBulkResetDialog = true }
+                        },
                         SelectionAction("Disable", Icons.Default.Block) { onSetSelectedCardsDisabled(true) },
                         SelectionAction("Enable", Icons.Default.PlayArrow) { onSetSelectedCardsDisabled(false) },
                         SelectionAction("Delete", Icons.Default.Delete, destructive = true) { showBulkDeleteDialog = true }
@@ -467,6 +495,11 @@ fun CardListScreen(
                             onEdit = { onNavigateToEditCard(card) },
                             onDelete = { showDeleteDialog = card },
                             onToggleDisabled = { onToggleCardDisabled(card.id) },
+                            resetBlocked = schedulesByConcept(listOf(card.id)),
+                            onSelect = { if (!isSelectionMode) { onToggleSelectionMode(); onToggleCardSelection(card.id) } },
+                            onSelectAll = { if (!isSelectionMode) onToggleSelectionMode(); onSelectAllCards() },
+                            onChangeGroups = { actOnCard(card.id); showBulkGroupDialog = true },
+                            onReset = { actOnCard(card.id); showBulkResetDialog = true },
                             onToggleSelection = { onToggleCardSelection(card.id) },
                             onLongPress = {
                                 if (!isSelectionMode) {
@@ -640,7 +673,7 @@ fun CardListScreen(
             selectedCardIds = selectedCardIds,
             allCardsWithGroups = allCardsWithGroups,
             learningGroups = learningGroups,
-            onDismiss = { showBulkResetDialog = false },
+            onDismiss = { showBulkResetDialog = false; finishSingleCardAction() },
             onResetGlobal = {
                 onResetSelectedCardsGlobalState()
                 showBulkResetDialog = false
@@ -660,7 +693,7 @@ fun CardListScreen(
     if (showBulkGroupDialog) {
         BulkGroupDialog(
             groups = groups,
-            onDismiss = { showBulkGroupDialog = false },
+            onDismiss = { showBulkGroupDialog = false; finishSingleCardAction() },
             onConfirm = { selectedGroupIds ->
                 onUpdateSelectedCardsGroups(selectedGroupIds)
                 showBulkGroupDialog = false
@@ -906,6 +939,12 @@ fun CardListItem(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onToggleDisabled: () -> Unit = {},
+    /** Reset is greyed out: concepts schedule this card somewhere. */
+    resetBlocked: Boolean = false,
+    onSelect: () -> Unit = {},
+    onSelectAll: () -> Unit = {},
+    onChangeGroups: () -> Unit = {},
+    onReset: () -> Unit = {},
     onToggleSelection: () -> Unit = {},
     onLongPress: () -> Unit = {}
 ) {
@@ -1218,6 +1257,17 @@ fun CardListItem(
                                 leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
                             )
                             DropdownMenuItem(
+                                text = { Text("Change groups") },
+                                onClick = { showCardMenu = false; onChangeGroups() },
+                                leadingIcon = { Icon(AppIcons.CardGroups, contentDescription = null) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(if (resetBlocked) "Reset (concept scheduling on)" else "Reset state") },
+                                onClick = { showCardMenu = false; onReset() },
+                                enabled = !resetBlocked,
+                                leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }
+                            )
+                            DropdownMenuItem(
                                 text = { Text(if (card.isDisabled) "Enable card" else "Disable card") },
                                 onClick = { showCardMenu = false; onToggleDisabled() },
                                 leadingIcon = {
@@ -1226,6 +1276,17 @@ fun CardListItem(
                                         contentDescription = null
                                     )
                                 }
+                            )
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("Select") },
+                                onClick = { showCardMenu = false; onSelect() },
+                                leadingIcon = { Icon(Icons.Default.CheckBox, contentDescription = null) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Select all") },
+                                onClick = { showCardMenu = false; onSelectAll() },
+                                leadingIcon = { Icon(Icons.Default.SelectAll, contentDescription = null) }
                             )
                             HorizontalDivider()
                             DropdownMenuItem(
