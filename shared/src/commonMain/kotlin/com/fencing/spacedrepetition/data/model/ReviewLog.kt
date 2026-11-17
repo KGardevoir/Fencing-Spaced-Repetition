@@ -74,5 +74,28 @@ data class ReviewLog(
     val opponentUid: String? = null,
     /** Stable identifier, unique and kept for life; see docs/DESIGN.md, "Identity". */
     @ColumnInfo(defaultValue = "''")
-    val uid: String = newUid()
-)
+    val uid: String = newUid(),
+
+    // Why the card was practised, recorded for later analysis; null on logs
+    // from before it was (version 21) and on imported logs that lack it.
+
+    /** How the session was drawn: a [SelectionMode] name, CARD or CONCEPT. */
+    val selectionMode: String? = null,
+    /** Why this card was in it: a [SelectionReason] name -- DUE, EXTRA, LOCKED or EDITOR. */
+    val selectionReason: String? = null,
+    /**
+     * Drawn by concept to cover due concepts: their stable identifiers,
+     * comma-separated (a uid has no comma). Null or empty otherwise.
+     */
+    val selectionConcepts: String? = null,
+    /**
+     * The opponent's skill multiplier at the time of the review, before the
+     * fight difficulty: [stabilityMultiplier] is this times the fight
+     * difficulty's multiplier. Null when there was no opponent.
+     */
+    val opponentSkillMultiplier: Double? = null
+) {
+    /** [selectionConcepts] as a list. */
+    val selectionConceptUids: List<String>
+        get() = selectionConcepts.orEmpty().split(',').map { it.trim() }.filter { it.isNotEmpty() }
+}

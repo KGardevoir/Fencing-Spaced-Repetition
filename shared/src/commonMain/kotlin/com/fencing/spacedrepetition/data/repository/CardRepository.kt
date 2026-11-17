@@ -258,7 +258,10 @@ class CardRepository(
             opponentId = opponentId,
             opponentUid = opponentUid,
             fightDifficulty = fightDifficulty,
-            stabilityMultiplier = stabilityMultiplier
+            stabilityMultiplier = stabilityMultiplier,
+            opponentSkillMultiplier = opponentSkillOf(opponentId),
+            selectionMode = (if (usesConcepts(group?.let { learningGroupIdFor(it.id) })) SelectionMode.CONCEPT else SelectionMode.CARD).name,
+            selectionReason = SelectionReason.EDITOR.name
         ))
         // A new review in the card's history: its concepts follow.
         rederiveConceptsForCards(listOf(cardBefore.id))
@@ -272,6 +275,10 @@ class CardRepository(
      * since been deleted, or an unrated fight -- so a review with neither is
      * scheduled exactly as it was before opponents existed.
      */
+    /** The opponent's skill multiplier as it is now, or null for no opponent. */
+    private suspend fun opponentSkillOf(opponentId: Long?): Double? =
+        opponentId?.let { opponentDao.getOpponentById(it)?.skillMultiplier }
+
     private suspend fun resolveStabilityMultiplier(opponentId: Long?, fightDifficulty: Int? = null): Double {
         val opponentMultiplier =
             if (opponentId == null) 1.0
@@ -626,13 +633,28 @@ class CardRepository(
      * card by card, exactly as before concepts -- due cards first, topped up
      * with the rest of the pool.
      */
-    suspend fun drawCards(limit: Int, groupId: Long?): List<Card> {
-        if (usesConcepts(learningGroupIdFor(groupId))) return drawCardsByConcept(limit, groupId)
+    suspend fun drawCards(limit: Int, groupId: Long?): List<Card> = drawSession(limit, groupId).map { it.card }
+
+    /** [drawCards], with why each card was drawn -- recorded on its review log. */
+    suspend fun drawSession(limit: Int, groupId: Long?): List<DrawnCard> {
+        if (usesConcepts(learningGroupIdFor(groupId))) return drawSessionByConcept(limit, groupId)
         val dueCards = if (groupId != null) getDueCardsByGroup(groupId, limit) else getDueCards(limit)
-        if (dueCards.size >= limit) return dueCards.take(limit)
-        val allCards = if (groupId != null) getCardsByGroupSync(groupId) else getAllCardsSync()
-        return allCards.take(limit)
+        val drawn = if (dueCards.size >= limit) dueCards.take(limit) else {
+            val allCards = if (groupId != null) getCardsByGroupSync(groupId) else getAllCardsSync()
+            allCards.take(limit)
+        }
+        val dueIds = dueCards.map { it.id }.toSet()
+        return drawn.map {
+            DrawnCard(
+                it,
+                CardSelection(SelectionMode.CARD, if (it.id in dueIds) SelectionReason.DUE else SelectionReason.EXTRA)
+            )
+        }
     }
+
+    /** How a session in [groupId] is drawn now: by concept or card by card. */
+    suspend fun selectionModeFor(groupId: Long?): SelectionMode =
+        if (usesConcepts(learningGroupIdFor(groupId))) SelectionMode.CONCEPT else SelectionMode.CARD
 
     /**
      * Every concept's state in one learning context: Global when
@@ -669,7 +691,10 @@ class CardRepository(
      * A session that the due units do not fill is topped up with the rest
      * of the pool, soonest due first -- additional study, as before.
      */
-    internal suspend fun drawCardsByConcept(limit: Int, groupId: Long?): List<Card> {
+    internal suspend fun drawCardsByConcept(limit: Int, groupId: Long?): List<Card> =
+        drawSessionByConcept(limit, groupId).map { it.card }
+
+    private suspend fun drawSessionByConcept(limit: Int, groupId: Long?): List<DrawnCard> {
         if (limit <= 0) return emptyList()
         val pool = if (groupId != null) cardDao.getCardsByGroupSync(groupId) else cardDao.getAllCardsSync()
         if (pool.isEmpty()) return emptyList()
@@ -712,6 +737,8 @@ class CardRepository(
         val ordered = if (shouldRandomize) shuffleByBucket(units, bucketHours) { it.due } else units
 
         val selected = LinkedHashMap<Long, Card>()
+        // Why each was taken: the due concepts a card was picked to cover.
+        val coveredBy = HashMap<Long, Set<Long>>()
         val uncovered = units.filterIsInstance<DueUnit.OfConcept>().map { it.conceptId }.toMutableSet()
         val tagged = pool.filter { it.id in conceptsByCard }
 
@@ -732,18 +759,31 @@ class CardRepository(
                         weights[card to concept] ?: 1.0
                     }
                     selected[best.id] = best
+                    coveredBy[best.id] = conceptsByCard.getValue(best.id) intersect uncovered
                     uncovered -= conceptsByCard.getValue(best.id)
                 }
             }
         }
 
+        val due = selected.keys.toSet()
         if (selected.size < limit) {
             val rest = pool.filter { it.id !in selected }
                 .sortedBy { if (it.id in conceptsByCard) taggedDue(it) else cardDue(it) }
             val fill = if (shouldRandomize) rest.shuffled() else rest
             fill.take(limit - selected.size).forEach { selected[it.id] = it }
         }
-        return selected.values.toList()
+        val conceptUids = if (coveredBy.isEmpty()) emptyMap() else
+            conceptDao.getAllConceptsSync().associate { it.id to it.uid }
+        return selected.values.map { card ->
+            DrawnCard(
+                card,
+                CardSelection(
+                    SelectionMode.CONCEPT,
+                    if (card.id in due) SelectionReason.DUE else SelectionReason.EXTRA,
+                    coveredBy[card.id].orEmpty().mapNotNull { conceptUids[it] }.sorted()
+                )
+            )
+        }
     }
 
     private sealed class DueUnit(val due: Long) {
@@ -1059,7 +1099,8 @@ class CardRepository(
         sessionId: Long? = null,
         groupId: Long? = null,
         opponentId: Long? = null,
-        fightDifficulty: Int? = null
+        fightDifficulty: Int? = null,
+        selection: CardSelection? = null
     ): Card {
         val now = Time.now()
         val elapsedDays = if (card.lastReview == 0L) 0 else
@@ -1070,6 +1111,7 @@ class CardRepository(
         val groupUid = group?.uid
         val stabilityMultiplier = resolveStabilityMultiplier(opponentId, fightDifficulty)
         val opponentUid = opponentId?.let { opponentDao.getOpponentById(it)?.uid }
+        val opponentSkill = opponentSkillOf(opponentId)
 
         if (grade == Grade.SKIP) {
             val stateBefore = serializeCardState(card)
@@ -1088,7 +1130,11 @@ class CardRepository(
                 opponentId = opponentId,
                 opponentUid = opponentUid,
                 fightDifficulty = fightDifficulty,
-                stabilityMultiplier = stabilityMultiplier
+                stabilityMultiplier = stabilityMultiplier,
+                opponentSkillMultiplier = opponentSkill,
+                selectionMode = selection?.mode?.name,
+                selectionReason = selection?.reason?.name,
+                selectionConcepts = selection?.conceptUids?.takeIf { it.isNotEmpty() }?.joinToString(",")
             ))
             return card
         }
@@ -1111,7 +1157,11 @@ class CardRepository(
             opponentId = opponentId,
             opponentUid = opponentUid,
             fightDifficulty = fightDifficulty,
-            stabilityMultiplier = stabilityMultiplier
+            stabilityMultiplier = stabilityMultiplier,
+            opponentSkillMultiplier = opponentSkill,
+            selectionMode = selection?.mode?.name,
+            selectionReason = selection?.reason?.name,
+            selectionConcepts = selection?.conceptUids?.takeIf { it.isNotEmpty() }?.joinToString(",")
         )
 
         reviewLogDao.insertReviewLog(reviewLog)
@@ -1126,14 +1176,15 @@ class CardRepository(
         groupId: Long,
         sessionId: Long? = null,
         opponentId: Long? = null,
-        fightDifficulty: Int? = null
+        fightDifficulty: Int? = null,
+        selection: CardSelection? = null
     ): Card {
         val group = groupDao.getGroupById(groupId)
-            ?: return reviewCard(card, grade, sessionId, groupId, opponentId, fightDifficulty)
+            ?: return reviewCard(card, grade, sessionId, groupId, opponentId, fightDifficulty, selection)
 
         val learningGroupId = group.learningGroupId
             // Global learning state, with the group's settings applied
-            ?: return reviewCard(card, grade, sessionId, groupId, opponentId, fightDifficulty)
+            ?: return reviewCard(card, grade, sessionId, groupId, opponentId, fightDifficulty, selection)
 
         // The state kept in the group's learning group
         val now = Time.now()
@@ -1150,6 +1201,7 @@ class CardRepository(
 
         val stabilityMultiplier = resolveStabilityMultiplier(opponentId, fightDifficulty)
         val opponentUid = opponentId?.let { opponentDao.getOpponentById(it)?.uid }
+        val opponentSkill = opponentSkillOf(opponentId)
 
         if (grade == Grade.SKIP) {
             val stateBefore = serializeLearningState(learningState)
@@ -1168,7 +1220,11 @@ class CardRepository(
                 opponentId = opponentId,
                 opponentUid = opponentUid,
                 fightDifficulty = fightDifficulty,
-                stabilityMultiplier = stabilityMultiplier
+                stabilityMultiplier = stabilityMultiplier,
+                opponentSkillMultiplier = opponentSkill,
+                selectionMode = selection?.mode?.name,
+                selectionReason = selection?.reason?.name,
+                selectionConcepts = selection?.conceptUids?.takeIf { it.isNotEmpty() }?.joinToString(",")
             ))
             return card
         }
@@ -1191,7 +1247,11 @@ class CardRepository(
             opponentId = opponentId,
             opponentUid = opponentUid,
             fightDifficulty = fightDifficulty,
-            stabilityMultiplier = stabilityMultiplier
+            stabilityMultiplier = stabilityMultiplier,
+            opponentSkillMultiplier = opponentSkill,
+            selectionMode = selection?.mode?.name,
+            selectionReason = selection?.reason?.name,
+            selectionConcepts = selection?.conceptUids?.takeIf { it.isNotEmpty() }?.joinToString(",")
         )
 
         reviewLogDao.insertReviewLog(reviewLog)
@@ -1270,13 +1330,16 @@ class CardRepository(
         cardsWithGrades: List<Pair<Card, Grade>>,
         sessionId: Long? = null,
         opponentId: Long? = null,
-        fightDifficulty: Int? = null
+        fightDifficulty: Int? = null,
+        /** Why each card was drawn, by card id. */
+        selections: Map<Long, CardSelection> = emptyMap()
     ) {
         val now = Time.now()
         val reviewLogs = mutableListOf<ReviewLog>()
         val updatedCards = mutableListOf<Card>()
         val stabilityMultiplier = resolveStabilityMultiplier(opponentId, fightDifficulty)
         val opponentUid = opponentId?.let { opponentDao.getOpponentById(it)?.uid }
+        val opponentSkill = opponentSkillOf(opponentId)
 
         cardsWithGrades.forEach { (card, grade) ->
             val elapsedDays = if (card.lastReview == 0L) 0 else
@@ -1297,7 +1360,11 @@ class CardRepository(
                     opponentId = opponentId,
                     opponentUid = opponentUid,
                     fightDifficulty = fightDifficulty,
-                    stabilityMultiplier = stabilityMultiplier
+                    stabilityMultiplier = stabilityMultiplier,
+                    opponentSkillMultiplier = opponentSkill,
+                    selectionMode = selections[card.id]?.mode?.name,
+                    selectionReason = selections[card.id]?.reason?.name,
+                    selectionConcepts = selections[card.id]?.conceptUids?.takeIf { it.isNotEmpty() }?.joinToString(",")
                 ))
                 return@forEach
             }
@@ -1318,7 +1385,11 @@ class CardRepository(
                     opponentId = opponentId,
                     opponentUid = opponentUid,
                     fightDifficulty = fightDifficulty,
-                    stabilityMultiplier = stabilityMultiplier
+                    stabilityMultiplier = stabilityMultiplier,
+                    opponentSkillMultiplier = opponentSkill,
+                    selectionMode = selections[card.id]?.mode?.name,
+                    selectionReason = selections[card.id]?.reason?.name,
+                    selectionConcepts = selections[card.id]?.conceptUids?.takeIf { it.isNotEmpty() }?.joinToString(",")
                 )
             )
 

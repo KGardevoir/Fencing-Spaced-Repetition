@@ -32,7 +32,7 @@ import com.fencing.spacedrepetition.util.Time
 
 @Database(
     entities = [Card::class, PracticeSession::class, ReviewLog::class, Group::class, CardGroupCrossRef::class, CardLearningState::class, LearningGroup::class, Opponent::class, Concept::class, CardConceptCrossRef::class, ConceptLearningState::class, ConceptLearningGroupCrossRef::class],
-    version = 20,
+    version = 21,
     exportSchema = true
 )
 @ColumnTypeConverters(Converters::class)
@@ -1066,6 +1066,19 @@ private val MIGRATION_19_20 = object : Migration(19, 20) {
 }
 
 /**
+ * Why each card was practised, and the opponent's skill at the time: four
+ * nullable columns on the review log, null on every log before them.
+ */
+private val MIGRATION_20_21 = object : Migration(20, 21) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `review_logs` ADD COLUMN `selectionMode` TEXT")
+        connection.execSQL("ALTER TABLE `review_logs` ADD COLUMN `selectionReason` TEXT")
+        connection.execSQL("ALTER TABLE `review_logs` ADD COLUMN `selectionConcepts` TEXT")
+        connection.execSQL("ALTER TABLE `review_logs` ADD COLUMN `opponentSkillMultiplier` REAL")
+    }
+}
+
+/**
  * A version 4 UUID, in canonical lower-case form, as an SQLite expression --
  * evaluated afresh for every row an UPDATE touches. SQLite has no uuid()
  * of its own.
@@ -1101,4 +1114,5 @@ val ALL_MIGRATIONS: Array<Migration> = arrayOf(
     MIGRATION_17_18,
     MIGRATION_18_19,
     MIGRATION_19_20,
+    MIGRATION_20_21,
 )

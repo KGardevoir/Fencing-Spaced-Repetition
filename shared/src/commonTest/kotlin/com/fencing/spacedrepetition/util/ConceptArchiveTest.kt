@@ -201,6 +201,31 @@ class ConceptArchiveTest {
     }
 
     @Test
+    fun whyACardWasPractisedRoundTrips() {
+        val card = Card(id = 1, question = "Lunge", answer = "")
+        val log = com.fencing.spacedrepetition.data.model.ReviewLog(
+            cardId = 1, sessionId = null, reviewTime = 600L, grade = 3, algorithm = "FSRS", stateBefore = "",
+            stateAfter = "", scheduledDays = 1, elapsedDays = 0, fightDifficulty = 4, stabilityMultiplier = 1.5,
+            selectionMode = "CONCEPT", selectionReason = "DUE", selectionConcepts = "c-1,c-2",
+            opponentSkillMultiplier = 1.25
+        )
+        val out = StringBuilder()
+        CardImportExport.exportCardsWithGroupStates(
+            listOf(CardWithGroupStates(card, emptyList())), out, noImages,
+            reviewLogs = listOf(log), cardQuestions = mapOf(1L to "Lunge")
+        )
+        assertTrue("selectionReason: \"DUE\"" in out.toString() || "selectionReason: DUE" in out.toString())
+        CardImportExport.parseCards(out.toString().lines())
+        val parsed = CardImportExport.lastParsedReviewHistory.single()
+        assertEquals("CONCEPT", parsed.selectionMode)
+        assertEquals("DUE", parsed.selectionReason)
+        assertEquals(listOf("c-1", "c-2"), parsed.selectionConcepts)
+        assertEquals(1.25, parsed.opponentSkillMultiplier)
+        assertEquals(4, parsed.fightDifficulty)
+        assertEquals(1.5, parsed.stabilityMultiplier)
+    }
+
+    @Test
     fun whereAConceptIsAvailableRoundTrips() {
         val bouting = LearningGroup(id = 5, name = "Bouting", useConcepts = true)
         val text = export(

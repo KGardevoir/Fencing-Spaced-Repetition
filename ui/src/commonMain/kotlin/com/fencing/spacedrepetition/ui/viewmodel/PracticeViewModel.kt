@@ -6,6 +6,9 @@ package com.fencing.spacedrepetition.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.data.model.Card
+import com.fencing.spacedrepetition.data.model.SelectionReason
+import com.fencing.spacedrepetition.data.model.DrawnCard
+import com.fencing.spacedrepetition.data.model.CardSelection
 import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.SessionCard
@@ -103,6 +106,9 @@ class PracticeViewModel(
      * outlives a cancellation cannot repopulate a session the user has left.
      */
     private var sessionToken: Long = 0L
+
+    /** Why each card of the session was drawn, by card id; written on its review log. */
+    private var sessionSelections: Map<Long, CardSelection> = emptyMap()
     private var sessionJob: Job? = null
 
     fun startNewSession(numberOfCards: Int = 3, groupId: Long? = null) {
@@ -129,7 +135,11 @@ class PracticeViewModel(
             try {
                 // Cards deleted since the lock was taken simply drop out.
                 val lockedCards = lockedIds.mapNotNull { repository.getCardById(it) }
-                val cardsForSession = lockedCards.ifEmpty { drawCards(numberOfCards, groupId) }
+                val drawn = if (lockedCards.isNotEmpty()) {
+                    val locked = CardSelection(repository.selectionModeFor(groupId), SelectionReason.LOCKED)
+                    lockedCards.map { DrawnCard(it, locked) }
+                } else drawCards(numberOfCards, groupId)
+                val cardsForSession = drawn.map { it.card }
 
                 // Superseded while we were reading: say nothing and leave the
                 // session that replaced this one alone.
@@ -157,6 +167,7 @@ class PracticeViewModel(
                 // Initialize session cards; no default opponent or fight rating
                 // until the user picks one
                 sessionId = newSessionId
+                sessionSelections = drawn.associate { it.card.id to it.selection }
                 _sessionOpponentId.value = null
                 _sessionFightDifficulty.value = null
                 _sessionCards.value = cardsForSession.map { SessionCard(it, null) }
@@ -178,8 +189,8 @@ class PracticeViewModel(
      * learning concept where the group's learning context has that switched
      * on, card by card otherwise. See [CardRepository.drawCards].
      */
-    private suspend fun drawCards(numberOfCards: Int, groupId: Long?): List<Card> =
-        repository.drawCards(numberOfCards, groupId)
+    private suspend fun drawCards(numberOfCards: Int, groupId: Long?): List<DrawnCard> =
+        repository.drawSession(numberOfCards, groupId)
 
     fun nextCard() {
         val currentIndex = _currentCardIndex.value
@@ -318,6 +329,7 @@ class PracticeViewModel(
         val fightDifficulty = _sessionFightDifficulty.value
         val notes = _sessionNotes.value
         val noteImages = _sessionNoteImages.value
+        val selections = sessionSelections
         _uiState.value = PracticeUiState.Submitting
 
         viewModelScope.launch {
@@ -332,12 +344,12 @@ class PracticeViewModel(
                     if (groupId != null) {
                         cardsWithGrades.forEach { (card, grade) ->
                             repository.reviewCardWithGroup(
-                                card, grade, groupId, sid, opponentId, fightDifficulty
+                                card, grade, groupId, sid, opponentId, fightDifficulty, selections[card.id]
                             )
                         }
                     } else {
                         repository.reviewMultipleCards(
-                            cardsWithGrades, sid, opponentId, fightDifficulty
+                            cardsWithGrades, sid, opponentId, fightDifficulty, selections
                         )
                     }
                     // The session is now in these cards' history, and their
@@ -376,6 +388,7 @@ class PracticeViewModel(
         _sessionNotes.value = ""
         _sessionNoteImages.value = emptyList()
         sessionId = null
+        sessionSelections = emptyMap()
         selectedGroupId = null
         sessionStartTime = 0L
         _uiState.value = PracticeUiState.Loading

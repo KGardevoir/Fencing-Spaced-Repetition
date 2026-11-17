@@ -1114,7 +1114,11 @@ object CardImportExport {
         val cardUid: String? = null,
         val groupUid: String? = null,
         val sessionUid: String? = null,
-        val opponentUid: String? = null
+        val opponentUid: String? = null,
+        val selectionMode: String? = null,
+        val selectionReason: String? = null,
+        val selectionConcepts: List<String> = emptyList(),
+        val opponentSkillMultiplier: Double? = null
     )
 
     /**
@@ -1210,7 +1214,11 @@ object CardImportExport {
                 stabilityMultiplier = p.stabilityMultiplier,
                 groupUid = p.groupUid,
                 opponentUid = p.opponentUid,
-                uid = p.uid ?: newUid()
+                uid = p.uid ?: newUid(),
+                selectionMode = p.selectionMode,
+                selectionReason = p.selectionReason,
+                selectionConcepts = p.selectionConcepts.takeIf { it.isNotEmpty() }?.joinToString(","),
+                opponentSkillMultiplier = p.opponentSkillMultiplier
             )
         }
     }

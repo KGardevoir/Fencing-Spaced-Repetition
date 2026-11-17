@@ -307,7 +307,15 @@ internal data class ArchiveReviewLog(
     /** The session's stable identifier; [session] is its start time. */
     val sessionUid: String? = null,
     /** The opponent's stable identifier; [opponent] is their name. */
-    val opponentUid: String? = null
+    val opponentUid: String? = null,
+    /** How the session was drawn: CARD or CONCEPT. Absent before it was recorded. */
+    val selectionMode: String? = null,
+    /** Why the card was practised: DUE, EXTRA, LOCKED or EDITOR. */
+    val selectionReason: String? = null,
+    /** The due concepts (by uid, as under `concepts:`) the card was drawn to cover. */
+    val selectionConcepts: List<String> = emptyList(),
+    /** The opponent's skill multiplier at the time, before fight difficulty. */
+    val opponentSkillMultiplier: Double? = null
 )
 
 // ==========================================================================
@@ -577,7 +585,11 @@ internal object ArchiveYaml {
         cardUid = cardUid,
         groupUid = log.groupUid,
         sessionUid = sessionUid,
-        opponentUid = log.opponentUid
+        opponentUid = log.opponentUid,
+        selectionMode = log.selectionMode,
+        selectionReason = log.selectionReason,
+        selectionConcepts = log.selectionConceptUids,
+        opponentSkillMultiplier = log.opponentSkillMultiplier
     )
 
     /** One session, with its notes and their pictures inlined. */
@@ -705,7 +717,11 @@ internal object ArchiveYaml {
         cardUid = log.cardUid?.takeIf { it.isNotBlank() },
         groupUid = log.groupUid?.takeIf { it.isNotBlank() },
         sessionUid = log.sessionUid?.takeIf { it.isNotBlank() },
-        opponentUid = log.opponentUid?.takeIf { it.isNotBlank() }
+        opponentUid = log.opponentUid?.takeIf { it.isNotBlank() },
+        selectionMode = log.selectionMode?.takeIf { it.isNotBlank() },
+        selectionReason = log.selectionReason?.takeIf { it.isNotBlank() },
+        selectionConcepts = log.selectionConcepts.map { it.trim() }.filter { it.isNotEmpty() },
+        opponentSkillMultiplier = log.opponentSkillMultiplier
     )
 
     fun parsedSession(session: ArchiveSession) = CardImportExport.ParsedSession(

@@ -9,6 +9,9 @@ import androidx.sqlite.execSQL
 import com.fencing.spacedrepetition.data.ALL_MIGRATIONS
 import com.fencing.spacedrepetition.data.AppDatabase
 import com.fencing.spacedrepetition.data.model.Card
+import com.fencing.spacedrepetition.data.model.CardSelection
+import com.fencing.spacedrepetition.data.model.SelectionMode
+import com.fencing.spacedrepetition.data.model.SelectionReason
 import com.fencing.spacedrepetition.data.model.CardConceptCrossRef
 import com.fencing.spacedrepetition.data.model.CardGroupCrossRef
 import com.fencing.spacedrepetition.data.model.Concept
@@ -661,6 +664,84 @@ class ConceptSchedulingDbTest {
         } finally {
             file.delete()
         }
+    }
+
+    @Test
+    fun `upgrades the released version 20`() = runTest {
+        val file = File.createTempFile("v20", ".db").apply { delete() }
+        try {
+            val path = file.absolutePath
+            createFromExportedSchema(File("src/jvmTest/resources/released/20-c4cceb5.json"), 20, path)
+            insertRow(path, "cards", mapOf("id" to 1, "question" to "Lunge", "answer" to "", "imagePaths" to "", "fsrsState" to "NEW", "category" to "", "tags" to "", "uid" to "seed-card"))
+            insertRow(path, "review_logs", mapOf("id" to 1, "cardId" to 1, "reviewTime" to 5, "grade" to 3, "algorithm" to "FSRS", "stateBefore" to "", "stateAfter" to "", "scheduledDays" to 0, "elapsedDays" to 0, "notes" to "", "imagePaths" to "", "stabilityMultiplier" to 1.0, "uid" to "seed-log"))
+            val migrated = openMigrated(path)
+            try {
+                // Opening runs 20 -> 21 and validates every table; older logs say nothing of why.
+                val log = migrated.reviewLogDao().getAllReviewLogsSync().single()
+                assertNull(log.selectionMode)
+                assertNull(log.selectionReason)
+                assertNull(log.opponentSkillMultiplier)
+            } finally {
+                migrated.close()
+            }
+        } finally {
+            file.delete()
+        }
+    }
+
+    // ==================== why a card was practised ====================
+
+    @Test
+    fun `a session drawn by concept records why each card was chosen`() = runTest {
+        val a = concept("A"); val b = concept("B")
+        val covering = card("covers A and B"); tag(covering, a, b)
+        val untagged = card("untagged")
+        val later = card("not due", nextReview = Time.now() + 10 * day)
+        val drawn = repo.drawSession(10, null).associate { it.card.id to it.selection }
+
+        val uids = db.conceptDao().getAllConceptsSync().associate { it.id to it.uid }
+        assertEquals(SelectionMode.CONCEPT, drawn.getValue(covering).mode)
+        assertEquals(SelectionReason.DUE, drawn.getValue(covering).reason)
+        assertEquals(listOf(uids.getValue(a), uids.getValue(b)).sorted(), drawn.getValue(covering).conceptUids)
+        assertEquals(SelectionReason.DUE, drawn.getValue(untagged).reason)
+        assertTrue(drawn.getValue(untagged).conceptUids.isEmpty())
+        assertEquals(SelectionReason.EXTRA, drawn.getValue(later).reason)
+    }
+
+    @Test
+    fun `card by card, a session records due and extra study`() = runTest {
+        globalConcepts = flowOf(false)
+        val due = card("due")
+        val later = card("later", nextReview = Time.now() + 10 * day)
+        val drawn = repo.drawSession(2, null).associate { it.card.id to it.selection }
+        assertEquals(CardSelection(SelectionMode.CARD, SelectionReason.DUE), drawn.getValue(due))
+        assertEquals(CardSelection(SelectionMode.CARD, SelectionReason.EXTRA), drawn.getValue(later))
+    }
+
+    @Test
+    fun `a graded review records why, the opponent's skill and the fight`() = runTest {
+        val a = concept("A")
+        val c = card("c"); tag(c, a)
+        val rival = db.opponentDao().insertOpponent(Opponent(name = "Rival", skillMultiplier = 1.25))
+        val selection = repo.drawSession(1, null).single().selection
+        val graded = repo.getCardById(c)!!
+        repo.reviewMultipleCards(listOf(graded to Grade.GOOD), null, rival, fightDifficulty = 4, selections = mapOf(c to selection))
+
+        val log = db.reviewLogDao().getAllReviewLogsSync().single()
+        assertEquals("CONCEPT", log.selectionMode)
+        assertEquals("DUE", log.selectionReason)
+        assertEquals(listOf(db.conceptDao().getAllConceptsSync().single().uid), log.selectionConceptUids)
+        assertEquals(1.25, log.opponentSkillMultiplier)
+        assertEquals(4, log.fightDifficulty)
+        // The multiplier applied is the opponent's skill times the fight's.
+        assertEquals(
+            com.fencing.spacedrepetition.data.model.FightDifficulty.combinedMultiplier(1.25, 4),
+            log.stabilityMultiplier
+        )
+
+        // A grade from the card editor says so.
+        repo.logGradeFromEdit(graded, graded, Grade.HARD)
+        assertEquals("EDITOR", db.reviewLogDao().getAllReviewLogsSync().maxBy { it.id }.selectionReason)
     }
 
     // ==================== weights ====================

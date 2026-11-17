@@ -48,6 +48,10 @@ class Migration19To20Test {
             identity("src/jvmTest/resources/released/19-b490cfe.json"),
             identity("schemas/com.fencing.spacedrepetition.data.AppDatabase/19.json")
         )
-        assertTrue(File("schemas/com.fencing.spacedrepetition.data.AppDatabase/20.json").exists())
+        assertEquals(
+            identity("src/jvmTest/resources/released/20-c4cceb5.json"),
+            identity("schemas/com.fencing.spacedrepetition.data.AppDatabase/20.json")
+        )
+        assertTrue(File("schemas/com.fencing.spacedrepetition.data.AppDatabase/21.json").exists())
     }
 }
