@@ -75,13 +75,12 @@ fun GlobalLearningSettingsScreen(
                 .padding(16.dp)
         ) {
             Text(
-                "The defaults: Global groups use these, and each learning group " +
-                    "uses them for whatever it does not override.",
+                "Defaults for every learning group.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            GlobalSetting("Cards per Session", "Number of cards to practice each session") {
+            GlobalSetting("Cards per Session", null) {
                 CardsPerSessionSlider(cardsPerSession, onSetCardsPerSession)
             }
             GlobalSetting("Randomize Due Cards", null) {
@@ -93,15 +92,15 @@ fun GlobalLearningSettingsScreen(
                     BucketSizeSlider(randomizeBucketHours, onSetRandomizeBucketHours)
                 }
             }
-            GlobalSetting("Practice Days", "Cards are scheduled to come due on days you practice.") {
+            GlobalSetting("Practice Days", "Cards come due on these days.") {
                 PracticeDaysPicker(practiceDays, onSetPracticeDays)
             }
-            GlobalSetting("Maximum Interval", "Maximum time between reviews") {
+            GlobalSetting("Maximum Interval", null) {
                 MaximumIntervalSlider(maximumInterval, onSetMaximumInterval)
             }
             GlobalSetting(
                 "FSRS Desired Retention",
-                "Target probability of remembering a card when it comes due."
+                "Chance of remembering a card when due."
             ) {
                 RetentionSelector(
                     retentionPercent = fsrsRetention,

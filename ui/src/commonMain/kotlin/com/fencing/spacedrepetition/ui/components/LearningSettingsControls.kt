@@ -95,7 +95,7 @@ fun FuzzingSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, enabled:
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
-            "Add ≤5 % random variance to FSRS intervals to spread reviews",
+            "±5 % on intervals to spread reviews",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f)
@@ -114,7 +114,7 @@ fun RandomizeDueCardsSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
-            "Shuffle cards with similar due dates for variety",
+            "Shuffle cards due around the same time",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f)
@@ -137,7 +137,7 @@ fun BucketSizeSlider(value: Int, onValueChange: (Int) -> Unit, enabled: Boolean 
         enabled = enabled
     )
     Text(
-        "Cards due within the same bucket are shuffled randomly. Smaller buckets preserve due-date ordering more strictly.",
+        "Smaller buckets keep closer to due order.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )

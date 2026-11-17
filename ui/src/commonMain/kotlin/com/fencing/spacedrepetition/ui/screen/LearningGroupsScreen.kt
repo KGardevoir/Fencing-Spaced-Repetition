@@ -113,9 +113,7 @@ fun LearningGroupsScreen(
         ) {
             item {
                 Text(
-                    "Card groups in the same learning group share one set of learning " +
-                        "progress: grading a card in one moves it on in all of them. " +
-                        "A group in no learning group learns Global.",
+                    "Groups in a learning group share progress.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 8.dp)
@@ -124,8 +122,7 @@ fun LearningGroupsScreen(
             item {
                 LearningGroupRow(
                     name = "Global",
-                    description = "The default. Every card's own learning progress, " +
-                        "scheduled by the app settings.",
+                    description = "",
                     members = globalGroups,
                     isGlobal = true,
                     // Global is not a row anywhere: it cannot be selected or deleted.
