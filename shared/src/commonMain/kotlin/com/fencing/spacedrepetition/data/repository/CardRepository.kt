@@ -106,13 +106,21 @@ class CardRepository(
             // Reset review times
             lastReview = 0L,
             nextReview = 0L,
-            modified = now
+            modified = now,
+            // Reviews before now stop counting towards anything derived.
+            lastReset = now
         )
         cardDao.updateCard(resetCard)
 
-        // Optionally reset group-specific learning states
+        // Optionally reset the learning-group progress too: every learning
+        // group, held or not, gets a new state stamped with the reset, so the
+        // history from before it is set aside there as well.
         if (resetGroupStates) {
-            groupDao.deleteAllLearningStatesForCard(cardId)
+            groupDao.getAllLearningGroups().first().forEach { learningGroup ->
+                groupDao.insertLearningState(
+                    CardLearningState(cardId, learningGroup.id, modified = now, lastReset = now)
+                )
+            }
         }
     }
 
@@ -122,23 +130,14 @@ class CardRepository(
         resetCardStateInLearningGroup(cardId, learningGroupId)
     }
 
+    /**
+     * Back to new in one learning group, stamped with when, so the history from
+     * before the reset stops counting there. Written whether or not the card
+     * held a state in it yet: a reset is a fact about the progress, not the row.
+     */
     suspend fun resetCardStateInLearningGroup(cardId: Long, learningGroupId: Long) {
-        val learningState = groupDao.getLearningState(cardId, learningGroupId)
-        if (learningState != null) {
-            val resetState = learningState.copy(
-                fsrsStability = 0.0,
-                fsrsDifficulty = 0.0,
-                fsrsElapsedDays = 0,
-                fsrsScheduledDays = 0,
-                fsrsReps = 0,
-                fsrsLapses = 0,
-                fsrsState = "NEW",
-                lastReview = 0L,
-                nextReview = 0L,
-                modified = Time.now()
-            )
-            groupDao.updateLearningState(resetState)
-        }
+        val now = Time.now()
+        groupDao.insertLearningState(CardLearningState(cardId, learningGroupId, modified = now, lastReset = now))
     }
 
     fun getCardCount(): Flow<Int> = cardDao.getCardCount()
@@ -164,8 +163,31 @@ class CardRepository(
 
     suspend fun getAllReviewLogsSync(): List<ReviewLog> = reviewLogDao.getAllReviewLogsSync()
 
-    suspend fun importReviewLogs(reviewLogs: List<ReviewLog>) {
-        reviewLogDao.insertReviewLogs(reviewLogs)
+    /**
+     * Add imported reviews to the history, leaving out any already in it.
+     *
+     * The history is what progress is derived from, so a
+     * review imported twice would count twice. A review is already here when
+     * its stable identifier is, or -- for files from before identifiers --
+     * when the same card has a review at the same moment with the same grade.
+     *
+     * @return how many were added.
+     */
+    suspend fun importReviewLogs(reviewLogs: List<ReviewLog>): Int {
+        val existing = reviewLogDao.getAllReviewLogsSync()
+        val knownUids = existing.map { it.uid }.toMutableSet()
+        val knownMoments = existing.map { Triple(it.cardId, it.reviewTime, it.grade) }.toMutableSet()
+        val fresh = reviewLogs.filter { log ->
+            val moment = Triple(log.cardId, log.reviewTime, log.grade)
+            val isNew = log.uid !in knownUids && moment !in knownMoments
+            if (isNew) {
+                knownUids += log.uid
+                knownMoments += moment
+            }
+            isNew
+        }.map { it.copy(id = 0) }
+        if (fresh.isNotEmpty()) reviewLogDao.insertReviewLogs(fresh)
+        return fresh.size
     }
 
     suspend fun updateReviewLog(reviewLog: ReviewLog) {
@@ -187,8 +209,11 @@ class CardRepository(
         val now = Time.now()
         val elapsedDays = if (cardBefore.lastReview == 0L) 0 else
             ((now - cardBefore.lastReview) / (1000 * 60 * 60 * 24)).toInt()
-        val groupName = groupId?.let { groupDao.getGroupById(it)?.name }
+        val group = groupId?.let { groupDao.getGroupById(it) }
+        val groupName = group?.name
+        val groupUid = group?.uid
         val stabilityMultiplier = resolveStabilityMultiplier(opponentId, fightDifficulty)
+        val opponentUid = opponentId?.let { opponentDao.getOpponentById(it)?.uid }
         reviewLogDao.insertReviewLog(ReviewLog(
             cardId = cardBefore.id,
             sessionId = null,
@@ -200,7 +225,9 @@ class CardRepository(
             scheduledDays = cardAfter.fsrsScheduledDays,
             elapsedDays = elapsedDays,
             groupName = groupName ?: GROUP_NAME_CARD_EDIT,
+            groupUid = groupUid,
             opponentId = opponentId,
+            opponentUid = opponentUid,
             fightDifficulty = fightDifficulty,
             stabilityMultiplier = stabilityMultiplier
         ))
@@ -396,14 +423,18 @@ class CardRepository(
             // Find the global state (or use the first state if no global)
             val globalState = states.find { it.isGlobalState } ?: states.first()
 
-            // Create or update the card (decode base64 images)
+            // Create or update the card (decode base64 images). The same card
+            // is the one with the file's stable identifier, else the one with
+            // its question; a card found keeps its own identifier for life.
             val card = toCard(globalState)
-            val existingCard = cardDao.findCardByQuestion(question)
+            val existingCard = states.firstNotNullOfOrNull { it.uid }?.let { cardDao.findCardByUid(it) }
+                ?: cardDao.findCardByQuestion(question)
             val cardId: Long
 
             if (existingCard != null) {
                 val updatedCard = card.copy(
                     id = existingCard.id,
+                    uid = existingCard.uid,
                     created = existingCard.created,
                     modified = Time.now()
                 )
@@ -442,7 +473,8 @@ class CardRepository(
                         fsrsLapses = groupState.fsrsLapses ?: 0,
                         fsrsState = groupState.fsrsState ?: "NEW",
                         lastReview = groupState.lastReview ?: 0L,
-                        nextReview = groupState.nextReview ?: 0L
+                        nextReview = groupState.nextReview ?: 0L,
+                        lastReset = groupState.lastReset ?: 0L
                     )
                     groupDao.insertLearningState(learningState)
                 }
@@ -528,7 +560,24 @@ class CardRepository(
      * recorded, and they keep it.
      */
     suspend fun updateSessionOpponent(sessionId: Long, opponentId: Long?) {
-        reviewLogDao.updateOpponentForSession(sessionId, opponentId)
+        val opponentUid = opponentId?.let { opponentDao.getOpponentById(it)?.uid }
+        reviewLogDao.updateOpponentForSession(sessionId, opponentId, opponentUid)
+    }
+
+    /** Set one review's opponent, by local id and by identifier together. */
+    suspend fun updateReviewLogOpponent(reviewLog: ReviewLog, opponentId: Long?) {
+        val opponentUid = opponentId?.let { opponentDao.getOpponentById(it)?.uid }
+        reviewLogDao.updateReviewLog(reviewLog.copy(opponentId = opponentId, opponentUid = opponentUid))
+    }
+
+    /**
+     * Bring every review's opponent reference into line after opponents or
+     * history arrive by import: see [ReviewLogDao.fillOpponentUids] and
+     * [ReviewLogDao.relinkOpponentIds].
+     */
+    suspend fun reconcileOpponentReferences() {
+        reviewLogDao.fillOpponentUids()
+        reviewLogDao.relinkOpponentIds()
     }
 
     fun getSessionByIdFlow(sessionId: Long): Flow<PracticeSession?> =
@@ -546,8 +595,15 @@ class CardRepository(
      * multiplier.
      */
     suspend fun ensureSession(session: PracticeSession): Long =
-        sessionDao.getSessionByStartTime(session.startTime)?.id
+        session.uid.takeIf { it.isNotBlank() }?.let { sessionDao.getSessionByUid(it)?.id }
+            ?: sessionDao.getSessionByStartTime(session.startTime)?.id
             ?: sessionDao.insertSession(session.copy(id = 0))
+
+    /** The card groups, for naming them as they are now (history, by stable identifier). */
+    fun getAllGroups(): Flow<List<Group>> = groupDao.getAllGroups()
+
+    /** Local card id by stable identifier, for placing imported history. */
+    suspend fun cardIdsByUid(): Map<String, Long> = cardDao.getAllCardsAsList().associate { it.uid to it.id }
 
     fun getAllSessions(): Flow<List<PracticeSession>> = sessionDao.getAllSessions()
 
@@ -568,8 +624,11 @@ class CardRepository(
         val elapsedDays = if (card.lastReview == 0L) 0 else
             ((now - card.lastReview) / (1000 * 60 * 60 * 24)).toInt()
 
-        val groupName = groupId?.let { groupDao.getGroupById(it)?.name }
+        val group = groupId?.let { groupDao.getGroupById(it) }
+        val groupName = group?.name
+        val groupUid = group?.uid
         val stabilityMultiplier = resolveStabilityMultiplier(opponentId, fightDifficulty)
+        val opponentUid = opponentId?.let { opponentDao.getOpponentById(it)?.uid }
 
         if (grade == Grade.SKIP) {
             val stateBefore = serializeCardState(card)
@@ -584,7 +643,9 @@ class CardRepository(
                 scheduledDays = card.fsrsScheduledDays,
                 elapsedDays = elapsedDays,
                 groupName = groupName,
+                groupUid = groupUid,
                 opponentId = opponentId,
+                opponentUid = opponentUid,
                 fightDifficulty = fightDifficulty,
                 stabilityMultiplier = stabilityMultiplier
             ))
@@ -605,7 +666,9 @@ class CardRepository(
             scheduledDays = updatedCard.fsrsScheduledDays,
             elapsedDays = elapsedDays,
             groupName = groupName,
+            groupUid = groupUid,
             opponentId = opponentId,
+            opponentUid = opponentUid,
             fightDifficulty = fightDifficulty,
             stabilityMultiplier = stabilityMultiplier
         )
@@ -645,6 +708,7 @@ class CardRepository(
             ((now - learningState.lastReview) / (1000 * 60 * 60 * 24)).toInt()
 
         val stabilityMultiplier = resolveStabilityMultiplier(opponentId, fightDifficulty)
+        val opponentUid = opponentId?.let { opponentDao.getOpponentById(it)?.uid }
 
         if (grade == Grade.SKIP) {
             val stateBefore = serializeLearningState(learningState)
@@ -659,7 +723,9 @@ class CardRepository(
                 scheduledDays = learningState.fsrsScheduledDays,
                 elapsedDays = elapsedDays,
                 groupName = group.name,
+                groupUid = group.uid,
                 opponentId = opponentId,
+                opponentUid = opponentUid,
                 fightDifficulty = fightDifficulty,
                 stabilityMultiplier = stabilityMultiplier
             ))
@@ -680,7 +746,9 @@ class CardRepository(
             scheduledDays = updatedState.fsrsScheduledDays,
             elapsedDays = elapsedDays,
             groupName = group.name,
+            groupUid = group.uid,
             opponentId = opponentId,
+            opponentUid = opponentUid,
             fightDifficulty = fightDifficulty,
             stabilityMultiplier = stabilityMultiplier
         )
@@ -767,6 +835,7 @@ class CardRepository(
         val reviewLogs = mutableListOf<ReviewLog>()
         val updatedCards = mutableListOf<Card>()
         val stabilityMultiplier = resolveStabilityMultiplier(opponentId, fightDifficulty)
+        val opponentUid = opponentId?.let { opponentDao.getOpponentById(it)?.uid }
 
         cardsWithGrades.forEach { (card, grade) ->
             val elapsedDays = if (card.lastReview == 0L) 0 else
@@ -785,6 +854,7 @@ class CardRepository(
                     scheduledDays = card.fsrsScheduledDays,
                     elapsedDays = elapsedDays,
                     opponentId = opponentId,
+                    opponentUid = opponentUid,
                     fightDifficulty = fightDifficulty,
                     stabilityMultiplier = stabilityMultiplier
                 ))
@@ -805,6 +875,7 @@ class CardRepository(
                     scheduledDays = updatedCard.fsrsScheduledDays,
                     elapsedDays = elapsedDays,
                     opponentId = opponentId,
+                    opponentUid = opponentUid,
                     fightDifficulty = fightDifficulty,
                     stabilityMultiplier = stabilityMultiplier
                 )

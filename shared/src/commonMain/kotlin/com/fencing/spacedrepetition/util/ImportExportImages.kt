@@ -58,10 +58,13 @@ suspend fun CardImportExport.parsedReviewLogsToEntities(
     questionToCardId: Map<String, Long>,
     opponentNameToId: Map<String, Long> = emptyMap(),
     images: ImageStore,
-    sessionIdByStart: Map<Long, Long> = emptyMap()
+    sessionIdByStart: Map<Long, Long> = emptyMap(),
+    cardIdByUid: Map<String, Long> = emptyMap(),
+    sessionIdByUid: Map<String, Long> = emptyMap()
 ): List<ReviewLog> = parsed.mapNotNull { log ->
     val entity = parsedReviewLogsToEntities(
-        listOf(log), questionToCardId, opponentNameToId, sessionIdByStart = sessionIdByStart
+        listOf(log), questionToCardId, opponentNameToId, sessionIdByStart = sessionIdByStart,
+        cardIdByUid = cardIdByUid, sessionIdByUid = sessionIdByUid
     ).singleOrNull() ?: return@mapNotNull null
     entity.copy(imagePaths = storeImages(log.imageData, images).joinToString(","))
 }
@@ -86,7 +89,8 @@ suspend fun CardImportExport.parsedSessionToSession(
     cardIds = cardIds.joinToString(","),
     grades = grades.joinToString(","),
     notes = parsed.notes,
-    imagePaths = storeImages(parsed.imageData, images).joinToString(",")
+    imagePaths = storeImages(parsed.imageData, images).joinToString(","),
+    uid = parsed.uid ?: newUid()
 )
 
 /**

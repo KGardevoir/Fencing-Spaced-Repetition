@@ -229,7 +229,9 @@ class GroupSettingsExportTest {
         )
 
         val content = output.toString(Charsets.UTF_8.name())
-        assertFalse(content.contains("- name: \"DefaultGroup\""))
+        // Listed even with no settings: the groups section is where each
+        // group's stable identifier travels. It carries nothing else.
+        assertTrue(content.contains("- name: \"DefaultGroup\"\n    uid: \"${groups[0].uid}\"\n"))
         assertTrue(content.contains("- name: \"CustomGroup\""))
         // The group is still on the card that belongs to it.
         assertTrue(content.contains("groups:\n      - \"DefaultGroup\"\n      - \"CustomGroup\"\n"))
@@ -443,7 +445,10 @@ class GroupSettingsExportTest {
 
         val result = CardImportExport.applyLearningGroupSettings(learningGroup, emptyMap())
 
-        assertEquals(LearningGroup(id = 3, name = "Test", description = "desc", created = 99L), result)
+        assertEquals(
+            LearningGroup(id = 3, name = "Test", description = "desc", created = 99L, uid = learningGroup.uid),
+            result
+        )
     }
 
     @Test
@@ -453,7 +458,7 @@ class GroupSettingsExportTest {
 
         val result = CardImportExport.applyGroupSettings(group, settings)
 
-        assertEquals(Group(id = 1, name = "Test", autoShowAnswer = true, created = 0), result)
+        assertEquals(group.copy(autoShowAnswer = true), result)
     }
 
     @Test
@@ -529,7 +534,11 @@ class GroupSettingsExportTest {
         CardImportExport.parseCards(ByteArrayInputStream(output.toByteArray()))
 
         val learningSettings = CardImportExport.lastParsedLearningGroupSettings.getValue("Bouting")
-        val restored = CardImportExport.applyLearningGroupSettings(LearningGroup(name = "Bouting", created = 0), learningSettings)
+        // The identity travels too, so the import finds this learning group again.
+        assertEquals(learningGroup.uid, CardImportExport.lastParsedLearningGroupUids["Bouting"])
+        val restored = CardImportExport.applyLearningGroupSettings(
+            LearningGroup(name = "Bouting", created = 0, uid = learningGroup.uid), learningSettings
+        )
         assertEquals(learningGroup.copy(id = 0), restored)
 
         val drillSettings = CardImportExport.lastParsedGroupSettings.getValue("FencingDrills")

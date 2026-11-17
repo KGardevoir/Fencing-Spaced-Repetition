@@ -7,6 +7,8 @@ import androidx.room3.Entity
 import androidx.room3.Index
 import androidx.room3.PrimaryKey
 import com.fencing.spacedrepetition.util.Time
+import androidx.room3.ColumnInfo
+import com.fencing.spacedrepetition.util.newUid
 
 /**
  * A training partner / opponent whose skill level modulates the stability gain
@@ -15,7 +17,7 @@ import com.fencing.spacedrepetition.util.Time
  */
 @Entity(
     tableName = "opponents",
-    indices = [Index(value = ["name"], unique = true)]
+    indices = [Index(value = ["name"], unique = true), Index(value = ["uid"], unique = true)]
 )
 data class Opponent(
     @PrimaryKey(autoGenerate = true)
@@ -29,5 +31,8 @@ data class Opponent(
     val notes: String = "",
 
     val created: Long = Time.now(),
-    val modified: Long = Time.now()
+    val modified: Long = Time.now(),
+    /** Stable identifier, unique and kept for life; see docs/DESIGN.md, "Identity". */
+    @ColumnInfo(defaultValue = "''")
+    val uid: String = newUid()
 )

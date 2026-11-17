@@ -119,7 +119,9 @@ internal data class ArchiveSession(
     val startTime: Long,
     val endTime: Long? = null,
     val notes: String = "",
-    val images: List<String> = emptyList()
+    val images: List<String> = emptyList(),
+    /** Stable identifier (see docs/DESIGN.md, "Identity"); absent in files from before them. */
+    val uid: String? = null
 )
 
 @Serializable
@@ -132,7 +134,9 @@ internal data class ArchiveLearningGroup(
     val practiceDays: String? = null,
     val maximumInterval: Int? = null,
     val fsrsRetention: Int? = null,
-    val fsrsEnableFuzzing: Boolean? = null
+    val fsrsEnableFuzzing: Boolean? = null,
+    /** Stable identifier (see docs/DESIGN.md, "Identity"); absent in files from before them. */
+    val uid: String? = null
 )
 
 @Serializable
@@ -149,14 +153,18 @@ internal data class ArchiveGroup(
     val practiceDays: String? = null,
     val maximumInterval: Int? = null,
     val fsrsRetention: Int? = null,
-    val fsrsEnableFuzzing: Boolean? = null
+    val fsrsEnableFuzzing: Boolean? = null,
+    /** Stable identifier (see docs/DESIGN.md, "Identity"); absent in files from before them. */
+    val uid: String? = null
 )
 
 @Serializable
 internal data class ArchiveOpponent(
     val name: String,
     val skillMultiplier: Double = 1.0,
-    val notes: String = ""
+    val notes: String = "",
+    /** Stable identifier (see docs/DESIGN.md, "Identity"); absent in files from before them. */
+    val uid: String? = null
 )
 
 @Serializable
@@ -171,7 +179,9 @@ internal data class ArchiveCard(
     val state: ArchiveState? = null,
     val learningStates: List<ArchiveLearningState> = emptyList(),
     /** Per-group states from before learning groups; read, never written. */
-    val groupStates: List<ArchiveGroupState> = emptyList()
+    val groupStates: List<ArchiveGroupState> = emptyList(),
+    /** Stable identifier (see docs/DESIGN.md, "Identity"); absent in files from before them. */
+    val uid: String? = null
 ) {
     val questionText: String get() = (question ?: concept).orEmpty().trim()
     val answerText: String get() = (answer ?: description).orEmpty()
@@ -187,7 +197,9 @@ internal data class ArchiveState(
     val reps: Int = 0,
     val lapses: Int = 0,
     val scheduledDays: Int = 0,
-    val elapsedDays: Int = 0
+    val elapsedDays: Int = 0,
+    /** When this progress was last reset; absent (never) in files from before resets were kept. */
+    val lastReset: Long = 0L
 )
 
 @Serializable
@@ -201,7 +213,9 @@ internal data class ArchiveLearningState(
     val reps: Int = 0,
     val lapses: Int = 0,
     val scheduledDays: Int = 0,
-    val elapsedDays: Int = 0
+    val elapsedDays: Int = 0,
+    /** When this progress was last reset; absent (never) in files from before resets were kept. */
+    val lastReset: Long = 0L
 )
 
 @Serializable
@@ -235,7 +249,17 @@ internal data class ArchiveReviewLog(
     val stabilityMultiplier: Double = 1.0,
     val images: List<String> = emptyList(),
     /** The startTime of the session this review was part of; absent for a quick grade. */
-    val session: Long? = null
+    val session: Long? = null,
+    /** Stable identifier (see docs/DESIGN.md, "Identity"); absent in files from before them. */
+    val uid: String? = null,
+    /** The card's stable identifier; [card] is its question, for reading and for older files. */
+    val cardUid: String? = null,
+    /** The group's stable identifier; [group] is its name at the time. */
+    val groupUid: String? = null,
+    /** The session's stable identifier; [session] is its start time. */
+    val sessionUid: String? = null,
+    /** The opponent's stable identifier; [opponent] is their name. */
+    val opponentUid: String? = null
 )
 
 // ==========================================================================
@@ -305,7 +329,8 @@ internal object ArchiveYaml {
     fun groupNode(group: Group, learningGroupName: String? = null) = ArchiveGroup(
         name = group.name,
         learningGroup = learningGroupName,
-        autoShowAnswer = group.autoShowAnswer
+        autoShowAnswer = group.autoShowAnswer,
+        uid = group.uid
     )
 
     fun learningGroupNode(learningGroup: LearningGroup) = ArchiveLearningGroup(
@@ -317,13 +342,15 @@ internal object ArchiveYaml {
         practiceDays = learningGroup.practiceDays,
         maximumInterval = learningGroup.maximumInterval,
         fsrsRetention = learningGroup.fsrsRetention,
-        fsrsEnableFuzzing = learningGroup.fsrsEnableFuzzing
+        fsrsEnableFuzzing = learningGroup.fsrsEnableFuzzing,
+        uid = learningGroup.uid
     )
 
     fun opponentNode(opponent: Opponent) = ArchiveOpponent(
         name = opponent.name,
         skillMultiplier = opponent.skillMultiplier,
-        notes = opponent.notes
+        notes = opponent.notes,
+        uid = opponent.uid
     )
 
     /**
@@ -349,7 +376,8 @@ internal object ArchiveYaml {
             reps = card.fsrsReps,
             lapses = card.fsrsLapses,
             scheduledDays = card.fsrsScheduledDays,
-            elapsedDays = card.fsrsElapsedDays
+            elapsedDays = card.fsrsElapsedDays,
+            lastReset = card.lastReset
         )
         return ArchiveCard(
             question = card.question,
@@ -368,9 +396,11 @@ internal object ArchiveYaml {
                     reps = learning.fsrsReps,
                     lapses = learning.fsrsLapses,
                     scheduledDays = learning.fsrsScheduledDays,
-                    elapsedDays = learning.fsrsElapsedDays
+                    elapsedDays = learning.fsrsElapsedDays,
+                    lastReset = learning.lastReset
                 )
-            }
+            },
+            uid = card.uid
         )
     }
 
@@ -391,7 +421,9 @@ internal object ArchiveYaml {
         question: String,
         opponentName: String?,
         images: ImageReader,
-        sessionStart: Long? = null
+        sessionStart: Long? = null,
+        cardUid: String? = null,
+        sessionUid: String? = null
     ) = ArchiveReviewLog(
         card = question,
         reviewTime = log.reviewTime,
@@ -409,7 +441,12 @@ internal object ArchiveYaml {
         images = log.imagePaths.split(",")
             .filter { it.isNotBlank() }
             .mapNotNull { CardImportExport.encodeImageToBase64(it, images) },
-        session = sessionStart
+        session = sessionStart,
+        uid = log.uid,
+        cardUid = cardUid,
+        groupUid = log.groupUid,
+        sessionUid = sessionUid,
+        opponentUid = log.opponentUid
     )
 
     /** One session, with its notes and their pictures inlined. */
@@ -419,7 +456,8 @@ internal object ArchiveYaml {
         notes = session.notes,
         images = session.imagePaths.split(",")
             .filter { it.isNotBlank() }
-            .mapNotNull { CardImportExport.encodeImageToBase64(it, images) }
+            .mapNotNull { CardImportExport.encodeImageToBase64(it, images) },
+        uid = session.uid
     )
 
     // ---------- document to the import pipeline ----------
@@ -511,7 +549,8 @@ internal object ArchiveYaml {
     fun parsedOpponent(opponent: ArchiveOpponent) = CardImportExport.ParsedOpponent(
         name = opponent.name.trim(),
         skillMultiplier = opponent.skillMultiplier,
-        notes = opponent.notes
+        notes = opponent.notes,
+        uid = opponent.uid?.takeIf { it.isNotBlank() }
     )
 
     fun parsedReviewLog(log: ArchiveReviewLog) = CardImportExport.ParsedReviewLog(
@@ -529,14 +568,20 @@ internal object ArchiveYaml {
         opponentName = log.opponent?.takeIf { it.isNotBlank() },
         fightDifficulty = log.fightDifficulty,
         stabilityMultiplier = log.stabilityMultiplier,
-        sessionStart = log.session
+        sessionStart = log.session,
+        uid = log.uid?.takeIf { it.isNotBlank() },
+        cardUid = log.cardUid?.takeIf { it.isNotBlank() },
+        groupUid = log.groupUid?.takeIf { it.isNotBlank() },
+        sessionUid = log.sessionUid?.takeIf { it.isNotBlank() },
+        opponentUid = log.opponentUid?.takeIf { it.isNotBlank() }
     )
 
     fun parsedSession(session: ArchiveSession) = CardImportExport.ParsedSession(
         startTime = session.startTime,
         endTime = session.endTime,
         notes = session.notes,
-        imageData = session.images
+        imageData = session.images,
+        uid = session.uid?.takeIf { it.isNotBlank() }
     )
 
     /**
@@ -584,7 +629,7 @@ internal object ArchiveYaml {
                 lineNumber = lineNumber,
                 imageData = card.images
             )
-        }
+        }.copy(uid = card.uid?.takeIf { it.isNotBlank() })
         val learning = card.learningStates.filter { it.learningGroup.isNotBlank() }.map { learningState ->
             parsedCard(
                 question, answer, lineNumber, emptyList(), emptyList(),
@@ -598,7 +643,8 @@ internal object ArchiveYaml {
                     reps = learningState.reps,
                     lapses = learningState.lapses,
                     scheduledDays = learningState.scheduledDays,
-                    elapsedDays = learningState.elapsedDays
+                    elapsedDays = learningState.elapsedDays,
+                    lastReset = learningState.lastReset
                 )
             ).copy(learningGroupState = true)
         }
@@ -644,6 +690,7 @@ internal object ArchiveYaml {
         fsrsLapses = state.lapses,
         fsrsScheduledDays = state.scheduledDays,
         fsrsElapsedDays = state.elapsedDays,
-        groupNames = groupNames
+        groupNames = groupNames,
+        lastReset = state.lastReset
     )
 }

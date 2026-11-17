@@ -182,6 +182,35 @@ class GroupRepository(
         groupDao.deleteLearningGroup(learningGroup)
 
     /** The id of the learning group called [name], creating it if there is none. */
+    /**
+     * Make the groups an import names by stable identifier line up before
+     * anything looks them up by name: a group already here with that
+     * identifier takes the file's name (it was renamed), and one that is not
+     * here at all is created with the file's identifier, unless a group of
+     * that name already exists, which is then the one meant and keeps its own.
+     */
+    suspend fun adoptGroupIdentities(uidsByName: Map<String, String>) {
+        uidsByName.forEach { (name, uid) ->
+            val byUid = groupDao.getGroupByUid(uid)
+            when {
+                byUid != null -> if (byUid.name != name) groupDao.updateGroup(byUid.copy(name = name))
+                groupDao.getGroupByName(name) == null -> groupDao.insertGroup(Group(name = name, uid = uid))
+            }
+        }
+    }
+
+    /** [adoptGroupIdentities], for learning groups. */
+    suspend fun adoptLearningGroupIdentities(uidsByName: Map<String, String>) {
+        uidsByName.forEach { (name, uid) ->
+            val byUid = groupDao.getLearningGroupByUid(uid)
+            when {
+                byUid != null -> if (byUid.name != name) groupDao.updateLearningGroup(byUid.copy(name = name))
+                groupDao.getLearningGroupByName(name) == null ->
+                    groupDao.insertLearningGroup(LearningGroup(name = name, uid = uid))
+            }
+        }
+    }
+
     suspend fun ensureLearningGroup(name: String, description: String = ""): Long =
         groupDao.getLearningGroupByName(name)?.id
             ?: groupDao.insertLearningGroup(LearningGroup(name = name, description = description))

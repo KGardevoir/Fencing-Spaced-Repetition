@@ -101,6 +101,11 @@ internal suspend fun GroupRepository.groupsForImport(parsedCards: List<ParsedCar
         .mapNotNull { it.stateContext }
         .toSet()
 
+    // Identities first: a group or learning group the file names by stable
+    // identifier is found by it -- and takes the file's name if it was
+    // renamed -- before anything looks groups up by name.
+    adoptLearningGroupIdentities(CardImportExport.lastParsedLearningGroupUids)
+    adoptGroupIdentities(CardImportExport.lastParsedGroupUids)
     val groupIds = ensureGroupsExist(groupNames, legacyIndependent)
 
     CardImportExport.lastParsedLearningGroups.forEach { (name, description) ->

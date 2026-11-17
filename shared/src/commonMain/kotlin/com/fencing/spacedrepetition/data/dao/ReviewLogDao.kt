@@ -40,8 +40,26 @@ interface ReviewLogDao {
     @Delete
     suspend fun deleteReviewLog(reviewLog: ReviewLog)
 
-    @Query("UPDATE review_logs SET opponentId = :opponentId WHERE sessionId = :sessionId")
-    suspend fun updateOpponentForSession(sessionId: Long, opponentId: Long?)
+    @Query("UPDATE review_logs SET opponentId = :opponentId, opponentUid = :opponentUid WHERE sessionId = :sessionId")
+    suspend fun updateOpponentForSession(sessionId: Long, opponentId: Long?, opponentUid: String?)
+
+    /**
+     * Reconcile the two halves of every review's opponent reference: fill in
+     * the identifier where only the local id is known, then point each
+     * identified review at whichever local opponent now has that identifier --
+     * which reconnects reviews to an opponent deleted and imported again.
+     */
+    @Query("""
+        UPDATE review_logs SET opponentUid = (SELECT o.uid FROM opponents o WHERE o.id = review_logs.opponentId)
+        WHERE opponentUid IS NULL AND opponentId IS NOT NULL
+    """)
+    suspend fun fillOpponentUids()
+
+    @Query("""
+        UPDATE review_logs SET opponentId = (SELECT o.id FROM opponents o WHERE o.uid = review_logs.opponentUid)
+        WHERE opponentUid IS NOT NULL AND EXISTS (SELECT 1 FROM opponents o WHERE o.uid = review_logs.opponentUid)
+    """)
+    suspend fun relinkOpponentIds()
 
     @Query("DELETE FROM review_logs WHERE cardId = :cardId")
     suspend fun deleteReviewLogsByCard(cardId: Long)

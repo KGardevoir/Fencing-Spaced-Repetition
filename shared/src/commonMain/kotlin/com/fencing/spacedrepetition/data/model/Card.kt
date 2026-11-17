@@ -6,8 +6,11 @@ package com.fencing.spacedrepetition.data.model
 import androidx.room3.Entity
 import androidx.room3.PrimaryKey
 import com.fencing.spacedrepetition.util.Time
+import androidx.room3.ColumnInfo
+import androidx.room3.Index
+import com.fencing.spacedrepetition.util.newUid
 
-@Entity(tableName = "cards")
+@Entity(tableName = "cards", indices = [Index(value = ["uid"], unique = true)])
 data class Card(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
@@ -33,5 +36,15 @@ data class Card(
     val nextReview: Long = 0L,
     val created: Long = Time.now(),
     val modified: Long = Time.now(),
-    val isDisabled: Boolean = false
+    val isDisabled: Boolean = false,
+    /**
+     * When the card's own (Global) progress was last reset, or 0. Reviews
+     * before it are history, not progress: they stay in the review log but no
+     * longer count towards anything derived from it, such as concepts.
+     */
+    @ColumnInfo(defaultValue = "0")
+    val lastReset: Long = 0L,
+    /** Stable identifier, unique and kept for life; see docs/DESIGN.md, "Identity". */
+    @ColumnInfo(defaultValue = "''")
+    val uid: String = newUid()
 )

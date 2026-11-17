@@ -17,10 +17,14 @@ import androidx.sqlite.execSQL
  * are enforced -- is SQLite's, and a fake would simply agree with whatever the
  * test author believed.
  */
-internal class MigrationHarness(foreignKeys: Boolean) : AutoCloseable {
+internal class MigrationHarness(
+    foreignKeys: Boolean,
+    /** A file to build the database in, for handing on to Room; in memory by default. */
+    path: String = ":memory:"
+) : AutoCloseable {
 
     private val connection: SQLiteConnection =
-        BundledSQLiteDriver().open(":memory:")
+        BundledSQLiteDriver().open(path)
 
     init {
         // Set before any transaction: PRAGMA foreign_keys is a no-op inside
@@ -37,22 +41,33 @@ internal class MigrationHarness(foreignKeys: Boolean) : AutoCloseable {
     fun exec(sql: String) = connection.execSQL(sql)
 
     /**
-     * Run the shipped migration for [from] -> [from] + 1.
+     * Run the shipped migration for [from] -> [to] (by default the next version).
      *
      * Looked up in [ALL_MIGRATIONS] rather than referenced directly, so the
      * tests exercise the array the database is actually built with. A
      * migration that was written but never registered fails here.
      */
-    suspend fun migrate(from: Int) {
+    suspend fun migrate(from: Int, to: Int = from + 1) {
         val migration = ALL_MIGRATIONS.singleOrNull {
-            it.startVersion == from && it.endVersion == from + 1
-        } ?: error("No migration $from -> ${from + 1} in ALL_MIGRATIONS")
+            it.startVersion == from && it.endVersion == to
+        } ?: error("No migration $from -> $to in ALL_MIGRATIONS")
         migration.migrate(connection)
     }
 
-    /** Run every registered migration from [from] up to [to], in order. */
+    /**
+     * Run every registered migration from [from] up to [to], in order,
+     * following the chain as registered -- including the deliberate jump from
+     * 17 to 22 (see [com.fencing.spacedrepetition.data.MIGRATION_SKIPPED_VERSIONS]).
+     */
     suspend fun migrateThrough(from: Int, to: Int) {
-        for (version in from until to) migrate(version)
+        var version = from
+        while (version < to) {
+            val next = ALL_MIGRATIONS.singleOrNull { it.startVersion == version }
+                ?: error("No migration from $version in ALL_MIGRATIONS")
+            next.migrate(connection)
+            version = next.endVersion
+        }
+        check(version == to) { "The chain from $from passes $to: it reached $version" }
     }
 
     fun count(table: String): Long =

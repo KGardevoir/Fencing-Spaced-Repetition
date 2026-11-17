@@ -27,7 +27,7 @@ import com.fencing.spacedrepetition.util.Time
 
 @Database(
     entities = [Card::class, PracticeSession::class, ReviewLog::class, Group::class, CardGroupCrossRef::class, CardLearningState::class, LearningGroup::class, Opponent::class],
-    version = 17,
+    version = 22,
     exportSchema = true
 )
 @ColumnTypeConverters(Converters::class)
@@ -868,6 +868,75 @@ private val MIGRATION_16_17 = object : Migration(16, 17) {
 }
 
 /**
+ * Stable identifiers on every record, the group a review was made in by
+ * identifier, and the time each set of card progress was last reset.
+ * Additive only: no table is rebuilt.
+ *
+ * Numbered 22, not 18: versions 18 to 21 were used by builds of the
+ * learning-concepts work (which also added identifiers, alongside concepts)
+ * and are installed on devices, so they can never mean another schema.
+ * See docs/DESIGN.md, "Migrations".
+ */
+private val MIGRATION_17_22 = object : Migration(17, 22) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        // Stable identifiers. Every existing row gets a fresh random UUID;
+        // from here on a row is made with one and keeps it for life, so a
+        // rename -- or a trip to another device -- no longer changes what a
+        // record is. See docs/DESIGN.md, "Identity".
+        listOf("cards", "groups", "learning_groups", "opponents", "practice_sessions", "review_logs").forEach { table ->
+            connection.execSQL("ALTER TABLE `$table` ADD COLUMN `uid` TEXT NOT NULL DEFAULT ''")
+            connection.execSQL("UPDATE `$table` SET `uid` = $RANDOM_UUID_SQL")
+            connection.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_${table}_uid` ON `$table` (`uid`)")
+        }
+
+        // Which group a review was made in, by its stable identifier rather
+        // than its name. Filled from the name as best it can be: the oldest
+        // group of that name, since names were never unique. A log naming a
+        // group that no longer exists keeps no identifier.
+        connection.execSQL("ALTER TABLE `review_logs` ADD COLUMN `groupUid` TEXT")
+        // And who it was against, by identifier; the local opponentId is a soft
+        // reference that a deleted opponent leaves dangling.
+        connection.execSQL("ALTER TABLE `review_logs` ADD COLUMN `opponentUid` TEXT")
+        connection.execSQL("""
+            UPDATE `review_logs` SET `opponentUid` = (
+                SELECT o.`uid` FROM `opponents` o WHERE o.`id` = `review_logs`.`opponentId`
+            )
+            WHERE `opponentId` IS NOT NULL
+        """)
+        connection.execSQL("""
+            UPDATE `review_logs` SET `groupUid` = (
+                SELECT g.`uid` FROM `groups` g WHERE g.`name` = `review_logs`.`groupName`
+                ORDER BY g.`id` LIMIT 1
+            )
+            WHERE `groupName` IS NOT NULL
+        """)
+
+        // When each set of progress was last reset; 0 is never. Reviews before
+        // a reset stop counting towards what is derived from history.
+        connection.execSQL("ALTER TABLE `cards` ADD COLUMN `lastReset` INTEGER NOT NULL DEFAULT 0")
+        connection.execSQL("ALTER TABLE `card_learning_state` ADD COLUMN `lastReset` INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+/**
+ * Versions no migration on this line ever produces: 18 to 21 were used by
+ * the learning-concepts builds, which are installed on devices, so they can
+ * never be given another schema. [MIGRATION_17_22] steps over them.
+ */
+internal val MIGRATION_SKIPPED_VERSIONS = setOf(18, 19, 20, 21)
+
+/**
+ * A version 4 UUID, in canonical lower-case form, as an SQLite expression --
+ * evaluated afresh for every row an UPDATE touches. SQLite has no uuid()
+ * of its own.
+ */
+private const val RANDOM_UUID_SQL =
+    "lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || " +
+        "substr(lower(hex(randomblob(2))), 2) || '-' || " +
+        "substr('89ab', 1 + (abs(random()) % 4), 1) || substr(lower(hex(randomblob(2))), 2) || '-' || " +
+        "lower(hex(randomblob(6)))"
+
+/**
  * Every migration, oldest first. The SQL is identical on every platform, so
  * each platform's builder passes this same array and there is nothing here
  * for a target to override.
@@ -889,4 +958,5 @@ val ALL_MIGRATIONS: Array<Migration> = arrayOf(
     MIGRATION_14_15,
     MIGRATION_15_16,
     MIGRATION_16_17,
+    MIGRATION_17_22,
 )

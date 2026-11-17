@@ -18,6 +18,9 @@ interface OpponentDao {
     @Query("SELECT * FROM opponents WHERE id = :id")
     suspend fun getOpponentById(id: Long): Opponent?
 
+    @Query("SELECT * FROM opponents WHERE uid = :uid LIMIT 1")
+    suspend fun findByUid(uid: String): Opponent?
+
     @Query("SELECT * FROM opponents WHERE name = :name LIMIT 1")
     suspend fun findByName(name: String): Opponent?
 

@@ -180,6 +180,14 @@ object CardImportExport {
         "practiceDays", "maximumInterval", "fsrsRetention", "fsrsEnableFuzzing"
     )
 
+    /** The stable identifier the file gives each group it lists, by name. */
+    var lastParsedGroupUids: Map<String, String> = emptyMap()
+        private set
+
+    /** The stable identifier the file gives each learning group it declares, by name. */
+    var lastParsedLearningGroupUids: Map<String, String> = emptyMap()
+        private set
+
     /** Parsed review history from an import file (populated after calling parseCards) */
     var lastParsedReviewHistory: List<ParsedReviewLog> = emptyList()
         private set
@@ -200,14 +208,16 @@ object CardImportExport {
         val startTime: Long,
         val endTime: Long? = null,
         val notes: String = "",
-        val imageData: List<String> = emptyList() // base64-encoded images
+        val imageData: List<String> = emptyList(), // base64-encoded images
+        val uid: String? = null
     )
 
     /** An opponent an import found, in either format. */
     data class ParsedOpponent(
         val name: String,
         val skillMultiplier: Double,
-        val notes: String
+        val notes: String,
+        val uid: String? = null
     )
 
     /**
@@ -227,6 +237,8 @@ object CardImportExport {
         lastParsedGroupSettings = emptyMap()
         lastParsedLearningGroups = emptyMap()
         lastParsedLearningGroupSettings = emptyMap()
+        lastParsedGroupUids = emptyMap()
+        lastParsedLearningGroupUids = emptyMap()
         lastParsedOpponents = emptyList()
         lastParsedReviewHistory = emptyList()
         lastParsedSessions = emptyList()
@@ -275,10 +287,14 @@ object CardImportExport {
         lastParsedLearningGroupSettings = learningGroups
             .associate { it.name.trim() to ArchiveYaml.learningGroupSettings(it) }
             .filterValues { it.isNotEmpty() }
-        lastParsedGroupSettings = ArchiveYaml
+        lastParsedLearningGroupUids = learningGroups
+            .mapNotNull { lg -> lg.uid?.takeIf { it.isNotBlank() }?.let { lg.name.trim() to it } }.toMap()
+        val groups = ArchiveYaml
             .decodeSection(document, KEY_GROUPS, ArchiveGroup.serializer(), errors)
             .filter { it.name.isNotBlank() }
-            .associate { it.name.trim() to ArchiveYaml.groupSettings(it) }
+        lastParsedGroupSettings = groups.associate { it.name.trim() to ArchiveYaml.groupSettings(it) }
+        lastParsedGroupUids = groups
+            .mapNotNull { g -> g.uid?.takeIf { it.isNotBlank() }?.let { g.name.trim() to it } }.toMap()
         lastParsedOpponents = ArchiveYaml
             .decodeSection(document, KEY_OPPONENTS, ArchiveOpponent.serializer(), errors)
             .map { ArchiveYaml.parsedOpponent(it) }
@@ -713,13 +729,19 @@ object CardImportExport {
                 ArchiveYaml.cardNode(card, groupNames, learningStates, images)
             }
             val learningGroupNames = learningGroups.associate { it.id to it.name }
+            // Every group a written card is in -- so the file carries each
+            // one's stable identifier -- plus any with settings or a learning
+            // group of their own.
+            val referencedGroupNames = cardsWithStates.flatMap { it.groupNames }.toSet()
             val writtenGroups = groupSettings.filter {
-                it.hasCustomSettings() || it.learningGroupId in learningGroupNames
+                it.name in referencedGroupNames || it.hasCustomSettings() || it.learningGroupId in learningGroupNames
             }
             // Only the learning groups the written groups use.
             val writtenLearningGroupIds = writtenGroups.mapNotNull { it.learningGroupId }.toSet()
 
             val startBySessionId = sessions.associate { it.id to it.startTime }
+            val uidBySessionId = sessions.associate { it.id to it.uid }
+            val uidByCardId = cardsWithStates.associate { it.card.id to it.card.uid }
             val historyLogs = if (reviewLogs.isEmpty() || cardQuestions.isEmpty()) emptyList() else {
                 reviewLogs.filter { it.cardId in cardQuestions }
             }
@@ -729,7 +751,9 @@ object CardImportExport {
                     cardQuestions.getValue(log.cardId),
                     log.opponentId?.let { opponentNamesById[it] },
                     images,
-                    sessionStart = log.sessionId?.let { startBySessionId[it] }
+                    sessionStart = log.sessionId?.let { startBySessionId[it] },
+                    cardUid = uidByCardId[log.cardId],
+                    sessionUid = log.sessionId?.let { uidBySessionId[it] }
                 )
             }
             // Only the sessions the written history belongs to: a session is
@@ -746,9 +770,6 @@ object CardImportExport {
                 ArchiveDocument(
                     learningGroups = learningGroups.filter { it.id in writtenLearningGroupIds }
                         .map { ArchiveYaml.learningGroupNode(it) },
-                    // Only the groups with settings or a learning group of
-                    // their own. A group with neither is already described by
-                    // the cards that name it.
                     groups = writtenGroups.map {
                         ArchiveYaml.groupNode(it, it.learningGroupId?.let(learningGroupNames::get))
                     },
@@ -797,7 +818,9 @@ object CardImportExport {
                 fsrsScheduledDays = parsed.fsrsScheduledDays ?: 0,
                 fsrsElapsedDays = parsed.fsrsElapsedDays ?: 0,
                 created = now,
-                modified = now
+                modified = now,
+                lastReset = parsed.lastReset ?: 0L,
+                uid = parsed.uid ?: newUid()
             )
         } else {
             Card(
@@ -805,7 +828,8 @@ object CardImportExport {
                 answer = parsed.answer,
                 imagePaths = parsed.imagePaths,
                 created = now,
-                modified = now
+                modified = now,
+                uid = parsed.uid ?: newUid()
             )
         }
     }
@@ -1040,7 +1064,12 @@ object CardImportExport {
         val fightDifficulty: Int? = null,
         val stabilityMultiplier: Double = 1.0,
         /** The startTime of the session this review was part of; null for a quick grade. */
-        val sessionStart: Long? = null
+        val sessionStart: Long? = null,
+        val uid: String? = null,
+        val cardUid: String? = null,
+        val groupUid: String? = null,
+        val sessionUid: String? = null,
+        val opponentUid: String? = null
     )
 
     /**
@@ -1110,13 +1139,18 @@ object CardImportExport {
         parsed: List<ParsedReviewLog>,
         questionToCardId: Map<String, Long>,
         opponentNameToId: Map<String, Long> = emptyMap(),
-        sessionIdByStart: Map<Long, Long> = emptyMap()
+        sessionIdByStart: Map<Long, Long> = emptyMap(),
+        cardIdByUid: Map<String, Long> = emptyMap(),
+        sessionIdByUid: Map<String, Long> = emptyMap()
     ): List<ReviewLog> {
         return parsed.mapNotNull { p ->
-            val cardId = questionToCardId[p.cardQuestion] ?: return@mapNotNull null
+            // By stable identifier where the file has one, by question otherwise.
+            val cardId = p.cardUid?.let { cardIdByUid[it] }
+                ?: questionToCardId[p.cardQuestion]
+                ?: return@mapNotNull null
             ReviewLog(
                 cardId = cardId,
-                sessionId = p.sessionStart?.let { sessionIdByStart[it] },
+                sessionId = p.sessionUid?.let { sessionIdByUid[it] } ?: p.sessionStart?.let { sessionIdByStart[it] },
                 reviewTime = p.reviewTime,
                 grade = p.grade,
                 algorithm = p.algorithm,
@@ -1128,7 +1162,10 @@ object CardImportExport {
                 notes = p.notes,
                 opponentId = p.opponentName?.let { opponentNameToId[it] },
                 fightDifficulty = p.fightDifficulty,
-                stabilityMultiplier = p.stabilityMultiplier
+                stabilityMultiplier = p.stabilityMultiplier,
+                groupUid = p.groupUid,
+                opponentUid = p.opponentUid,
+                uid = p.uid ?: newUid()
             )
         }
     }

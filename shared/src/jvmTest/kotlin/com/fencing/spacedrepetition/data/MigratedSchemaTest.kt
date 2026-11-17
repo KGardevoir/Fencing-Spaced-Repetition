@@ -204,18 +204,19 @@ class MigratedSchemaTest {
             .map { it.startVersion to it.endVersion }
             .sortedBy { it.first }
 
+        // One step at a time, except where versions were deliberately skipped
+        // because builds elsewhere already used them (see MIGRATION_SKIPPED_VERSIONS).
         steps.forEach { (from, to) ->
-            assertEquals(from + 1, to, "migration $from -> $to skips a version")
+            val skipped = (from + 1 until to).toSet()
+            assertTrue(skipped.all { it in MIGRATION_SKIPPED_VERSIONS }, "migration $from -> $to skips a version")
         }
 
         val starts = steps.map { it.first }
         assertEquals(starts.distinct(), starts, "two migrations start at the same version: $starts")
         assertEquals(1, steps.first().first, "the chain does not start at version 1")
-        assertEquals(
-            steps.size,
-            steps.last().second - steps.first().first,
-            "the chain has a hole in it: $steps"
-        )
+        steps.zipWithNext().forEach { (a, b) ->
+            assertEquals(a.second, b.first, "the chain has a hole in it: $steps")
+        }
     }
 
     @Test
