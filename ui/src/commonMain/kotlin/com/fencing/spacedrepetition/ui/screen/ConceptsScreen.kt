@@ -23,7 +23,12 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,6 +43,7 @@ import com.fencing.spacedrepetition.ui.components.rememberSelectionState
 import com.fencing.spacedrepetition.ui.viewmodel.ConceptSummary
 import com.fencing.spacedrepetition.util.Time
 import com.fencing.spacedrepetition.util.formatDate
+import com.fencing.spacedrepetition.util.toTwoDecimals
 
 /**
  * The learning concepts: what each is, which cards carry it, which card
@@ -78,6 +84,23 @@ fun ConceptsScreen(
     val selection = rememberSelectionState(concepts.map { it.concept.id })
     var query by rememberSaveable { mutableStateOf("") }
     var confirmRederive by remember { mutableStateOf(false) }
+
+    // Editing is a full screen of its own, in place of the list.
+    editing?.let { summary ->
+        // The live row where there is one, so a rederive shows at once.
+        ConceptEditScreen(
+            summary = concepts.find { it.concept.id == summary.concept.id && summary.concept.id != 0L } ?: summary,
+            globalConceptScheduling = globalConceptScheduling,
+            concepts = concepts.map { it.concept },
+            learningGroups = learningGroups,
+            onSave = { updated, learningGroupIds ->
+                onSaveConcept(updated, learningGroupIds)
+                editing = null
+            },
+            onDismiss = { editing = null }
+        )
+        return
+    }
 
     // Learning-context filter chips, as on the card list: null is Global.
     var contextFilters by remember { mutableStateOf(emptySet<Long?>()) }
@@ -232,21 +255,6 @@ fun ConceptsScreen(
         }
     }
 
-    editing?.let { summary ->
-        // The live row where there is one, so a reset shows at once.
-        ConceptEditDialog(
-            summary = concepts.find { it.concept.id == summary.concept.id && summary.concept.id != 0L } ?: summary,
-            globalConceptScheduling = globalConceptScheduling,
-            concepts = concepts.map { it.concept },
-            learningGroups = learningGroups,
-            onSave = { updated, learningGroupIds ->
-                onSaveConcept(updated, learningGroupIds)
-                editing = null
-            },
-            onDismiss = { editing = null }
-        )
-    }
-
     deleting?.let { doomed ->
         val cardCount = doomed.flatMap { it.cardIds }.toSet().size
         val what = doomed.singleOrNull()?.let { "\"${it.concept.name}\"" } ?: "${doomed.size} concepts"
@@ -393,26 +401,6 @@ private fun ConceptRow(
     }
 }
 
-/** "Global · REVIEW · due 3 Dec" -- one learning context's progress, on one line. */
-@Composable
-private fun StateLine(learningGroup: LearningGroup?, state: ConceptLearningState, enabled: Boolean) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
-        Icon(
-            if (learningGroup == null) Icons.Default.Public else AppIcons.LearningGroup,
-            contentDescription = null,
-            modifier = Modifier.size(16.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(
-            "${learningGroup?.name ?: "Global"} · " +
-                if (enabled) describeState(state) else "concept scheduling off",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
 internal fun describeState(state: ConceptLearningState): String = when {
     state.fsrsState == "NEW" && state.fsrsReps == 0 -> "new"
     state.nextReview <= Time.now() -> "${state.fsrsState.lowercase()} · due now"
@@ -420,16 +408,19 @@ internal fun describeState(state: ConceptLearningState): String = when {
 }
 
 /**
- * A concept's name and description, where it is available -- the learning
- * contexts whose cards may be tagged with it -- and, for one that exists, its
- * progress.
+ * A concept, full screen: its name and description, every learning parameter
+ * of its progress in the learning context picked from the drop-down, and
+ * where it is available -- the learning contexts whose cards may be tagged
+ * with it.
  *
- * Every learning context can be chosen: tagging is always allowed. One whose
- * concept scheduling is off says so -- its cards can carry the concept, but
- * are scheduled card by card until the switch is turned on.
+ * Progress is derived from the review history of the concept's cards, so it
+ * is shown, not edited. Every learning context can be chosen for
+ * availability: tagging is always allowed. One whose concept scheduling is
+ * off says so.
  */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
-private fun ConceptEditDialog(
+private fun ConceptEditScreen(
     summary: ConceptSummary,
     globalConceptScheduling: Boolean,
     concepts: List<Concept>,
@@ -443,8 +434,10 @@ private fun ConceptEditDialog(
     var description by rememberSaveable { mutableStateOf(concept.description) }
     var inGlobal by rememberSaveable { mutableStateOf(concept.inGlobal) }
     var checkedLearningGroups by remember { mutableStateOf(summary.learningGroupIds) }
+    BackHandler(onBack = onDismiss)
 
     val nameTaken = concepts.any { it.id != concept.id && it.name.equals(name.trim(), ignoreCase = true) }
+    val canSave = name.isNotBlank() && !nameTaken
     fun save() {
         onSave(
             concept.copy(name = name.trim(), description = description.trim(), inGlobal = inGlobal),
@@ -452,100 +445,164 @@ private fun ConceptEditDialog(
         )
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Default.Lightbulb, contentDescription = null) },
-        title = { Text(if (isNew) "New Concept" else "Edit Concept") },
-        text = {
-            LazyColumn(modifier = Modifier.heightIn(max = 520.dp)) {
-                item {
-                    OutlinedTextField(
-                        value = name,
-                        onValueChange = { name = it },
-                        label = { Text("Name") },
-                        singleLine = true,
-                        isError = nameTaken,
-                        supportingText = if (nameTaken) {
-                            { Text("That name is already in use") }
-                        } else null,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = description,
-                        onValueChange = { description = it },
-                        label = { Text("Description (Optional)") },
-                        minLines = 2,
-                        maxLines = 3,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                if (!isNew && summary.states.isNotEmpty()) {
-                    item {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            "Progress",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            "Derived from the review history of this concept's cards.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    // Keys are per section: progress and availability rows are both
-                    // per learning group, and share this list.
-                    items(summary.states, key = { "progress-${it.first?.id ?: "global"}" }) { entry ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(modifier = Modifier.weight(1f)) {
-                                StateLine(entry.first, entry.second, entry.first?.useConcepts ?: globalConceptScheduling)
-                            }
-                        }
-                    }
-                }
-                item {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        "Available in",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        "Cards learnt here can be tagged with this concept. Leave everything " +
-                            "unticked to make it available everywhere.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                item {
-                    AvailabilityRow("Global", Icons.Default.Public, inGlobal, schedulingOn = globalConceptScheduling) {
-                        inGlobal = it
-                    }
-                }
-                items(learningGroups, key = { "available-${it.id}" }) { learningGroup ->
-                    AvailabilityRow(
-                        learningGroup.name,
-                        AppIcons.LearningGroup,
-                        learningGroup.id in checkedLearningGroups,
-                        schedulingOn = learningGroup.useConcepts
-                    ) {
-                        checkedLearningGroups =
-                            if (it) checkedLearningGroups + learningGroup.id else checkedLearningGroups - learningGroup.id
-                    }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(if (isNew) "New Concept" else "Edit Concept") },
+                navigationIcon = {
+                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Cancel") }
+                },
+                actions = {
+                    TextButton(onClick = { save() }, enabled = canSave) { Text(if (isNew) "Add" else "Save") }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
+        ) {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Name") },
+                singleLine = true,
+                isError = nameTaken,
+                supportingText = if (nameTaken) {
+                    { Text("That name is already in use") }
+                } else null,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = description,
+                onValueChange = { description = it },
+                label = { Text("Description (Optional)") },
+                minLines = 2,
+                maxLines = 5,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            if (!isNew) {
+                SectionTitle("Learning parameters", "Derived from the review history of this concept's cards.")
+                LearningParameters(summary, learningGroups, globalConceptScheduling)
+            }
+
+            SectionTitle("Available in", "Leave everything unticked to make it available everywhere.")
+            AvailabilityRow("Global", Icons.Default.Public, inGlobal, schedulingOn = globalConceptScheduling) {
+                inGlobal = it
+            }
+            learningGroups.forEach { learningGroup ->
+                AvailabilityRow(
+                    learningGroup.name,
+                    AppIcons.LearningGroup,
+                    learningGroup.id in checkedLearningGroups,
+                    schedulingOn = learningGroup.useConcepts
+                ) {
+                    checkedLearningGroups =
+                        if (it) checkedLearningGroups + learningGroup.id else checkedLearningGroups - learningGroup.id
                 }
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { save() },
-                enabled = name.isNotBlank() && !nameTaken
-            ) { Text(if (isNew) "Add" else "Save") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            Spacer(modifier = Modifier.height(32.dp))
+        }
+    }
+}
+
+@Composable
+private fun SectionTitle(title: String, hint: String) {
+    Spacer(modifier = Modifier.height(24.dp))
+    Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+    Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Spacer(modifier = Modifier.height(8.dp))
+}
+
+/**
+ * Every learning parameter of the concept in one learning context, chosen
+ * from a drop-down of Global and every learning group. Where the concept has
+ * no progress yet, it reads as new.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LearningParameters(
+    summary: ConceptSummary,
+    learningGroups: List<LearningGroup>,
+    globalConceptScheduling: Boolean
+) {
+    val contexts: List<LearningGroup?> = listOf<LearningGroup?>(null) + learningGroups
+    // Start on the first context the concept has progress in.
+    var context by remember(summary.concept.id) {
+        mutableStateOf(summary.states.firstOrNull()?.first?.id)
+    }
+    var expanded by remember { mutableStateOf(false) }
+    val learningGroup = learningGroups.find { it.id == context }
+    val state = summary.states.find { it.first?.id == context }?.second
+        ?: if (context == null) summary.concept.globalState()
+        else ConceptLearningState(conceptId = summary.concept.id, learningGroupId = context ?: 0L)
+    val schedulingOn = learningGroup?.useConcepts ?: globalConceptScheduling
+
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = learningGroup?.name ?: "Global",
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Learning group") },
+            leadingIcon = {
+                Icon(if (learningGroup == null) Icons.Default.Public else AppIcons.LearningGroup, contentDescription = null)
+            },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            contexts.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option?.name ?: "Global") },
+                    leadingIcon = {
+                        Icon(if (option == null) Icons.Default.Public else AppIcons.LearningGroup, contentDescription = null)
+                    },
+                    onClick = { context = option?.id; expanded = false }
+                )
+            }
+        }
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+
+    val isNew = state.fsrsState == "NEW" && state.fsrsReps == 0
+    if (!schedulingOn) {
+        Text(
+            "Concept scheduling is off here: shown, but not used to draw cards.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.tertiary
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+    }
+    ParameterRow("State", if (isNew) "New" else state.fsrsState.lowercase().replaceFirstChar { it.uppercase() })
+    ParameterRow("Stability", if (isNew) "—" else "${state.fsrsStability.toTwoDecimals()} days")
+    ParameterRow("Difficulty", if (isNew) "—" else state.fsrsDifficulty.toTwoDecimals())
+    ParameterRow("Reviews", state.fsrsReps.toString())
+    ParameterRow("Lapses", state.fsrsLapses.toString())
+    ParameterRow("Last review", if (state.lastReview > 0) formatDate(state.lastReview) else "—")
+    ParameterRow("Interval", if (isNew) "—" else "${state.fsrsScheduledDays} days")
+    ParameterRow(
+        "Next review",
+        when {
+            isNew || state.nextReview <= 0 -> "—"
+            state.nextReview <= Time.now() -> "Due now"
+            else -> formatDate(state.nextReview)
         }
     )
+}
+
+@Composable
+private fun ParameterRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+    }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 }
 
 @Composable
