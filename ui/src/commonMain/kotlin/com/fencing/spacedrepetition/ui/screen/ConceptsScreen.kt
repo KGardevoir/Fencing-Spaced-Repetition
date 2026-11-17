@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -78,10 +79,16 @@ fun ConceptsScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var confirmRederive by remember { mutableStateOf(false) }
 
-    val shown = if (query.isBlank()) concepts else concepts.filter { summary ->
-        summary.concept.name.contains(query.trim(), ignoreCase = true) ||
+    // Learning-context filter chips, as on the card list: null is Global.
+    var contextFilters by remember { mutableStateOf(emptySet<Long?>()) }
+    val learningGroupIds = learningGroups.map { it.id }.toSet()
+
+    val shown = concepts.filter { summary ->
+        (query.isBlank() ||
+            summary.concept.name.contains(query.trim(), ignoreCase = true) ||
             summary.concept.description.contains(query.trim(), ignoreCase = true) ||
-            summary.groups.any { it.name.contains(query.trim(), ignoreCase = true) }
+            summary.groups.any { it.name.contains(query.trim(), ignoreCase = true) }) &&
+            (contextFilters.isEmpty() || conceptContextsOf(summary, learningGroupIds).any { it in contextFilters })
     }
 
     Scaffold(
@@ -166,6 +173,37 @@ fun ConceptsScreen(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
+                }
+            }
+            if (concepts.isNotEmpty()) {
+                item {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        item {
+                            FilterChip(
+                                selected = contextFilters.isEmpty(),
+                                onClick = { contextFilters = emptySet() },
+                                label = { Text("All") }
+                            )
+                        }
+                        item {
+                            FilterChip(
+                                selected = null in contextFilters,
+                                onClick = { contextFilters = contextFilters.toggled(null) },
+                                label = { Text("Global") },
+                                leadingIcon = { Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                            )
+                        }
+                        items(learningGroups, key = { it.id }) { learningGroup ->
+                            FilterChip(
+                                selected = learningGroup.id in contextFilters,
+                                onClick = { contextFilters = contextFilters.toggled(learningGroup.id) },
+                                label = { Text(learningGroup.name) },
+                                leadingIcon = {
+                                    Icon(AppIcons.LearningGroup, contentDescription = null, modifier = Modifier.size(16.dp))
+                                }
+                            )
+                        }
+                    }
                 }
             }
             if (concepts.isEmpty()) {
@@ -267,6 +305,22 @@ fun ConceptsScreen(
             confirmButton = { TextButton(onClick = onClearError) { Text("OK") } }
         )
     }
+}
+
+private fun <T> Set<T>.toggled(item: T): Set<T> = if (item in this) this - item else this + item
+
+/**
+ * The learning contexts a concept is in, for the filter chips (null is
+ * Global): where it is restricted to, when it is; otherwise -- available
+ * everywhere -- where its cards are learnt.
+ */
+private fun conceptContextsOf(summary: ConceptSummary, learningGroupIds: Set<Long>): Set<Long?> {
+    val restricted = buildSet<Long?> {
+        addAll(summary.learningGroupIds)
+        if (summary.concept.inGlobal) add(null)
+    }
+    if (restricted.isNotEmpty()) return restricted
+    return summary.groups.map { group -> group.learningGroupId?.takeIf { it in learningGroupIds } }.toSet()
 }
 
 @OptIn(ExperimentalFoundationApi::class)
