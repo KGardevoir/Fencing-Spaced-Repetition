@@ -110,10 +110,13 @@ class ConceptRepository(private val conceptDao: ConceptDao) {
      * Create or update the concepts an import carries, and any it only names
      * on cards, returning name -> id for linking the cards.
      *
-     * A concept described in the file has its states replaced by the file's,
-     * the way an imported card's are: Global from `state` (new when absent),
-     * and the learning-group states it lists, each found or created by name
-     * through [learningGroupId].
+     * Everything about a concept but its progress is the file's: its name
+     * (followed by stable identifier), its description, and -- when the file
+     * says -- where it is available. Its progress is not: a concept already
+     * here keeps its own (it is derived from history anyway), and only a
+     * concept new here starts from the states the file carries, each
+     * learning group found or created by name through [learningGroupId].
+     * See docs/DESIGN.md, "Archive".
      */
     suspend fun importConcepts(
         parsed: List<com.fencing.spacedrepetition.util.CardImportExport.ParsedConcept>,
@@ -122,30 +125,34 @@ class ConceptRepository(private val conceptDao: ConceptDao) {
     ): Map<String, Long> {
         val ids = mutableMapOf<String, Long>()
         parsed.forEach { concept ->
+            val wasHere = concept.uid?.let { conceptDao.getConceptByUid(it) } != null ||
+                conceptDao.getConceptByName(concept.name) != null
             val id = adoptConcept(concept)
             ids[concept.name] = id
-            conceptDao.getConceptById(id)?.let { existing ->
+            val current = conceptDao.getConceptById(id) ?: return@forEach
+
+            // What it is, and where it is available when the file says.
+            val availableIn = concept.availableIn
+            var updated = current.copy(description = concept.description.trim(), modified = Time.now())
+            if (availableIn != null) updated = updated.copy(inGlobal = concept.inGlobal)
+
+            // Progress only for a concept that is new here.
+            if (!wasHere) {
                 val global = (concept.globalState ?: ConceptLearningState(id, 0L)).copy(conceptId = id)
-                conceptDao.updateConcept(
-                    existing.withGlobalState(global).copy(
-                        description = concept.description.ifBlank { existing.description }
+                updated = updated.withGlobalState(global).copy(modified = Time.now())
+                concept.learningStates.forEach { (learningGroupName, state) ->
+                    conceptDao.upsertConceptLearningState(
+                        state.copy(conceptId = id, learningGroupId = learningGroupId(learningGroupName))
                     )
-                )
-            }
-            // Where it is available, when the file says: a file from before
-            // availability says neither, and leaves it as it is here.
-            if (concept.inGlobal || concept.availableIn.isNotEmpty()) {
-                conceptDao.getConceptById(id)?.let { conceptDao.updateConcept(it.copy(inGlobal = concept.inGlobal)) }
-                conceptDao.deleteLearningGroupsForConcept(id)
-                concept.availableIn.forEach { name ->
-                    conceptDao.insertConceptLearningGroup(ConceptLearningGroupCrossRef(id, learningGroupId(name)))
                 }
             }
-            conceptDao.deleteAllLearningStatesForConcept(id)
-            concept.learningStates.forEach { (learningGroupName, state) ->
-                conceptDao.upsertConceptLearningState(
-                    state.copy(conceptId = id, learningGroupId = learningGroupId(learningGroupName))
-                )
+            conceptDao.updateConcept(updated)
+
+            if (availableIn != null) {
+                conceptDao.deleteLearningGroupsForConcept(id)
+                availableIn.forEach { name ->
+                    conceptDao.insertConceptLearningGroup(ConceptLearningGroupCrossRef(id, learningGroupId(name)))
+                }
             }
         }
         (namedOnCards - ids.keys).forEach { name ->

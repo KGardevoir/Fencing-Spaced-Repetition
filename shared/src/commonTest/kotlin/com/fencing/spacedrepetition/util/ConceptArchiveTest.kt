@@ -220,4 +220,48 @@ class ConceptArchiveTest {
         assertTrue(parsed.inGlobal)
         assertEquals(listOf("Bouting"), parsed.availableIn)
     }
+
+    @Test
+    fun exportsAlwaysSayWhichConceptsACardHasSoAnImportCanClearThem() {
+        val text = export(
+            cards = listOf(CardWithGroupStates(Card(id = 1, question = "Plain", answer = ""), emptyList())),
+            concepts = emptyList()
+        )
+        assertTrue("concepts: []" in text, text)
+        val (parsed, _) = CardImportExport.parseCards(text.lines())
+        assertTrue(parsed.single().conceptsStated)
+        assertEquals(emptyList(), parsed.single().conceptNames)
+    }
+
+    @Test
+    fun aFileFromBeforeConceptsDoesNotSayAndLeavesThemAlone() {
+        val (parsed, _) = CardImportExport.parseCards(listOf("version: 5", "cards:", "  - question: \"Q\""))
+        assertTrue(!parsed.single().conceptsStated)
+    }
+
+    @Test
+    fun aConceptAvailableNowhereSaysSo() {
+        val text = export(
+            cards = listOf(CardWithGroupStates(Card(id = 1, question = "Q", answer = ""), emptyList(), conceptNames = listOf("Distance"))),
+            concepts = listOf(ConceptWithStates(Concept(id = 1, name = "Distance")))
+        )
+        CardImportExport.parseCards(text.lines())
+        assertEquals(emptyList(), CardImportExport.lastParsedConcepts.single().availableIn)
+    }
+
+    @Test
+    fun aGroupsDescriptionTravels() {
+        val group = com.fencing.spacedrepetition.data.model.Group(id = 1, name = "Footwork", description = "Feet first")
+        val out = StringBuilder()
+        CardImportExport.exportCardsWithGroupStates(
+            listOf(CardWithGroupStates(Card(id = 1, question = "Q", answer = ""), listOf("Footwork"))),
+            out, noImages, groupSettings = listOf(group)
+        )
+        CardImportExport.parseCards(out.toString().lines())
+        val restored = CardImportExport.applyGroupSettings(
+            com.fencing.spacedrepetition.data.model.Group(name = "Footwork", description = "Imported group"),
+            CardImportExport.lastParsedGroupSettings.getValue("Footwork")
+        )
+        assertEquals("Feet first", restored.description)
+    }
 }

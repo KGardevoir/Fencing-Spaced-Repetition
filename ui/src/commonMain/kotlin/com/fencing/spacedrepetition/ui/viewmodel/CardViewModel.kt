@@ -570,8 +570,8 @@ class CardViewModel(
      *
      * After the cards, and only after them: a log is linked to its card by
      * question text, so the cards have to be in the database to be found.
-     * Opponents already known by name keep their local skill multiplier --
-     * someone else's opinion of an opponent does not overwrite yours.
+     * Opponents already here take the file's name, notes and multiplier:
+     * an import updates everything but progress.
      */
     private suspend fun importOpponentsAndHistory() {
         val parsedOpponents = CardImportExport.lastParsedOpponents

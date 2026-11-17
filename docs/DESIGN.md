@@ -191,6 +191,32 @@ cards, start time for sessions):
 
 Files from before identifiers have no `uid`s and import exactly as before.
 
+### An import updates everything but progress
+
+So that another program can edit an export -- rename, rewrite, regroup,
+retag, re-describe -- and the result can be imported without resetting
+anyone's learning, a record already here takes everything from the file
+**except progress**:
+
+| Record already here | Taken from the file | Kept |
+|---|---|---|
+| Card | question, description, pictures, groups, concepts | scheduling state, last review, next review, `lastReset`, every learning-group state; `uid`, creation time, disabled |
+| Concept | name, description, availability | its progress (derived from history anyway) |
+| Card group | name, description, learning group, auto-show | -- |
+| Learning group | name, description, every setting, `useConcepts` | -- |
+| Opponent | name (when free), skill multiplier, notes | -- (past reviews keep the multiplier they were scheduled with) |
+| Session | notes and their pictures | times, cards, grades |
+| Review | notes, pictures, opponent | grade, time, group, multiplier -- the history progress is derived from |
+
+A record **new** here is created from the file whole, progress included, so
+restoring a backup onto a new device restores its learning.
+
+**Absent is not empty.** Where a newer format added a list an older file
+never wrote, the list is now always written -- a card's `concepts:` and a
+concept's `availableIn:` -- even when empty. Present (even `[]`) sets the
+value; absent, as in a file from before it, leaves the value as it is here. A
+group's `description:` works the same way.
+
 ## Migrations
 
 - Every schema change has a migration; there is deliberately no destructive

@@ -118,7 +118,9 @@ internal suspend fun GroupRepository.groupsForImport(parsedCards: List<ParsedCar
             val settings = CardImportExport.lastParsedLearningGroupSettings[name].orEmpty()
             updateLearningGroup(
                 CardImportExport.applyLearningGroupSettings(learningGroup, settings).copy(
-                    // The file says whether it schedules by concept, as it does its settings.
+                    // Its description and whether it schedules by concept are
+                    // the file's too: an import updates everything but progress.
+                    description = description,
                     useConcepts = name in CardImportExport.lastParsedConceptLearningGroups
                 )
             )
@@ -172,7 +174,7 @@ internal suspend fun importConceptsAndLinks(
 ) {
     val namedOnCards = parsedCards.flatMap { it.conceptNames }.toSet()
     val parsedConcepts = CardImportExport.lastParsedConcepts
-    if (namedOnCards.isEmpty() && parsedConcepts.isEmpty()) return
+    if (namedOnCards.isEmpty() && parsedConcepts.isEmpty() && parsedCards.none { it.conceptsStated }) return
     val conceptIds = concepts.importConcepts(parsedConcepts, namedOnCards) { groups.ensureLearningGroup(it) }
     cards.linkImportedConcepts(parsedCards, conceptIds)
 }

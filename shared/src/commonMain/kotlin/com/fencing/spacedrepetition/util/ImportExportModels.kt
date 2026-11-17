@@ -43,6 +43,11 @@ data class ParsedCard(
     val learningGroupState: Boolean = false,
     /** The concepts the card is tagged with, by name. Carried on its own (Global) record. */
     val conceptNames: List<String> = emptyList(),
+    /**
+     * Whether the file says which concepts the card has -- even none. A file
+     * from before concepts does not, and an import leaves the card's as they are.
+     */
+    val conceptsStated: Boolean = false,
     /** The card's stable identifier, on its own record; null in files from before them. */
     val uid: String? = null,
     /** When this record's progress was last reset (0 never); null when the file does not say. */

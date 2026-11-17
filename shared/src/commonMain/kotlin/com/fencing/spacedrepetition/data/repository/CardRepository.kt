@@ -189,6 +189,8 @@ class CardRepository(
      */
     suspend fun importReviewLogs(reviewLogs: List<ReviewLog>): Int {
         val existing = reviewLogDao.getAllReviewLogsSync()
+        val byUid = existing.associateBy { it.uid }
+        val byMoment = existing.associateBy { Triple(it.cardId, it.reviewTime, it.grade) }
         val knownUids = existing.map { it.uid }.toMutableSet()
         val knownMoments = existing.map { Triple(it.cardId, it.reviewTime, it.grade) }.toMutableSet()
         val fresh = reviewLogs.filter { log ->
@@ -197,6 +199,19 @@ class CardRepository(
             if (isNew) {
                 knownUids += log.uid
                 knownMoments += moment
+            } else {
+                // Already here: what was noted about it, and who it was
+                // against, are the file's. Its grade, time, group and
+                // multiplier are history that progress is derived from, and stay.
+                (byUid[log.uid] ?: byMoment[moment])?.let { here ->
+                    val updated = here.copy(
+                        notes = log.notes,
+                        imagePaths = log.imagePaths,
+                        opponentId = log.opponentId,
+                        opponentUid = log.opponentUid
+                    )
+                    if (updated != here) reviewLogDao.updateReviewLog(updated)
+                }
             }
             isNew
         }.map { it.copy(id = 0) }
@@ -377,6 +392,22 @@ class CardRepository(
         return importedCount
     }
 
+    /**
+     * This card with what an import may change -- its question, description
+     * and pictures -- taken from [imported], and everything that is progress
+     * kept: its scheduling state, when it was last reviewed and reset, and
+     * (elsewhere) its learning-group states. So a file edited by another
+     * program can rename, rewrite or regroup cards without resetting anyone's
+     * learning. Identity, creation time and whether it is disabled are this
+     * device's and stay too. See docs/DESIGN.md, "Archive".
+     */
+    private fun Card.withImportedContent(imported: Card): Card = copy(
+        question = imported.question,
+        answer = imported.answer,
+        imagePaths = imported.imagePaths,
+        modified = Time.now()
+    )
+
     suspend fun importFullCards(
         cards: List<Card>,
         groupNamesPerCard: List<List<String>>,
@@ -388,13 +419,8 @@ class CardRepository(
             val cardId: Long
 
             if (existingCard != null) {
-                // Update existing card with full state from import
-                val updatedCard = card.copy(
-                    id = existingCard.id,
-                    created = existingCard.created, // Preserve original creation time
-                    modified = Time.now()
-                )
-                cardDao.updateCard(updatedCard)
+                // Everything but its progress: see [withImportedContent].
+                cardDao.updateCard(existingCard.withImportedContent(card))
                 cardId = existingCard.id
 
                 // Clear existing group associations before re-adding
@@ -448,19 +474,12 @@ class CardRepository(
             val cardId: Long
 
             if (existingCard != null) {
-                val updatedCard = card.copy(
-                    id = existingCard.id,
-                    uid = existingCard.uid,
-                    created = existingCard.created,
-                    modified = Time.now()
-                )
-                cardDao.updateCard(updatedCard)
+                // Everything but its progress: see [withImportedContent].
+                cardDao.updateCard(existingCard.withImportedContent(card))
                 cardId = existingCard.id
 
-                // Clear existing group associations
+                // Its groups are content, and are the file's now.
                 groupDao.deleteAllGroupsForCard(cardId)
-                // Clear existing group-specific learning states
-                groupDao.deleteAllLearningStatesForCard(cardId)
             } else {
                 cardId = cardDao.insertCard(card)
             }
@@ -475,8 +494,9 @@ class CardRepository(
                 }
             }
 
-            // Import group-specific learning states
-            states.filter { it.isGroupSpecificState }.forEach { groupState ->
+            // Learning-group progress comes in only with a card that is new
+            // here; a card already here keeps its own.
+            if (existingCard == null) states.filter { it.isGroupSpecificState }.forEach { groupState ->
                 learningGroups[groupState.stateContext!!]?.let { learningGroupId ->
                     val learningState = CardLearningState(
                         cardId = cardId,
@@ -503,14 +523,18 @@ class CardRepository(
 
     /**
      * Tag imported cards with the concepts their records list, finding each
-     * card by question. A card that lists any concepts has exactly those
-     * afterwards; one that lists none -- including every card in a file from
-     * before concepts -- keeps whatever it carries here.
+     * card by stable identifier, else question. A card whose record says
+     * which concepts it has -- even none, since exports always say -- has
+     * exactly those afterwards; one from a file from before concepts keeps
+     * whatever it carries here.
      */
     suspend fun linkImportedConcepts(parsedCards: List<ParsedCard>, conceptIds: Map<String, Long>) {
         parsedCards.groupBy { it.concept }.forEach { (question, records) ->
             val names = records.flatMap { it.conceptNames }.toSet()
-            if (names.isEmpty()) return@forEach
+            // A file that says which concepts a card has -- even none -- sets
+            // them; one that does not (from before concepts) leaves them.
+            val stated = records.any { it.conceptsStated }
+            if (!stated && names.isEmpty()) return@forEach
             val card = records.firstNotNullOfOrNull { it.uid }?.let { cardDao.findCardByUid(it) }
                 ?: cardDao.findCardByQuestion(question)
                 ?: return@forEach
@@ -968,18 +992,22 @@ class CardRepository(
     suspend fun getAllSessionsSync(): List<PracticeSession> = sessionDao.getAllSessionsSync()
 
     /**
-     * The session a restored review belongs to, found by when it started or
-     * created from what an archive carried.
+     * The session a restored review belongs to, found by stable identifier,
+     * else by when it started, or created from what an archive carried.
      *
-     * By start time because that is what identifies a session across devices --
-     * ids are this device's own. A session already here is left as it is, notes
-     * included, the way an opponent already known by name keeps its local
-     * multiplier.
+     * A session already here takes the file's notes and their pictures -- an
+     * import updates everything but progress -- and keeps its times, cards
+     * and grades, which are the history its progress was made from.
      */
-    suspend fun ensureSession(session: PracticeSession): Long =
-        session.uid.takeIf { it.isNotBlank() }?.let { sessionDao.getSessionByUid(it)?.id }
-            ?: sessionDao.getSessionByStartTime(session.startTime)?.id
-            ?: sessionDao.insertSession(session.copy(id = 0))
+    suspend fun ensureSession(session: PracticeSession): Long {
+        val existing = session.uid.takeIf { it.isNotBlank() }?.let { sessionDao.getSessionByUid(it) }
+            ?: sessionDao.getSessionByStartTime(session.startTime)
+            ?: return sessionDao.insertSession(session.copy(id = 0))
+        if (existing.notes != session.notes || existing.imagePaths != session.imagePaths) {
+            sessionDao.updateSession(existing.copy(notes = session.notes, imagePaths = session.imagePaths))
+        }
+        return existing.id
+    }
 
     /** The card groups, for naming them as they are now (history, by stable identifier). */
     fun getAllGroups(): Flow<List<Group>> = groupDao.getAllGroups()

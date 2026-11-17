@@ -157,6 +157,9 @@ object CardImportExport {
         private set
 
     /** The key a group's learning group travels under in [lastParsedGroupSettings]. */
+    /** The key a group's description travels under in [lastParsedGroupSettings]. */
+    const val DESCRIPTION_SETTING = "description"
+
     const val LEARNING_GROUP_SETTING = "learningGroup"
 
     /** Learning groups an import file declared, as name to description. */
@@ -214,7 +217,8 @@ object CardImportExport {
     data class ParsedConcept(
         val uid: String? = null,
         val inGlobal: Boolean = false,
-        val availableIn: List<String> = emptyList(),
+        /** Null when the file does not say where it is available; then it is left as it is. */
+        val availableIn: List<String>? = null,
         val name: String,
         val description: String = "",
         val globalState: com.fencing.spacedrepetition.data.model.ConceptLearningState? = null,
@@ -948,7 +952,8 @@ object CardImportExport {
      */
     fun applyGroupSettings(group: Group, settings: Map<String, String>): Group {
         return group.copy(
-            autoShowAnswer = settings["autoShowAnswer"]?.toBooleanStrictOrNull()
+            autoShowAnswer = settings["autoShowAnswer"]?.toBooleanStrictOrNull(),
+            description = settings[DESCRIPTION_SETTING] ?: group.description
         )
     }
 
