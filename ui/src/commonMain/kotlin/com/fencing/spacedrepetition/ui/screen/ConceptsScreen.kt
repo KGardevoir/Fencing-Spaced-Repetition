@@ -539,8 +539,8 @@ private fun SectionTitle(title: String, hint: String) {
 
 /**
  * Every learning parameter of the concept in one learning context, chosen
- * from a drop-down of Global and every learning group. Where the concept has
- * no progress yet, it reads as new.
+ * from a drop-down of the contexts it is part of: those its cards are learnt
+ * in. Where the concept has no progress yet, it reads as new.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -549,11 +549,24 @@ private fun LearningParameters(
     learningGroups: List<LearningGroup>,
     globalConceptScheduling: Boolean
 ) {
-    val contexts: List<LearningGroup?> = listOf<LearningGroup?>(null) + learningGroups
-    // Start on the first context the concept has progress in.
-    var context by remember(summary.concept.id) {
-        mutableStateOf(summary.states.firstOrNull()?.first?.id)
+    // Its cards' learning contexts: each group's learning group, or Global
+    // for a group in none (or one since deleted) and for cards in no group.
+    val learningGroupIds = learningGroups.map { it.id }.toSet()
+    val inGlobal = summary.cardIds.isNotEmpty() &&
+        (summary.groups.isEmpty() || summary.groups.any { it.learningGroupId !in learningGroupIds })
+    val contexts: List<LearningGroup?> = (if (inGlobal) listOf<LearningGroup?>(null) else emptyList()) +
+        learningGroups.filter { lg -> summary.groups.any { it.learningGroupId == lg.id } }
+    if (contexts.isEmpty()) {
+        Text(
+            "No cards carry this concept yet.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        return
     }
+    var chosen by remember(summary.concept.id) { mutableStateOf(contexts.first()?.id) }
+    // The chosen context left (a card was untagged or moved): the first one.
+    val context = chosen.takeIf { c -> contexts.any { it?.id == c } } ?: contexts.first()?.id
     var expanded by remember { mutableStateOf(false) }
     val learningGroup = learningGroups.find { it.id == context }
     val state = summary.states.find { it.first?.id == context }?.second
@@ -580,7 +593,7 @@ private fun LearningParameters(
                     leadingIcon = {
                         Icon(if (option == null) Icons.Default.Public else AppIcons.LearningGroup, contentDescription = null)
                     },
-                    onClick = { context = option?.id; expanded = false }
+                    onClick = { chosen = option?.id; expanded = false }
                 )
             }
         }
