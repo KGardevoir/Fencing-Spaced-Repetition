@@ -116,18 +116,6 @@ fun CardListScreen(
     var showBulkDeleteDialog by remember { mutableStateOf(false) }
     var showBulkGroupDialog by remember { mutableStateOf(false) }
     var showBulkResetDialog by remember { mutableStateOf(false) }
-    // A card's own ⋮ menu acts on that card by selecting just it; when the
-    // dialog it opens closes, selecting stops again.
-    var singleCardAction by remember { mutableStateOf(false) }
-    fun finishSingleCardAction() {
-        if (singleCardAction) { singleCardAction = false; onExitSelectionMode() }
-    }
-    LaunchedEffect(isSelectionMode) { if (!isSelectionMode) singleCardAction = false }
-    fun actOnCard(cardId: Long) {
-        singleCardAction = true
-        if (!isSelectionMode) onToggleSelectionMode()
-        if (cardId !in selectedCardIds) onToggleCardSelection(cardId)
-    }
     // Resetting a card where concepts schedule would reset the concepts'
     // progress from it too, so reset is offered only where none do.
     fun schedulesByConcept(cardIds: Collection<Long>): Boolean = cardIds.any { cardId ->
@@ -495,11 +483,6 @@ fun CardListScreen(
                             onEdit = { onNavigateToEditCard(card) },
                             onDelete = { showDeleteDialog = card },
                             onToggleDisabled = { onToggleCardDisabled(card.id) },
-                            resetBlocked = schedulesByConcept(listOf(card.id)),
-                            onSelect = { if (!isSelectionMode) { onToggleSelectionMode(); onToggleCardSelection(card.id) } },
-                            onSelectAll = { if (!isSelectionMode) onToggleSelectionMode(); onSelectAllCards() },
-                            onChangeGroups = { actOnCard(card.id); showBulkGroupDialog = true },
-                            onReset = { actOnCard(card.id); showBulkResetDialog = true },
                             onToggleSelection = { onToggleCardSelection(card.id) },
                             onLongPress = {
                                 if (!isSelectionMode) {
@@ -673,7 +656,7 @@ fun CardListScreen(
             selectedCardIds = selectedCardIds,
             allCardsWithGroups = allCardsWithGroups,
             learningGroups = learningGroups,
-            onDismiss = { showBulkResetDialog = false; finishSingleCardAction() },
+            onDismiss = { showBulkResetDialog = false },
             onResetGlobal = {
                 onResetSelectedCardsGlobalState()
                 showBulkResetDialog = false
@@ -693,7 +676,7 @@ fun CardListScreen(
     if (showBulkGroupDialog) {
         BulkGroupDialog(
             groups = groups,
-            onDismiss = { showBulkGroupDialog = false; finishSingleCardAction() },
+            onDismiss = { showBulkGroupDialog = false },
             onConfirm = { selectedGroupIds ->
                 onUpdateSelectedCardsGroups(selectedGroupIds)
                 showBulkGroupDialog = false
@@ -939,12 +922,6 @@ fun CardListItem(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onToggleDisabled: () -> Unit = {},
-    /** Reset is greyed out: concepts schedule this card somewhere. */
-    resetBlocked: Boolean = false,
-    onSelect: () -> Unit = {},
-    onSelectAll: () -> Unit = {},
-    onChangeGroups: () -> Unit = {},
-    onReset: () -> Unit = {},
     onToggleSelection: () -> Unit = {},
     onLongPress: () -> Unit = {}
 ) {
@@ -1245,58 +1222,8 @@ fun CardListItem(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    Box {
-                        var showCardMenu by remember { mutableStateOf(false) }
-                        IconButton(onClick = { showCardMenu = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "Card actions")
-                        }
-                        DropdownMenu(expanded = showCardMenu, onDismissRequest = { showCardMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text("Edit card") },
-                                onClick = { showCardMenu = false; onEdit() },
-                                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Change groups") },
-                                onClick = { showCardMenu = false; onChangeGroups() },
-                                leadingIcon = { Icon(AppIcons.CardGroups, contentDescription = null) }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(if (resetBlocked) "Reset (concept scheduling on)" else "Reset state") },
-                                onClick = { showCardMenu = false; onReset() },
-                                enabled = !resetBlocked,
-                                leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(if (card.isDisabled) "Enable card" else "Disable card") },
-                                onClick = { showCardMenu = false; onToggleDisabled() },
-                                leadingIcon = {
-                                    Icon(
-                                        if (card.isDisabled) Icons.Default.PlayArrow else Icons.Default.Block,
-                                        contentDescription = null
-                                    )
-                                }
-                            )
-                            HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text("Select") },
-                                onClick = { showCardMenu = false; onSelect() },
-                                leadingIcon = { Icon(Icons.Default.CheckBox, contentDescription = null) }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Select all") },
-                                onClick = { showCardMenu = false; onSelectAll() },
-                                leadingIcon = { Icon(Icons.Default.SelectAll, contentDescription = null) }
-                            )
-                            HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text("Delete card", color = MaterialTheme.colorScheme.error) },
-                                onClick = { showCardMenu = false; onDelete() },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                                }
-                            )
-                        }
+                    IconButton(onClick = onEdit) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit", tint = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
