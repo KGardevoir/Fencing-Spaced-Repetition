@@ -53,8 +53,10 @@ class SelectionState {
         selected = if (id in selected) selected - id else selected + id
     }
 
+    /** Selects all of [ids] -- or, when they are all selected already, none. */
     fun selectAll(ids: Collection<Long>) {
-        selected = ids.toSet()
+        val all = ids.toSet()
+        selected = if (all.isNotEmpty() && selected.containsAll(all)) selected - all else selected + all
     }
 
     fun exit() {
