@@ -39,6 +39,7 @@ import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.ui.components.AppIcons
 import com.fencing.spacedrepetition.ui.components.SelectionAction
 import com.fencing.spacedrepetition.ui.components.SelectionTopBar
+import com.fencing.spacedrepetition.ui.components.UnsavedChangesDialog
 import com.fencing.spacedrepetition.ui.components.rememberSelectionState
 import com.fencing.spacedrepetition.ui.viewmodel.ConceptSummary
 import com.fencing.spacedrepetition.util.Time
@@ -434,7 +435,23 @@ private fun ConceptEditScreen(
     var description by rememberSaveable { mutableStateOf(concept.description) }
     var inGlobal by rememberSaveable { mutableStateOf(concept.inGlobal) }
     var checkedLearningGroups by remember { mutableStateOf(summary.learningGroupIds) }
-    BackHandler(onBack = onDismiss)
+    var showUnsavedChangesDialog by rememberSaveable { mutableStateOf(false) }
+
+    // Unticking a learning group that no longer exists is no change.
+    val isDirty = name != concept.name || description != concept.description || inGlobal != concept.inGlobal ||
+        checkedLearningGroups.filter { id -> learningGroups.any { it.id == id } }.toSet() !=
+        summary.learningGroupIds.filter { id -> learningGroups.any { it.id == id } }.toSet()
+    fun requestDismiss() {
+        if (isDirty) showUnsavedChangesDialog = true else onDismiss()
+    }
+    BackHandler(onBack = ::requestDismiss)
+
+    if (showUnsavedChangesDialog) {
+        UnsavedChangesDialog(
+            onDiscard = { showUnsavedChangesDialog = false; onDismiss() },
+            onKeepEditing = { showUnsavedChangesDialog = false }
+        )
+    }
 
     val nameTaken = concepts.any { it.id != concept.id && it.name.equals(name.trim(), ignoreCase = true) }
     val canSave = name.isNotBlank() && !nameTaken
@@ -450,7 +467,7 @@ private fun ConceptEditScreen(
             TopAppBar(
                 title = { Text(if (isNew) "New Concept" else "Edit Concept") },
                 navigationIcon = {
-                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Cancel") }
+                    IconButton(onClick = ::requestDismiss) { Icon(Icons.Default.Close, contentDescription = "Cancel") }
                 },
                 actions = {
                     TextButton(onClick = { save() }, enabled = canSave) { Text(if (isNew) "Add" else "Save") }
