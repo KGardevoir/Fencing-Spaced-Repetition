@@ -542,7 +542,7 @@ class CardRepository(
             val weights = records.flatMap { it.conceptWeights.entries }.associate { it.key to it.value }
             names.forEach { name ->
                 conceptIds[name]?.let {
-                    val weight = (weights[name] ?: 1.0).coerceIn(CardConceptCrossRef.MIN_WEIGHT, CardConceptCrossRef.MAX_WEIGHT)
+                    val weight = CardConceptCrossRef.sanitize(weights[name])
                     conceptDao.insertCardConceptCrossRef(CardConceptCrossRef(card.id, it, weight))
                 }
             }
@@ -682,7 +682,8 @@ class CardRepository(
 
         val poolIds = pool.map { it.id }.toSet()
         val links = conceptDao.getAllCardConceptCrossRefsSync()
-        val weights = links.associate { (it.cardId to it.conceptId) to it.weight }
+        // Scoring uses each card's share of each concept, not the raw weights.
+        val weights = conceptShares(links)
         val conceptsByCard: Map<Long, Set<Long>> = links
             .filter { it.cardId in poolIds }
             .groupBy({ it.cardId }, { it.conceptId })
@@ -792,12 +793,13 @@ class CardRepository(
         weights: Map<Long, Double> = emptyMap()
     ) {
         val before = conceptDao.getCardConceptLinksSync(cardId).associate { it.conceptId to it.weight }
-        val after = conceptIds.associateWith { (weights[it] ?: 1.0).coerceIn(CardConceptCrossRef.MIN_WEIGHT, CardConceptCrossRef.MAX_WEIGHT) }
+        val after = conceptIds.associateWith { CardConceptCrossRef.sanitize(weights[it]) }
         if (before == after) return
         conceptDao.deleteAllConceptsForCard(cardId)
         after.forEach { (conceptId, weight) -> conceptDao.insertCardConceptCrossRef(CardConceptCrossRef(cardId, conceptId, weight)) }
-        // A concept whose tag came, went or changed weight scores differently now.
-        rederiveConcepts((before.keys + after.keys).filter { before[it] != after[it] })
+        // Shares are proportions within the card, so any change to its weights
+        // can move every one of its concepts: rederive them all.
+        rederiveConcepts(before.keys + after.keys)
     }
 
     /**
@@ -812,9 +814,11 @@ class CardRepository(
         val concepts = if (conceptIds == null) conceptDao.getAllConceptsSync()
             else conceptDao.getConceptsByIds(conceptIds.toList())
         if (concepts.isEmpty()) return
-        // Each concept's cards, with how much of the concept each contains.
-        val cardsByConcept = conceptDao.getAllCardConceptCrossRefsSync()
-            .groupBy({ it.conceptId }, { it.cardId to it.weight })
+        // Each concept's cards, with each card's share of the concept.
+        val links = conceptDao.getAllCardConceptCrossRefsSync()
+        val shares = conceptShares(links)
+        val cardsByConcept = links
+            .groupBy({ it.conceptId }, { it.cardId to shares.getValue(it.cardId to it.conceptId) })
             .mapValues { it.value.toMap() }
         val logsByCard = reviewLogDao.getAllReviewLogsSync().groupBy { it.cardId }
         val groups = GroupLookup(groupDao.getAllGroups().first())
@@ -1596,13 +1600,12 @@ class CardRepository(
         }
 
         /**
-         * Of [candidates], the card containing the most of the [uncovered]
-         * concepts: the sum of its weights for them ([weightOf], by card and
-         * concept), so a card that is all about two due concepts beats one
-         * that only touches three. Ties go to the card carrying the fewest
-         * concepts that are not due (it spends less of the session on what
-         * does not need it), then to a random one when randomising, else the
-         * lowest id.
+         * Of [candidates], the card covering the most [uncovered] concepts.
+         * Ties go to the card whose share is most in them ([weightOf], by card
+         * and concept: its normalized weights), so of two cards each touching
+         * one due concept the one mostly about it wins; then to the card
+         * carrying the fewest concepts that are not due; then to a random one
+         * when randomising, else the lowest id.
          */
         internal fun pickBestCoveringCard(
             candidates: List<Card>,
@@ -1613,9 +1616,11 @@ class CardRepository(
         ): Card {
             val ordered = if (randomize) candidates.shuffled() else candidates.sortedBy { it.id }
             return ordered.maxWith(
-                compareBy<Card> { card ->
-                    conceptsByCard.getValue(card.id).filter { it in uncovered }.sumOf { weightOf(card.id, it) }
-                }.thenByDescending { card -> conceptsByCard.getValue(card.id).count { it !in uncovered } }
+                compareBy<Card> { card -> conceptsByCard.getValue(card.id).count { it in uncovered } }
+                    .thenBy { card ->
+                        conceptsByCard.getValue(card.id).filter { it in uncovered }.sumOf { weightOf(card.id, it) }
+                    }
+                    .thenByDescending { card -> conceptsByCard.getValue(card.id).count { it !in uncovered } }
             )
         }
 

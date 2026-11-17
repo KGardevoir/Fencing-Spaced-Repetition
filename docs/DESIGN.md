@@ -87,23 +87,27 @@ history is imported, or a group's learning group, name or existence changes.
 
 ### Weights
 
-Each tag carries a **weight** (`card_concept_cross_ref.weight`, 0 to 1,
-default 1): how much of the concept the card contains. It scores the card for
-that concept:
+Each tag carries a **weight** (`card_concept_cross_ref.weight`): how much of
+the concept the card contains, **relative to the card's other concepts**. Any
+number of 0 or more (default 1) -- "2 of X, 1 of Y" is weights 2 and 1. Only
+the proportions matter: scoring uses each card's **share** of each concept,
+its weights divided by their sum (`conceptShares`), so a card's shares add to
+1 and a card with one concept is all of it whatever the number. A card whose
+weights are all 0 contains none of its concepts.
 
 - **Grading.** A session's grade for a concept is the mean of its cards'
-  grades **weighted** by how much of the concept each contains, rounded to the
-  nearest grade; a card with weight 0 says nothing about the concept. A
-  review outside a session is graded as it was (its weight only decides
-  whether it counts at all).
-- **Drawing.** When a due concept picks a card to cover it, a card scores by
-  the **sum of its weights** for the uncovered due concepts, so a card that is
-  all about two of them beats one that only touches three.
+  grades **weighted by each card's share** of the concept, rounded to the
+  nearest grade; a card with share 0 says nothing about it. A review outside
+  a session is graded as it was (its share only decides whether it counts).
+- **Drawing.** When a due concept picks a card to cover it, the card covering
+  the **most** uncovered due concepts wins; ties go to the card whose **share
+  is most in them** (so of two cards each touching the due concept, the one
+  mostly about it), then to the one with the fewest concepts that are not due.
 
-Changing a weight rederives the concept. In the archive a card's
-`conceptWeights:` maps concept name to weight, listing only weights that are
-not 1; a concept missing from it -- and every concept in a file from before
-weights -- is 1.
+Changing any of a card's weights rederives all of its concepts, since every
+share on the card moves. In the archive a card's `conceptWeights:` maps
+concept name to weight, listing only weights that are not 1; a concept
+missing from it -- and every concept in a file from before weights -- is 1.
 
 ### Tagging and availability
 

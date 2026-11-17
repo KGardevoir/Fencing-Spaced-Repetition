@@ -32,6 +32,7 @@ import androidx.compose.ui.backhandler.BackHandler
 import com.fencing.spacedrepetition.util.Time
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import com.fencing.spacedrepetition.data.model.Group
@@ -1236,39 +1237,59 @@ fun AddEditCardScreen(
         }
     }
 
-    // How much of one concept the card contains
+    // How much of one concept the card contains, relative to its others
     weighing?.let { concept ->
-        var percent by remember(concept.id) {
-            mutableStateOf(((conceptWeights[concept.id] ?: 1.0) * 100).roundToInt().toFloat())
-        }
+        var text by remember(concept.id) { mutableStateOf(formatWeight(conceptWeights[concept.id] ?: 1.0)) }
+        val entered = text.trim().replace(',', '.').toDoubleOrNull()
+        val valid = entered != null && entered >= 0.0 && !entered.isInfinite()
+        // The share of the card this would make the concept, against its others as they stand.
+        val others = selectedConceptIds.filter { it != concept.id }.sumOf { conceptWeights[it] ?: 1.0 }
+        val share = if (valid && entered!! + others > 0.0) entered / (entered + others) else null
         AlertDialog(
             onDismissRequest = { weighing = null },
             icon = { Icon(Icons.Default.Lightbulb, contentDescription = null) },
             title = { Text(concept.name) },
             text = {
                 Column {
-                    Text(
-                        "How much of this concept the card contains: ${percent.roundToInt()}%",
-                        style = MaterialTheme.typography.bodyMedium
+                    OutlinedTextField(
+                        value = text,
+                        onValueChange = { text = it },
+                        label = { Text("How much of this concept") },
+                        singleLine = true,
+                        isError = !valid,
+                        supportingText = {
+                            Text(
+                                when {
+                                    !valid -> "Enter a number, 0 or more"
+                                    share != null -> "${(share * 100).roundToInt()}% of this card"
+                                    else -> "This card contains none of its concepts"
+                                }
+                            )
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth()
                     )
-                    Slider(value = percent, onValueChange = { percent = it }, valueRange = 0f..100f, steps = 9)
                     Text(
-                        "When a session grades several cards with this concept, each card's grade " +
-                            "counts in proportion; drawing by concept prefers cards that contain more " +
-                            "of what is due. At 0% the card does not count towards it.",
+                        "Any amount, relative to the card's other concepts: 2 here and 1 on another " +
+                            "makes the card two-thirds this one. Grading a session weighs each card's " +
+                            "grade by its share of the concept, and drawing by concept prefers cards " +
+                            "with more of what is due. 0 means the card does not count towards it.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    val weight = percent.roundToInt() / 100.0
-                    conceptWeights = if (weight == 1.0) conceptWeights - concept.id else conceptWeights + (concept.id to weight)
-                    conceptsTouched = true
-                    isDirty = true
-                    weighing = null
-                }) { Text("Set") }
+                TextButton(
+                    onClick = {
+                        val weight = entered ?: return@TextButton
+                        conceptWeights = if (weight == 1.0) conceptWeights - concept.id else conceptWeights + (concept.id to weight)
+                        conceptsTouched = true
+                        isDirty = true
+                        weighing = null
+                    },
+                    enabled = valid
+                ) { Text("Set") }
             },
             dismissButton = {
                 TextButton(
@@ -1791,6 +1812,18 @@ private fun SchedulingOffNote(text: String) {
     }
 }
 
-/** A concept chip's text: its name, and how much of it the card contains when that is not all. */
+/** A concept chip's text: its name, and its weight when that is not the default 1. */
 internal fun conceptChipLabel(name: String, weight: Double): String =
-    if (weight >= 1.0) name else "$name · ${(weight * 100).roundToInt()}%"
+    if (weight == 1.0) name else "$name ×${formatWeight(weight)}"
+
+/** A weight as people write it: "2", "0.5", "1.25" -- no trailing ".0". */
+internal fun formatWeight(weight: Double): String {
+    val hundredths = (weight * 100).roundToLong()
+    val whole = hundredths / 100
+    val fraction = (hundredths % 100).toInt()
+    return when {
+        fraction == 0 -> whole.toString()
+        fraction % 10 == 0 -> "$whole.${fraction / 10}"
+        else -> "$whole.${fraction.toString().padStart(2, '0')}"
+    }
+}

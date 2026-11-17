@@ -146,19 +146,35 @@ data class CardConceptCrossRef(
     val cardId: Long,
     val conceptId: Long,
     /**
-     * How much of the concept the card contains, from 0 (none) to 1 (all of
-     * it, the default). Scores the card for the concept: a session's grade
-     * for a concept is the weighted mean of its cards' grades, and drawing
-     * by concept prefers the cards that contain the most of the due ones.
+     * How much of the concept the card contains, relative to the card's other
+     * concepts: any number of 0 or more (default 1), so "2 of X, 1 of Y" is
+     * weights 2 and 1. Only the proportions matter -- see [conceptShares],
+     * which turns a card's weights into its share of each concept, the
+     * number scoring uses. 0 means the card contains none of it.
      */
     @ColumnInfo(defaultValue = "1.0")
     val weight: Double = 1.0
 ) {
     companion object {
         const val MIN_WEIGHT = 0.0
-        const val MAX_WEIGHT = 1.0
+
+        /** A weight as stored: never negative, and not a number becomes 1. */
+        fun sanitize(weight: Double?): Double =
+            weight?.takeIf { !it.isNaN() && !it.isInfinite() }?.coerceAtLeast(MIN_WEIGHT) ?: 1.0
     }
 }
+
+/**
+ * Each card's share of each of its concepts: its weights divided by their
+ * sum, so a card's shares add up to 1 (or are all 0 when every weight is).
+ * "2 of X, 1 of Y" is X ⅔, Y ⅓; a card with one concept is all of it. This is
+ * what scoring uses -- the weights themselves are only proportions.
+ */
+fun conceptShares(links: List<CardConceptCrossRef>): Map<Pair<Long, Long>, Double> =
+    links.groupBy { it.cardId }.flatMap { (cardId, cardLinks) ->
+        val total = cardLinks.sumOf { it.weight }
+        cardLinks.map { (cardId to it.conceptId) to (if (total > 0.0) it.weight / total else 0.0) }
+    }.toMap()
 
 /** One concept's learning progress in one [LearningGroup]. */
 @Entity(

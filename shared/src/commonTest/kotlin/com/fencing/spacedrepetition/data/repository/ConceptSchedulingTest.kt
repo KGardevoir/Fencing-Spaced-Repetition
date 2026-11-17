@@ -142,12 +142,37 @@ class ConceptSchedulingTest {
     }
 
     @Test
-    fun `covering scores by how much of the uncovered concepts a card contains`() {
+    fun `covering counts due concepts first, then how much of the card they are`() {
         val concepts = mapOf(1L to setOf(10L, 11L), 2L to setOf(10L))
-        val weights = mapOf((1L to 10L) to 0.2, (1L to 11L) to 0.2, (2L to 10L) to 1.0)
-        val best = CardRepository.pickBestCoveringCard(
+        val shares = mapOf((1L to 10L) to 0.1, (1L to 11L) to 0.1, (2L to 10L) to 1.0)
+        // Covering two due concepts beats covering one, however lightly.
+        assertEquals(1L, CardRepository.pickBestCoveringCard(
             listOf(card(1), card(2)), concepts, uncovered = setOf(10L, 11L), randomize = false
-        ) { c, k -> weights.getValue(c to k) }
-        assertEquals(2L, best.id)
+        ) { c, k -> shares.getValue(c to k) }.id)
+        // Each covering one: the card mostly about it wins.
+        val one = mapOf(3L to setOf(10L, 20L), 4L to setOf(10L, 21L))
+        val oneShares = mapOf((3L to 10L) to 0.25, (3L to 20L) to 0.75, (4L to 10L) to 0.5, (4L to 21L) to 0.5)
+        assertEquals(4L, CardRepository.pickBestCoveringCard(
+            listOf(card(3), card(4)), one, uncovered = setOf(10L), randomize = false
+        ) { c, k -> oneShares.getValue(c to k) }.id)
+    }
+
+    @Test
+    fun `weights are proportions within a card`() {
+        val shares = com.fencing.spacedrepetition.data.model.conceptShares(
+            listOf(
+                com.fencing.spacedrepetition.data.model.CardConceptCrossRef(1, 10, weight = 2.0),
+                com.fencing.spacedrepetition.data.model.CardConceptCrossRef(1, 11, weight = 1.0),
+                com.fencing.spacedrepetition.data.model.CardConceptCrossRef(2, 10, weight = 7.0),
+                com.fencing.spacedrepetition.data.model.CardConceptCrossRef(3, 10, weight = 0.0)
+            )
+        )
+        assertEquals(2.0 / 3, shares.getValue(1L to 10L), 1e-9)
+        assertEquals(1.0 / 3, shares.getValue(1L to 11L), 1e-9)
+        assertEquals(1.0, shares.getValue(2L to 10L))   // one concept: all of it, whatever the number
+        assertEquals(0.0, shares.getValue(3L to 10L))   // all zero: none
+        assertEquals(1.0, com.fencing.spacedrepetition.data.model.CardConceptCrossRef.sanitize(Double.NaN))
+        assertEquals(0.0, com.fencing.spacedrepetition.data.model.CardConceptCrossRef.sanitize(-3.0))
+        assertEquals(12.5, com.fencing.spacedrepetition.data.model.CardConceptCrossRef.sanitize(12.5))
     }
 }

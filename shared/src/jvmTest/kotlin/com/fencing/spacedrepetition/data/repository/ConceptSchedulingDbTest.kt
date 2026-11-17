@@ -12,6 +12,7 @@ import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardConceptCrossRef
 import com.fencing.spacedrepetition.data.model.CardGroupCrossRef
 import com.fencing.spacedrepetition.data.model.Concept
+import com.fencing.spacedrepetition.data.model.conceptShares
 import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.LearningGroup
@@ -665,26 +666,31 @@ class ConceptSchedulingDbTest {
     // ==================== weights ====================
 
     @Test
-    fun `a session grades a concept by the weighted mean of its cards`() = runTest {
-        val a = concept("A")
-        val mostly = card("mostly A"); val barely = card("barely A")
-        db.conceptDao().insertCardConceptCrossRef(CardConceptCrossRef(mostly, a, weight = 1.0))
-        db.conceptDao().insertCardConceptCrossRef(CardConceptCrossRef(barely, a, weight = 0.2))
-        val session = repo.createPracticeSession(listOf(mostly, barely))
-        log(mostly, Grade.EASY, Time.now() - day, session = session)
-        log(barely, Grade.AGAIN, Time.now() - day, session = session)
-        repo.rederiveConcepts()
-        // (4 * 1.0 + 1 * 0.2) / 1.2 = 3.5, which rounds to EASY; unweighted it would be HARD-ish 2.5 -> GOOD.
-        val weighted = global(a)
+    fun `a session grades a concept by each card's share of it`() {
+        runTest {
+            // "barely" is 1 part A to 4 parts B: a fifth A.
+            val a = concept("A"); val b = concept("B"); val c = concept("C")
+            val allA = card("all A"); val barelyA = card("barely A")
+            db.conceptDao().insertCardConceptCrossRef(CardConceptCrossRef(allA, a, weight = 3.0))
+            db.conceptDao().insertCardConceptCrossRef(CardConceptCrossRef(barelyA, a, weight = 1.0))
+            db.conceptDao().insertCardConceptCrossRef(CardConceptCrossRef(barelyA, b, weight = 4.0))
+            val session = repo.createPracticeSession(listOf(allA, barelyA))
+            log(allA, Grade.EASY, Time.now() - day, session = session)
+            log(barelyA, Grade.AGAIN, Time.now() - day, session = session)
 
-        val b = concept("B")
-        val one = card("one"); val two = card("two")
-        tag(one, b); tag(two, b)
-        val other = repo.createPracticeSession(listOf(one, two))
-        log(one, Grade.EASY, Time.now() - day, session = other)
-        log(two, Grade.AGAIN, Time.now() - day, session = other)
-        repo.rederiveConcepts()
-        assertTrue(weighted.fsrsStability > global(b).fsrsStability, "the lightly weighted AGAIN should count for less")
+            // The same grades on two cards that are each all C: the plain mean.
+            val one = card("one"); val two = card("two")
+            tag(one, c); tag(two, c)
+            val other = repo.createPracticeSession(listOf(one, two))
+            log(one, Grade.EASY, Time.now() - day, session = other)
+            log(two, Grade.AGAIN, Time.now() - day, session = other)
+            repo.rederiveConcepts()
+
+            // A: (4 * 1 + 1 * 0.2) / 1.2 = 3.5 -> EASY; C: 2.5 -> GOOD.
+            assertTrue(global(a).fsrsStability > global(c).fsrsStability, "the AGAIN on a card that is barely A should count for less")
+            // The raw weight 3 on a card with one concept is still all of it.
+            assertEquals(1.0, conceptShares(db.conceptDao().getAllCardConceptCrossRefsSync()).getValue(allA to a))
+        }
     }
 
     @Test
@@ -700,14 +706,18 @@ class ConceptSchedulingDbTest {
     }
 
     @Test
-    fun `drawing prefers the card containing more of the due concepts`() = runTest {
-        val a = concept("A"); val b = concept("B")
-        val touchesBoth = card("touches both")
-        db.conceptDao().insertCardConceptCrossRef(CardConceptCrossRef(touchesBoth, a, weight = 0.2))
-        db.conceptDao().insertCardConceptCrossRef(CardConceptCrossRef(touchesBoth, b, weight = 0.2))
-        val allAboutA = card("all about A")
-        db.conceptDao().insertCardConceptCrossRef(CardConceptCrossRef(allAboutA, a, weight = 1.0))
-        assertEquals(listOf(allAboutA), repo.drawCards(1, null).map { it.id })
+    fun `drawing prefers, of cards covering as many due concepts, the one most about them`() = runTest {
+        val later = Time.now() + 30 * day
+        val a = concept("A")
+        val b = concept("B", nextReview = later); val c = concept("C", nextReview = later)
+        // Both cover the due A once; one is a quarter A, the other half.
+        val quarter = card("quarter A")
+        db.conceptDao().insertCardConceptCrossRef(CardConceptCrossRef(quarter, a, weight = 1.0))
+        db.conceptDao().insertCardConceptCrossRef(CardConceptCrossRef(quarter, b, weight = 3.0))
+        val half = card("half A")
+        db.conceptDao().insertCardConceptCrossRef(CardConceptCrossRef(half, a, weight = 2.0))
+        db.conceptDao().insertCardConceptCrossRef(CardConceptCrossRef(half, c, weight = 2.0))
+        assertEquals(listOf(half), repo.drawCards(1, null).map { it.id })
     }
 
     @Test
