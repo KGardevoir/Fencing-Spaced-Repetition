@@ -295,8 +295,12 @@ class CardViewModel(
         }
     }
 
+    /** Selects every card shown -- or, when they are all selected already, none. */
     fun selectAllCards() {
-        _selectedCardIds.value = filteredCards.value.map { it.id }.toSet()
+        val shown = filteredCards.value.map { it.id }.toSet()
+        _selectedCardIds.value =
+            if (shown.isNotEmpty() && _selectedCardIds.value.containsAll(shown)) _selectedCardIds.value - shown
+            else _selectedCardIds.value + shown
     }
 
     fun clearSelection() {
