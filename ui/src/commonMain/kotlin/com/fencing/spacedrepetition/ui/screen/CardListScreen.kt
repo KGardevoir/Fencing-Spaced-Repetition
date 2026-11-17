@@ -1114,29 +1114,34 @@ fun CardListItem(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    Row {
-                        IconButton(onClick = onToggleDisabled) {
-                            Icon(
-                                imageVector = if (card.isDisabled) Icons.Default.PlayArrow else Icons.Default.Block,
-                                contentDescription = if (card.isDisabled) "Enable card" else "Disable card",
-                                tint = if (card.isDisabled)
-                                    MaterialTheme.colorScheme.primary
-                                else
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                    Box {
+                        var showCardMenu by remember { mutableStateOf(false) }
+                        IconButton(onClick = { showCardMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "Card actions")
                         }
-                        IconButton(onClick = onEdit) {
-                            Icon(
-                                Icons.Default.Edit,
-                                contentDescription = "Edit",
-                                tint = MaterialTheme.colorScheme.primary
+                        DropdownMenu(expanded = showCardMenu, onDismissRequest = { showCardMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Edit card") },
+                                onClick = { showCardMenu = false; onEdit() },
+                                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
                             )
-                        }
-                        IconButton(onClick = onDelete) {
-                            Icon(
-                                Icons.Default.Delete,
-                                contentDescription = "Delete",
-                                tint = MaterialTheme.colorScheme.error
+                            DropdownMenuItem(
+                                text = { Text(if (card.isDisabled) "Enable card" else "Disable card") },
+                                onClick = { showCardMenu = false; onToggleDisabled() },
+                                leadingIcon = {
+                                    Icon(
+                                        if (card.isDisabled) Icons.Default.PlayArrow else Icons.Default.Block,
+                                        contentDescription = null
+                                    )
+                                }
+                            )
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("Delete card", color = MaterialTheme.colorScheme.error) },
+                                onClick = { showCardMenu = false; onDelete() },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                                }
                             )
                         }
                     }
