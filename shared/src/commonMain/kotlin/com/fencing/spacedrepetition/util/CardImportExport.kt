@@ -763,9 +763,9 @@ object CardImportExport {
     ): ExportResult {
         return try {
             var rowCount = 0
-            val cards = cardsWithStates.map { (card, groupNames, learningStates, conceptNames) ->
+            val cards = cardsWithStates.map { (card, groupNames, learningStates, conceptNames, conceptWeights) ->
                 rowCount += 1 + learningStates.size
-                ArchiveYaml.cardNode(card, groupNames, learningStates, images, conceptNames)
+                ArchiveYaml.cardNode(card, groupNames, learningStates, images, conceptNames, conceptWeights)
             }
             // Only the concepts the written cards carry.
             val writtenConceptNames = cardsWithStates.flatMap { it.conceptNames }.toSet()

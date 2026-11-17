@@ -32,7 +32,7 @@ import com.fencing.spacedrepetition.util.Time
 
 @Database(
     entities = [Card::class, PracticeSession::class, ReviewLog::class, Group::class, CardGroupCrossRef::class, CardLearningState::class, LearningGroup::class, Opponent::class, Concept::class, CardConceptCrossRef::class, ConceptLearningState::class, ConceptLearningGroupCrossRef::class],
-    version = 19,
+    version = 20,
     exportSchema = true
 )
 @ColumnTypeConverters(Converters::class)
@@ -1058,6 +1058,13 @@ private val MIGRATION_18_19 = object : Migration(18, 19) {
     }
 }
 
+/** How much of each concept a card contains; every existing tag is all of it. */
+private val MIGRATION_19_20 = object : Migration(19, 20) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `card_concept_cross_ref` ADD COLUMN `weight` REAL NOT NULL DEFAULT 1.0")
+    }
+}
+
 /**
  * A version 4 UUID, in canonical lower-case form, as an SQLite expression --
  * evaluated afresh for every row an UPDATE touches. SQLite has no uuid()
@@ -1093,4 +1100,5 @@ val ALL_MIGRATIONS: Array<Migration> = arrayOf(
     MIGRATION_16_17,
     MIGRATION_17_18,
     MIGRATION_18_19,
+    MIGRATION_19_20,
 )

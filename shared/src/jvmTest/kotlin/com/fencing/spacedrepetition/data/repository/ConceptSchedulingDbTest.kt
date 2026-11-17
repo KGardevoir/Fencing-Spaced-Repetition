@@ -642,6 +642,75 @@ class ConceptSchedulingDbTest {
     }
 
     @Test
+    fun `upgrades the released version 19`() = runTest {
+        val file = File.createTempFile("v19", ".db").apply { delete() }
+        try {
+            val path = file.absolutePath
+            createFromExportedSchema(File("src/jvmTest/resources/released/19-b490cfe.json"), 19, path)
+            insertRow(path, "cards", mapOf("id" to 1, "question" to "Lunge", "answer" to "", "imagePaths" to "", "fsrsState" to "NEW", "category" to "", "tags" to "", "uid" to "seed-card"))
+            insertRow(path, "concepts", mapOf("id" to 5, "name" to "Distance", "description" to "", "fsrsState" to "NEW", "uid" to "seed-concept"))
+            insertRow(path, "card_concept_cross_ref", mapOf("cardId" to 1, "conceptId" to 5))
+            val migrated = openMigrated(path)
+            try {
+                // Opening runs 19 -> 20 and validates every table against the entities.
+                assertEquals(listOf(1.0), migrated.conceptDao().getCardConceptLinksSync(1).map { it.weight })
+            } finally {
+                migrated.close()
+            }
+        } finally {
+            file.delete()
+        }
+    }
+
+    // ==================== weights ====================
+
+    @Test
+    fun `a session grades a concept by the weighted mean of its cards`() = runTest {
+        val a = concept("A")
+        val mostly = card("mostly A"); val barely = card("barely A")
+        db.conceptDao().insertCardConceptCrossRef(CardConceptCrossRef(mostly, a, weight = 1.0))
+        db.conceptDao().insertCardConceptCrossRef(CardConceptCrossRef(barely, a, weight = 0.2))
+        val session = repo.createPracticeSession(listOf(mostly, barely))
+        log(mostly, Grade.EASY, Time.now() - day, session = session)
+        log(barely, Grade.AGAIN, Time.now() - day, session = session)
+        repo.rederiveConcepts()
+        // (4 * 1.0 + 1 * 0.2) / 1.2 = 3.5, which rounds to EASY; unweighted it would be HARD-ish 2.5 -> GOOD.
+        val weighted = global(a)
+
+        val b = concept("B")
+        val one = card("one"); val two = card("two")
+        tag(one, b); tag(two, b)
+        val other = repo.createPracticeSession(listOf(one, two))
+        log(one, Grade.EASY, Time.now() - day, session = other)
+        log(two, Grade.AGAIN, Time.now() - day, session = other)
+        repo.rederiveConcepts()
+        assertTrue(weighted.fsrsStability > global(b).fsrsStability, "the lightly weighted AGAIN should count for less")
+    }
+
+    @Test
+    fun `changing a tag's weight rederives the concept, and 0 means the card does not count`() = runTest {
+        val a = concept("A")
+        val c = card("c")
+        log(c, Grade.GOOD, Time.now() - day)
+        repo.setCardConcepts(c, listOf(a), mapOf(a to 1.0))
+        assertEquals(1, global(a).fsrsReps)
+        repo.setCardConcepts(c, listOf(a), mapOf(a to 0.0))
+        assertEquals(0, global(a).fsrsReps)
+        assertEquals(listOf(0.0), db.conceptDao().getCardConceptLinksSync(c).map { it.weight })
+    }
+
+    @Test
+    fun `drawing prefers the card containing more of the due concepts`() = runTest {
+        val a = concept("A"); val b = concept("B")
+        val touchesBoth = card("touches both")
+        db.conceptDao().insertCardConceptCrossRef(CardConceptCrossRef(touchesBoth, a, weight = 0.2))
+        db.conceptDao().insertCardConceptCrossRef(CardConceptCrossRef(touchesBoth, b, weight = 0.2))
+        val allAboutA = card("all about A")
+        db.conceptDao().insertCardConceptCrossRef(CardConceptCrossRef(allAboutA, a, weight = 1.0))
+        assertEquals(listOf(allAboutA), repo.drawCards(1, null).map { it.id })
+    }
+
+    @Test
     fun `upgrades the first version 18 build, from before identifiers`() = upgradesFromReleasedV18("9a9b31d")
 
     @Test

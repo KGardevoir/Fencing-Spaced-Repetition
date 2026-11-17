@@ -642,6 +642,11 @@ private fun CardEditor(
         cardToEdit?.let { cardViewModel.getConceptsForCard(it.id) } ?: flowOf(emptyList<Concept>())
     }
     val cardConcepts by cardConceptsFlow.collectAsState(initial = emptyList())
+    val cardConceptLinksFlow = remember(cardToEdit?.id) {
+        cardToEdit?.let { cardViewModel.getConceptLinksForCard(it.id) }
+            ?: flowOf(emptyList<com.fencing.spacedrepetition.data.model.CardConceptCrossRef>())
+    }
+    val cardConceptLinks by cardConceptLinksFlow.collectAsState(initial = emptyList())
     val conceptLinks by cardViewModel.conceptLearningGroups.collectAsState()
     val globalConceptScheduling by settingsViewModel.globalConceptScheduling.collectAsState()
     // Where this card is learnt, the concepts available there, and -- when
@@ -671,6 +676,7 @@ private fun CardEditor(
         learningGroups = learningGroups,
         allConcepts = allConcepts,
         cardConcepts = cardConcepts,
+        cardConceptWeights = cardConceptLinks.filter { it.weight != 1.0 }.associate { it.conceptId to it.weight },
         cardToEdit = cardToEdit,
         initialGroupId = initialGroupId,
         onComputeGrade = { cardId, grade, groupId, onComputed ->
@@ -687,8 +693,8 @@ private fun CardEditor(
             cardViewModel.recordGradeFromEdit(before, after, grade, groupId)
         },
         onUpdateLearningState = { cardViewModel.updateLearningState(it) },
-        onAddCard = { question, answer, groupIds, imagePaths, conceptIds, onSuccess ->
-            cardViewModel.addCard(question, answer, groupIds, imagePaths, conceptIds, onSuccess)
+        onAddCard = { question, answer, groupIds, imagePaths, concepts, onSuccess ->
+            cardViewModel.addCard(question, answer, groupIds, imagePaths, concepts, onSuccess)
         },
         onCreateGroup = { name, onCreated -> groupViewModel.addGroup(name, onSuccess = onCreated) },
         cardContextsFor = cardContextsFor,

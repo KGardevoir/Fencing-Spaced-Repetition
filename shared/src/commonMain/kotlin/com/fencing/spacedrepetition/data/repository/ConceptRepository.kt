@@ -38,6 +38,9 @@ class ConceptRepository(private val conceptDao: ConceptDao) {
 
     suspend fun getConceptsForCardSync(cardId: Long): List<Concept> = conceptDao.getConceptsForCardSync(cardId)
 
+    /** A card's concept tags, with how much of each concept it contains. */
+    fun getConceptLinksForCard(cardId: Long): Flow<List<CardConceptCrossRef>> = conceptDao.getCardConceptLinks(cardId)
+
     /**
      * The concept named [name], created if there is none. Names are matched
      * ignoring case, so "parry 4" finds "Parry 4" rather than making a twin.

@@ -184,10 +184,16 @@ internal suspend fun ConceptRepository.withConceptNames(
     cardsWithStates: List<CardWithGroupStates>
 ): List<CardWithGroupStates> {
     val names = getAllConceptsSync().associate { it.id to it.name }
-    val byCard = getAllCardConceptCrossRefsSync()
+    val links = getAllCardConceptCrossRefsSync()
+    val byCard = links
         .groupBy({ it.cardId }, { names[it.conceptId] })
         .mapValues { (_, n) -> n.filterNotNull().sorted() }
-    return cardsWithStates.map { it.copy(conceptNames = byCard[it.card.id].orEmpty()) }
+    val weightsByCard = links.filter { it.weight != 1.0 }
+        .groupBy { it.cardId }
+        .mapValues { (_, l) -> l.mapNotNull { link -> names[link.conceptId]?.let { it to link.weight } }.toMap() }
+    return cardsWithStates.map {
+        it.copy(conceptNames = byCard[it.card.id].orEmpty(), conceptWeights = weightsByCard[it.card.id].orEmpty())
+    }
 }
 
 /**

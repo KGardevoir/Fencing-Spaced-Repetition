@@ -31,6 +31,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.backhandler.BackHandler
 import com.fencing.spacedrepetition.util.Time
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import com.fencing.spacedrepetition.data.model.Group
@@ -58,13 +59,18 @@ fun AddEditCardScreen(
     learningGroups: List<LearningGroup> = emptyList(),
     allConcepts: List<Concept> = emptyList(),
     cardConcepts: List<Concept> = emptyList(),
+    /** How much of each of [cardConcepts] the card contains (1 when absent). */
+    cardConceptWeights: Map<Long, Double> = emptyMap(),
     cardToEdit: Card? = null,
     initialGroupId: Long? = null,
     onComputeGrade: (cardId: Long, grade: Grade, groupId: Long?, onComputed: (Card) -> Unit) -> Unit,
     onResetCardState: (cardId: Long, resetGroupStates: Boolean, onDone: () -> Unit) -> Unit,
     onResetCardStateInGroup: (cardId: Long, groupId: Long, onDone: () -> Unit) -> Unit,
-    /** conceptIds is null when the concepts were not touched, leaving them as they are. */
-    onUpdateCard: (card: Card, groupIds: List<Long>, conceptIds: List<Long>?, onSuccess: () -> Unit) -> Unit,
+    /**
+     * concepts maps each concept the card carries to how much of it the card
+     * contains; null when the concepts were not touched, leaving them as they are.
+     */
+    onUpdateCard: (card: Card, groupIds: List<Long>, concepts: Map<Long, Double>?, onSuccess: () -> Unit) -> Unit,
     onRecordGradeFromEdit: (before: Card, after: Card, grade: Grade, groupId: Long?) -> Unit,
     onUpdateLearningState: (CardLearningState) -> Unit,
     onAddCard: (
@@ -72,7 +78,7 @@ fun AddEditCardScreen(
         answer: String,
         groupIds: List<Long>,
         imagePaths: List<String>,
-        conceptIds: List<Long>,
+        concepts: Map<Long, Double>,
         onSuccess: () -> Unit
     ) -> Unit,
     onCreateGroup: (name: String, onCreated: (Long) -> Unit) -> Unit,
@@ -110,6 +116,10 @@ fun AddEditCardScreen(
     // that races the concepts loading does not wipe them.
     var selectedConceptIds by remember(cardConcepts) { mutableStateOf(cardConcepts.map { it.id }.toSet()) }
     var conceptsTouched by rememberSaveable { mutableStateOf(false) }
+    // How much of each concept the card contains; a concept not in it is 1.
+    var conceptWeights by remember(cardConceptWeights) { mutableStateOf(cardConceptWeights) }
+    var weighing by remember { mutableStateOf<Concept?>(null) }
+    fun selectedConcepts(): Map<Long, Double> = selectedConceptIds.associateWith { conceptWeights[it] ?: 1.0 }
     var showConceptSelectionSheet by rememberSaveable { mutableStateOf(false) }
     var showCreateConceptDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -478,17 +488,14 @@ fun AddEditCardScreen(
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             allConcepts.filter { it.id in selectedConceptIds }.forEach { concept ->
+                                // Tap to set how much of the concept the card contains, or remove it.
                                 AssistChip(
-                                    onClick = {
-                                        selectedConceptIds = selectedConceptIds - concept.id
-                                        conceptsTouched = true
-                                        isDirty = true
-                                    },
-                                    label = { Text(concept.name) },
+                                    onClick = { weighing = concept },
+                                    label = { Text(conceptChipLabel(concept.name, conceptWeights[concept.id] ?: 1.0)) },
                                     trailingIcon = {
                                         Icon(
-                                            Icons.Default.Close,
-                                            contentDescription = "Remove",
+                                            Icons.Default.Tune,
+                                            contentDescription = "Weight or remove ${concept.name}",
                                             modifier = Modifier.size(16.dp)
                                         )
                                     }
@@ -944,7 +951,7 @@ fun AddEditCardScreen(
                             onUpdateCard(
                                 updatedCard,
                                 selectedGroupIds.toList(),
-                                if (conceptsTouched) selectedConceptIds.toList() else null
+                                if (conceptsTouched) selectedConcepts() else null
                             ) {
                                 // Record a history entry if a grade was applied via the grade buttons
                                 val grade = appliedGrade
@@ -974,7 +981,7 @@ fun AddEditCardScreen(
                                 answerFieldValue.text,
                                 selectedGroupIds.toList(),
                                 imagePaths,
-                                selectedConceptIds.toList()
+                                selectedConcepts()
                             ) { isDirty = false; onNavigateBack() }
                         }
                     }
@@ -1227,6 +1234,55 @@ fun AddEditCardScreen(
                 }
             )
         }
+    }
+
+    // How much of one concept the card contains
+    weighing?.let { concept ->
+        var percent by remember(concept.id) {
+            mutableStateOf(((conceptWeights[concept.id] ?: 1.0) * 100).roundToInt().toFloat())
+        }
+        AlertDialog(
+            onDismissRequest = { weighing = null },
+            icon = { Icon(Icons.Default.Lightbulb, contentDescription = null) },
+            title = { Text(concept.name) },
+            text = {
+                Column {
+                    Text(
+                        "How much of this concept the card contains: ${percent.roundToInt()}%",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Slider(value = percent, onValueChange = { percent = it }, valueRange = 0f..100f, steps = 9)
+                    Text(
+                        "When a session grades several cards with this concept, each card's grade " +
+                            "counts in proportion; drawing by concept prefers cards that contain more " +
+                            "of what is due. At 0% the card does not count towards it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val weight = percent.roundToInt() / 100.0
+                    conceptWeights = if (weight == 1.0) conceptWeights - concept.id else conceptWeights + (concept.id to weight)
+                    conceptsTouched = true
+                    isDirty = true
+                    weighing = null
+                }) { Text("Set") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        selectedConceptIds = selectedConceptIds - concept.id
+                        conceptWeights = conceptWeights - concept.id
+                        conceptsTouched = true
+                        isDirty = true
+                        weighing = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) { Text("Remove") }
+            }
+        )
     }
 
     // Concept selection bottom sheet
@@ -1734,3 +1790,7 @@ private fun SchedulingOffNote(text: String) {
         Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
     }
 }
+
+/** A concept chip's text: its name, and how much of it the card contains when that is not all. */
+internal fun conceptChipLabel(name: String, weight: Double): String =
+    if (weight >= 1.0) name else "$name · ${(weight * 100).roundToInt()}%"

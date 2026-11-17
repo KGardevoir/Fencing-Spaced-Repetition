@@ -118,4 +118,36 @@ class ConceptSchedulingTest {
             CardRepository.conceptReviewEvents(listOf(log(1, Grade.SKIP, 1, session = 3), log(2, Grade.SKIP, 2, session = 3)))
         )
     }
+
+    // ==================== weights ====================
+
+    @Test
+    fun `weighted grades lean towards the cards with more of the concept`() {
+        assertEquals(Grade.EASY, CardRepository.combineWeightedConceptGrades(listOf(Grade.EASY to 1.0, Grade.AGAIN to 0.2)))
+        assertEquals(Grade.AGAIN, CardRepository.combineWeightedConceptGrades(listOf(Grade.EASY to 0.1, Grade.AGAIN to 1.0)))
+        // Equal weights are the plain mean, whatever the weight.
+        assertEquals(
+            CardRepository.combineConceptGrades(listOf(Grade.HARD, Grade.GOOD)),
+            CardRepository.combineWeightedConceptGrades(listOf(Grade.HARD to 0.5, Grade.GOOD to 0.5))
+        )
+        assertFailsWith<IllegalArgumentException> { CardRepository.combineWeightedConceptGrades(listOf(Grade.GOOD to 0.0)) }
+    }
+
+    @Test
+    fun `a card that contains none of a concept says nothing about it`() {
+        val events = CardRepository.conceptReviewEvents(
+            listOf(log(1, Grade.EASY, 10, session = 1), log(2, Grade.AGAIN, 11, session = 1))
+        ) { cardId -> if (cardId == 2L) 0.0 else 1.0 }
+        assertEquals(Grade.EASY, events.single().grade)
+    }
+
+    @Test
+    fun `covering scores by how much of the uncovered concepts a card contains`() {
+        val concepts = mapOf(1L to setOf(10L, 11L), 2L to setOf(10L))
+        val weights = mapOf((1L to 10L) to 0.2, (1L to 11L) to 0.2, (2L to 10L) to 1.0)
+        val best = CardRepository.pickBestCoveringCard(
+            listOf(card(1), card(2)), concepts, uncovered = setOf(10L, 11L), randomize = false
+        ) { c, k -> weights.getValue(c to k) }
+        assertEquals(2L, best.id)
+    }
 }

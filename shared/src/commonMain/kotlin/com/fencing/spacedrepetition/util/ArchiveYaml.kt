@@ -218,6 +218,12 @@ internal data class ArchiveCard(
      * singular `concept:` above, which is an old name for the question.
      */
     val concepts: List<String>? = null,
+    /**
+     * How much of each of [concepts] the card contains, from 0 to 1, for
+     * those that are not 1 -- the default, and all a file from before weights
+     * implies.
+     */
+    val conceptWeights: Map<String, Double>? = null,
     val state: ArchiveState? = null,
     val learningStates: List<ArchiveLearningState> = emptyList(),
     /** Per-group states from before learning groups; read, never written. */
@@ -487,7 +493,8 @@ internal object ArchiveYaml {
         learningStates: Map<String, CardLearningState>,
         images: ImageReader,
         /** Null leaves the card's concepts unsaid, as the narrow export does; a list, even empty, is written. */
-        conceptNames: List<String>? = null
+        conceptNames: List<String>? = null,
+        conceptWeights: Map<String, Double> = emptyMap()
     ): ArchiveCard {
         val state = ArchiveState(
             nextReview = card.nextReview,
@@ -507,6 +514,7 @@ internal object ArchiveYaml {
             images = card.imagePaths.mapNotNull { CardImportExport.encodeImageToBase64(it, images) },
             groups = groupNames.filter { it.isNotBlank() },
             concepts = conceptNames?.filter { it.isNotBlank() },
+            conceptWeights = conceptWeights.filterValues { it != 1.0 }.takeIf { it.isNotEmpty() },
             state = state.takeIf { it != ArchiveState() },
             learningStates = learningStates.map { (name, learning) ->
                 ArchiveLearningState(
@@ -757,6 +765,7 @@ internal object ArchiveYaml {
         }.copy(
             conceptNames = concepts,
             conceptsStated = card.concepts != null,
+            conceptWeights = card.conceptWeights.orEmpty().mapKeys { it.key.trim() },
             uid = card.uid?.takeIf { it.isNotBlank() }
         )
         val learning = card.learningStates.filter { it.learningGroup.isNotBlank() }.map { learningState ->

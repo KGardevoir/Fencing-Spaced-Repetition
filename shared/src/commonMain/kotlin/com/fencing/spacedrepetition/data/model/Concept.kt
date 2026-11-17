@@ -144,8 +144,21 @@ data class ConceptLearningGroupCrossRef(
 )
 data class CardConceptCrossRef(
     val cardId: Long,
-    val conceptId: Long
-)
+    val conceptId: Long,
+    /**
+     * How much of the concept the card contains, from 0 (none) to 1 (all of
+     * it, the default). Scores the card for the concept: a session's grade
+     * for a concept is the weighted mean of its cards' grades, and drawing
+     * by concept prefers the cards that contain the most of the due ones.
+     */
+    @ColumnInfo(defaultValue = "1.0")
+    val weight: Double = 1.0
+) {
+    companion object {
+        const val MIN_WEIGHT = 0.0
+        const val MAX_WEIGHT = 1.0
+    }
+}
 
 /** One concept's learning progress in one [LearningGroup]. */
 @Entity(

@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.algorithm.RetentionPlanner
 import com.fencing.spacedrepetition.algorithm.ScheduleEstimate
 import com.fencing.spacedrepetition.data.model.Card
+import com.fencing.spacedrepetition.data.model.CardConceptCrossRef
 import com.fencing.spacedrepetition.data.model.Concept
 import com.fencing.spacedrepetition.data.model.ConceptLearningGroupCrossRef
 import com.fencing.spacedrepetition.data.model.CardLearningState
@@ -246,17 +247,24 @@ class CardViewModel(
 
     fun getConceptsForCard(cardId: Long): Flow<List<Concept>> = conceptRepository.getConceptsForCard(cardId)
 
+    /** A card's concept tags, with how much of each concept it contains. */
+    fun getConceptLinksForCard(cardId: Long): Flow<List<CardConceptCrossRef>> =
+        conceptRepository.getConceptLinksForCard(cardId)
+
     val allConcepts: StateFlow<List<Concept>> = conceptRepository.getAllConcepts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    /** Each card's concepts, by card id, sorted by name -- for showing them on the card list. */
-    val conceptsByCard: StateFlow<Map<Long, List<Concept>>> = combine(
+    /**
+     * Each card's concepts with how much of each it contains, by card id,
+     * sorted by name -- for showing them on the card list.
+     */
+    val conceptsByCard: StateFlow<Map<Long, List<Pair<Concept, Double>>>> = combine(
         conceptRepository.getAllConcepts(),
         conceptRepository.getAllCardConceptCrossRefs()
     ) { concepts, refs ->
         val byId = concepts.associateBy { it.id }
-        refs.groupBy({ it.cardId }, { byId[it.conceptId] })
-            .mapValues { (_, list) -> list.filterNotNull().sortedBy { it.name.lowercase() } }
+        refs.groupBy({ it.cardId }, { ref -> byId[ref.conceptId]?.let { it to ref.weight } })
+            .mapValues { (_, list) -> list.filterNotNull().sortedBy { it.first.name.lowercase() } }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     /** Which learning groups offer which concepts, for the card editor. */
@@ -284,7 +292,7 @@ class CardViewModel(
         answer: String,
         groupIds: List<Long>,
         imagePaths: List<String> = emptyList(),
-        conceptIds: List<Long> = emptyList(),
+        concepts: Map<Long, Double> = emptyMap(),
         onSuccess: () -> Unit
     ) {
         viewModelScope.launch {
@@ -295,7 +303,7 @@ class CardViewModel(
                     imagePaths = imagePaths
                 )
                 val cardId = repository.insertCardWithGroups(card, groupIds)
-                if (conceptIds.isNotEmpty()) repository.setCardConcepts(cardId, conceptIds)
+                if (concepts.isNotEmpty()) repository.setCardConcepts(cardId, concepts.keys, concepts)
                 onSuccess()
             } catch (e: Exception) {
                 // Handle error
@@ -303,12 +311,13 @@ class CardViewModel(
         }
     }
 
-    fun updateCard(card: Card, groupIds: List<Long>, conceptIds: List<Long>?, onSuccess: () -> Unit) {
+    /** [concepts]: each concept the card carries and how much of it; null leaves them as they are. */
+    fun updateCard(card: Card, groupIds: List<Long>, concepts: Map<Long, Double>?, onSuccess: () -> Unit) {
         viewModelScope.launch {
             try {
                 repository.updateCard(card.copy(modified = Time.now()))
                 repository.updateCardGroups(card.id, groupIds)
-                conceptIds?.let { repository.setCardConcepts(card.id, it) }
+                concepts?.let { repository.setCardConcepts(card.id, it.keys, it) }
                 onSuccess()
             } catch (e: Exception) {
                 // Handle error

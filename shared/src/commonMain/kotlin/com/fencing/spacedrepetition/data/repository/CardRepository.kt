@@ -539,8 +539,12 @@ class CardRepository(
                 ?: cardDao.findCardByQuestion(question)
                 ?: return@forEach
             conceptDao.deleteAllConceptsForCard(card.id)
+            val weights = records.flatMap { it.conceptWeights.entries }.associate { it.key to it.value }
             names.forEach { name ->
-                conceptIds[name]?.let { conceptDao.insertCardConceptCrossRef(CardConceptCrossRef(card.id, it)) }
+                conceptIds[name]?.let {
+                    val weight = (weights[name] ?: 1.0).coerceIn(CardConceptCrossRef.MIN_WEIGHT, CardConceptCrossRef.MAX_WEIGHT)
+                    conceptDao.insertCardConceptCrossRef(CardConceptCrossRef(card.id, it, weight))
+                }
             }
         }
     }
@@ -556,9 +560,13 @@ class CardRepository(
         val cardsWithGroups = cardDao.getAllCardsWithGroups().first()
         val learningGroupNames = groupDao.getAllLearningGroups().first().associate { it.id to it.name }
         val conceptNames = conceptDao.getAllConceptsSync().associate { it.id to it.name }
-        val conceptsByCard = conceptDao.getAllCardConceptCrossRefsSync()
+        val links = conceptDao.getAllCardConceptCrossRefsSync()
+        val conceptsByCard = links
             .groupBy({ it.cardId }, { conceptNames[it.conceptId] })
             .mapValues { (_, names) -> names.filterNotNull().sorted() }
+        val weightsByCard = links.filter { it.weight != 1.0 }
+            .groupBy { it.cardId }
+            .mapValues { (_, l) -> l.mapNotNull { link -> conceptNames[link.conceptId]?.let { it to link.weight } }.toMap() }
         return cardsWithGroups.map { cardWithGroups ->
             val card = cardWithGroups.card
             val groups = cardWithGroups.groups
@@ -573,7 +581,9 @@ class CardRepository(
                     .toMap()
             }
 
-            CardWithGroupStates(card, groupNames, learningStates, conceptsByCard[card.id].orEmpty())
+            CardWithGroupStates(
+                card, groupNames, learningStates, conceptsByCard[card.id].orEmpty(), weightsByCard[card.id].orEmpty()
+            )
         }
     }
 
@@ -671,7 +681,9 @@ class CardRepository(
         val bucketHours = learningGroup?.randomizeBucketHours ?: preferences.randomizeBucketHours.first()
 
         val poolIds = pool.map { it.id }.toSet()
-        val conceptsByCard: Map<Long, Set<Long>> = conceptDao.getAllCardConceptCrossRefsSync()
+        val links = conceptDao.getAllCardConceptCrossRefsSync()
+        val weights = links.associate { (it.cardId to it.conceptId) to it.weight }
+        val conceptsByCard: Map<Long, Set<Long>> = links
             .filter { it.cardId in poolIds }
             .groupBy({ it.cardId }, { it.conceptId })
             .mapValues { it.value.toSet() }
@@ -715,7 +727,9 @@ class CardRepository(
                         uncovered -= unit.conceptId
                         continue
                     }
-                    val best = pickBestCoveringCard(candidates, conceptsByCard, uncovered, shouldRandomize)
+                    val best = pickBestCoveringCard(candidates, conceptsByCard, uncovered, shouldRandomize) { card, concept ->
+                        weights[card to concept] ?: 1.0
+                    }
                     selected[best.id] = best
                     uncovered -= conceptsByCard.getValue(best.id)
                 }
@@ -768,14 +782,22 @@ class CardRepository(
         if (ids.isNotEmpty()) rederiveConcepts(ids)
     }
 
-    /** Make [conceptIds] exactly the concepts [cardId] carries, and rederive every concept that changed. */
-    suspend fun setCardConcepts(cardId: Long, conceptIds: Collection<Long>) {
-        val before = conceptDao.getConceptsForCardSync(cardId).map { it.id }.toSet()
-        val after = conceptIds.toSet()
+    /**
+     * Make [conceptIds] exactly the concepts [cardId] carries, each with its
+     * weight in [weights] (1 when absent), and rederive every concept that changed.
+     */
+    suspend fun setCardConcepts(
+        cardId: Long,
+        conceptIds: Collection<Long>,
+        weights: Map<Long, Double> = emptyMap()
+    ) {
+        val before = conceptDao.getCardConceptLinksSync(cardId).associate { it.conceptId to it.weight }
+        val after = conceptIds.associateWith { (weights[it] ?: 1.0).coerceIn(CardConceptCrossRef.MIN_WEIGHT, CardConceptCrossRef.MAX_WEIGHT) }
         if (before == after) return
         conceptDao.deleteAllConceptsForCard(cardId)
-        after.forEach { conceptDao.insertCardConceptCrossRef(CardConceptCrossRef(cardId, it)) }
-        rederiveConcepts((before - after) + (after - before))
+        after.forEach { (conceptId, weight) -> conceptDao.insertCardConceptCrossRef(CardConceptCrossRef(cardId, conceptId, weight)) }
+        // A concept whose tag came, went or changed weight scores differently now.
+        rederiveConcepts((before.keys + after.keys).filter { before[it] != after[it] })
     }
 
     /**
@@ -790,8 +812,10 @@ class CardRepository(
         val concepts = if (conceptIds == null) conceptDao.getAllConceptsSync()
             else conceptDao.getConceptsByIds(conceptIds.toList())
         if (concepts.isEmpty()) return
+        // Each concept's cards, with how much of the concept each contains.
         val cardsByConcept = conceptDao.getAllCardConceptCrossRefsSync()
-            .groupBy({ it.conceptId }, { it.cardId })
+            .groupBy({ it.conceptId }, { it.cardId to it.weight })
+            .mapValues { it.value.toMap() }
         val logsByCard = reviewLogDao.getAllReviewLogsSync().groupBy { it.cardId }
         val groups = GroupLookup(groupDao.getAllGroups().first())
         val learningGroupIds = groupDao.getAllLearningGroups().first().map { it.id }.toSet()
@@ -806,7 +830,8 @@ class CardRepository(
         }
 
         concepts.forEach { concept ->
-            val logs = cardsByConcept[concept.id].orEmpty().flatMap { logsByCard[it].orEmpty() }
+            val weights = cardsByConcept[concept.id].orEmpty()
+            val logs = weights.keys.flatMap { logsByCard[it].orEmpty() }
                 .filter { it.grade != Grade.SKIP.value }
             if (onlyWithHistory && logs.isEmpty()) return@forEach
 
@@ -820,7 +845,8 @@ class CardRepository(
                 if (log.reviewTime <= resetOf(log.cardId, context)) null else context to log
             }.groupBy({ it.first }, { it.second })
 
-            val global = replayConceptHistory(concept.id, 0L, byContext[ContextKey(null)].orEmpty(), groups)
+            val weightOf = { cardId: Long -> weights[cardId] ?: 1.0 }
+            val global = replayConceptHistory(concept.id, 0L, byContext[ContextKey(null)].orEmpty(), groups, weightOf)
                 ?: ConceptLearningState(concept.id, 0L)
             conceptDao.updateConcept(concept.withGlobalState(global))
 
@@ -828,7 +854,7 @@ class CardRepository(
             byContext.forEach { (key, contextLogs) ->
                 val learningGroupId = key.learningGroupId ?: return@forEach
                 if (learningGroupId !in learningGroupIds) return@forEach
-                replayConceptHistory(concept.id, learningGroupId, contextLogs, groups)
+                replayConceptHistory(concept.id, learningGroupId, contextLogs, groups, weightOf)
                     ?.let { conceptDao.upsertConceptLearningState(it) }
             }
         }
@@ -855,9 +881,10 @@ class CardRepository(
         conceptId: Long,
         learningGroupId: Long,
         logs: List<ReviewLog>,
-        groups: GroupLookup
+        groups: GroupLookup,
+        weightOf: (cardId: Long) -> Double
     ): ConceptLearningState? {
-        val events = conceptReviewEvents(logs)
+        val events = conceptReviewEvents(logs, weightOf)
         if (events.isEmpty()) return null
         var state = ConceptLearningState(conceptId, learningGroupId)
         events.forEach { event ->
@@ -1522,21 +1549,28 @@ class CardRepository(
          *
          * The reviews of one practice session are one fight, so all of a
          * session's logs make a single concept review, graded with the
-         * rounded mean of its cards' grades -- a concept on three cards of one
-         * session is reviewed once, not three times in the same minute. A log
-         * outside any session (graded from the card editor, or imported
-         * without one) is a review of its own. Skips say nothing and are left
-         * out; a session of nothing but skips is no review at all.
+         * rounded mean of its cards' grades, each weighted by how much of the
+         * concept its card contains ([weightOf], by card id) -- a concept on
+         * three cards of one session is reviewed once, not three times in the
+         * same minute. A log outside any session (graded from the card editor,
+         * or imported without one) is a review of its own. Skips say nothing
+         * and are left out, as are cards that contain none of the concept
+         * (weight 0); a session of nothing else is no review at all.
          */
-        internal fun conceptReviewEvents(logs: List<ReviewLog>): List<ConceptReviewEvent> =
-            logs.filter { it.grade != Grade.SKIP.value && Grade.fromValue(it.grade) != null }
+        internal fun conceptReviewEvents(
+            logs: List<ReviewLog>,
+            weightOf: (cardId: Long) -> Double = { 1.0 }
+        ): List<ConceptReviewEvent> =
+            logs.filter { it.grade != Grade.SKIP.value && Grade.fromValue(it.grade) != null && weightOf(it.cardId) > 0.0 }
                 .groupBy { log -> log.sessionId?.let { "s$it" } ?: "l${log.id}:${log.reviewTime}" }
                 .values
                 .map { session ->
                     val first = session.minBy { it.reviewTime }
                     ConceptReviewEvent(
                         time = first.reviewTime,
-                        grade = combineConceptGrades(session.map { Grade.fromValue(it.grade)!! }),
+                        grade = combineWeightedConceptGrades(
+                            session.map { Grade.fromValue(it.grade)!! to weightOf(it.cardId) }
+                        ),
                         groupName = first.groupName,
                         groupUid = first.groupUid,
                         stabilityMultiplier = first.stabilityMultiplier
@@ -1544,29 +1578,44 @@ class CardRepository(
                 }
                 .sortedBy { it.time }
 
-        internal fun combineConceptGrades(grades: List<Grade>): Grade {
-            require(grades.isNotEmpty() && grades.none { it == Grade.SKIP })
-            val mean = grades.sumOf { it.value }.toDouble() / grades.size
+        internal fun combineConceptGrades(grades: List<Grade>): Grade =
+            combineWeightedConceptGrades(grades.map { it to 1.0 })
+
+        /**
+         * The weighted mean of [grades] -- each grade with how much of the
+         * concept its card contains -- rounded half up to the nearest grade.
+         * Weights need not add up to anything; at least one must be above 0.
+         */
+        internal fun combineWeightedConceptGrades(grades: List<Pair<Grade, Double>>): Grade {
+            require(grades.isNotEmpty() && grades.none { it.first == Grade.SKIP })
+            val total = grades.sumOf { it.second }
+            require(total > 0.0) { "No card contains any of the concept" }
+            val mean = grades.sumOf { (grade, weight) -> grade.value * weight } / total
             val rounded = kotlin.math.floor(mean + 0.5).toInt().coerceIn(Grade.AGAIN.value, Grade.EASY.value)
             return Grade.fromValue(rounded)!!
         }
 
         /**
-         * Of [candidates], the card carrying the most [uncovered] concepts;
-         * ties go to the card carrying the fewest concepts that are not due
-         * (it spends less of the session on what does not need it), then to
-         * a random one when randomising, else the lowest id.
+         * Of [candidates], the card containing the most of the [uncovered]
+         * concepts: the sum of its weights for them ([weightOf], by card and
+         * concept), so a card that is all about two due concepts beats one
+         * that only touches three. Ties go to the card carrying the fewest
+         * concepts that are not due (it spends less of the session on what
+         * does not need it), then to a random one when randomising, else the
+         * lowest id.
          */
         internal fun pickBestCoveringCard(
             candidates: List<Card>,
             conceptsByCard: Map<Long, Set<Long>>,
             uncovered: Set<Long>,
-            randomize: Boolean
+            randomize: Boolean,
+            weightOf: (cardId: Long, conceptId: Long) -> Double = { _, _ -> 1.0 }
         ): Card {
             val ordered = if (randomize) candidates.shuffled() else candidates.sortedBy { it.id }
             return ordered.maxWith(
-                compareBy<Card> { card -> conceptsByCard.getValue(card.id).count { it in uncovered } }
-                    .thenByDescending { card -> conceptsByCard.getValue(card.id).count { it !in uncovered } }
+                compareBy<Card> { card ->
+                    conceptsByCard.getValue(card.id).filter { it in uncovered }.sumOf { weightOf(card.id, it) }
+                }.thenByDescending { card -> conceptsByCard.getValue(card.id).count { it !in uncovered } }
             )
         }
 

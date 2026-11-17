@@ -48,6 +48,8 @@ data class ParsedCard(
      * from before concepts does not, and an import leaves the card's as they are.
      */
     val conceptsStated: Boolean = false,
+    /** How much of each concept the card contains, by concept name; a concept not listed is 1. */
+    val conceptWeights: Map<String, Double> = emptyMap(),
     /** The card's stable identifier, on its own record; null in files from before them. */
     val uid: String? = null,
     /** When this record's progress was last reset (0 never); null when the file does not say. */
@@ -76,7 +78,9 @@ data class CardWithGroupStates(
     val card: Card,
     val groupNames: List<String>,
     val learningStates: Map<String, com.fencing.spacedrepetition.data.model.CardLearningState> = emptyMap(),
-    val conceptNames: List<String> = emptyList()
+    val conceptNames: List<String> = emptyList(),
+    /** How much of each concept the card contains, by concept name; a concept not listed is 1. */
+    val conceptWeights: Map<String, Double> = emptyMap()
 )
 
 /**

@@ -70,6 +70,12 @@ interface ConceptDao {
     """)
     suspend fun getConceptsForCardSync(cardId: Long): List<Concept>
 
+    @Query("SELECT * FROM card_concept_cross_ref WHERE cardId = :cardId")
+    fun getCardConceptLinks(cardId: Long): Flow<List<CardConceptCrossRef>>
+
+    @Query("SELECT * FROM card_concept_cross_ref WHERE cardId = :cardId")
+    suspend fun getCardConceptLinksSync(cardId: Long): List<CardConceptCrossRef>
+
     @Query("SELECT cardId FROM card_concept_cross_ref WHERE conceptId = :conceptId")
     suspend fun getCardIdsForConcept(conceptId: Long): List<Long>
 

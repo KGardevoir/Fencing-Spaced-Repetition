@@ -264,4 +264,21 @@ class ConceptArchiveTest {
         )
         assertEquals("Feet first", restored.description)
     }
+
+    @Test
+    fun conceptWeightsRoundTripAndAllOfAConceptIsNotWritten() {
+        val text = export(
+            cards = listOf(
+                CardWithGroupStates(
+                    Card(id = 1, question = "Lunge", answer = ""), emptyList(),
+                    conceptNames = listOf("Distance", "Tempo"), conceptWeights = mapOf("Distance" to 0.3)
+                )
+            ),
+            concepts = listOf(ConceptWithStates(Concept(id = 1, name = "Distance")), ConceptWithStates(Concept(id = 2, name = "Tempo")))
+        )
+        assertTrue("conceptWeights:" in text)
+        assertTrue("Tempo\": 1.0" !in text)
+        val (parsed, _) = CardImportExport.parseCards(text.lines())
+        assertEquals(mapOf("Distance" to 0.3), parsed.single().conceptWeights)
+    }
 }

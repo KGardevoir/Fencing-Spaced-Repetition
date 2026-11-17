@@ -62,7 +62,7 @@ fun CardListScreen(
     concepts: List<com.fencing.spacedrepetition.data.model.Concept> = emptyList(),
     selectedConceptFilters: Set<Long> = emptySet(),
     /** Each card's concepts, by card id, shown on the card the way its groups are. */
-    conceptsByCard: Map<Long, List<com.fencing.spacedrepetition.data.model.Concept>> = emptyMap(),
+    conceptsByCard: Map<Long, List<Pair<com.fencing.spacedrepetition.data.model.Concept, Double>>> = emptyMap(),
     onToggleConceptFilter: (Long) -> Unit = {},
     searchQuery: String,
     cardCount: Int,
@@ -896,7 +896,8 @@ fun ExportGroupSelectionDialog(
 fun CardListItem(
     card: Card,
     groups: List<Group>,
-    concepts: List<com.fencing.spacedrepetition.data.model.Concept> = emptyList(),
+    /** The card's concepts, each with how much of it the card contains. */
+    concepts: List<Pair<com.fencing.spacedrepetition.data.model.Concept, Double>> = emptyList(),
     learningStates: List<CardLearningState> = emptyList(),
     learningGroups: List<LearningGroup> = emptyList(),
     isSelectionMode: Boolean = false,
@@ -1034,7 +1035,10 @@ fun CardListItem(
                                 AssistChip(
                                     onClick = { },
                                     label = {
-                                        Text(concepts.first().name, style = MaterialTheme.typography.labelSmall)
+                                        Text(
+                                            conceptChipLabel(concepts.first().first.name, concepts.first().second),
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
                                     },
                                     leadingIcon = {
                                         Icon(
@@ -1133,10 +1137,10 @@ fun CardListItem(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        concepts.forEach { concept ->
+                        concepts.forEach { (concept, weight) ->
                             AssistChip(
                                 onClick = { },
-                                label = { Text(concept.name, style = MaterialTheme.typography.labelSmall) },
+                                label = { Text(conceptChipLabel(concept.name, weight), style = MaterialTheme.typography.labelSmall) },
                                 leadingIcon = {
                                     Icon(
                                         Icons.Default.Lightbulb,
