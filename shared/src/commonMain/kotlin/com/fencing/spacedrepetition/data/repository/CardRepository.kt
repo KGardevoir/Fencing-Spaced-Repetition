@@ -739,6 +739,8 @@ class CardRepository(
         val selected = LinkedHashMap<Long, Card>()
         // Why each was taken: the due concepts a card was picked to cover.
         val coveredBy = HashMap<Long, Set<Long>>()
+        // ...and the one due concept whose turn it was when the card was picked.
+        val triggeredBy = HashMap<Long, Long>()
         val uncovered = units.filterIsInstance<DueUnit.OfConcept>().map { it.conceptId }.toMutableSet()
         val tagged = pool.filter { it.id in conceptsByCard }
 
@@ -760,6 +762,7 @@ class CardRepository(
                     }
                     selected[best.id] = best
                     coveredBy[best.id] = conceptsByCard.getValue(best.id) intersect uncovered
+                    triggeredBy[best.id] = unit.conceptId
                     uncovered -= conceptsByCard.getValue(best.id)
                 }
             }
@@ -780,7 +783,8 @@ class CardRepository(
                 CardSelection(
                     SelectionMode.CONCEPT,
                     if (card.id in due) SelectionReason.DUE else SelectionReason.EXTRA,
-                    coveredBy[card.id].orEmpty().mapNotNull { conceptUids[it] }.sorted()
+                    coveredBy[card.id].orEmpty().mapNotNull { conceptUids[it] }.sorted(),
+                    triggeredBy[card.id]?.let { conceptUids[it] }
                 )
             )
         }
@@ -1134,7 +1138,8 @@ class CardRepository(
                 opponentSkillMultiplier = opponentSkill,
                 selectionMode = selection?.mode?.name,
                 selectionReason = selection?.reason?.name,
-                selectionConcepts = selection?.conceptUids?.takeIf { it.isNotEmpty() }?.joinToString(",")
+                selectionConcepts = selection?.conceptUids?.takeIf { it.isNotEmpty() }?.joinToString(","),
+                selectionTrigger = selection?.triggerConceptUid
             ))
             return card
         }
@@ -1161,7 +1166,8 @@ class CardRepository(
             opponentSkillMultiplier = opponentSkill,
             selectionMode = selection?.mode?.name,
             selectionReason = selection?.reason?.name,
-            selectionConcepts = selection?.conceptUids?.takeIf { it.isNotEmpty() }?.joinToString(",")
+            selectionConcepts = selection?.conceptUids?.takeIf { it.isNotEmpty() }?.joinToString(","),
+            selectionTrigger = selection?.triggerConceptUid
         )
 
         reviewLogDao.insertReviewLog(reviewLog)
@@ -1224,7 +1230,8 @@ class CardRepository(
                 opponentSkillMultiplier = opponentSkill,
                 selectionMode = selection?.mode?.name,
                 selectionReason = selection?.reason?.name,
-                selectionConcepts = selection?.conceptUids?.takeIf { it.isNotEmpty() }?.joinToString(",")
+                selectionConcepts = selection?.conceptUids?.takeIf { it.isNotEmpty() }?.joinToString(","),
+                selectionTrigger = selection?.triggerConceptUid
             ))
             return card
         }
@@ -1251,7 +1258,8 @@ class CardRepository(
             opponentSkillMultiplier = opponentSkill,
             selectionMode = selection?.mode?.name,
             selectionReason = selection?.reason?.name,
-            selectionConcepts = selection?.conceptUids?.takeIf { it.isNotEmpty() }?.joinToString(",")
+            selectionConcepts = selection?.conceptUids?.takeIf { it.isNotEmpty() }?.joinToString(","),
+            selectionTrigger = selection?.triggerConceptUid
         )
 
         reviewLogDao.insertReviewLog(reviewLog)
@@ -1364,7 +1372,8 @@ class CardRepository(
                     opponentSkillMultiplier = opponentSkill,
                     selectionMode = selections[card.id]?.mode?.name,
                     selectionReason = selections[card.id]?.reason?.name,
-                    selectionConcepts = selections[card.id]?.conceptUids?.takeIf { it.isNotEmpty() }?.joinToString(",")
+                    selectionConcepts = selections[card.id]?.conceptUids?.takeIf { it.isNotEmpty() }?.joinToString(","),
+                    selectionTrigger = selections[card.id]?.triggerConceptUid
                 ))
                 return@forEach
             }
@@ -1389,7 +1398,8 @@ class CardRepository(
                     opponentSkillMultiplier = opponentSkill,
                     selectionMode = selections[card.id]?.mode?.name,
                     selectionReason = selections[card.id]?.reason?.name,
-                    selectionConcepts = selections[card.id]?.conceptUids?.takeIf { it.isNotEmpty() }?.joinToString(",")
+                    selectionConcepts = selections[card.id]?.conceptUids?.takeIf { it.isNotEmpty() }?.joinToString(","),
+                    selectionTrigger = selections[card.id]?.triggerConceptUid
                 )
             )
 

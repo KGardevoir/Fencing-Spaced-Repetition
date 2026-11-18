@@ -48,6 +48,25 @@ class Migration22To23Test {
         assertEquals(viaConcepts, viaMaster)
     }
 
+    @Test
+    fun `23 to 24 records which concept picked a card, and nothing before it says`() = runTest {
+        MigrationHarness(foreignKeys = true).use { db ->
+            db.createSchemaV11()
+            db.migrateThrough(from = 11, to = 23)
+            db.exec("INSERT INTO `cards` (`id`, `question`, `answer`, `uid`) VALUES (1, 'Lunge', '', 'card-1')")
+            db.exec(
+                """
+                INSERT INTO `review_logs` (`id`, `cardId`, `reviewTime`, `grade`, `algorithm`, `stateBefore`,
+                    `stateAfter`, `scheduledDays`, `elapsedDays`, `notes`, `imagePaths`, `stabilityMultiplier`, `uid`)
+                VALUES (1, 1, 100, 3, 'FSRS', '', '', 1, 0, '', '', 1.0, 'log-1')
+                """
+            )
+            db.migrate(from = 23)
+            assertTrue("selectionTrigger" in db.columnsOf("review_logs"))
+            assertEquals(0L, db.queryLong("SELECT COUNT(*) FROM `review_logs` WHERE `selectionTrigger` IS NOT NULL"))
+        }
+    }
+
     /**
      * Released versions never change: Room checks the schema's identity hash
      * on open, and a phone already on a version whose schema changed under
@@ -60,6 +79,7 @@ class Migration22To23Test {
         val dir = "schemas/com.fencing.spacedrepetition.data.AppDatabase"
         assertEquals(identity("src/jvmTest/resources/released/21-d06a7b4.json"), identity("$dir/21.json"))
         assertEquals(identity("src/jvmTest/resources/released/22-9e957ee.json"), identity("$dir/22.json"))
+        assertEquals(identity("src/jvmTest/resources/released/23-0ecf3e5.json"), identity("$dir/23.json"))
         // 23 is 21's schema under the number that joins both lines.
         assertEquals(identity("$dir/21.json"), identity("$dir/23.json"))
     }

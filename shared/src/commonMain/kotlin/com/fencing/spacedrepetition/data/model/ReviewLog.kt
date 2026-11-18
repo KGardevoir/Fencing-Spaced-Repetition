@@ -93,7 +93,13 @@ data class ReviewLog(
      * fight difficulty: [stabilityMultiplier] is this times the fight
      * difficulty's multiplier. Null when there was no opponent.
      */
-    val opponentSkillMultiplier: Double? = null
+    val opponentSkillMultiplier: Double? = null,
+    /**
+     * Drawn by concept: the stable identifier of the one due concept that
+     * picked this card (one of [selectionConcepts]). Null otherwise, and on
+     * logs from before version 24.
+     */
+    val selectionTrigger: String? = null
 ) {
     /** [selectionConcepts] as a list. */
     val selectionConceptUids: List<String>

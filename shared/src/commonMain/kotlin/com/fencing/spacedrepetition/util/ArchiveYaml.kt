@@ -315,7 +315,9 @@ internal data class ArchiveReviewLog(
     /** The due concepts (by uid, as under `concepts:`) the card was drawn to cover. */
     val selectionConcepts: List<String> = emptyList(),
     /** The opponent's skill multiplier at the time, before fight difficulty. */
-    val opponentSkillMultiplier: Double? = null
+    val opponentSkillMultiplier: Double? = null,
+    /** Drawn by concept: the due concept (by uid) that picked the card. */
+    val selectionTrigger: String? = null
 )
 
 // ==========================================================================
@@ -589,7 +591,8 @@ internal object ArchiveYaml {
         selectionMode = log.selectionMode,
         selectionReason = log.selectionReason,
         selectionConcepts = log.selectionConceptUids,
-        opponentSkillMultiplier = log.opponentSkillMultiplier
+        opponentSkillMultiplier = log.opponentSkillMultiplier,
+        selectionTrigger = log.selectionTrigger
     )
 
     /** One session, with its notes and their pictures inlined. */
@@ -721,7 +724,8 @@ internal object ArchiveYaml {
         selectionMode = log.selectionMode?.takeIf { it.isNotBlank() },
         selectionReason = log.selectionReason?.takeIf { it.isNotBlank() },
         selectionConcepts = log.selectionConcepts.map { it.trim() }.filter { it.isNotEmpty() },
-        opponentSkillMultiplier = log.opponentSkillMultiplier
+        opponentSkillMultiplier = log.opponentSkillMultiplier,
+        selectionTrigger = log.selectionTrigger?.takeIf { it.isNotBlank() }
     )
 
     fun parsedSession(session: ArchiveSession) = CardImportExport.ParsedSession(

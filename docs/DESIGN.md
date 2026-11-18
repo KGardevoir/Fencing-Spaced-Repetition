@@ -180,7 +180,7 @@ rebuilds it from the session's reviews.
 
 ### Why a card was practised
 
-Every review written since version 21 also records, for later analysis,
+Every review written since version 21 (24 for `selectionTrigger`) also records, for later analysis,
 why the card was in front of the fencer and against whom:
 
 | Column | What it records |
@@ -188,14 +188,16 @@ why the card was in front of the fencer and against whom:
 | `selectionMode` | How the session was drawn: `CARD` (card by card) or `CONCEPT` |
 | `selectionReason` | Why this card: `DUE`; `EXTRA` (topped up a session the due cards did not fill); `LOCKED` (the group's draw was locked, so earlier cards were kept); `EDITOR` (graded in the card editor, not drawn) |
 | `selectionConcepts` | Drawn by concept: the `uid`s of the due concepts the card was picked to cover (comma-separated; empty for an untagged due card or extra study) |
+| `selectionTrigger` | Drawn by concept: the `uid` of the one due concept that picked the card -- the walk through the due concepts (most overdue first, bucket-shuffled where the group randomises) reached it uncovered, and this card was its best cover. Always one of `selectionConcepts`; null otherwise (since version 24) |
 | `opponentSkillMultiplier` | The opponent's skill multiplier at the time, before fight difficulty |
 
 With `fightDifficulty` (1-5) and `stabilityMultiplier` (the two
 multipliers combined, as applied) already on every review, a past review
 can be taken apart into opponent and fight even after the opponent's skill
-is edited. All four are null on reviews from before they existed. They are
+is edited. All are null on reviews from before they existed. They are
 history: written once, exported (`reviewHistory[].selectionMode`,
-`selectionReason`, `selectionConcepts`, `opponentSkillMultiplier`) and
+`selectionReason`, `selectionConcepts`, `selectionTrigger`,
+`opponentSkillMultiplier`) and
 imported with a new review, never changed by a later import.
 
 The review log is the source of truth for progress that is derived, so it
@@ -292,7 +294,7 @@ group's `description:` works the same way.
 - The exported schemas of the variants that were installed are kept in
   `shared/src/jvmTest/resources/released-v18/`, and `ConceptSchedulingDbTest`
   upgrades a database built from each. Each later released version's schema
-  is kept in `shared/src/jvmTest/resources/released/` (19, 20, 21 and master's 22 so far), with an
+  is kept in `shared/src/jvmTest/resources/released/` (19, 20, 21, master's 22 and 23 so far), with an
   upgrade test from it and a guard test that fails if the committed schema
   for that version ever changes. Add one for each version you release.
 - Columns added with `ALTER TABLE ... DEFAULT x` need a matching

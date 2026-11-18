@@ -1118,7 +1118,8 @@ object CardImportExport {
         val selectionMode: String? = null,
         val selectionReason: String? = null,
         val selectionConcepts: List<String> = emptyList(),
-        val opponentSkillMultiplier: Double? = null
+        val opponentSkillMultiplier: Double? = null,
+        val selectionTrigger: String? = null
     )
 
     /**
@@ -1218,7 +1219,8 @@ object CardImportExport {
                 selectionMode = p.selectionMode,
                 selectionReason = p.selectionReason,
                 selectionConcepts = p.selectionConcepts.takeIf { it.isNotEmpty() }?.joinToString(","),
-                opponentSkillMultiplier = p.opponentSkillMultiplier
+                opponentSkillMultiplier = p.opponentSkillMultiplier,
+                selectionTrigger = p.selectionTrigger
             )
         }
     }

@@ -23,11 +23,16 @@ enum class SelectionReason {
  *
  * @param conceptUids for a card drawn by concept to cover due concepts, the
  *   stable identifiers of the due concepts it was picked to cover.
+ * @param triggerConceptUid for such a card, the one due concept that picked
+ *   it: the walk through the due concepts reached it, it was not yet covered,
+ *   and this card was its best cover. Always one of [conceptUids]. Null for a
+ *   card that was due itself, extra study, or not drawn by concept.
  */
 data class CardSelection(
     val mode: SelectionMode,
     val reason: SelectionReason,
-    val conceptUids: List<String> = emptyList()
+    val conceptUids: List<String> = emptyList(),
+    val triggerConceptUid: String? = null
 )
 
 /** A card drawn for a session, and why. */

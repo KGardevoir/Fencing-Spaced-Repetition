@@ -207,7 +207,7 @@ class ConceptArchiveTest {
             cardId = 1, sessionId = null, reviewTime = 600L, grade = 3, algorithm = "FSRS", stateBefore = "",
             stateAfter = "", scheduledDays = 1, elapsedDays = 0, fightDifficulty = 4, stabilityMultiplier = 1.5,
             selectionMode = "CONCEPT", selectionReason = "DUE", selectionConcepts = "c-1,c-2",
-            opponentSkillMultiplier = 1.25
+            opponentSkillMultiplier = 1.25, selectionTrigger = "c-2"
         )
         val out = StringBuilder()
         CardImportExport.exportCardsWithGroupStates(
@@ -221,6 +221,7 @@ class ConceptArchiveTest {
         assertEquals("DUE", parsed.selectionReason)
         assertEquals(listOf("c-1", "c-2"), parsed.selectionConcepts)
         assertEquals(1.25, parsed.opponentSkillMultiplier)
+        assertEquals("c-2", parsed.selectionTrigger)
         assertEquals(4, parsed.fightDifficulty)
         assertEquals(1.5, parsed.stabilityMultiplier)
     }

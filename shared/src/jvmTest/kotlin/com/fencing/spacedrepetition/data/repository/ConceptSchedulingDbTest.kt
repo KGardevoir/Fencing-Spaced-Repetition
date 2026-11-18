@@ -735,6 +735,20 @@ class ConceptSchedulingDbTest {
     // ==================== why a card was practised ====================
 
     @Test
+    fun `the most overdue concept is the one that picks its card`() = runTest {
+        val long = concept("long overdue", nextReview = Time.now() - 5 * day)
+        val recent = concept("just due", nextReview = Time.now() - day)
+        val both = card("both"); tag(both, long, recent)
+        val onlyRecent = card("only the recent one"); tag(onlyRecent, recent)
+        val uids = db.conceptDao().getAllConceptsSync().associate { it.id to it.uid }
+
+        val drawn = repo.drawSession(1, null).single()
+        assertEquals(both, drawn.card.id)
+        assertEquals(uids.getValue(long), drawn.selection.triggerConceptUid)
+        assertEquals(listOf(uids.getValue(long), uids.getValue(recent)).sorted(), drawn.selection.conceptUids)
+    }
+
+    @Test
     fun `a session drawn by concept records why each card was chosen`() = runTest {
         val a = concept("A"); val b = concept("B")
         val covering = card("covers A and B"); tag(covering, a, b)
@@ -746,7 +760,11 @@ class ConceptSchedulingDbTest {
         assertEquals(SelectionMode.CONCEPT, drawn.getValue(covering).mode)
         assertEquals(SelectionReason.DUE, drawn.getValue(covering).reason)
         assertEquals(listOf(uids.getValue(a), uids.getValue(b)).sorted(), drawn.getValue(covering).conceptUids)
+        // The due concept whose turn picked it is one of those it covers.
+        assertTrue(drawn.getValue(covering).triggerConceptUid in drawn.getValue(covering).conceptUids)
         assertEquals(SelectionReason.DUE, drawn.getValue(untagged).reason)
+        assertNull(drawn.getValue(untagged).triggerConceptUid)
+        assertNull(drawn.getValue(later).triggerConceptUid)
         assertTrue(drawn.getValue(untagged).conceptUids.isEmpty())
         assertEquals(SelectionReason.EXTRA, drawn.getValue(later).reason)
     }
@@ -774,6 +792,7 @@ class ConceptSchedulingDbTest {
         assertEquals("CONCEPT", log.selectionMode)
         assertEquals("DUE", log.selectionReason)
         assertEquals(listOf(db.conceptDao().getAllConceptsSync().single().uid), log.selectionConceptUids)
+        assertEquals(db.conceptDao().getAllConceptsSync().single().uid, log.selectionTrigger)
         assertEquals(1.25, log.opponentSkillMultiplier)
         assertEquals(4, log.fightDifficulty)
         // The multiplier applied is the opponent's skill times the fight's.
