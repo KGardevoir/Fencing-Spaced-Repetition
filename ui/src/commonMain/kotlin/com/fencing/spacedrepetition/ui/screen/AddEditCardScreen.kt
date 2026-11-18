@@ -3,6 +3,8 @@
 
 package com.fencing.spacedrepetition.ui.screen
 
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -120,6 +122,7 @@ fun AddEditCardScreen(
     // How much of each concept the card contains; a concept not in it is 1.
     var conceptWeights by remember(cardConceptWeights) { mutableStateOf(cardConceptWeights) }
     var weighing by remember { mutableStateOf<Concept?>(null) }
+    var removingConcept by remember { mutableStateOf<Concept?>(null) }
     fun selectedConcepts(): Map<Long, Double> = selectedConceptIds.associateWith { conceptWeights[it] ?: 1.0 }
     var showConceptSelectionSheet by rememberSaveable { mutableStateOf(false) }
     var showCreateConceptDialog by rememberSaveable { mutableStateOf(false) }
@@ -491,20 +494,22 @@ fun AddEditCardScreen(
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             allConcepts.filter { it.id in selectedConceptIds }.forEach { concept ->
-                                // Tap to set how much of the concept the card contains, or remove it.
-                                AssistChip(
+                                // Tap to set how much of the concept the card contains;
+                                // long-press to take it off the card.
+                                ConceptWeightChip(
+                                    label = conceptChipLabel(concept.name, conceptWeights[concept.id] ?: 1.0),
+                                    name = concept.name,
                                     onClick = { weighing = concept },
-                                    label = { Text(conceptChipLabel(concept.name, conceptWeights[concept.id] ?: 1.0)) },
-                                    trailingIcon = {
-                                        Icon(
-                                            Icons.Default.Tune,
-                                            contentDescription = "Weight or remove ${concept.name}",
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
+                                    onLongClick = { removingConcept = concept }
                                 )
                             }
                         }
+                        Text(
+                            "Tap a concept to set how much of it the card has; long-press to remove it.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
                     }
                 }
             }
@@ -1217,16 +1222,32 @@ fun AddEditCardScreen(
                 ) { Text("Set") }
             },
             dismissButton = {
+                TextButton(onClick = { weighing = null }) { Text("Cancel") }
+            }
+        )
+    }
+
+    // Taking a concept off the card, from a long-press on its chip
+    removingConcept?.let { concept ->
+        AlertDialog(
+            onDismissRequest = { removingConcept = null },
+            icon = { Icon(Icons.Default.Delete, contentDescription = null) },
+            title = { Text("Remove Concept") },
+            text = { Text("Take \"${concept.name}\" off this card? The concept itself is kept.") },
+            confirmButton = {
                 TextButton(
                     onClick = {
                         selectedConceptIds = selectedConceptIds - concept.id
                         conceptWeights = conceptWeights - concept.id
                         conceptsTouched = true
                         isDirty = true
-                        weighing = null
+                        removingConcept = null
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) { Text("Remove") }
+            },
+            dismissButton = {
+                TextButton(onClick = { removingConcept = null }) { Text("Cancel") }
             }
         )
     }
@@ -1738,6 +1759,33 @@ private fun SchedulingOffNote(text: String) {
 }
 
 /** A concept chip's text: its name, and its weight when that is not the default 1. */
+/** A concept on the card: tap to weigh it, long-press to remove it. Looks like an assist chip. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ConceptWeightChip(label: String, name: String, onClick: () -> Unit, onLongClick: () -> Unit) {
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        modifier = Modifier
+            .heightIn(min = 32.dp)
+            .combinedClickable(
+                onClickLabel = "Set how much of $name",
+                onLongClickLabel = "Remove $name",
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 6.dp)
+        ) {
+            Text(label, style = MaterialTheme.typography.labelLarge)
+            Spacer(modifier = Modifier.width(6.dp))
+            Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
+        }
+    }
+}
+
 internal fun conceptChipLabel(name: String, weight: Double): String =
     if (weight == 1.0) name else "$name ×${formatWeight(weight)}"
 
