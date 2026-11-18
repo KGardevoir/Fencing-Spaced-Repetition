@@ -148,6 +148,23 @@ class IdentityDbTest {
     }
 
     @Test
+    fun `merging opponents moves their reviews' identity to the one kept`() = runTest {
+        val opponents = OpponentRepository(db.opponentDao())
+        val bob = db.opponentDao().insertOpponent(Opponent(name = "Bob"))
+        val bobby = db.opponentDao().insertOpponent(Opponent(name = "Bobby"))
+        val c = db.cardDao().getCardById(card("c"))!!
+        repo.reviewCard(c, Grade.GOOD, opponentId = bobby)
+
+        opponents.mergeOpponents(sourceId = bobby, targetId = bob)
+        val log = db.reviewLogDao().getAllReviewLogsSync().single()
+        assertEquals(bob, log.opponentId)
+        assertEquals(db.opponentDao().getOpponentById(bob)!!.uid, log.opponentUid)
+        // And reconciling after an import leaves it with Bob.
+        repo.reconcileOpponentReferences()
+        assertEquals(bob, db.reviewLogDao().getAllReviewLogsSync().single().opponentId)
+    }
+
+    @Test
     fun `changing a review's opponent from history changes who it identifies`() = runTest {
         val alex = db.opponentDao().insertOpponent(Opponent(name = "Alex"))
         val sam = db.opponentDao().insertOpponent(Opponent(name = "Sam"))

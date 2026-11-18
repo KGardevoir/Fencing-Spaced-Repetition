@@ -39,6 +39,40 @@ class OpponentRepository(private val opponentDao: OpponentDao) {
     suspend fun deleteOpponentById(id: Long) = opponentDao.deleteOpponentById(id)
 
     /**
+     * Folds [sourceId] into [targetId]: every review logged against the source
+     * is relinked to the target, the source's notes are appended to the
+     * target's, and the source is deleted. The target keeps its name and skill
+     * multiplier. Past reviews keep the stability multiplier they were graded
+     * with, so FSRS state is untouched -- this is the same metadata-only
+     * relabel as reassigning a session's opponent, applied to all of them.
+     *
+     * Relinking runs before the delete, so an interruption between the two
+     * leaves a harmless leftover opponent with no history rather than
+     * orphaned reviews. Returns false if either id is missing or they match.
+     */
+    suspend fun mergeOpponents(sourceId: Long, targetId: Long): Boolean {
+        if (sourceId == targetId) return false
+        val source = opponentDao.getOpponentById(sourceId) ?: return false
+        val target = opponentDao.getOpponentById(targetId) ?: return false
+
+        // By local id and by stable identifier together, so the reviews -- and
+        // any export of them -- name the opponent who is kept, and those that
+        // only still carried the source's identifier (from a deletion and
+        // re-import) follow too. See docs/DESIGN.md, "History".
+        opponentDao.reassignReviewLogs(fromId = sourceId, toId = targetId, fromUid = source.uid, toUid = target.uid)
+
+        val sourceNotes = source.notes.trim()
+        if (sourceNotes.isNotEmpty() && !target.notes.contains(sourceNotes)) {
+            val merged = if (target.notes.isBlank()) sourceNotes
+                else "${target.notes.trimEnd()}\n\n${source.name}: $sourceNotes"
+            opponentDao.updateOpponent(target.copy(notes = merged, modified = Time.now()))
+        }
+
+        opponentDao.deleteOpponent(source)
+        return true
+    }
+
+    /**
      * Ensures each named opponent exists, and makes each one the file
      * describes: the same person is the one with the file's stable identifier,
      * else the one with the name, else a new one carrying the identifier.
