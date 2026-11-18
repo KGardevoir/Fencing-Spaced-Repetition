@@ -86,6 +86,10 @@ fun ConceptsScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var confirmRederive by remember { mutableStateOf(false) }
 
+    // The learning context last looked at in a concept's parameters ("global",
+    // or a learning group's id), so the next concept opens on it where it can.
+    var lastContextKey by rememberSaveable { mutableStateOf<String?>(null) }
+
     // Editing is a full screen of its own, in place of the list.
     editing?.let { summary ->
         // The live row where there is one, so a rederive shows at once.
@@ -94,6 +98,8 @@ fun ConceptsScreen(
             globalConceptScheduling = globalConceptScheduling,
             concepts = concepts.map { it.concept },
             learningGroups = learningGroups,
+            lastContextKey = lastContextKey,
+            onContextChosen = { lastContextKey = it },
             onSave = { updated, learningGroupIds ->
                 onSaveConcept(updated, learningGroupIds)
                 editing = null
@@ -426,6 +432,8 @@ private fun ConceptEditScreen(
     globalConceptScheduling: Boolean,
     concepts: List<Concept>,
     learningGroups: List<LearningGroup>,
+    lastContextKey: String?,
+    onContextChosen: (String) -> Unit,
     onSave: (Concept, Set<Long>) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -506,7 +514,7 @@ private fun ConceptEditScreen(
 
             if (!isNew) {
                 SectionTitle("Learning parameters", "Derived from the review history of this concept's cards.")
-                LearningParameters(summary, learningGroups, globalConceptScheduling)
+                LearningParameters(summary, learningGroups, globalConceptScheduling, lastContextKey, onContextChosen)
             }
 
             SectionTitle("Available in", "Leave everything unticked to make it available everywhere.")
@@ -547,7 +555,10 @@ private fun SectionTitle(title: String, hint: String) {
 private fun LearningParameters(
     summary: ConceptSummary,
     learningGroups: List<LearningGroup>,
-    globalConceptScheduling: Boolean
+    globalConceptScheduling: Boolean,
+    /** The context last chosen on any concept: opened on when this concept is in it. */
+    lastContextKey: String?,
+    onContextChosen: (String) -> Unit
 ) {
     // Its cards' learning contexts: each group's learning group, or Global
     // for a group in none (or one since deleted) and for cards in no group.
@@ -564,7 +575,11 @@ private fun LearningParameters(
         )
         return
     }
-    var chosen by remember(summary.concept.id) { mutableStateOf(contexts.first()?.id) }
+    fun keyOf(learningGroup: LearningGroup?) = learningGroup?.id?.toString() ?: "global"
+    // The context last looked at, when this concept is part of it; else the first.
+    var chosen by remember(summary.concept.id) {
+        mutableStateOf((contexts.firstOrNull { keyOf(it) == lastContextKey } ?: contexts.first())?.id)
+    }
     // The chosen context left (a card was untagged or moved): the first one.
     val context = chosen.takeIf { c -> contexts.any { it?.id == c } } ?: contexts.first()?.id
     var expanded by remember { mutableStateOf(false) }
@@ -593,7 +608,7 @@ private fun LearningParameters(
                     leadingIcon = {
                         Icon(if (option == null) Icons.Default.Public else AppIcons.LearningGroup, contentDescription = null)
                     },
-                    onClick = { chosen = option?.id; expanded = false }
+                    onClick = { chosen = option?.id; onContextChosen(keyOf(option)); expanded = false }
                 )
             }
         }
