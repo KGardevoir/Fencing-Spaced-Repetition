@@ -9,6 +9,7 @@ import com.fencing.spacedrepetition.data.model.ReviewLog
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 class ConceptSchedulingTest {
 
@@ -74,6 +75,29 @@ class ConceptSchedulingTest {
         val picks = draw(mapOf(5L to mapOf("A" to 1.0), 3L to mapOf("A" to 1.0)), mapOf("A" to 1.0))
         assertEquals(listOf(3L), picks.map { it.cardId })   // 3 first in id order; then A has no need left
         assertEquals(emptyList(), draw(mapOf(1L to mapOf("A" to 1.0)), mapOf("A" to 0.0)))
+    }
+
+    @Test
+    fun `staleness decides between cards meeting much the same need`() {
+        // Card 1 meets a little more need, but was graded just now; card 2 has rested.
+        val vectors = mapOf(1L to mapOf("A" to 1.0), 2L to mapOf("B" to 1.0))
+        val need = mapOf("A" to 0.6, "B" to 0.5)
+        val fresh = CardRepository.stalenessFactor(0.0)
+        val rested = CardRepository.stalenessFactor(30.0)
+        val picks = CardRepository.greedyDotProduct(listOf(1L, 2L), vectors, need, 1) { if (it == 1L) fresh else rested }
+        assertEquals(2L, picks.single().cardId)
+        // What it covers is still its plain share of the need.
+        assertEquals(0.5, picks.single().score, 1e-9)
+        // But staleness never makes a card meet need it does not have.
+        assertEquals(emptyList(), CardRepository.greedyDotProduct(listOf(1L), vectors, mapOf("A" to 0.0), 1) { 1.0 })
+    }
+
+    @Test
+    fun `staleness runs from a half just after grading to one`() {
+        assertEquals(0.5, CardRepository.stalenessFactor(0.0), 1e-9)
+        assertEquals(1.0, CardRepository.stalenessFactor(null), 1e-9)
+        assertEquals(0.5 + 0.5 * (1 - kotlin.math.exp(-1.0)), CardRepository.stalenessFactor(7.0), 1e-9)
+        assertTrue(CardRepository.stalenessFactor(21.0) > 0.97)
     }
 
     // ==================== shuffleByBucket ====================

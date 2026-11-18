@@ -98,6 +98,15 @@ class ConceptSchedulingDbTest {
     }
 
     @Test
+    fun `of two cards for the same concept, the one graded longer ago is drawn`() = runTest {
+        val a = concept("A")
+        val recent = db.cardDao().insertCard(Card(question = "graded yesterday", answer = "", lastReview = Time.now() - day))
+        val rested = db.cardDao().insertCard(Card(question = "graded a month ago", answer = "", lastReview = Time.now() - 30 * day))
+        tag(recent, a); tag(rested, a)
+        assertEquals(listOf(rested), repo.drawCards(1, null).map { it.id })
+    }
+
+    @Test
     fun `a concept that is not due does not pull its cards in ahead of due ones`() = runTest {
         val future = Time.now() + 10L * 86_400_000L
         val notDue = concept("Later", nextReview = future)

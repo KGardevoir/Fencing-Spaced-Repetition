@@ -103,8 +103,12 @@ weights are all 0 contains none of its concepts.
   every untagged card) has a **need**: 1 minus FSRS's predicted recall of it
   right now in that learning context -- 1 if never learnt -- or 0 when it is
   not due. A card's score is the sum over its concepts of its **share** times
-  the concept's need: the need it would meet. The highest-scoring card is
-  taken, each of its concepts' need drops by its share (not below 0), and
+  the concept's need: the need it would meet. To choose, that is multiplied
+  by the card's **staleness** -- 0.5 just after it was graded in that
+  context, rising towards 1 with the days since (`1 - e^(-days/7)` scaled
+  into 0.5..1), 1 if never graded there -- so the cards that cover a concept
+  take turns instead of the same one winning every time. The highest-scoring
+  card is taken, each of its concepts' need drops by its share (not below 0), and
   the next is chosen the same way, until the session is full or no card
   meets any need; the rest is topped up with additional study. Ties go to
   the lowest id, or at random where the group randomises. Because shares

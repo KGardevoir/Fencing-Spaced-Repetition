@@ -683,7 +683,11 @@ class CardRepository(
      * card is a vector of its **shares** of its concepts (its weights
      * normalised to add to 1); an untagged card is all of itself.
      *
-     * A card's score is the dot product of the two: the need it would meet.
+     * A card's score is the dot product of the two -- the need it would
+     * meet -- times its **staleness**: 0.5 for a card graded just now in this
+     * context, rising towards 1 the longer since ([stalenessFactor]); 1 for
+     * one never graded here. So of cards meeting much the same need, the one
+     * left alone longest wins, and the same cards are not drawn every time.
      * The highest-scoring card is taken; then each of its concepts' need
      * drops by the card's share of it (never below 0), so a card half about
      * a concept leaves half of that concept's need for another card. Repeat
@@ -742,8 +746,18 @@ class CardRepository(
             card.id to (conceptsByCard[card.id]?.associate { NeedKey.OfConcept(it) as NeedKey to shares.getValue(card.id to it) }
                 ?: mapOf(NeedKey.OfCard(card.id) to 1.0))
         }
+        // When each card was last graded here: its own state's last review in this context.
+        val lastGraded: Map<Long, Long> = if (learningGroupId == null) pool.associate { it.id to it.lastReview }
+            else groupDao.getAllLearningStatesSync()
+                .filter { it.learningGroupId == learningGroupId && it.cardId in poolIds }
+                .associate { it.cardId to it.lastReview }
+        val staleness = pool.associate { card ->
+            val last = lastGraded[card.id] ?: 0L
+            card.id to stalenessFactor(if (last <= 0L) null else (now - last).toDouble() / DAY_MILLIS)
+        }
+
         val order = if (shouldRandomize) pool.map { it.id }.shuffled() else pool.map { it.id }.sorted()
-        val picks = greedyDotProduct(order, vectors, needs, limit)
+        val picks = greedyDotProduct(order, vectors, needs, limit) { cardId -> staleness[cardId] ?: 1.0 }
 
         val cardsById = pool.associateBy { it.id }
         val selected = LinkedHashMap<Long, Card>()
@@ -1689,7 +1703,9 @@ class CardRepository(
             order: List<Long>,
             vectors: Map<Long, Map<K, Double>>,
             need: Map<K, Double>,
-            limit: Int
+            limit: Int,
+            /** Multiplies a card's dot product when choosing; the need it meets is unaffected. */
+            factor: (cardId: Long) -> Double = { 1.0 }
         ): List<DotPick<K>> {
             val remaining = need.toMutableMap()
             val left = order.toMutableList()
@@ -1698,7 +1714,9 @@ class CardRepository(
                 var best: Long? = null
                 var bestScore = 0.0
                 for (cardId in left) {
-                    val score = vectors[cardId].orEmpty().entries.sumOf { (key, share) -> share * (remaining[key] ?: 0.0) }
+                    val met = vectors[cardId].orEmpty().entries.sumOf { (key, share) -> share * (remaining[key] ?: 0.0) }
+                    if (met <= 0.0) continue
+                    val score = met * factor(cardId)
                     if (score > bestScore + 1e-12) { best = cardId; bestScore = score }
                 }
                 val chosen = best ?: break
@@ -1706,12 +1724,25 @@ class CardRepository(
                 val terms = vector.mapNotNull { (key, share) ->
                     (share * (remaining[key] ?: 0.0)).takeIf { it > 0.0 }?.let { key to it }
                 }.toMap()
-                picks += DotPick(chosen, bestScore, terms)
+                // The need it met, before staleness: what the card actually covers.
+                picks += DotPick(chosen, terms.values.sum(), terms)
                 vector.forEach { (key, share) -> remaining[key] = ((remaining[key] ?: 0.0) - share).coerceAtLeast(0.0) }
                 left.remove(chosen)
             }
             return picks
         }
+
+        /** How many days of rest make a card about two-thirds of the way back to full staleness. */
+        internal const val STALENESS_DAYS = 7.0
+
+        /**
+         * A card's staleness factor in a dot-product draw: 0.5 just after it
+         * was graded, approaching 1 as days pass (about 0.82 after a week,
+         * 0.98 after three), and 1 for a card never graded ([daysSinceGraded] null).
+         */
+        internal fun stalenessFactor(daysSinceGraded: Double?): Double =
+            if (daysSinceGraded == null) 1.0
+            else 0.5 + 0.5 * (1.0 - kotlin.math.exp(-daysSinceGraded.coerceAtLeast(0.0) / STALENESS_DAYS))
 
         internal fun forwardDaysToNearestPracticeDay(targetDow: Int, practiceDays: Set<Int>): Int {
             if (practiceDays.contains(targetDow)) return 0
