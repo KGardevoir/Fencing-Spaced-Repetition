@@ -80,23 +80,21 @@ class ConceptSchedulingDbTest {
         conceptIds.forEach { db.conceptDao().insertCardConceptCrossRef(CardConceptCrossRef(cardId, it)) }
 
     @Test
-    fun `draws the cards that cover the most due concepts`() = runTest {
+    fun `draws by dot product of each card's shares with the concepts' need`() = runTest {
+        // Every concept here is new, so each has the full need of 1.
         val a = concept("A"); val b = concept("B"); val c = concept("C")
-        val c1 = card("both A and B"); tag(c1, a, b)
-        val c2 = card("only A"); tag(c2, a)
-        val c3 = card("only C"); tag(c3, c)
-        val c4 = card("untagged")
-        val c5 = card("only B"); tag(c5, b)
+        val c1 = card("half A, half B"); tag(c1, a, b)
+        val c2 = card("all A"); tag(c2, a)
+        val c3 = card("all C"); tag(c3, c)
+        val c4 = card("untagged")   // new: a need of 1 of its own
+        val c5 = card("all B"); tag(c5, b)
 
-        val two = repo.drawCards(2, null).map { it.id }
-        assertEquals(listOf(c4, c1), two)
-
-        // A and B are covered by c1, so C's card is next, not c2 or c5.
-        val three = repo.drawCards(3, null).map { it.id }
-        assertEquals(listOf(c4, c1, c3), three)
-
-        // Asking for everything tops up with the rest of the pool.
-        assertEquals(setOf(c1, c2, c3, c4, c5), repo.drawCards(10, null).map { it.id }.toSet())
+        // Each card meets 1 to start with; the tie goes to the lowest id, c1.
+        // c1 then leaves half of A and half of B, so c3 and c4, still meeting
+        // a whole 1 each, come before c2 and c5, which now meet 0.5.
+        assertEquals(listOf(c1, c3), repo.drawCards(2, null).map { it.id })
+        assertEquals(listOf(c1, c3, c4), repo.drawCards(3, null).map { it.id })
+        assertEquals(listOf(c1, c3, c4, c2, c5), repo.drawCards(5, null).map { it.id })
     }
 
     @Test
@@ -735,17 +733,26 @@ class ConceptSchedulingDbTest {
     // ==================== why a card was practised ====================
 
     @Test
-    fun `the most overdue concept is the one that picks its card`() = runTest {
-        val long = concept("long overdue", nextReview = Time.now() - 5 * day)
-        val recent = concept("just due", nextReview = Time.now() - day)
-        val both = card("both"); tag(both, long, recent)
-        val onlyRecent = card("only the recent one"); tag(onlyRecent, recent)
+    fun `the concept with the most need is the trigger`() = runTest {
+        // Same stability, but one was last reviewed much longer ago: FSRS
+        // gives it the lower recall now, so the higher need.
+        val stale = db.conceptDao().insertConcept(Concept(
+            name = "stale", fsrsStability = 2.0, fsrsState = "REVIEW", fsrsReps = 1,
+            lastReview = Time.now() - 20 * day, nextReview = Time.now() - 18 * day
+        ))
+        val fresh = db.conceptDao().insertConcept(Concept(
+            name = "fresh", fsrsStability = 2.0, fsrsState = "REVIEW", fsrsReps = 1,
+            lastReview = Time.now() - 3 * day, nextReview = Time.now() - day
+        ))
+        val both = card("both"); tag(both, stale, fresh)
+        val onlyFresh = card("only the fresh one"); tag(onlyFresh, fresh)
         val uids = db.conceptDao().getAllConceptsSync().associate { it.id to it.uid }
 
+        // "both" meets half of each need, which beats all of the smaller one.
         val drawn = repo.drawSession(1, null).single()
         assertEquals(both, drawn.card.id)
-        assertEquals(uids.getValue(long), drawn.selection.triggerConceptUid)
-        assertEquals(listOf(uids.getValue(long), uids.getValue(recent)).sorted(), drawn.selection.conceptUids)
+        assertEquals(uids.getValue(stale), drawn.selection.triggerConceptUid)
+        assertEquals(listOf(uids.getValue(stale), uids.getValue(fresh)).sorted(), drawn.selection.conceptUids)
     }
 
     @Test

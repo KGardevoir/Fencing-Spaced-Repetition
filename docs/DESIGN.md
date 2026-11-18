@@ -99,10 +99,18 @@ weights are all 0 contains none of its concepts.
   grades **weighted by each card's share** of the concept, rounded to the
   nearest grade; a card with share 0 says nothing about it. A review outside
   a session is graded as it was (its share only decides whether it counts).
-- **Drawing.** When a due concept picks a card to cover it, the card covering
-  the **most** uncovered due concepts wins; ties go to the card whose **share
-  is most in them** (so of two cards each touching the due concept, the one
-  mostly about it), then to the one with the fewest concepts that are not due.
+- **Drawing.** A session is drawn by **dot product**. Every concept (and
+  every untagged card) has a **need**: 1 minus FSRS's predicted recall of it
+  right now in that learning context -- 1 if never learnt -- or 0 when it is
+  not due. A card's score is the sum over its concepts of its **share** times
+  the concept's need: the need it would meet. The highest-scoring card is
+  taken, each of its concepts' need drops by its share (not below 0), and
+  the next is chosen the same way, until the session is full or no card
+  meets any need; the rest is topped up with additional study. Ties go to
+  the lowest id, or at random where the group randomises. Because shares
+  add to 1, every card meets at most 1 unit of need: a card half about two
+  needed concepts scores the same as one all about one of them, and leaves
+  half of each for others (`greedyDotProduct`).
 
 Changing any of a card's weights rederives all of its concepts, since every
 share on the card moves. In the archive a card's `conceptWeights:` maps
@@ -136,8 +144,8 @@ removed. "Create New Concept" in the card editor makes the concept available
 in all of the card's learning contexts.
 
 Scheduling *by* concept is opt-in per context: each learning group has a
-`useConcepts` switch and Global has a setting. Where it is on, a session draws
-the due concepts and shows the cards covering the most of them; elsewhere,
+`useConcepts` switch and Global has a setting. Where it is on, a session is drawn by
+the dot product of each card's shares with its concepts' need (see Weights); elsewhere,
 cards are scheduled one by one. The switch never changes what is derived.
 
 ## Resets
@@ -187,8 +195,8 @@ why the card was in front of the fencer and against whom:
 |---|---|
 | `selectionMode` | How the session was drawn: `CARD` (card by card) or `CONCEPT` |
 | `selectionReason` | Why this card: `DUE`; `EXTRA` (topped up a session the due cards did not fill); `LOCKED` (the group's draw was locked, so earlier cards were kept); `EDITOR` (graded in the card editor, not drawn) |
-| `selectionConcepts` | Drawn by concept: the `uid`s of the due concepts the card was picked to cover (comma-separated; empty for an untagged due card or extra study) |
-| `selectionTrigger` | Drawn by concept: the `uid` of the one due concept that picked the card -- the walk through the due concepts (most overdue first, bucket-shuffled where the group randomises) reached it uncovered, and this card was its best cover. Always one of `selectionConcepts`; null otherwise (since version 24) |
+| `selectionConcepts` | Drawn by concept: the `uid`s of every concept whose need the card met (a term of its score above 0), comma-separated; empty for an untagged card or extra study |
+| `selectionTrigger` | Drawn by concept: the `uid` of the concept that contributed the most to the card's dot-product score (its share times that concept's need) when it was picked. Always one of `selectionConcepts`; null otherwise (since version 24) |
 | `opponentSkillMultiplier` | The opponent's skill multiplier at the time, before fight difficulty |
 
 With `fightDifficulty` (1-5) and `stabilityMultiplier` (the two

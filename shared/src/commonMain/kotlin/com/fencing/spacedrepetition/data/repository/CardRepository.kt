@@ -37,6 +37,8 @@ internal data class ConceptReviewEvent(
     val groupUid: String? = null
 )
 
+private const val DAY_MILLIS = 24.0 * 60 * 60 * 1000
+
 class CardRepository(
     private val cardDao: CardDao,
     private val sessionDao: PracticeSessionDao,
@@ -673,23 +675,23 @@ class CardRepository(
     }
 
     /**
-     * Draw the cards for a session, scheduling by concept.
+     * Draw the cards for a session, scheduling by concept, by dot product.
      *
-     * Each card in the pool (the group's cards, or the whole collection) is
-     * either tagged with concepts or not. An untagged card is scheduled as it
-     * always was, by its own state. A tagged card has no due date of its own:
-     * what comes due is its concepts.
+     * Every concept, and every untagged card, has a **need**: 1 minus FSRS's
+     * predicted probability of recalling it right now, in this learning
+     * context -- 1 for one never learnt -- and 0 if it is not due yet. Every
+     * card is a vector of its **shares** of its concepts (its weights
+     * normalised to add to 1); an untagged card is all of itself.
      *
-     * The due units -- untagged cards and concepts -- are put in due order
-     * (bucket-shuffled when the group randomises), and taken in that order.
-     * An untagged card is simply taken. A concept that no card taken so far
-     * covers picks a card for itself: of the cards carrying it, the one
-     * carrying the most of the other uncovered due concepts, so each card
-     * shown practises as many of the due concepts as it can. Its concepts are
-     * then covered, and the walk goes on until the session is full.
+     * A card's score is the dot product of the two: the need it would meet.
+     * The highest-scoring card is taken; then each of its concepts' need
+     * drops by the card's share of it (never below 0), so a card half about
+     * a concept leaves half of that concept's need for another card. Repeat
+     * until the session is full or nothing left meets any need. Ties go to
+     * the lowest id, or at random when the group randomises.
      *
-     * A session that the due units do not fill is topped up with the rest
-     * of the pool, soonest due first -- additional study, as before.
+     * A session the need does not fill is topped up with the rest of the
+     * pool, soonest due first -- additional study, as before.
      */
     internal suspend fun drawCardsByConcept(limit: Int, groupId: Long?): List<Card> =
         drawSessionByConcept(limit, groupId).map { it.card }
@@ -703,97 +705,93 @@ class CardRepository(
         val learningGroup = learningGroupFor(groupId)
         val learningGroupId = learningGroup?.id
         val shouldRandomize = learningGroup?.randomizeDueCards ?: preferences.randomizeDueCards.first()
-        val bucketHours = learningGroup?.randomizeBucketHours ?: preferences.randomizeBucketHours.first()
 
         val poolIds = pool.map { it.id }.toSet()
-        val links = conceptDao.getAllCardConceptCrossRefsSync()
-        // Scoring uses each card's share of each concept, not the raw weights.
-        val weights = conceptShares(links)
+        val links = conceptDao.getAllCardConceptCrossRefsSync().filter { it.cardId in poolIds }
+        val shares = conceptShares(links)
         val conceptsByCard: Map<Long, Set<Long>> = links
-            .filter { it.cardId in poolIds }
             .groupBy({ it.cardId }, { it.conceptId })
             .mapValues { it.value.toSet() }
         val conceptStates = if (conceptsByCard.isEmpty()) emptyMap() else conceptStatesIn(learningGroupId)
 
-        // An untagged card's due date in this context.
-        val cardLearningStates = if (learningGroupId == null) emptyMap() else
-            pool.filter { it.id !in conceptsByCard }.mapNotNull { card ->
-                groupDao.getLearningState(card.id, learningGroupId)?.let { card.id to it.nextReview }
-            }.toMap()
-        fun cardDue(card: Card): Long = cardLearningStates[card.id] ?: card.nextReview
-        fun conceptDue(conceptId: Long): Long = conceptStates[conceptId]?.nextReview ?: 0L
-        // A tagged card is as due as its most-due concept.
-        fun taggedDue(card: Card): Long =
-            conceptsByCard[card.id].orEmpty().minOfOrNull { conceptDue(it) } ?: cardDue(card)
-
-        val now = Time.now()
-        val units = buildList {
-            pool.filter { it.id !in conceptsByCard && cardDue(it) <= now }
-                .forEach { add(DueUnit.OfCard(it, cardDue(it))) }
-            conceptsByCard.values.flatten().toSet()
-                .filter { conceptDue(it) <= now }
-                .forEach { add(DueUnit.OfConcept(it, conceptDue(it))) }
-        }.sortedBy { it.due }
-        val ordered = if (shouldRandomize) shuffleByBucket(units, bucketHours) { it.due } else units
-
-        val selected = LinkedHashMap<Long, Card>()
-        // Why each was taken: the due concepts a card was picked to cover.
-        val coveredBy = HashMap<Long, Set<Long>>()
-        // ...and the one due concept whose turn it was when the card was picked.
-        val triggeredBy = HashMap<Long, Long>()
-        val uncovered = units.filterIsInstance<DueUnit.OfConcept>().map { it.conceptId }.toMutableSet()
-        val tagged = pool.filter { it.id in conceptsByCard }
-
-        for (unit in ordered) {
-            if (selected.size >= limit) break
-            when (unit) {
-                is DueUnit.OfCard -> selected.getOrPut(unit.card.id) { unit.card }
-                is DueUnit.OfConcept -> {
-                    if (unit.conceptId !in uncovered) continue
-                    val candidates = tagged.filter {
-                        it.id !in selected && unit.conceptId in conceptsByCard.getValue(it.id)
-                    }
-                    if (candidates.isEmpty()) {
-                        uncovered -= unit.conceptId
-                        continue
-                    }
-                    val best = pickBestCoveringCard(candidates, conceptsByCard, uncovered, shouldRandomize) { card, concept ->
-                        weights[card to concept] ?: 1.0
-                    }
-                    selected[best.id] = best
-                    coveredBy[best.id] = conceptsByCard.getValue(best.id) intersect uncovered
-                    triggeredBy[best.id] = unit.conceptId
-                    uncovered -= conceptsByCard.getValue(best.id)
+        // An untagged card's own state in this context: (stability, last review, next review).
+        val untaggedStates: Map<Long, Triple<Double, Long, Long>> = pool.filter { it.id !in conceptsByCard }
+            .associate { card ->
+                val state = learningGroupId?.let { groupDao.getLearningState(card.id, it) }
+                card.id to when {
+                    learningGroupId == null -> Triple(card.fsrsStability, card.lastReview, card.nextReview)
+                    state == null -> Triple(0.0, 0L, 0L)   // never practised there: new
+                    else -> Triple(state.fsrsStability, state.lastReview, state.nextReview)
                 }
             }
-        }
 
-        val due = selected.keys.toSet()
+        val now = Time.now()
+        fun need(stability: Double, lastReview: Long, nextReview: Long): Double {
+            if (nextReview > now) return 0.0                      // not due yet
+            val elapsedDays = if (lastReview <= 0L) 0.0 else (now - lastReview).toDouble() / DAY_MILLIS
+            return 1.0 - fsrsAlgorithm.retrievability(elapsedDays, stability)   // 1 when never learnt
+        }
+        val needs = HashMap<NeedKey, Double>()
+        conceptsByCard.values.flatten().toSet().forEach { conceptId ->
+            val state = conceptStates[conceptId] ?: return@forEach
+            needs[NeedKey.OfConcept(conceptId)] = need(state.fsrsStability, state.lastReview, state.nextReview)
+        }
+        untaggedStates.forEach { (cardId, s) -> needs[NeedKey.OfCard(cardId)] = need(s.first, s.second, s.third) }
+
+        val vectors: Map<Long, Map<NeedKey, Double>> = pool.associate { card ->
+            card.id to (conceptsByCard[card.id]?.associate { NeedKey.OfConcept(it) as NeedKey to shares.getValue(card.id to it) }
+                ?: mapOf(NeedKey.OfCard(card.id) to 1.0))
+        }
+        val order = if (shouldRandomize) pool.map { it.id }.shuffled() else pool.map { it.id }.sorted()
+        val picks = greedyDotProduct(order, vectors, needs, limit)
+
+        val cardsById = pool.associateBy { it.id }
+        val selected = LinkedHashMap<Long, Card>()
+        picks.forEach { selected[it.cardId] = cardsById.getValue(it.cardId) }
+        val pickById = picks.associateBy { it.cardId }
+
         if (selected.size < limit) {
-            val rest = pool.filter { it.id !in selected }
-                .sortedBy { if (it.id in conceptsByCard) taggedDue(it) else cardDue(it) }
+            fun dueOf(card: Card): Long = conceptsByCard[card.id]
+                ?.minOfOrNull { conceptStates[it]?.nextReview ?: 0L }
+                ?: untaggedStates[card.id]?.third ?: card.nextReview
+            val rest = pool.filter { it.id !in selected }.sortedBy(::dueOf)
             val fill = if (shouldRandomize) rest.shuffled() else rest
             fill.take(limit - selected.size).forEach { selected[it.id] = it }
         }
-        val conceptUids = if (coveredBy.isEmpty()) emptyMap() else
+
+        val conceptUids = if (picks.isEmpty()) emptyMap() else
             conceptDao.getAllConceptsSync().associate { it.id to it.uid }
         return selected.values.map { card ->
+            val pick = pickById[card.id]
+            // The concepts whose need it met, and the one it met most of.
+            val conceptTerms = pick?.terms.orEmpty().mapNotNull { (key, term) ->
+                (key as? NeedKey.OfConcept)?.let { it.conceptId to term }
+            }
             DrawnCard(
                 card,
                 CardSelection(
                     SelectionMode.CONCEPT,
-                    if (card.id in due) SelectionReason.DUE else SelectionReason.EXTRA,
-                    coveredBy[card.id].orEmpty().mapNotNull { conceptUids[it] }.sorted(),
-                    triggeredBy[card.id]?.let { conceptUids[it] }
+                    if (pick != null) SelectionReason.DUE else SelectionReason.EXTRA,
+                    conceptTerms.mapNotNull { conceptUids[it.first] }.sorted(),
+                    conceptTerms.maxWithOrNull(compareBy<Pair<Long, Double>> { it.second }.thenByDescending { it.first })
+                        ?.let { conceptUids[it.first] }
                 )
             )
         }
     }
 
-    private sealed class DueUnit(val due: Long) {
-        class OfCard(val card: Card, due: Long) : DueUnit(due)
-        class OfConcept(val conceptId: Long, due: Long) : DueUnit(due)
+    /** What has a need in a dot-product draw: a concept, or an untagged card standing for itself. */
+    internal sealed interface NeedKey {
+        data class OfConcept(val conceptId: Long) : NeedKey
+        data class OfCard(val cardId: Long) : NeedKey
     }
+
+    /**
+     * One card a dot-product draw took: its [score] (the need it met), and
+     * each term of the dot product that was more than 0 -- share times need,
+     * by what had the need.
+     */
+    internal data class DotPick<K>(val cardId: Long, val score: Double, val terms: Map<K, Double>)
 
     // ---------- Deriving concept state from card history ----------
     //
@@ -1681,28 +1679,38 @@ class CardRepository(
         }
 
         /**
-         * Of [candidates], the card covering the most [uncovered] concepts.
-         * Ties go to the card whose share is most in them ([weightOf], by card
-         * and concept: its normalized weights), so of two cards each touching
-         * one due concept the one mostly about it wins; then to the card
-         * carrying the fewest concepts that are not due; then to a random one
-         * when randomising, else the lowest id.
+         * The greedy dot-product draw. Each card in [order] is a vector of
+         * shares ([vectors]); each key has a need. Repeatedly take the card
+         * whose dot product with the remaining need is largest (the first in
+         * [order] on a tie), then lower each of its keys' need by its share,
+         * not below 0. Stops at [limit] cards, or when no card meets any need.
          */
-        internal fun pickBestCoveringCard(
-            candidates: List<Card>,
-            conceptsByCard: Map<Long, Set<Long>>,
-            uncovered: Set<Long>,
-            randomize: Boolean,
-            weightOf: (cardId: Long, conceptId: Long) -> Double = { _, _ -> 1.0 }
-        ): Card {
-            val ordered = if (randomize) candidates.shuffled() else candidates.sortedBy { it.id }
-            return ordered.maxWith(
-                compareBy<Card> { card -> conceptsByCard.getValue(card.id).count { it in uncovered } }
-                    .thenBy { card ->
-                        conceptsByCard.getValue(card.id).filter { it in uncovered }.sumOf { weightOf(card.id, it) }
-                    }
-                    .thenByDescending { card -> conceptsByCard.getValue(card.id).count { it !in uncovered } }
-            )
+        internal fun <K> greedyDotProduct(
+            order: List<Long>,
+            vectors: Map<Long, Map<K, Double>>,
+            need: Map<K, Double>,
+            limit: Int
+        ): List<DotPick<K>> {
+            val remaining = need.toMutableMap()
+            val left = order.toMutableList()
+            val picks = mutableListOf<DotPick<K>>()
+            while (picks.size < limit && left.isNotEmpty()) {
+                var best: Long? = null
+                var bestScore = 0.0
+                for (cardId in left) {
+                    val score = vectors[cardId].orEmpty().entries.sumOf { (key, share) -> share * (remaining[key] ?: 0.0) }
+                    if (score > bestScore + 1e-12) { best = cardId; bestScore = score }
+                }
+                val chosen = best ?: break
+                val vector = vectors[chosen].orEmpty()
+                val terms = vector.mapNotNull { (key, share) ->
+                    (share * (remaining[key] ?: 0.0)).takeIf { it > 0.0 }?.let { key to it }
+                }.toMap()
+                picks += DotPick(chosen, bestScore, terms)
+                vector.forEach { (key, share) -> remaining[key] = ((remaining[key] ?: 0.0) - share).coerceAtLeast(0.0) }
+                left.remove(chosen)
+            }
+            return picks
         }
 
         internal fun forwardDaysToNearestPracticeDay(targetDow: Int, practiceDays: Set<Int>): Int {

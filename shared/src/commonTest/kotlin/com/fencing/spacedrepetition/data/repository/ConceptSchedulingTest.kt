@@ -12,8 +12,6 @@ import kotlin.test.assertFailsWith
 
 class ConceptSchedulingTest {
 
-    private fun card(id: Long) = Card(id = id, question = "Q$id", answer = "")
-
     // ==================== combineConceptGrades ====================
 
     @Test
@@ -37,33 +35,45 @@ class ConceptSchedulingTest {
         assertFailsWith<IllegalArgumentException> { CardRepository.combineConceptGrades(listOf(Grade.SKIP)) }
     }
 
-    // ==================== pickBestCoveringCard ====================
+    // ==================== greedyDotProduct ====================
+
+    private fun draw(vectors: Map<Long, Map<String, Double>>, need: Map<String, Double>, limit: Int = 10) =
+        CardRepository.greedyDotProduct(vectors.keys.sorted(), vectors, need, limit)
 
     @Test
-    fun `picks the card covering the most uncovered concepts`() {
-        val concepts = mapOf(1L to setOf(10L), 2L to setOf(10L, 11L, 12L), 3L to setOf(10L, 11L))
-        val best = CardRepository.pickBestCoveringCard(
-            listOf(card(1), card(2), card(3)), concepts, uncovered = setOf(10L, 11L, 12L), randomize = false
+    fun `the card meeting the most need is taken first`() {
+        val picks = draw(
+            mapOf(1L to mapOf("A" to 1.0), 2L to mapOf("B" to 1.0)),
+            mapOf("A" to 0.2, "B" to 0.7)
         )
-        assertEquals(2L, best.id)
+        assertEquals(listOf(2L, 1L), picks.map { it.cardId })
+        assertEquals(0.7, picks.first().score, 1e-9)
     }
 
     @Test
-    fun `ties go to the card with fewer concepts that are not due`() {
-        val concepts = mapOf(1L to setOf(10L, 99L, 98L), 2L to setOf(10L, 99L), 3L to setOf(10L, 97L, 96L))
-        val best = CardRepository.pickBestCoveringCard(
-            listOf(card(1), card(2), card(3)), concepts, uncovered = setOf(10L), randomize = false
-        )
-        assertEquals(2L, best.id)
+    fun `a score is the dot product of shares and need`() {
+        // 2 parts A to 1 part B: shares 2/3 and 1/3.
+        val picks = draw(mapOf(1L to mapOf("A" to 2.0 / 3, "B" to 1.0 / 3)), mapOf("A" to 0.6, "B" to 0.3), limit = 1)
+        assertEquals(2.0 / 3 * 0.6 + 1.0 / 3 * 0.3, picks.single().score, 1e-9)
+        assertEquals(mapOf("A" to 0.4, "B" to 0.1), picks.single().terms.mapValues { (_, v) -> kotlin.math.round(v * 1e9) / 1e9 })
     }
 
     @Test
-    fun `a full tie goes to the lowest id when not randomising`() {
-        val concepts = mapOf(4L to setOf(10L), 2L to setOf(10L), 3L to setOf(10L))
-        val best = CardRepository.pickBestCoveringCard(
-            listOf(card(4), card(3), card(2)), concepts, uncovered = setOf(10L), randomize = false
+    fun `a card covers only its share of a concept's need`() {
+        // Card 1 is half A: it leaves half of A's need, which card 2 then meets.
+        val picks = draw(
+            mapOf(1L to mapOf("A" to 0.5, "B" to 0.5), 2L to mapOf("A" to 1.0), 3L to mapOf("C" to 1.0)),
+            mapOf("A" to 1.0, "B" to 1.0, "C" to 0.4)
         )
-        assertEquals(2L, best.id)
+        assertEquals(listOf(1L, 2L, 3L), picks.map { it.cardId })
+        assertEquals(0.5, picks[1].score, 1e-9)
+    }
+
+    @Test
+    fun `nothing is taken once no need is left, and ties go to the first in order`() {
+        val picks = draw(mapOf(5L to mapOf("A" to 1.0), 3L to mapOf("A" to 1.0)), mapOf("A" to 1.0))
+        assertEquals(listOf(3L), picks.map { it.cardId })   // 3 first in id order; then A has no need left
+        assertEquals(emptyList(), draw(mapOf(1L to mapOf("A" to 1.0)), mapOf("A" to 0.0)))
     }
 
     // ==================== shuffleByBucket ====================
@@ -139,22 +149,6 @@ class ConceptSchedulingTest {
             listOf(log(1, Grade.EASY, 10, session = 1), log(2, Grade.AGAIN, 11, session = 1))
         ) { cardId -> if (cardId == 2L) 0.0 else 1.0 }
         assertEquals(Grade.EASY, events.single().grade)
-    }
-
-    @Test
-    fun `covering counts due concepts first, then how much of the card they are`() {
-        val concepts = mapOf(1L to setOf(10L, 11L), 2L to setOf(10L))
-        val shares = mapOf((1L to 10L) to 0.1, (1L to 11L) to 0.1, (2L to 10L) to 1.0)
-        // Covering two due concepts beats covering one, however lightly.
-        assertEquals(1L, CardRepository.pickBestCoveringCard(
-            listOf(card(1), card(2)), concepts, uncovered = setOf(10L, 11L), randomize = false
-        ) { c, k -> shares.getValue(c to k) }.id)
-        // Each covering one: the card mostly about it wins.
-        val one = mapOf(3L to setOf(10L, 20L), 4L to setOf(10L, 21L))
-        val oneShares = mapOf((3L to 10L) to 0.25, (3L to 20L) to 0.75, (4L to 10L) to 0.5, (4L to 21L) to 0.5)
-        assertEquals(4L, CardRepository.pickBestCoveringCard(
-            listOf(card(3), card(4)), one, uncovered = setOf(10L), randomize = false
-        ) { c, k -> oneShares.getValue(c to k) }.id)
     }
 
     @Test
