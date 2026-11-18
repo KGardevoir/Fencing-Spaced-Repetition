@@ -8,8 +8,8 @@ package com.fencing.spacedrepetition.ui
 // text, and hand one back to the user.
 //
 // Compose draws into a canvas and has no file dialog of its own, so this is
-// the same corner BrowserImagePicker lives in -- the page reaching for a DOM
-// element because there is no other way to open a file chooser at all.
+// where the page reaches for a DOM element: there is no other way to open a
+// file chooser at all. Photos are picked through the same dialog.
 //
 // Compression is here rather than in shared code because it is the browser's
 // own: CompressionStream and DecompressionStream are built into the platform,
@@ -33,14 +33,29 @@ import kotlin.js.Promise
  * `.yaml.gz`, a type no two systems name the same way, and the Android picker
  * accepts every type for the same reason.
  *
- * A fresh input per pick, and a cancel detected by the window regaining focus
- * with nothing selected -- both for the reasons BrowserImagePicker gives: a
- * reused input does not fire a change event for the same file twice, and no
- * browser this targets has a cancel event at all.
+ * A fresh input per pick: a reused one does not fire a change event for the
+ * same file twice.
+ *
+ * A dismissed dialog is learned from the input's `cancel` event, and from
+ * nothing else. This used to be guessed from the window regaining focus with
+ * no file selected half a second later -- but focus comes back as soon as the
+ * chooser closes, and the file arrives only once the browser has it, which
+ * for a large backup, on a phone, or from a cloud drive is well after that.
+ * The guess called those picks cancelled and the import silently did nothing.
+ * A browser too old for `cancel` leaves a dismissed pick pending instead,
+ * which costs nothing: the next pick settles it, and a pending pick is a
+ * coroutine waiting, not a spinner showing.
+ *
+ * Public, not internal: the web module's image picker opens its chooser here
+ * too, so the two cannot drift apart again.
  */
-internal fun openFileDialog(accept: String): Promise<JsAny?> = js(
+fun openFileDialog(accept: String): Promise<JsAny?> = js(
     """
     new Promise(function (resolve) {
+        // Only one chooser can be open, so a pick still pending when another
+        // starts was dismissed without saying so.
+        if (window.__fsrSettlePendingPick) window.__fsrSettlePendingPick();
+
         var input = document.createElement('input');
         input.type = 'file';
         if (accept) input.accept = accept;
@@ -51,28 +66,33 @@ internal fun openFileDialog(accept: String): Promise<JsAny?> = js(
         function finish(value) {
             if (settled) return;
             settled = true;
-            window.removeEventListener('focus', onFocus);
+            if (window.__fsrSettlePendingPick === dismiss) window.__fsrSettlePendingPick = null;
             input.remove();
             resolve(value);
         }
+        function dismiss() { finish(null); }
+        window.__fsrSettlePendingPick = dismiss;
 
         input.addEventListener('change', function () {
             finish((input.files && input.files[0]) || null);
         });
-
-        function onFocus() {
-            // The change event, when there is one, arrives after focus
-            // returns. This gives it that chance before calling it a cancel.
-            setTimeout(function () {
-                if (!input.files || input.files.length === 0) finish(null);
-            }, 500);
-        }
-        window.addEventListener('focus', onFocus);
+        input.addEventListener('cancel', dismiss);
 
         input.click();
     })
     """
 )
+
+/**
+ * A file's bytes as a Uint8Array, or null if they could not be read -- for
+ * callers that need the file itself rather than its text, like a photo.
+ */
+fun fileBytes(file: JsAny): Promise<JsAny?> = js(
+    "file.arrayBuffer().then(function (b) { return new Uint8Array(b); }).catch(function () { return null; })"
+)
+
+/** A file's MIME type as the browser reported it, or an empty string. */
+fun fileType(file: JsAny): String = js("file.type || ''")
 
 /** The chosen file's name, which a CSV import derives a group name from. */
 internal fun fileName(file: JsAny): String = js("file.name || ''")
