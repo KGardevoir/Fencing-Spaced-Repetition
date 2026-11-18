@@ -116,7 +116,7 @@ class MainActivity : ComponentActivity() {
                         factory = GroupViewModelFactory(groupRepository, repository, imageStore, conceptRepository)
                     )
                     val historyViewModel: HistoryViewModel = viewModel(
-                        factory = HistoryViewModelFactory(repository, opponentRepository)
+                        factory = HistoryViewModelFactory(repository, opponentRepository, conceptRepository)
                     )
                     val opponentViewModel: OpponentViewModel = viewModel(
                         factory = OpponentViewModelFactory(opponentRepository)
@@ -224,12 +224,13 @@ class SettingsViewModelFactory(
 
 class HistoryViewModelFactory(
     private val repository: CardRepository,
-    private val opponentRepository: OpponentRepository
+    private val opponentRepository: OpponentRepository,
+    private val conceptRepository: ConceptRepository
 ) : androidx.lifecycle.ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(HistoryViewModel::class.java)) {
-            return HistoryViewModel(repository, opponentRepository) as T
+            return HistoryViewModel(repository, opponentRepository, conceptRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

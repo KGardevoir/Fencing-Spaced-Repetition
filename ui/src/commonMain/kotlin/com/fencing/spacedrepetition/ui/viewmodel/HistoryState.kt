@@ -13,8 +13,21 @@ import com.fencing.spacedrepetition.data.model.ReviewLog
  */
 data class ReviewLogWithCard(
     val reviewLog: ReviewLog,
-    val cardQuestion: String
+    val cardQuestion: String,
+    /** The concepts this review tested: what it was drawn for first, then the card's other concepts. */
+    val concepts: List<TestedConcept> = emptyList()
 )
+
+/**
+ * A concept a review tested.
+ *
+ * @param drawnFor the card was drawn by concept and this concept's need was
+ *   part of why (it is in the log's selectionConcepts).
+ * @param trigger the concept that contributed most to the draw (the log's
+ *   selectionTrigger).
+ * Otherwise the card carries it now, so the grade counts towards it.
+ */
+data class TestedConcept(val name: String, val drawnFor: Boolean = false, val trigger: Boolean = false)
 
 data class SessionWithReviews(
     val session: PracticeSession,

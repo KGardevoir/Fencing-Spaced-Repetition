@@ -18,7 +18,11 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.FightDifficulty
@@ -42,6 +46,7 @@ import com.fencing.spacedrepetition.ui.image.LocalImagePicker
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryItem
 import com.fencing.spacedrepetition.ui.viewmodel.OPPONENT_FILTER_NONE
 import com.fencing.spacedrepetition.ui.viewmodel.ReviewLogWithCard
+import com.fencing.spacedrepetition.ui.viewmodel.TestedConcept
 import com.fencing.spacedrepetition.util.formatDate
 import com.fencing.spacedrepetition.util.formatDateAndTime
 import com.fencing.spacedrepetition.util.formatTimeOfDay
@@ -644,6 +649,7 @@ private fun QuickGradeCard(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
+                    ConceptsUnderTest(logWithCard.concepts)
                     val groupLabel = log.groupName?.takeIf { it != GROUP_NAME_CARD_EDIT }
                     Text(
                         text = buildString {
@@ -825,6 +831,7 @@ private fun ReviewLogRow(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+                ConceptsUnderTest(logWithCard.concepts)
                 val groupLabel = log.groupName?.takeIf { it != GROUP_NAME_CARD_EDIT }
                 val metaText = buildString {
                     if (groupLabel != null) append(groupLabel)
@@ -859,6 +866,40 @@ private fun ReviewLogRow(
             // Nothing to edit on a row: its notes, opponent and fight are the
             // session's, and are edited on the session.
         }
+    }
+}
+
+/**
+ * The concepts a review tested, on one line: the one that triggered the
+ * draw marked ★ and in bold, the others it was drawn for in full colour,
+ * and the card's other concepts -- which the grade counts towards too --
+ * dimmed.
+ */
+@Composable
+private fun ConceptsUnderTest(concepts: List<TestedConcept>) {
+    if (concepts.isEmpty()) return
+    val strong = MaterialTheme.colorScheme.primary
+    val dim = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+        Icon(Icons.Default.Lightbulb, contentDescription = "Concepts tested", modifier = Modifier.size(14.dp), tint = strong)
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = buildAnnotatedString {
+                concepts.forEachIndexed { i, concept ->
+                    if (i > 0) withStyle(SpanStyle(color = dim)) { append(" · ") }
+                    when {
+                        concept.trigger -> withStyle(SpanStyle(color = strong, fontWeight = FontWeight.Bold)) {
+                            append("★ "); append(concept.name)
+                        }
+                        concept.drawnFor -> withStyle(SpanStyle(color = strong)) { append(concept.name) }
+                        else -> withStyle(SpanStyle(color = dim)) { append(concept.name) }
+                    }
+                }
+            },
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

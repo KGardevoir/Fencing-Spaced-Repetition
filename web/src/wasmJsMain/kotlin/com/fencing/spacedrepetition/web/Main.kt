@@ -82,7 +82,7 @@ fun main() {
         val practiceViewModel = remember {
             PracticeViewModel(cardRepository, opponentRepository)
         }
-        val historyViewModel = remember { HistoryViewModel(cardRepository, opponentRepository) }
+        val historyViewModel = remember { HistoryViewModel(cardRepository, opponentRepository, conceptRepository) }
         val opponentViewModel = remember { OpponentViewModel(opponentRepository) }
         val retentionReportViewModel = remember { RetentionReportViewModel(cardRepository, groupRepository, conceptRepository, preferences.globalConceptScheduling) }
         val conceptViewModel = remember { ConceptViewModel(conceptRepository, cardRepository, groupRepository) }
