@@ -92,13 +92,14 @@ class CardRepository(
     fun getDueCardCount(): Flow<Int> = dueCount(null)
 
     /**
-     * How many of the cards a session would draw from are due now: the
-     * group's cards ([groupId]), or every card (null), in the learning
-     * context the session practises in -- counted the way that context
-     * draws. Card by card, a card is due by its own state there. By concept,
-     * an untagged card is due by its own state (new if never practised in
-     * the learning group) and a tagged card when any of its concepts is due:
-     * a tagged card's own due date plays no part in drawing it.
+     * How many cards are ready for practice in a session over the group's
+     * cards ([groupId]), or every card (null), in the learning context the
+     * session practises in -- counted the way that context draws.
+     *
+     * Card by card: the cards due by their own state there. By concept: how
+     * many cards the dot-product draw would take, with no session limit,
+     * before every due concept's and untagged card's need is met -- so a due
+     * concept on thirty cards counts as the one or two it takes, not thirty.
      *
      * Recounted whenever cards, groups, concepts or their states change, and
      * every minute, so cards coming due while the screen is open are counted.
@@ -123,13 +124,16 @@ class CardRepository(
         }
         val byConcept = if (learningGroupId == null) globalByConcept
             else learningGroups.first { it.id == learningGroupId }.useConcepts
+        val enabled = pool.filter { !it.isDisabled }
+        val enabledIds = enabled.map { it.id }.toSet()
         countDue(
-            pool.filter { !it.isDisabled }, learningGroupId, byConcept,
+            enabled, learningGroupId, byConcept,
             cardStates.associateBy { it.cardId to it.learningGroupId },
-            links.groupBy({ it.cardId }, { it.conceptId }),
-            if (learningGroupId == null) concepts.associate { it.id to it.nextReview }
-            else conceptStates.filter { it.learningGroupId == learningGroupId }.associate { it.conceptId to it.nextReview },
-            now
+            conceptShares(links.filter { it.cardId in enabledIds }),
+            if (learningGroupId == null) concepts.associate { it.id to it.globalState() }
+            else conceptStates.filter { it.learningGroupId == learningGroupId }.associateBy { it.conceptId },
+            now,
+            fsrsAlgorithm::retrievability
         )
     }
 
@@ -785,11 +789,8 @@ class CardRepository(
             }
 
         val now = Time.now()
-        fun need(stability: Double, lastReview: Long, nextReview: Long): Double {
-            if (nextReview > now) return 0.0                      // not due yet
-            val elapsedDays = if (lastReview <= 0L) 0.0 else (now - lastReview).toDouble() / DAY_MILLIS
-            return 1.0 - fsrsAlgorithm.retrievability(elapsedDays, stability)   // 1 when never learnt
-        }
+        fun need(stability: Double, lastReview: Long, nextReview: Long): Double =
+            needOf(stability, lastReview, nextReview, now, fsrsAlgorithm::retrievability)
         val needs = HashMap<NeedKey, Double>()
         conceptsByCard.values.flatten().toSet().forEach { conceptId ->
             val state = conceptStates[conceptId] ?: return@forEach
@@ -1800,32 +1801,66 @@ class CardRepository(
             else 0.5 + 0.5 * (1.0 - kotlin.math.exp(-daysSinceGraded.coerceAtLeast(0.0) / STALENESS_DAYS))
 
         /**
-         * How many of [cards] are due at [now] in learning context
-         * [learningGroupId] (null is Global). See [dueCount].
+         * The need of something due in a dot-product draw: 1 minus its
+         * predicted recall at [now] -- 1 if never learnt -- or 0 when it is
+         * not due yet.
+         */
+        internal fun needOf(
+            stability: Double, lastReview: Long, nextReview: Long, now: Long,
+            retrievability: (elapsedDays: Double, stability: Double) -> Double
+        ): Double {
+            if (nextReview > now) return 0.0
+            val elapsedDays = if (lastReview <= 0L) 0.0 else (now - lastReview).toDouble() / DAY_MILLIS
+            return 1.0 - retrievability(elapsedDays, stability)
+        }
+
+        /**
+         * How many of [cards] are ready for practice at [now] in learning
+         * context [learningGroupId] (null is Global). See [dueCount].
          *
-         * @param conceptDue each concept's next review in this context; a
-         *   concept missing from it is new there, so due.
+         * @param shares each card's share of each of its concepts.
+         * @param conceptStates each concept's state in this context; one
+         *   missing is new there, so fully needed.
          */
         internal fun countDue(
             cards: List<Card>,
             learningGroupId: Long?,
             byConcept: Boolean,
             cardStates: Map<Pair<Long, Long>, CardLearningState>,
-            conceptsByCard: Map<Long, List<Long>>,
-            conceptDue: Map<Long, Long>,
-            now: Long
-        ): Int = cards.count { card ->
-            val ownState = learningGroupId?.let { cardStates[card.id to it] }
-            val concepts = if (byConcept) conceptsByCard[card.id].orEmpty() else emptyList()
-            when {
-                concepts.isNotEmpty() -> concepts.any { (conceptDue[it] ?: 0L) <= now }
-                learningGroupId == null -> card.nextReview <= now
-                // Card by card, a card not yet practised in the learning group
-                // goes by its Global state, as the group's draw does; by concept
-                // it is new there.
-                ownState == null -> if (byConcept) true else card.nextReview <= now
-                else -> ownState.nextReview <= now
+            shares: Map<Pair<Long, Long>, Double>,
+            conceptStates: Map<Long, ConceptLearningState>,
+            now: Long,
+            retrievability: (elapsedDays: Double, stability: Double) -> Double
+        ): Int {
+            if (!byConcept) return cards.count { card ->
+                // A card not yet practised in the learning group goes by its
+                // Global state, as the group's card-by-card draw does.
+                val due = learningGroupId?.let { cardStates[card.id to it] }?.nextReview ?: card.nextReview
+                due <= now
             }
+            val conceptsByCard = shares.keys.groupBy({ it.first }, { it.second })
+            val need = HashMap<Any, Double>()
+            val vectors = cards.associate { card ->
+                val concepts = conceptsByCard[card.id]
+                card.id to if (concepts != null) {
+                    concepts.associate { conceptId ->
+                        val state = conceptStates[conceptId]
+                        need[conceptId to "concept"] = if (state == null) 1.0
+                            else needOf(state.fsrsStability, state.lastReview, state.nextReview, now, retrievability)
+                        (conceptId to "concept") as Any to shares.getValue(card.id to conceptId)
+                    }
+                } else {
+                    val own = learningGroupId?.let { cardStates[card.id to it] }
+                    need[card.id to "card"] = when {
+                        learningGroupId == null ->
+                            needOf(card.fsrsStability, card.lastReview, card.nextReview, now, retrievability)
+                        own == null -> 1.0   // never practised in the learning group: new
+                        else -> needOf(own.fsrsStability, own.lastReview, own.nextReview, now, retrievability)
+                    }
+                    mapOf((card.id to "card") as Any to 1.0)
+                }
+            }
+            return greedyDotProduct(cards.map { it.id }.sorted(), vectors, need, cards.size).size
         }
 
         internal fun forwardDaysToNearestPracticeDay(targetDow: Int, practiceDays: Set<Int>): Int {

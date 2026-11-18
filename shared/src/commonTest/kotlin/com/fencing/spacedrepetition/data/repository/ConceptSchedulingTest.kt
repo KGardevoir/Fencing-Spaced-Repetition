@@ -104,29 +104,30 @@ class ConceptSchedulingTest {
 
     private fun c(id: Long, next: Long) =
         com.fencing.spacedrepetition.data.model.Card(id = id, question = "Q$id", answer = "", nextReview = next)
+    private val noRecall = { _: Double, _: Double -> 0.0 }
 
     @Test
-    fun `by concept, a tagged card is due by its concepts, not its own date`() {
-        val cards = listOf(c(1, next = 0), c(2, next = 0), c(3, next = 50))
-        val concepts = mapOf(1L to listOf(10L), 2L to listOf(11L))
-        val conceptDue = mapOf(10L to 200L, 11L to 50L)
-        // Card 1's own date says due, but its concept is not; card 2's concept is; card 3 is untagged and due.
-        assertEquals(2, CardRepository.countDue(cards, null, byConcept = true, emptyMap(), concepts, conceptDue, now = 100))
-        // Card by card, the same cards go by their own dates.
-        assertEquals(3, CardRepository.countDue(cards, null, byConcept = false, emptyMap(), concepts, conceptDue, now = 100))
+    fun `card by card, cards are counted by their own due dates`() {
+        val cards = listOf(c(1, next = 0), c(2, next = 500))
+        assertEquals(1, CardRepository.countDue(cards, null, false, emptyMap(), emptyMap(), emptyMap(), 100, noRecall))
+        // In a learning group, a card's state there; one without goes by Global.
+        val states = mapOf((1L to 7L) to com.fencing.spacedrepetition.data.model.CardLearningState(1, 7, nextReview = 900))
+        assertEquals(0, CardRepository.countDue(cards, 7L, false, states, emptyMap(), emptyMap(), 100, noRecall))
     }
 
     @Test
-    fun `in a learning group, a card goes by its state there`() {
-        val cards = listOf(c(1, next = 0), c(2, next = 500))
-        val states = mapOf(
-            (1L to 7L) to com.fencing.spacedrepetition.data.model.CardLearningState(1, 7, nextReview = 900)
-        )
-        // Card 1 is not due in the learning group; card 2 has no state there: Global's date card by card, new by concept.
-        assertEquals(0, CardRepository.countDue(cards, 7L, byConcept = false, states, emptyMap(), emptyMap(), now = 100))
-        assertEquals(1, CardRepository.countDue(cards, 7L, byConcept = true, states, emptyMap(), emptyMap(), now = 100))
-        // A concept never practised in the learning group is due there.
-        assertEquals(1, CardRepository.countDue(listOf(c(3, next = 900)), 7L, true, emptyMap(), mapOf(3L to listOf(10L)), emptyMap(), now = 100))
+    fun `by concept, the count is the cards it takes to meet the need`() {
+        // One new concept on five cards: one card meets all of it.
+        val five = (1L..5L).map { c(it, next = 0) }
+        val shares = (1L..5L).associate { (it to 10L) to 1.0 }
+        assertEquals(1, CardRepository.countDue(five, null, true, emptyMap(), shares, emptyMap(), 100, noRecall))
+        // Two cards each half of two concepts: both are needed.
+        val halves = mapOf((1L to 10L) to 0.5, (1L to 11L) to 0.5, (2L to 10L) to 0.5, (2L to 11L) to 0.5)
+        assertEquals(2, CardRepository.countDue(five.take(2), null, true, emptyMap(), halves, emptyMap(), 100, noRecall))
+        // A concept not due yet needs nothing; an untagged card due by its own date still counts.
+        val later = mapOf(10L to com.fencing.spacedrepetition.data.model.ConceptLearningState(10, 0, nextReview = 500))
+        val mixed = listOf(c(1, next = 0), c(6, next = 0))
+        assertEquals(1, CardRepository.countDue(mixed, null, true, emptyMap(), mapOf((1L to 10L) to 1.0), later, 100, noRecall))
     }
 
     // ==================== shuffleByBucket ====================
