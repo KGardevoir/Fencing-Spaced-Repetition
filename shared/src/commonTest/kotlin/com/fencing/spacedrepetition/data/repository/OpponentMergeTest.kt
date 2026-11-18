@@ -42,7 +42,8 @@ class OpponentMergeTest {
             rows.value = rows.value - id
         }
         override suspend fun reassignReviewLogs(fromId: Long, toId: Long) {
-            logOpponents.replaceAll { _, v -> if (v == fromId) toId else v }
+            // MutableMap.replaceAll is JVM-only; this runs on wasm too.
+            logOpponents.keys.filter { logOpponents[it] == fromId }.forEach { logOpponents[it] = toId }
         }
         override fun getOpponentCount(): Flow<Int> = rows.map { it.size }
     }
