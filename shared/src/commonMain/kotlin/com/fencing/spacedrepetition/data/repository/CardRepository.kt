@@ -17,6 +17,9 @@ import com.fencing.spacedrepetition.util.ConceptWithStates
 import com.fencing.spacedrepetition.util.ParsedCard
 import com.fencing.spacedrepetition.util.Time
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 
 const val GROUP_NAME_CARD_EDIT = "card_edit"
@@ -85,7 +88,58 @@ class CardRepository(
 
     fun getDueCardsFlow(limit: Int = 100): Flow<List<Card>> = cardDao.getDueCardsFlow(limit = limit)
 
-    fun getDueCardCount(): Flow<Int> = cardDao.getDueCardCount()
+    /** How many cards are due in all-cards practice (Global); see [dueCount]. */
+    fun getDueCardCount(): Flow<Int> = dueCount(null)
+
+    /**
+     * How many of the cards a session would draw from are due now: the
+     * group's cards ([groupId]), or every card (null), in the learning
+     * context the session practises in -- counted the way that context
+     * draws. Card by card, a card is due by its own state there. By concept,
+     * an untagged card is due by its own state (new if never practised in
+     * the learning group) and a tagged card when any of its concepts is due:
+     * a tagged card's own due date plays no part in drawing it.
+     *
+     * Recounted whenever cards, groups, concepts or their states change, and
+     * every minute, so cards coming due while the screen is open are counted.
+     * Disabled cards never are.
+     */
+    fun dueCount(groupId: Long?): Flow<Int> = combine(
+        combine(cardDao.getAllCardsWithGroups(), groupDao.getAllLearningStates(), groupDao.getAllLearningGroups()) { a, b, c -> Triple(a, b, c) },
+        combine(conceptDao.getAllConcepts(), conceptDao.getAllCardConceptCrossRefs(), conceptDao.getAllConceptLearningStates()) { a, b, c -> Triple(a, b, c) },
+        preferences.globalConceptScheduling,
+        minuteTicker()
+    ) { (cardsWithGroups, cardStates, learningGroups), (concepts, links, conceptStates), globalByConcept, now ->
+        val learningGroupIds = learningGroups.map { it.id }.toSet()
+        val pool: List<Card>
+        val learningGroupId: Long?
+        if (groupId == null) {
+            pool = cardsWithGroups.map { it.card }
+            learningGroupId = null
+        } else {
+            val group = cardsWithGroups.firstNotNullOfOrNull { cwg -> cwg.groups.firstOrNull { it.id == groupId } }
+            pool = cardsWithGroups.filter { cwg -> cwg.groups.any { it.id == groupId } }.map { it.card }
+            learningGroupId = group?.learningGroupId?.takeIf { it in learningGroupIds }
+        }
+        val byConcept = if (learningGroupId == null) globalByConcept
+            else learningGroups.first { it.id == learningGroupId }.useConcepts
+        countDue(
+            pool.filter { !it.isDisabled }, learningGroupId, byConcept,
+            cardStates.associateBy { it.cardId to it.learningGroupId },
+            links.groupBy({ it.cardId }, { it.conceptId }),
+            if (learningGroupId == null) concepts.associate { it.id to it.nextReview }
+            else conceptStates.filter { it.learningGroupId == learningGroupId }.associate { it.conceptId to it.nextReview },
+            now
+        )
+    }
+
+    /** The time now, again every minute. */
+    private fun minuteTicker(): Flow<Long> = flow {
+        while (true) {
+            emit(Time.now())
+            delay(60_000L)
+        }
+    }
 
     fun getCardsByCategory(category: String): Flow<List<Card>> = cardDao.getCardsByCategory(category)
 
@@ -319,7 +373,8 @@ class CardRepository(
         }
     }
 
-    fun getDueCardCountByGroup(groupId: Long): Flow<Int> = cardDao.getDueCardCountByGroup(groupId)
+    /** How many of [groupId]'s cards are due; see [dueCount]. */
+    fun getDueCardCountByGroup(groupId: Long): Flow<Int> = dueCount(groupId)
 
     fun getCardCountByGroup(groupId: Long): Flow<Int> = cardDao.getCardCountByGroup(groupId)
 
@@ -1743,6 +1798,35 @@ class CardRepository(
         internal fun stalenessFactor(daysSinceGraded: Double?): Double =
             if (daysSinceGraded == null) 1.0
             else 0.5 + 0.5 * (1.0 - kotlin.math.exp(-daysSinceGraded.coerceAtLeast(0.0) / STALENESS_DAYS))
+
+        /**
+         * How many of [cards] are due at [now] in learning context
+         * [learningGroupId] (null is Global). See [dueCount].
+         *
+         * @param conceptDue each concept's next review in this context; a
+         *   concept missing from it is new there, so due.
+         */
+        internal fun countDue(
+            cards: List<Card>,
+            learningGroupId: Long?,
+            byConcept: Boolean,
+            cardStates: Map<Pair<Long, Long>, CardLearningState>,
+            conceptsByCard: Map<Long, List<Long>>,
+            conceptDue: Map<Long, Long>,
+            now: Long
+        ): Int = cards.count { card ->
+            val ownState = learningGroupId?.let { cardStates[card.id to it] }
+            val concepts = if (byConcept) conceptsByCard[card.id].orEmpty() else emptyList()
+            when {
+                concepts.isNotEmpty() -> concepts.any { (conceptDue[it] ?: 0L) <= now }
+                learningGroupId == null -> card.nextReview <= now
+                // Card by card, a card not yet practised in the learning group
+                // goes by its Global state, as the group's draw does; by concept
+                // it is new there.
+                ownState == null -> if (byConcept) true else card.nextReview <= now
+                else -> ownState.nextReview <= now
+            }
+        }
 
         internal fun forwardDaysToNearestPracticeDay(targetDow: Int, practiceDays: Set<Int>): Int {
             if (practiceDays.contains(targetDow)) return 0

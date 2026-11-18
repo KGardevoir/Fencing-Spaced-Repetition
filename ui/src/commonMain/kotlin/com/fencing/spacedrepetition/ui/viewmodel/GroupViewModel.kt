@@ -198,7 +198,7 @@ class GroupViewModel(
     }
 
     fun getDueCardCountForGroup(groupId: Long): Flow<Int> =
-        groupRepository.getDueCardCountByGroup(groupId)
+        cardRepository.getDueCardCountByGroup(groupId)
 
     // Import and export state, rendered by the group list screen.
     private val _importExportState = MutableStateFlow<ImportExportState>(ImportExportState.Idle)

@@ -100,6 +100,35 @@ class ConceptSchedulingTest {
         assertTrue(CardRepository.stalenessFactor(21.0) > 0.97)
     }
 
+    // ==================== countDue ====================
+
+    private fun c(id: Long, next: Long) =
+        com.fencing.spacedrepetition.data.model.Card(id = id, question = "Q$id", answer = "", nextReview = next)
+
+    @Test
+    fun `by concept, a tagged card is due by its concepts, not its own date`() {
+        val cards = listOf(c(1, next = 0), c(2, next = 0), c(3, next = 50))
+        val concepts = mapOf(1L to listOf(10L), 2L to listOf(11L))
+        val conceptDue = mapOf(10L to 200L, 11L to 50L)
+        // Card 1's own date says due, but its concept is not; card 2's concept is; card 3 is untagged and due.
+        assertEquals(2, CardRepository.countDue(cards, null, byConcept = true, emptyMap(), concepts, conceptDue, now = 100))
+        // Card by card, the same cards go by their own dates.
+        assertEquals(3, CardRepository.countDue(cards, null, byConcept = false, emptyMap(), concepts, conceptDue, now = 100))
+    }
+
+    @Test
+    fun `in a learning group, a card goes by its state there`() {
+        val cards = listOf(c(1, next = 0), c(2, next = 500))
+        val states = mapOf(
+            (1L to 7L) to com.fencing.spacedrepetition.data.model.CardLearningState(1, 7, nextReview = 900)
+        )
+        // Card 1 is not due in the learning group; card 2 has no state there: Global's date card by card, new by concept.
+        assertEquals(0, CardRepository.countDue(cards, 7L, byConcept = false, states, emptyMap(), emptyMap(), now = 100))
+        assertEquals(1, CardRepository.countDue(cards, 7L, byConcept = true, states, emptyMap(), emptyMap(), now = 100))
+        // A concept never practised in the learning group is due there.
+        assertEquals(1, CardRepository.countDue(listOf(c(3, next = 900)), 7L, true, emptyMap(), mapOf(3L to listOf(10L)), emptyMap(), now = 100))
+    }
+
     // ==================== shuffleByBucket ====================
 
     @Test
