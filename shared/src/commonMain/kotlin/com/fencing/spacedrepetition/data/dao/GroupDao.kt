@@ -81,6 +81,12 @@ interface GroupDao {
     """)
     suspend fun getGroupsForCardSync(cardId: Long): List<Group>
 
+    @Query("SELECT * FROM groups WHERE uid = :uid LIMIT 1")
+    suspend fun getGroupByUid(uid: String): Group?
+
+    @Query("SELECT * FROM learning_groups WHERE uid = :uid LIMIT 1")
+    suspend fun getLearningGroupByUid(uid: String): LearningGroup?
+
     @Query("SELECT * FROM groups WHERE name = :name LIMIT 1")
     suspend fun getGroupByName(name: String): Group?
 
@@ -121,6 +127,9 @@ interface GroupDao {
 
     @Query("SELECT * FROM card_learning_state WHERE cardId = :cardId AND learningGroupId = :learningGroupId")
     suspend fun getLearningState(cardId: Long, learningGroupId: Long): CardLearningState?
+
+    @Query("SELECT * FROM card_learning_state")
+    suspend fun getAllLearningStatesSync(): List<CardLearningState>
 
     @Query("SELECT * FROM card_learning_state WHERE cardId = :cardId")
     suspend fun getAllLearningStatesForCard(cardId: Long): List<CardLearningState>

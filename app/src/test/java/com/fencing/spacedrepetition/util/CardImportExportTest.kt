@@ -481,7 +481,7 @@ class CardImportExportTest {
         val result = CardImportExport.exportCardsWithGroupStates(cardsWithStates, outputStream, images = NoImages)
 
         assertTrue(result is ExportResult.Success)
-        assertEquals(2, (result as ExportResult.Success).exportedCount) // 1 global + 1 group-specific
+        assertEquals(1, (result as ExportResult.Success).exportedCount) // cards, not states
 
         val output = outputStream.toString(Charsets.UTF_8.name())
 

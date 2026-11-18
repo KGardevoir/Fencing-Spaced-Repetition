@@ -33,13 +33,23 @@ class HistoryViewModel(
     val searchQuery = MutableStateFlow("")
     val selectedGroup = MutableStateFlow<String?>(null)
 
+    /**
+     * Every log with its card's question, and with the group it was made in
+     * named as that group is called now -- found by its stable identifier, so
+     * a renamed group's history shows, and filters, under the new name. A log
+     * from before identifiers, or of a group since deleted, keeps the name it
+     * noted.
+     */
     private val allLogsWithCards: Flow<List<ReviewLogWithCard>> =
-        repository.getAllReviewLogs().transform { logs ->
-            emit(logs.map { log ->
-                val card = repository.getCardById(log.cardId)
-                ReviewLogWithCard(log, card?.question ?: "Deleted Card")
-            })
-        }
+        combine(repository.getAllReviewLogs(), repository.getAllGroups()) { logs, groups -> logs to groups }
+            .transform { (logs, groups) ->
+                val currentNames = groups.associate { it.uid to it.name }
+                emit(logs.map { log ->
+                    val card = repository.getCardById(log.cardId)
+                    val named = log.groupUid?.let { currentNames[it] }?.let { log.copy(groupName = it) } ?: log
+                    ReviewLogWithCard(named, card?.question ?: "Deleted Card")
+                })
+            }
 
     val availableGroups: StateFlow<List<String>> = allLogsWithCards
         .map { logs ->
@@ -129,7 +139,7 @@ class HistoryViewModel(
      */
     fun updateReviewLogOpponent(reviewLog: ReviewLog, opponentId: Long?) {
         viewModelScope.launch {
-            repository.updateReviewLog(reviewLog.copy(opponentId = opponentId))
+            repository.updateReviewLogOpponent(reviewLog, opponentId)
         }
     }
 

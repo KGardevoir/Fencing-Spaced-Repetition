@@ -3,6 +3,8 @@
 
 package com.fencing.spacedrepetition.ui.screen
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,6 +18,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.ui.components.AppIcons
+import com.fencing.spacedrepetition.ui.components.SelectionAction
+import com.fencing.spacedrepetition.ui.components.SelectionTopBar
+import com.fencing.spacedrepetition.ui.components.rememberSelectionState
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.ui.components.CsvGroupSelectionDialog
@@ -46,7 +51,7 @@ fun GroupListScreen(
     importExportState: ImportExportState,
     dueCardCountFor: @Composable (Long) -> Int,
     onSetSortOption: (GroupSortOption) -> Unit,
-    onDeleteGroup: (Group) -> Unit,
+    onDeleteGroups: (List<Group>) -> Unit,
     onDismissImportExport: () -> Unit,
     onImportArchive: (Group) -> Unit,
     onExportArchive: (Group) -> Unit,
@@ -59,8 +64,10 @@ fun GroupListScreen(
     onNavigateToEdit: (Long) -> Unit = {},
     onNavigateToAdd: () -> Unit = {}
 ) {
-    var showDeleteDialog by remember { mutableStateOf<Group?>(null) }
+    var showDeleteDialog by remember { mutableStateOf<List<Group>?>(null) }
     var showSortMenu by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
+    val selection = rememberSelectionState(groups.map { it.id })
 
     // Scroll to top when sort option changes
     val groupListState = rememberLazyListState()
@@ -70,7 +77,18 @@ fun GroupListScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            if (selection.active) {
+                SelectionTopBar(
+                    selectedCount = selection.selected.size,
+                    onExit = selection::exit,
+                    onSelectAll = { selection.selectAll(groups.map { it.id }) },
+                    actions = listOf(
+                        SelectionAction("Delete", Icons.Default.Delete, destructive = true) {
+                            showDeleteDialog = groups.filter { it.id in selection.selected }
+                        }
+                    )
+                )
+            } else TopAppBar(
                 title = { Text("Groups") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
@@ -100,6 +118,19 @@ fun GroupListScreen(
                                     }
                                 )
                             }
+                        }
+                    }
+                    Box {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                        }
+                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Select Groups") },
+                                onClick = { showMenu = false; selection.start() },
+                                enabled = groups.isNotEmpty(),
+                                leadingIcon = { Icon(Icons.Default.CheckBox, contentDescription = null) }
+                            )
                         }
                     }
                 },
@@ -157,8 +188,13 @@ fun GroupListScreen(
                         group = group,
                         dueCardCount = dueCardCountFor(group.id),
                         learningGroupName = learningGroups.find { it.id == group.learningGroupId }?.name,
+                        selecting = selection.active,
+                        selected = group.id in selection.selected,
+                        onClick = {
+                            if (selection.active) selection.toggle(group.id) else onNavigateToEdit(group.id)
+                        },
+                        onLongPress = { if (!selection.active) selection.start(group.id) },
                         onEdit = { onNavigateToEdit(group.id) },
-                        onDelete = { showDeleteDialog = group },
                         onImport = { onImportArchive(group) },
                         onExport = { onExportArchive(group) },
                         onCsvImport = { onImportCsv(group) },
@@ -170,19 +206,26 @@ fun GroupListScreen(
     }
 
     // Delete confirmation dialog
-    showDeleteDialog?.let { group ->
+    showDeleteDialog?.let { doomed ->
+        val what = doomed.singleOrNull()?.let { "\"${it.name}\"" } ?: "${doomed.size} groups"
         AlertDialog(
             onDismissRequest = { showDeleteDialog = null },
             icon = { Icon(Icons.Default.Warning, contentDescription = null) },
-            title = { Text("Delete Group?") },
+            title = { Text(if (doomed.size == 1) "Delete Group?" else "Delete Groups?") },
             text = {
-                Text("Are you sure you want to delete \"${group.name}\"?\n\nCards in this group will NOT be deleted, only removed from this group.")
+                Text(
+                    "Are you sure you want to delete $what?\n\nCards in " +
+                        (if (doomed.size == 1) "this group" else "these groups") +
+                        " will NOT be deleted, only removed from " +
+                        (if (doomed.size == 1) "it." else "them.")
+                )
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        onDeleteGroup(group)
+                        onDeleteGroups(doomed)
                         showDeleteDialog = null
+                        selection.exit()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
@@ -305,14 +348,17 @@ fun GroupListScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun GroupListItem(
     group: Group,
     dueCardCount: Int,
     learningGroupName: String? = null,
+    selecting: Boolean = false,
+    selected: Boolean = false,
+    onClick: () -> Unit = {},
+    onLongPress: () -> Unit = {},
     onEdit: () -> Unit,
-    onDelete: () -> Unit,
     onImport: () -> Unit,
     onExport: () -> Unit,
     onCsvImport: () -> Unit = {},
@@ -321,7 +367,11 @@ fun GroupListItem(
     var showMenu by remember { mutableStateOf(false) }
 
     Card(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = onClick, onLongClick = onLongPress),
+        colors = if (selected) CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        else CardDefaults.cardColors()
     ) {
         Row(
             modifier = Modifier
@@ -329,11 +379,15 @@ fun GroupListItem(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                AppIcons.CardGroups,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
-            )
+            if (selecting) {
+                Checkbox(checked = selected, onCheckedChange = { onClick() })
+            } else {
+                Icon(
+                    AppIcons.CardGroups,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -383,7 +437,7 @@ fun GroupListItem(
                 }
                 Spacer(modifier = Modifier.width(8.dp))
             }
-            Box {
+            if (!selecting) Box {
                 IconButton(onClick = { showMenu = true }) {
                     Icon(
                         Icons.Default.MoreVert,
@@ -444,21 +498,6 @@ fun GroupListItem(
                         },
                         leadingIcon = {
                             Icon(Icons.Default.GridOn, contentDescription = null)
-                        }
-                    )
-                    HorizontalDivider()
-                    DropdownMenuItem(
-                        text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
-                        onClick = {
-                            showMenu = false
-                            onDelete()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.Delete,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error
-                            )
                         }
                     )
                 }

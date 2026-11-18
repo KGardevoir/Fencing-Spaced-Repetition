@@ -40,7 +40,11 @@ data class ParsedCard(
      * files from before learning groups, which name the group that learned
      * independently instead.
      */
-    val learningGroupState: Boolean = false
+    val learningGroupState: Boolean = false,
+    /** The card's stable identifier, on its own record; null in files from before them. */
+    val uid: String? = null,
+    /** When this record's progress was last reset (0 never); null when the file does not say. */
+    val lastReset: Long? = null
 ) {
     // Every full-format row carries a state context ("GLOBAL" or a group
     // name); the two-column simple format carries none.

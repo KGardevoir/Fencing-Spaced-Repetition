@@ -3,6 +3,7 @@
 
 package com.fencing.spacedrepetition.data.model
 
+import androidx.room3.ColumnInfo
 import androidx.room3.Embedded
 import androidx.room3.Entity
 import androidx.room3.ForeignKey
@@ -11,6 +12,7 @@ import androidx.room3.Junction
 import androidx.room3.PrimaryKey
 import androidx.room3.Relation
 import com.fencing.spacedrepetition.util.Time
+import com.fencing.spacedrepetition.util.newUid
 
 /**
  * A set of learning progress that one or more card groups share.
@@ -29,7 +31,7 @@ import com.fencing.spacedrepetition.util.Time
  * to use the app-wide default, which is also what Global uses. A card group
  * keeps only whether it shows the description straight away.
  */
-@Entity(tableName = "learning_groups")
+@Entity(tableName = "learning_groups", indices = [Index(value = ["uid"], unique = true)])
 data class LearningGroup(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
@@ -42,7 +44,10 @@ data class LearningGroup(
     val practiceDays: String? = null,  // comma-separated ISO-8601 day ints (1=Mon..7=Sun)
     val maximumInterval: Int? = null,
     val fsrsRetention: Int? = null,         // integer percent 70–97, e.g. 90 for 90 %
-    val fsrsEnableFuzzing: Boolean? = null  // override FSRS interval fuzzing setting
+    val fsrsEnableFuzzing: Boolean? = null,  // override FSRS interval fuzzing setting
+    /** Stable identifier, unique and kept for life; see docs/DESIGN.md, "Identity". */
+    @ColumnInfo(defaultValue = "''")
+    val uid: String = newUid()
 ) {
     /** Returns true if any setting override is set */
     fun hasCustomSettings(): Boolean =
@@ -75,7 +80,7 @@ fun parsePracticeDays(raw: String?): Set<Int>? {
             onDelete = ForeignKey.SET_NULL
         )
     ],
-    indices = [Index("learningGroupId")]
+    indices = [Index("learningGroupId"), Index(value = ["uid"], unique = true)]
 )
 data class Group(
     @PrimaryKey(autoGenerate = true)
@@ -89,7 +94,10 @@ data class Group(
      * Whether to show a card's description straight away; null for the
      * global setting. Every other setting is the learning group's.
      */
-    val autoShowAnswer: Boolean? = null
+    val autoShowAnswer: Boolean? = null,
+    /** Stable identifier, unique and kept for life; see docs/DESIGN.md, "Identity". */
+    @ColumnInfo(defaultValue = "''")
+    val uid: String = newUid()
 ) {
     /** Returns true if any per-group setting override is set */
     fun hasCustomSettings(): Boolean = autoShowAnswer != null
@@ -155,7 +163,13 @@ data class CardLearningState(
     // Common scheduling fields
     val lastReview: Long = 0L,
     val nextReview: Long = 0L,
-    val modified: Long = Time.now()
+    val modified: Long = Time.now(),
+    /**
+     * When this learning-group progress was last reset, or 0. Reviews before
+     * it no longer count towards anything derived from history.
+     */
+    @ColumnInfo(defaultValue = "0")
+    val lastReset: Long = 0L
 )
 
 data class CardWithGroups(

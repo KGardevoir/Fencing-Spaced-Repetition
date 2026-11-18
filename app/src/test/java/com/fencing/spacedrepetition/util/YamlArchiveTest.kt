@@ -151,8 +151,10 @@ class YamlArchiveTest {
         assertEquals(groupState.fsrsState, perGroup.fsrsState)
         assertEquals(groupState.nextReview, perGroup.nextReview)
 
+        // The group's stable identifier travels with it.
+        assertEquals(group.uid, CardImportExport.lastParsedGroupUids["Foot work"])
         val restored = CardImportExport.applyGroupSettings(
-            Group(id = 0, name = "Foot work", created = 0),
+            Group(id = 0, name = "Foot work", created = 0, uid = group.uid),
             CardImportExport.lastParsedGroupSettings.getValue("Foot work")
         )
         // The learning group travels by name, applied separately.
@@ -162,8 +164,9 @@ class YamlArchiveTest {
             CardImportExport.lastParsedGroupSettings.getValue("Foot work")[CardImportExport.LEARNING_GROUP_SETTING]
         )
 
+        assertEquals(learningGroup.uid, CardImportExport.lastParsedLearningGroupUids["Foot work"])
         val restoredLearningGroup = CardImportExport.applyLearningGroupSettings(
-            LearningGroup(id = 0, name = "Foot work", created = 0),
+            LearningGroup(id = 0, name = "Foot work", created = 0, uid = learningGroup.uid),
             CardImportExport.lastParsedLearningGroupSettings.getValue("Foot work")
         )
         assertEquals(learningGroup.copy(id = 0, created = 0), restoredLearningGroup)

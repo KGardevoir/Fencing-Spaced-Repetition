@@ -173,8 +173,10 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for complete deployment instructions, includi
 
 ## Database Schema
 
+Every user record (cards, groups, learning groups, opponents, sessions, review logs) carries a stable `uid` that survives renames and travels in exports; row ids are local. See [docs/DESIGN.md](docs/DESIGN.md).
+
 ### Cards
-Question and description content, category, tags, image paths, FSRS scheduling parameters, and review scheduling timestamps.
+Question and description content, category, tags, image paths, FSRS scheduling parameters, review scheduling timestamps, and when its progress was last reset.
 
 ### Groups
 Named groups, each pointing at a learning group (null = Global), with an optional auto-show override. Cards are linked to groups via a many-to-many relationship. Learning states are kept per card per learning group, so every group in the same learning group shares one set of progress.
@@ -186,7 +188,7 @@ Named sets of shared learning progress, with optional overrides for cards per se
 Session start/end times, associated card IDs, and assigned grades.
 
 ### Review Logs
-Complete history of every review including grade, algorithm used, state before and after, and scheduling metrics.
+Complete history of every review including grade, algorithm used, state before and after, and scheduling metrics. Each review has its own stable `uid` and names its group and opponent by theirs, so history survives renames, deletions and moves between devices.
 
 ## Privacy & Data
 
@@ -244,6 +246,7 @@ Source files carry [SPDX](https://spdx.dev/) identifiers
 
 ## Documentation
 
+- [docs/DESIGN.md](docs/DESIGN.md) - Design notes: stable identifiers, learning contexts, resets, history, archive matching
 - [DEPLOYMENT.md](DEPLOYMENT.md) - Complete Google Play Store deployment guide
 - [KEYSTORE_SETUP.md](KEYSTORE_SETUP.md) - Keystore creation and signing guide
 - [PRIVACY_POLICY.md](PRIVACY_POLICY.md) - Privacy policy and data handling

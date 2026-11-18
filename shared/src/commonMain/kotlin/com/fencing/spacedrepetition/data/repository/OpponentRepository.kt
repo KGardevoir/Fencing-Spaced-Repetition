@@ -45,18 +45,32 @@ class OpponentRepository(private val opponentDao: OpponentDao) {
      * Returns a map of opponent name -> id for relinking imported review logs.
      */
     suspend fun ensureOpponentsExist(
-        parsed: List<Triple<String, Double, String>>
+        parsed: List<Triple<String, Double, String>>,
+        uidsByName: Map<String, String> = emptyMap()
     ): Map<String, Long> {
         val result = mutableMapOf<String, Long>()
         parsed.forEach { (name, skillMultiplier, notes) ->
             val trimmed = name.trim()
             if (trimmed.isEmpty()) return@forEach
+            val uid = uidsByName[trimmed]
+            // The same person is the one with the file's stable identifier --
+            // renamed to the file's name when that is free -- else the one
+            // with the name. Their local multiplier is kept either way.
+            val byUid = uid?.let { opponentDao.findByUid(it) }
+            if (byUid != null) {
+                if (byUid.name != trimmed && opponentDao.findByName(trimmed) == null) {
+                    opponentDao.updateOpponent(byUid.copy(name = trimmed, modified = Time.now()))
+                }
+                result[trimmed] = byUid.id
+                return@forEach
+            }
             val existing = opponentDao.findByName(trimmed)
             if (existing != null) {
                 result[trimmed] = existing.id
             } else {
                 val newId = opponentDao.insertOpponent(
                     Opponent(name = trimmed, skillMultiplier = skillMultiplier, notes = notes)
+                        .let { if (uid != null) it.copy(uid = uid) else it }
                 )
                 if (newId >= 0) result[trimmed] = newId
             }

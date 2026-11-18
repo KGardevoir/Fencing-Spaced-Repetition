@@ -342,7 +342,7 @@ fun App(
                         .collectAsState(initial = 0).value
                 },
                 onSetSortOption = groupViewModel::setGroupSortOption,
-                onDeleteGroup = groupViewModel::deleteGroup,
+                onDeleteGroups = groupViewModel::deleteGroups,
                 onDismissImportExport = groupViewModel::resetImportExportState,
                 onImportArchive = transfer::importIntoGroup,
                 onExportArchive = transfer::exportGroup,
@@ -388,7 +388,7 @@ fun App(
                 groups = groups,
                 onEditLearningGroup = { navigator.go(Destination.EditLearningGroup(it)) },
                 onEditGlobal = { navigator.go(Destination.GlobalLearningSettings) },
-                onDeleteLearningGroup = groupViewModel::deleteLearningGroup,
+                onDeleteLearningGroups = groupViewModel::deleteLearningGroups,
                 onNavigateBack = { navigator.back() }
             )
         }
@@ -519,7 +519,7 @@ fun App(
                 onUpdateOpponent = { opponent, onDone ->
                     opponentViewModel.updateOpponent(opponent, onDone)
                 },
-                onDeleteOpponent = { opponentViewModel.deleteOpponent(it) },
+                onDeleteOpponents = { opponentViewModel.deleteOpponents(it) },
                 onClearError = opponentViewModel::clearError,
                 onNavigateBack = { navigator.back() }
             )

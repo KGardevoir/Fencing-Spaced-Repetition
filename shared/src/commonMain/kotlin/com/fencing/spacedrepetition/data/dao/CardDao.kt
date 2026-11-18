@@ -134,6 +134,9 @@ interface CardDao {
     """)
     fun getCardCountByGroup(groupId: Long): Flow<Int>
 
+    @Query("SELECT * FROM cards WHERE uid = :uid LIMIT 1")
+    suspend fun findCardByUid(uid: String): Card?
+
     @Query("SELECT * FROM cards WHERE question = :question LIMIT 1")
     suspend fun findCardByQuestion(question: String): Card?
 

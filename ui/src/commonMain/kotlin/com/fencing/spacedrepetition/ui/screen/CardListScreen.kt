@@ -29,6 +29,8 @@ import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.ui.components.AppIcons
+import com.fencing.spacedrepetition.ui.components.SelectionAction
+import com.fencing.spacedrepetition.ui.components.SelectionTopBar
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.CardWithGroups
@@ -126,51 +128,16 @@ fun CardListScreen(
     Scaffold(
         topBar = {
             if (isSelectionMode) {
-                // Selection mode top bar
-                TopAppBar(
-                    title = { Text("${selectedCardIds.size} selected") },
-                    navigationIcon = {
-                        IconButton(onClick = onExitSelectionMode) {
-                            Icon(Icons.Default.Close, "Exit selection")
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = onSelectAllCards) {
-                            Icon(Icons.Default.SelectAll, "Select all")
-                        }
-                        IconButton(
-                            onClick = { showBulkGroupDialog = true },
-                            enabled = selectedCardIds.isNotEmpty()
-                        ) {
-                            Icon(AppIcons.CardGroups, "Change groups")
-                        }
-                        IconButton(
-                            onClick = { showBulkResetDialog = true },
-                            enabled = selectedCardIds.isNotEmpty()
-                        ) {
-                            Icon(Icons.Default.Refresh, "Reset state")
-                        }
-                        IconButton(
-                            onClick = { onSetSelectedCardsDisabled(true) },
-                            enabled = selectedCardIds.isNotEmpty()
-                        ) {
-                            Icon(Icons.Default.Block, "Disable selected")
-                        }
-                        IconButton(
-                            onClick = { onSetSelectedCardsDisabled(false) },
-                            enabled = selectedCardIds.isNotEmpty()
-                        ) {
-                            Icon(Icons.Default.PlayArrow, "Enable selected")
-                        }
-                        IconButton(
-                            onClick = { showBulkDeleteDialog = true },
-                            enabled = selectedCardIds.isNotEmpty()
-                        ) {
-                            Icon(Icons.Default.Delete, "Delete selected")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                SelectionTopBar(
+                    selectedCount = selectedCardIds.size,
+                    onExit = onExitSelectionMode,
+                    onSelectAll = onSelectAllCards,
+                    actions = listOf(
+                        SelectionAction("Change groups", AppIcons.CardGroups) { showBulkGroupDialog = true },
+                        SelectionAction("Reset state", Icons.Default.Refresh) { showBulkResetDialog = true },
+                        SelectionAction("Disable", Icons.Default.Block) { onSetSelectedCardsDisabled(true) },
+                        SelectionAction("Enable", Icons.Default.PlayArrow) { onSetSelectedCardsDisabled(false) },
+                        SelectionAction("Delete", Icons.Default.Delete, destructive = true) { showBulkDeleteDialog = true }
                     )
                 )
             } else {
@@ -672,6 +639,7 @@ fun CardListScreen(
     if (showGroupSelectionDialog) {
         ExportGroupSelectionDialog(
             groups = groups,
+            initiallySelected = selectedGroupFilters,
             onDismiss = { showGroupSelectionDialog = false },
             onConfirm = { selectedGroupIds ->
                 showGroupSelectionDialog = false
@@ -731,6 +699,7 @@ fun CardListScreen(
     if (showCsvGroupSelectionForExport) {
         ExportGroupSelectionDialog(
             groups = groups,
+            initiallySelected = selectedGroupFilters,
             onDismiss = { showCsvGroupSelectionForExport = false },
             onConfirm = { selectedGroupIds ->
                 showCsvGroupSelectionForExport = false
@@ -806,10 +775,14 @@ fun BulkGroupDialog(
 @Composable
 fun ExportGroupSelectionDialog(
     groups: List<Group>,
+    /** Ticked to start with: the group filter chips active on the card list. */
+    initiallySelected: Set<Long> = emptySet(),
     onDismiss: () -> Unit,
     onConfirm: (List<Long>) -> Unit
 ) {
-    var selectedGroupIds by remember { mutableStateOf(setOf<Long>()) }
+    var selectedGroupIds by remember {
+        mutableStateOf(initiallySelected.filter { id -> groups.any { it.id == id } }.toSet())
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1147,31 +1120,8 @@ fun CardListItem(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    Row {
-                        IconButton(onClick = onToggleDisabled) {
-                            Icon(
-                                imageVector = if (card.isDisabled) Icons.Default.PlayArrow else Icons.Default.Block,
-                                contentDescription = if (card.isDisabled) "Enable card" else "Disable card",
-                                tint = if (card.isDisabled)
-                                    MaterialTheme.colorScheme.primary
-                                else
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        IconButton(onClick = onEdit) {
-                            Icon(
-                                Icons.Default.Edit,
-                                contentDescription = "Edit",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        IconButton(onClick = onDelete) {
-                            Icon(
-                                Icons.Default.Delete,
-                                contentDescription = "Delete",
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                        }
+                    IconButton(onClick = onEdit) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit", tint = MaterialTheme.colorScheme.primary)
                     }
                 }
             }

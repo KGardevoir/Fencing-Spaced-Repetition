@@ -3,7 +3,8 @@
 
 package com.fencing.spacedrepetition.ui.screen
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,7 +12,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,6 +25,9 @@ import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.ui.components.AppIcons
+import com.fencing.spacedrepetition.ui.components.SelectionAction
+import com.fencing.spacedrepetition.ui.components.SelectionTopBar
+import com.fencing.spacedrepetition.ui.components.rememberSelectionState
 
 /**
  * The learning groups, and which card groups learn in each.
@@ -44,20 +49,48 @@ fun LearningGroupsScreen(
     groups: List<Group>,
     onEditLearningGroup: (LearningGroup) -> Unit,
     onEditGlobal: () -> Unit,
-    onDeleteLearningGroup: (LearningGroup) -> Unit,
+    onDeleteLearningGroups: (List<LearningGroup>) -> Unit,
     onNavigateBack: () -> Unit
 ) {
-    var deleting by remember { mutableStateOf<LearningGroup?>(null) }
+    var deleting by remember { mutableStateOf<List<LearningGroup>?>(null) }
+    var showMenu by remember { mutableStateOf(false) }
+    val selection = rememberSelectionState(learningGroups.map { it.id })
 
     val globalGroups = groups.filter { group -> learningGroups.none { it.id == group.learningGroupId } }
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            if (selection.active) {
+                SelectionTopBar(
+                    selectedCount = selection.selected.size,
+                    onExit = selection::exit,
+                    onSelectAll = { selection.selectAll(learningGroups.map { it.id }) },
+                    actions = listOf(
+                        SelectionAction("Delete", Icons.Default.Delete, destructive = true) {
+                            deleting = learningGroups.filter { it.id in selection.selected }
+                        }
+                    )
+                )
+            } else TopAppBar(
                 title = { Text("Learning Groups") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    Box {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                        }
+                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Select Learning Groups") },
+                                onClick = { showMenu = false; selection.start() },
+                                enabled = learningGroups.isNotEmpty(),
+                                leadingIcon = { Icon(Icons.Default.CheckBox, contentDescription = null) }
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -80,9 +113,7 @@ fun LearningGroupsScreen(
         ) {
             item {
                 Text(
-                    "Card groups in the same learning group share one set of learning " +
-                        "progress: grading a card in one moves it on in all of them. " +
-                        "A group in no learning group learns Global.",
+                    "Groups in a learning group share progress.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 8.dp)
@@ -91,11 +122,11 @@ fun LearningGroupsScreen(
             item {
                 LearningGroupRow(
                     name = "Global",
-                    description = "The default. Every card's own learning progress, " +
-                        "scheduled by the app settings.",
+                    description = "",
                     members = globalGroups,
                     isGlobal = true,
-                    onEdit = onEditGlobal
+                    // Global is not a row anywhere: it cannot be selected or deleted.
+                    onClick = { if (!selection.active) onEditGlobal() }
                 )
             }
             items(learningGroups, key = { it.id }) { learningGroup ->
@@ -104,34 +135,41 @@ fun LearningGroupsScreen(
                     description = learningGroup.description,
                     members = groups.filter { it.learningGroupId == learningGroup.id },
                     isGlobal = false,
-                    onEdit = { onEditLearningGroup(learningGroup) },
-                    onDelete = { deleting = learningGroup }
+                    selecting = selection.active,
+                    selected = learningGroup.id in selection.selected,
+                    onClick = {
+                        if (selection.active) selection.toggle(learningGroup.id) else onEditLearningGroup(learningGroup)
+                    },
+                    onLongPress = { if (!selection.active) selection.start(learningGroup.id) }
                 )
             }
-            // Room for the last row's buttons above the action button.
+            // Room for the last row above the action button.
             item { Spacer(modifier = Modifier.height(72.dp)) }
         }
     }
 
-    deleting?.let { learningGroup ->
-        val memberCount = groups.count { it.learningGroupId == learningGroup.id }
+    deleting?.let { doomed ->
+        val memberCount = groups.count { group -> doomed.any { it.id == group.learningGroupId } }
+        val what = doomed.singleOrNull()?.let { "\"${it.name}\"" } ?: "${doomed.size} learning groups"
         AlertDialog(
             onDismissRequest = { deleting = null },
             icon = { Icon(Icons.Default.Delete, contentDescription = null) },
-            title = { Text("Delete Learning Group") },
+            title = { Text(if (doomed.size == 1) "Delete Learning Group" else "Delete Learning Groups") },
             text = {
                 Text(
-                    "Delete \"${learningGroup.name}\"? " +
-                        (if (memberCount > 0) "Its $memberCount group${if (memberCount == 1) "" else "s"} " +
+                    "Delete $what? " +
+                        (if (memberCount > 0) "$memberCount card group${if (memberCount == 1) "" else "s"} " +
                             "will go back to Global, and " else "") +
-                        "the learning progress kept in it will be lost. Cards are not deleted."
+                        "the learning progress kept in ${if (doomed.size == 1) "it" else "them"} will be lost. " +
+                        "Cards are not deleted."
                 )
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        onDeleteLearningGroup(learningGroup)
+                        onDeleteLearningGroups(doomed)
                         deleting = null
+                        selection.exit()
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) { Text("Delete") }
@@ -143,29 +181,36 @@ fun LearningGroupsScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun LearningGroupRow(
     name: String,
     description: String,
     members: List<Group>,
     isGlobal: Boolean,
-    onEdit: () -> Unit = {},
-    onDelete: () -> Unit = {}
+    selecting: Boolean = false,
+    selected: Boolean = false,
+    onClick: () -> Unit = {},
+    onLongPress: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onEdit),
+            .combinedClickable(onClick = onClick, onLongClick = onLongPress),
         colors = CardDefaults.cardColors(
-            containerColor = if (isGlobal) MaterialTheme.colorScheme.surfaceVariant
-            else MaterialTheme.colorScheme.secondaryContainer
+            containerColor = when {
+                selected -> MaterialTheme.colorScheme.primaryContainer
+                isGlobal -> MaterialTheme.colorScheme.surfaceVariant
+                else -> MaterialTheme.colorScheme.secondaryContainer
+            }
         )
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
+            if (selecting && !isGlobal) Checkbox(checked = selected, onCheckedChange = { onClick() })
+            else Icon(
                 if (isGlobal) Icons.Default.Public else AppIcons.LearningGroup,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary
@@ -190,14 +235,6 @@ private fun LearningGroupRow(
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis
                 )
-            }
-            IconButton(onClick = onEdit) {
-                Icon(Icons.Default.Edit, contentDescription = "Edit $name")
-            }
-            if (!isGlobal) {
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete $name")
-                }
             }
         }
     }

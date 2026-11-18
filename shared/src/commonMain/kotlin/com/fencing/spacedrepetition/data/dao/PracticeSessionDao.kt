@@ -42,6 +42,9 @@ interface PracticeSessionDao {
     @Query("SELECT * FROM practice_sessions ORDER BY startTime DESC")
     suspend fun getAllSessionsSync(): List<PracticeSession>
 
+    @Query("SELECT * FROM practice_sessions WHERE uid = :uid LIMIT 1")
+    suspend fun getSessionByUid(uid: String): PracticeSession?
+
     @Query("SELECT * FROM practice_sessions WHERE startTime = :startTime LIMIT 1")
     suspend fun getSessionByStartTime(startTime: Long): PracticeSession?
 

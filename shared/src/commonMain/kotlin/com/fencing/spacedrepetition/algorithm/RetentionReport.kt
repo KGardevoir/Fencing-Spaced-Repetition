@@ -207,6 +207,11 @@ object RetentionReportBuilder {
         val enabledCards = cards.filter { !it.isDisabled }
         val cardsById = cards.associateBy { it.id }
         val groupsByName = groups.associateBy { it.name }
+        val groupsByUid = groups.associateBy { it.uid }
+        // The group a review was made in: by its stable identifier, or by the
+        // name it noted for a review recorded without one.
+        fun groupOf(log: ReviewLog): Group? =
+            log.groupUid?.let { groupsByUid[it] } ?: log.groupName?.let { groupsByName[it] }
         val learningGroupIds = learningGroups.map { it.id }.toSet()
         val statesByKey = learningStates.associateBy { it.cardId to it.learningGroupId }
 
@@ -223,21 +228,22 @@ object RetentionReportBuilder {
         fun ReviewLog.counts() = parseState(stateBefore) != STATE_NEW
         val countedLogs = gradedLogs.filter { it.counts() }
 
-        // Which context a log graded. A log keeps only the name of the group it
-        // was practised in, so this follows the group as it is today: renaming a
-        // group or moving it between learning groups moves its history with it.
+        // Which context a log graded. A log keeps the stable identifier of the
+        // group it was practised in, so this follows the group as it is today:
+        // renaming a group or moving it between learning groups moves its
+        // history with it.
         // Practice across all cards, and grades from the card editor, are Global.
         // A group that has since been deleted is attributed nowhere but overall.
         val unattributed = Any()
         fun logContext(log: ReviewLog): Any? {
             val name = log.groupName
-            if (name.isNullOrBlank() || name == GROUP_NAME_CARD_EDIT) return null
-            val group = groupsByName[name] ?: return unattributed
+            if (log.groupUid == null && (name.isNullOrBlank() || name == GROUP_NAME_CARD_EDIT)) return null
+            val group = groupOf(log) ?: return unattributed
             return contextOf(group)
         }
         // Graded logs, first sightings included: they set a card's first stability.
         val gradedByContext: Map<Any?, List<ReviewLog>> = gradedLogs.groupBy(::logContext)
-        val logsByGroupName = countedLogs.groupBy { it.groupName }
+        val logsByGroupId = countedLogs.groupBy { groupOf(it)?.id }
 
         /**
          * Stability as of the end of each period, from the latest grade each
@@ -413,7 +419,7 @@ object RetentionReportBuilder {
                 learningContextName = contextNames[lgId] ?: GLOBAL_NAME,
                 summary = summarize(
                     groupCards.map { snapshotOf(it, lgId) },
-                    logsByGroupName[group.name].orEmpty(),
+                    logsByGroupId[group.id].orEmpty(),
                     // Stability is the state the group's cards share in its
                     // learning context, whichever group the grade came from.
                     stabilityTrendOf(

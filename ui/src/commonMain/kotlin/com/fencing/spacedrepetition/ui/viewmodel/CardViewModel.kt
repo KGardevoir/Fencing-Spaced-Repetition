@@ -295,8 +295,12 @@ class CardViewModel(
         }
     }
 
+    /** Selects every card shown -- or, when they are all selected already, none. */
     fun selectAllCards() {
-        _selectedCardIds.value = filteredCards.value.map { it.id }.toSet()
+        val shown = filteredCards.value.map { it.id }.toSet()
+        _selectedCardIds.value =
+            if (shown.isNotEmpty() && _selectedCardIds.value.containsAll(shown)) _selectedCardIds.value - shown
+            else _selectedCardIds.value + shown
     }
 
     fun clearSelection() {
@@ -515,19 +519,37 @@ class CardViewModel(
         val parsedOpponents = CardImportExport.lastParsedOpponents
         val opponentIds: Map<String, Long> = if (parsedOpponents.isEmpty()) emptyMap() else {
             opponentRepository.ensureOpponentsExist(
-                parsedOpponents.map { Triple(it.name, it.skillMultiplier, it.notes) }
+                parsedOpponents.map { Triple(it.name, it.skillMultiplier, it.notes) },
+                uidsByName = parsedOpponents.mapNotNull { o -> o.uid?.let { o.name to it } }.toMap()
             )
         }
 
         val parsedHistory = CardImportExport.lastParsedReviewHistory
-        if (parsedHistory.isEmpty()) return
+        if (parsedHistory.isEmpty()) {
+            // Opponents alone can still reconnect reviews to someone re-added.
+            repository.reconcileOpponentReferences()
+            return
+        }
 
         val questionToCardId = repository.getAllCardsSync().associate { it.question to it.id }
-        val sessionIdByStart = restoreSessions(parsedHistory, questionToCardId)
+        val cardIdByUid = repository.cardIdsByUid()
+        // A review's card: by stable identifier where the file has one.
+        val cardIdOf = { log: CardImportExport.ParsedReviewLog ->
+            log.cardUid?.let { cardIdByUid[it] } ?: questionToCardId[log.cardQuestion]
+        }
+        val sessionIds = restoreSessions(parsedHistory, cardIdOf)
         val reviewLogs = CardImportExport.parsedReviewLogsToEntities(
-            parsedHistory, questionToCardId, opponentIds, imageStore, sessionIdByStart
+            parsedHistory, questionToCardId, opponentIds, imageStore,
+            sessionIdByStart = sessionIds.byStart,
+            cardIdByUid = cardIdByUid,
+            sessionIdByUid = sessionIds.byUid
         )
+        // Reviews already in the history are left out, so nothing counts twice.
         if (reviewLogs.isNotEmpty()) repository.importReviewLogs(reviewLogs)
+        // Each review's opponent: the identifier the file gave, pointed at
+        // whoever has it here; a review the file named only by name gets the
+        // identifier of the opponent that name found.
+        repository.reconcileOpponentReferences()
     }
 
     /**
@@ -541,27 +563,35 @@ class CardViewModel(
      */
     private suspend fun restoreSessions(
         parsedHistory: List<CardImportExport.ParsedReviewLog>,
-        questionToCardId: Map<String, Long>
-    ): Map<Long, Long> {
+        cardIdOf: (CardImportExport.ParsedReviewLog) -> Long?
+    ): RestoredSessions {
         val parsedSessions = CardImportExport.lastParsedSessions
-        if (parsedSessions.isEmpty()) return emptyMap()
+        if (parsedSessions.isEmpty()) return RestoredSessions(emptyMap(), emptyMap())
 
-        val placeable = parsedHistory
-            .filter { it.sessionStart != null && it.cardQuestion in questionToCardId }
-            .groupBy { it.sessionStart!! }
-
-        return parsedSessions.mapNotNull { parsed ->
-            val reviews = placeable[parsed.startTime]?.sortedBy { it.reviewTime }
-                ?: return@mapNotNull null
+        val placeable = parsedHistory.filter { it.sessionStart != null && cardIdOf(it) != null }
+        val byStart = mutableMapOf<Long, Long>()
+        val byUid = mutableMapOf<String, Long>()
+        parsedSessions.forEach { parsed ->
+            // A review names its session by identifier, or by start time in older files.
+            val reviews = placeable
+                .filter { log -> log.sessionUid?.let { it == parsed.uid } ?: (log.sessionStart == parsed.startTime) }
+                .sortedBy { it.reviewTime }
+                .ifEmpty { return@forEach }
             val session = CardImportExport.parsedSessionToSession(
                 parsed,
-                cardIds = reviews.map { questionToCardId.getValue(it.cardQuestion) },
+                cardIds = reviews.map { cardIdOf(it)!! },
                 grades = reviews.map { it.grade },
                 images = imageStore
             )
-            parsed.startTime to repository.ensureSession(session)
-        }.toMap()
+            val id = repository.ensureSession(session)
+            byStart[parsed.startTime] = id
+            parsed.uid?.let { byUid[it] = id }
+        }
+        return RestoredSessions(byStart, byUid)
     }
+
+    /** Local session ids an import placed, by start time and by stable identifier. */
+    private data class RestoredSessions(val byStart: Map<Long, Long>, val byUid: Map<String, Long>)
 
     /** Exports every card, optionally with the review history and opponents. */
     fun exportAllCards(file: ExportFile, includeHistory: Boolean = false) {

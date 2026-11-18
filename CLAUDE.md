@@ -24,6 +24,10 @@ This is an Android app (Kotlin + Jetpack Compose) for practicing martial arts an
 - UI: Jetpack Compose with Material Design 3
 - Algorithms: FSRS-6
 
+## Design Notes
+
+Read [docs/DESIGN.md](docs/DESIGN.md) before changing the schema, the archive format, or scheduling. In short: every user record has a stable `uid` (never a name or a local row id) for identity and cross-device matching; resets record a time and only later reviews count. Keep that document up to date with any change to those rules.
+
 ## Key Directories
 
 - `app/src/main/java/com/fencing/spacedrepetition/algorithm/` - Spaced repetition engines

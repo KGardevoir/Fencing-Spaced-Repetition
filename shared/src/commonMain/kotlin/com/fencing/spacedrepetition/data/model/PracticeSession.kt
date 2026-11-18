@@ -6,8 +6,11 @@ package com.fencing.spacedrepetition.data.model
 import androidx.room3.Entity
 import androidx.room3.PrimaryKey
 import com.fencing.spacedrepetition.util.Time
+import androidx.room3.ColumnInfo
+import androidx.room3.Index
+import com.fencing.spacedrepetition.util.newUid
 
-@Entity(tableName = "practice_sessions")
+@Entity(tableName = "practice_sessions", indices = [Index(value = ["uid"], unique = true)])
 data class PracticeSession(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
@@ -29,7 +32,10 @@ data class PracticeSession(
     // fight. Quick grades from the card editor are not in a session and keep
     // their notes on their own review log.
     val notes: String = "",
-    val imagePaths: String = "" // Comma-separated image keys
+    val imagePaths: String = "", // Comma-separated image keys
+    /** Stable identifier, unique and kept for life; see docs/DESIGN.md, "Identity". */
+    @ColumnInfo(defaultValue = "''")
+    val uid: String = newUid()
 )
 
 /**
