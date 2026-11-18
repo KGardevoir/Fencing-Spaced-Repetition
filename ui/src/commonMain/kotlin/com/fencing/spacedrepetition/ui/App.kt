@@ -490,6 +490,7 @@ fun App(
                 onUpdateSessionNotes = historyViewModel::updateSessionNotes,
                 onUpdateSessionOpponent = historyViewModel::updateSessionOpponent,
                 onCreateOpponent = historyViewModel::createOpponent,
+                onMergeOpponents = historyViewModel::mergeOpponents,
                 onNavigateBack = { navigator.back() }
             )
         }
@@ -521,7 +522,8 @@ fun App(
                 },
                 onDeleteOpponents = { opponentViewModel.deleteOpponents(it) },
                 onClearError = opponentViewModel::clearError,
-                onNavigateBack = { navigator.back() }
+                onNavigateBack = { navigator.back() },
+                onMergeOpponents = { source, target -> opponentViewModel.mergeOpponents(source, target) }
             )
         }
 

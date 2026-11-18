@@ -52,6 +52,14 @@ class OpponentViewModel(
         }
     }
 
+    /** Fold [source] into [target]; see [OpponentRepository.mergeOpponents]. */
+    fun mergeOpponents(source: Opponent, target: Opponent, onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.mergeOpponents(sourceId = source.id, targetId = target.id)
+            onDone()
+        }
+    }
+
     fun clearError() {
         _error.value = null
     }
