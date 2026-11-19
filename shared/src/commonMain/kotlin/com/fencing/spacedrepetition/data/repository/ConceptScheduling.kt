@@ -166,21 +166,69 @@ internal object ConceptScheduling {
      * not due yet.
      */
     internal fun needOf(
-        stability: Double, lastReview: Long, nextReview: Long, now: Long,
+        state: FsrsState, now: Long,
         retrievability: (elapsedDays: Double, stability: Double) -> Double
     ): Double {
-        if (nextReview > now) return 0.0
-        val elapsedDays = if (lastReview <= 0L) 0.0 else (now - lastReview).toDouble() / FsrsState.DAY_MILLIS.toDouble()
-        return 1.0 - retrievability(elapsedDays, stability)
+        if (state.nextReview > now) return 0.0
+        val elapsedDays = if (state.lastReview <= 0L) 0.0 else (now - state.lastReview).toDouble() / FsrsState.DAY_MILLIS
+        return 1.0 - retrievability(elapsedDays, state.stability)
+    }
+
+    /**
+     * What a dot-product draw over [cards] in one learning context works
+     * from: each card's vector of shares (an untagged card is all of
+     * itself), the need of every concept and untagged card, and each card's
+     * own progress there (new in a learning group it was never practised in).
+     */
+    internal class DrawInputs(
+        val vectors: Map<Long, Map<NeedKey, Double>>,
+        val need: Map<NeedKey, Double>,
+        val ownStates: Map<Long, FsrsState>
+    )
+
+    /**
+     * @param cardStates cards' learning-group states, by (card, learning group).
+     * @param shares each card's share of each of its concepts.
+     * @param conceptStates each concept's state in this context; one missing
+     *   is new there, so fully needed.
+     */
+    internal fun drawInputs(
+        cards: List<Card>,
+        learningGroupId: Long?,
+        cardStates: Map<Pair<Long, Long>, CardLearningState>,
+        shares: Map<Pair<Long, Long>, Double>,
+        conceptStates: Map<Long, ConceptLearningState>,
+        now: Long,
+        retrievability: (elapsedDays: Double, stability: Double) -> Double
+    ): DrawInputs {
+        val conceptsByCard = shares.keys.groupBy({ it.first }, { it.second })
+        val ownStates = cards.associate { card ->
+            card.id to if (learningGroupId == null) card.fsrs else cardStates[card.id to learningGroupId]?.fsrs ?: FsrsState()
+        }
+        val need = HashMap<NeedKey, Double>()
+        val vectors = cards.associate { card ->
+            val concepts = conceptsByCard[card.id]
+            card.id to if (concepts != null) {
+                concepts.associate { conceptId ->
+                    val key: NeedKey = NeedKey.OfConcept(conceptId)
+                    need[key] = needOf(conceptStates[conceptId]?.fsrs ?: FsrsState(), now, retrievability)
+                    key to shares.getValue(card.id to conceptId)
+                }
+            } else {
+                val key: NeedKey = NeedKey.OfCard(card.id)
+                need[key] = needOf(ownStates.getValue(card.id), now, retrievability)
+                mapOf(key to 1.0)
+            }
+        }
+        return DrawInputs(vectors, need, ownStates)
     }
 
     /**
      * How many of [cards] are ready for practice at [now] in learning
-     * context [learningGroupId] (null is Global). See [dueCount].
-     *
-     * @param shares each card's share of each of its concepts.
-     * @param conceptStates each concept's state in this context; one
-     *   missing is new there, so fully needed.
+     * context [learningGroupId] (null is Global): card by card, those due by
+     * their own state there (Global's for a card never practised in the
+     * learning group, as that draw does); by concept, how many cards the
+     * dot-product draw takes, with no limit, to meet all the need.
      */
     internal fun countDue(
         cards: List<Card>,
@@ -193,33 +241,10 @@ internal object ConceptScheduling {
         retrievability: (elapsedDays: Double, stability: Double) -> Double
     ): Int {
         if (!byConcept) return cards.count { card ->
-            // A card not yet practised in the learning group goes by its
-            // Global state, as the group's card-by-card draw does.
             val due = learningGroupId?.let { cardStates[card.id to it] }?.nextReview ?: card.nextReview
             due <= now
         }
-        val conceptsByCard = shares.keys.groupBy({ it.first }, { it.second })
-        val need = HashMap<Any, Double>()
-        val vectors = cards.associate { card ->
-            val concepts = conceptsByCard[card.id]
-            card.id to if (concepts != null) {
-                concepts.associate { conceptId ->
-                    val state = conceptStates[conceptId]
-                    need[conceptId to "concept"] = if (state == null) 1.0
-                        else needOf(state.fsrsStability, state.lastReview, state.nextReview, now, retrievability)
-                    (conceptId to "concept") as Any to shares.getValue(card.id to conceptId)
-                }
-            } else {
-                val own = learningGroupId?.let { cardStates[card.id to it] }
-                need[card.id to "card"] = when {
-                    learningGroupId == null ->
-                        needOf(card.fsrsStability, card.lastReview, card.nextReview, now, retrievability)
-                    own == null -> 1.0   // never practised in the learning group: new
-                    else -> needOf(own.fsrsStability, own.lastReview, own.nextReview, now, retrievability)
-                }
-                mapOf((card.id to "card") as Any to 1.0)
-            }
-        }
-        return greedyDotProduct(cards.map { it.id }.sorted(), vectors, need, cards.size).size
+        val inputs = drawInputs(cards, learningGroupId, cardStates, shares, conceptStates, now, retrievability)
+        return greedyDotProduct(cards.map { it.id }.sorted(), inputs.vectors, inputs.need, cards.size).size
     }
 }

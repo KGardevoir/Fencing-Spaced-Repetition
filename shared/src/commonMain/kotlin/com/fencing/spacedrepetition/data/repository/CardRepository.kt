@@ -23,7 +23,7 @@ import com.fencing.spacedrepetition.data.repository.ConceptScheduling.combineCon
 import com.fencing.spacedrepetition.data.repository.ConceptScheduling.combineWeightedConceptGrades
 import com.fencing.spacedrepetition.data.repository.ConceptScheduling.greedyDotProduct
 import com.fencing.spacedrepetition.data.repository.ConceptScheduling.stalenessFactor
-import com.fencing.spacedrepetition.data.repository.ConceptScheduling.needOf
+import com.fencing.spacedrepetition.data.repository.ConceptScheduling.drawInputs
 import com.fencing.spacedrepetition.data.repository.ConceptScheduling.countDue
 import com.fencing.spacedrepetition.data.repository.ConceptScheduling.STALENESS_DAYS
 import kotlinx.coroutines.flow.Flow
@@ -40,8 +40,6 @@ const val GROUP_NAME_CARD_EDIT = "card_edit"
  * review-history export is positional.
  */
 private const val ALGORITHM_NAME = "FSRS"
-
-private const val DAY_MILLIS = 24.0 * 60 * 60 * 1000
 
 class CardRepository(
     private val cardDao: CardDao,
@@ -766,50 +764,21 @@ class CardRepository(
         val shouldRandomize = learningGroup?.randomizeDueCards ?: preferences.randomizeDueCards.first()
 
         val poolIds = pool.map { it.id }.toSet()
-        val links = conceptDao.getAllCardConceptCrossRefsSync().filter { it.cardId in poolIds }
-        val shares = conceptShares(links)
-        val conceptsByCard: Map<Long, Set<Long>> = links
-            .groupBy({ it.cardId }, { it.conceptId })
-            .mapValues { it.value.toSet() }
-        val conceptStates = if (conceptsByCard.isEmpty()) emptyMap() else conceptStatesIn(learningGroupId)
-
-        // An untagged card's own state in this context: (stability, last review, next review).
-        val untaggedStates: Map<Long, Triple<Double, Long, Long>> = pool.filter { it.id !in conceptsByCard }
-            .associate { card ->
-                val state = learningGroupId?.let { groupDao.getLearningState(card.id, it) }
-                card.id to when {
-                    learningGroupId == null -> Triple(card.fsrsStability, card.lastReview, card.nextReview)
-                    state == null -> Triple(0.0, 0L, 0L)   // never practised there: new
-                    else -> Triple(state.fsrsStability, state.lastReview, state.nextReview)
-                }
-            }
+        val shares = conceptShares(conceptDao.getAllCardConceptCrossRefsSync().filter { it.cardId in poolIds })
+        val conceptsByCard = shares.keys.groupBy({ it.first }, { it.second })
+        val conceptStates = conceptStatesIn(learningGroupId)
+        val cardStates = if (learningGroupId == null) emptyMap() else groupDao.getAllLearningStatesSync()
+            .filter { it.learningGroupId == learningGroupId && it.cardId in poolIds }
+            .associateBy { it.cardId to it.learningGroupId }
 
         val now = Time.now()
-        fun need(stability: Double, lastReview: Long, nextReview: Long): Double =
-            needOf(stability, lastReview, nextReview, now, fsrsAlgorithm::retrievability)
-        val needs = HashMap<NeedKey, Double>()
-        conceptsByCard.values.flatten().toSet().forEach { conceptId ->
-            val state = conceptStates[conceptId] ?: return@forEach
-            needs[NeedKey.OfConcept(conceptId)] = need(state.fsrsStability, state.lastReview, state.nextReview)
+        val inputs = drawInputs(pool, learningGroupId, cardStates, shares, conceptStates, now, fsrsAlgorithm::retrievability)
+        // Staleness: how long since each card was last graded here.
+        val staleness = inputs.ownStates.mapValues { (_, state) ->
+            stalenessFactor(if (state.lastReview <= 0L) null else (now - state.lastReview).toDouble() / FsrsState.DAY_MILLIS)
         }
-        untaggedStates.forEach { (cardId, s) -> needs[NeedKey.OfCard(cardId)] = need(s.first, s.second, s.third) }
-
-        val vectors: Map<Long, Map<NeedKey, Double>> = pool.associate { card ->
-            card.id to (conceptsByCard[card.id]?.associate { NeedKey.OfConcept(it) as NeedKey to shares.getValue(card.id to it) }
-                ?: mapOf(NeedKey.OfCard(card.id) to 1.0))
-        }
-        // When each card was last graded here: its own state's last review in this context.
-        val lastGraded: Map<Long, Long> = if (learningGroupId == null) pool.associate { it.id to it.lastReview }
-            else groupDao.getAllLearningStatesSync()
-                .filter { it.learningGroupId == learningGroupId && it.cardId in poolIds }
-                .associate { it.cardId to it.lastReview }
-        val staleness = pool.associate { card ->
-            val last = lastGraded[card.id] ?: 0L
-            card.id to stalenessFactor(if (last <= 0L) null else (now - last).toDouble() / DAY_MILLIS)
-        }
-
         val order = if (shouldRandomize) pool.map { it.id }.shuffled() else pool.map { it.id }.sorted()
-        val picks = greedyDotProduct(order, vectors, needs, limit) { cardId -> staleness[cardId] ?: 1.0 }
+        val picks = greedyDotProduct(order, inputs.vectors, inputs.need, limit) { cardId -> staleness[cardId] ?: 1.0 }
 
         val cardsById = pool.associateBy { it.id }
         val selected = LinkedHashMap<Long, Card>()
@@ -819,7 +788,7 @@ class CardRepository(
         if (selected.size < limit) {
             fun dueOf(card: Card): Long = conceptsByCard[card.id]
                 ?.minOfOrNull { conceptStates[it]?.nextReview ?: 0L }
-                ?: untaggedStates[card.id]?.third ?: card.nextReview
+                ?: inputs.ownStates.getValue(card.id).nextReview
             val rest = pool.filter { it.id !in selected }.sortedBy(::dueOf)
             val fill = if (shouldRandomize) rest.shuffled() else rest
             fill.take(limit - selected.size).forEach { selected[it.id] = it }
