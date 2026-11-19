@@ -24,6 +24,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.fencing.spacedrepetition.ui.components.rememberLeaveGuard
 import com.fencing.spacedrepetition.ui.components.AppIcons
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardLearningState
@@ -132,7 +133,6 @@ fun AddEditCardScreen(
     var showResetDialog by rememberSaveable { mutableStateOf(false) }
     var showCreateGroupDialog by rememberSaveable { mutableStateOf(false) }
     var isDirty by rememberSaveable { mutableStateOf(false) }
-    var showUnsavedChangesDialog by rememberSaveable { mutableStateOf(false) }
     val markdownToolbarState = rememberMarkdownToolbarState()
 
     val imagePicker = LocalImagePicker.current
@@ -190,9 +190,7 @@ fun AddEditCardScreen(
 
     val isEditing = cardToEdit != null
 
-    BackHandler(enabled = isDirty) {
-        showUnsavedChangesDialog = true
-    }
+    val requestLeave = rememberLeaveGuard(isDirty) { isDirty = false; onNavigateBack() }
 
     // Saves from the top bar, as every editor does.
     fun save() {
@@ -260,13 +258,7 @@ fun AddEditCardScreen(
             TopAppBar(
                 title = { Text(if (isEditing) "Edit Card" else "Add New Card") },
                 navigationIcon = {
-                    IconButton(onClick = {
-                        if (isDirty) {
-                            showUnsavedChangesDialog = true
-                        } else {
-                            onNavigateBack()
-                        }
-                    }) {
+                    IconButton(onClick = requestLeave) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                     }
                 },
@@ -1436,34 +1428,6 @@ fun AddEditCardScreen(
         )
     }
 
-    // Unsaved changes warning dialog
-    if (showUnsavedChangesDialog) {
-        AlertDialog(
-            onDismissRequest = { showUnsavedChangesDialog = false },
-            icon = { Icon(Icons.Default.Warning, contentDescription = null) },
-            title = { Text("Unsaved Changes") },
-            text = { Text("You have unsaved changes. Leaving now will discard them.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showUnsavedChangesDialog = false
-                        isDirty = false
-                        onNavigateBack()
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("Discard Changes")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showUnsavedChangesDialog = false }) {
-                    Text("Keep Editing")
-                }
-            }
-        )
-    }
 }
 
 /**

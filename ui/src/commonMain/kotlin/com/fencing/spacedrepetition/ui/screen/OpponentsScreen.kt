@@ -27,6 +27,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.fencing.spacedrepetition.ui.components.GuardedBack
+import com.fencing.spacedrepetition.ui.components.rememberLeaveGuard
 import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.ui.components.MergeOpponentsDialog
 import com.fencing.spacedrepetition.ui.components.SelectionAction
@@ -319,45 +321,12 @@ fun OpponentEditorDialog(
     val isDirty = name != (initial?.name ?: "") ||
         multiplierText != (initial?.skillMultiplier ?: 1.0).toTwoDecimals() ||
         notes != (initial?.notes ?: "")
-    var showUnsavedChangesDialog by rememberSaveable { mutableStateOf(false) }
 
-    fun requestDismiss() {
-        if (isDirty) {
-            showUnsavedChangesDialog = true
-        } else {
-            onDismiss()
-        }
-    }
-
-    if (showUnsavedChangesDialog) {
-        AlertDialog(
-            onDismissRequest = { showUnsavedChangesDialog = false },
-            icon = { Icon(Icons.Default.Warning, contentDescription = null) },
-            title = { Text("Unsaved Changes") },
-            text = { Text("You have unsaved changes. Leaving now will discard them.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showUnsavedChangesDialog = false
-                        onDismiss()
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("Discard Changes")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showUnsavedChangesDialog = false }) {
-                    Text("Keep Editing")
-                }
-            }
-        )
-    }
+    // A dialog: its own dismissal takes Back.
+    val requestDismiss = rememberLeaveGuard(isDirty, GuardedBack.NONE, onDismiss)
 
     AlertDialog(
-        onDismissRequest = { requestDismiss() },
+        onDismissRequest = requestDismiss,
         title = { Text(if (initial == null) "Add Opponent" else "Edit Opponent") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -424,7 +393,7 @@ fun OpponentEditorDialog(
             ) { Text("Save") }
         },
         dismissButton = {
-            TextButton(onClick = { requestDismiss() }) { Text("Cancel") }
+            TextButton(onClick = requestDismiss) { Text("Cancel") }
         }
     )
 }

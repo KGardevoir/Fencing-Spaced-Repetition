@@ -27,11 +27,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import com.fencing.spacedrepetition.ui.components.GuardedBack
+import com.fencing.spacedrepetition.ui.components.rememberLeaveGuard
 import com.fencing.spacedrepetition.util.Time
 import kotlinx.coroutines.launch
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.SessionCard
-import com.fencing.spacedrepetition.ui.components.UnsavedChangesDialog
 import com.fencing.spacedrepetition.ui.components.CardImagesDisplay
 import com.fencing.spacedrepetition.ui.components.CardImagesEdit
 import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
@@ -568,16 +569,9 @@ fun EditCardDialog(
     }
     var imagePaths by rememberSaveable(card.id) { mutableStateOf(card.imagePaths.toMutableList()) }
     val markdownToolbarState = rememberMarkdownToolbarState()
-    var showUnsavedChangesDialog by rememberSaveable { mutableStateOf(false) }
     val isDirty = question != card.question || answerFieldValue.text != card.answer || imagePaths != card.imagePaths
-    val requestDismiss = { if (isDirty) showUnsavedChangesDialog = true else onDismiss() }
-
-    if (showUnsavedChangesDialog) {
-        UnsavedChangesDialog(
-            onDiscard = { showUnsavedChangesDialog = false; onDismiss() },
-            onKeepEditing = { showUnsavedChangesDialog = false }
-        )
-    }
+    // A dialog: its own dismissal takes Back.
+    val requestDismiss = rememberLeaveGuard(isDirty, GuardedBack.NONE, onDismiss)
 
     val imagePicker = LocalImagePicker.current
     var lastLargeImageBytes by remember { mutableStateOf<Int?>(null) }

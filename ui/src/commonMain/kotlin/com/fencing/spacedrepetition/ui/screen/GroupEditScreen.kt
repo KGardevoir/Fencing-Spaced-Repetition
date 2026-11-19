@@ -22,6 +22,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.fencing.spacedrepetition.ui.components.rememberLeaveGuard
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.ui.components.AppIcons
@@ -55,30 +56,15 @@ fun GroupEditScreen(
     )
 
     val isDirty = buildUpdatedGroup() != group
-    var showUnsavedChangesDialog by rememberSaveable { mutableStateOf(false) }
+    val requestLeave = rememberLeaveGuard(isDirty, onLeave = onNavigateBack)
 
-    // Compose Multiplatform's own BackHandler, not the one from
-    // androidx.activity: same signature, and a real back gesture on Android.
-    // Not the browser's Back button on the web, despite the symmetry -- there
-    // Compose raises a back event for the Escape key alone and never touches
-    // session history, so this guards the keyboard and the arrow above, and
-    // browser Back still leaves the page.
-    BackHandler(enabled = isDirty) {
-        showUnsavedChangesDialog = true
-    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(if (isNewGroup) "Add Group" else "Edit Group") },
                 navigationIcon = {
-                    IconButton(onClick = {
-                        if (isDirty) {
-                            showUnsavedChangesDialog = true
-                        } else {
-                            onNavigateBack()
-                        }
-                    }) {
+                    IconButton(onClick = requestLeave) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
@@ -201,33 +187,6 @@ fun GroupEditScreen(
         }
     }
 
-    // Unsaved changes warning dialog
-    if (showUnsavedChangesDialog) {
-        AlertDialog(
-            onDismissRequest = { showUnsavedChangesDialog = false },
-            icon = { Icon(Icons.Default.Warning, contentDescription = null) },
-            title = { Text("Unsaved Changes") },
-            text = { Text("You have unsaved changes. Leaving now will discard them.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showUnsavedChangesDialog = false
-                        onNavigateBack()
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("Discard Changes")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showUnsavedChangesDialog = false }) {
-                    Text("Keep Editing")
-                }
-            }
-        )
-    }
 }
 
 /** A setting with a tick to override the global default; shared with the learning group editor. */

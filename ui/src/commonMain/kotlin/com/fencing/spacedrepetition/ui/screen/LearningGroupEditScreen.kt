@@ -19,6 +19,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.unit.dp
+import com.fencing.spacedrepetition.ui.components.rememberLeaveGuard
 import com.fencing.spacedrepetition.algorithm.ScheduleEstimate
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.LearningGroup
@@ -120,21 +121,15 @@ fun LearningGroupEditScreen(
     )
 
     val isDirty = buildUpdated() != learningGroup || memberIds != initialMemberIds
-    var showUnsavedChangesDialog by rememberSaveable { mutableStateOf(false) }
+    val requestLeave = rememberLeaveGuard(isDirty, onLeave = onNavigateBack)
 
-    // The same back handling as the group editor; see the note there.
-    BackHandler(enabled = isDirty) {
-        showUnsavedChangesDialog = true
-    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(if (isNew) "Add Learning Group" else "Edit Learning Group") },
                 navigationIcon = {
-                    IconButton(onClick = {
-                        if (isDirty) showUnsavedChangesDialog = true else onNavigateBack()
-                    }) {
+                    IconButton(onClick = requestLeave) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
@@ -352,30 +347,4 @@ fun LearningGroupEditScreen(
         }
     }
 
-    if (showUnsavedChangesDialog) {
-        AlertDialog(
-            onDismissRequest = { showUnsavedChangesDialog = false },
-            icon = { Icon(Icons.Default.Warning, contentDescription = null) },
-            title = { Text("Unsaved Changes") },
-            text = { Text("You have unsaved changes. Leaving now will discard them.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showUnsavedChangesDialog = false
-                        onNavigateBack()
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("Discard Changes")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showUnsavedChangesDialog = false }) {
-                    Text("Keep Editing")
-                }
-            }
-        )
-    }
 }
