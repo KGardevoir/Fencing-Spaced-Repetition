@@ -117,6 +117,23 @@ class CardViewModel(
         _selectedConceptFilters.update { if (conceptId in it) it - conceptId else it + conceptId }
     }
 
+    // A filter on a concept or group that has since been deleted has no chip
+    // to turn it off by, and would go on filtering: drop it with the record.
+    init {
+        viewModelScope.launch {
+            conceptRepository.getAllConcepts().collect { concepts ->
+                val ids = concepts.map { it.id }.toSet()
+                _selectedConceptFilters.update { it intersect ids }
+            }
+        }
+        viewModelScope.launch {
+            groupRepository.getAllGroups().collect { groups ->
+                val ids = groups.map { it.id }.toSet()
+                _selectedGroupFilters.update { it intersect ids }
+            }
+        }
+    }
+
     private val _showDisabledFilter = MutableStateFlow(false)
     val showDisabledFilter: StateFlow<Boolean> = _showDisabledFilter.asStateFlow()
 
