@@ -311,8 +311,6 @@ fun App(
                 onSelectAllCards = cardViewModel::selectAllCards,
                 onToggleCardSelection = cardViewModel::toggleCardSelection,
                 onSetSelectedCardsDisabled = { cardViewModel.setSelectedCardsDisabled(it) },
-                onToggleCardDisabled = cardViewModel::toggleCardDisabled,
-                onDeleteCard = cardViewModel::deleteCard,
                 onDeleteSelectedCards = { cardViewModel.deleteSelectedCards() },
                 onUpdateSelectedCardsGroups = { cardViewModel.updateSelectedCardsGroups(it) },
                 onResetSelectedCardsGlobalState = { cardViewModel.resetSelectedCardsGlobalState() },

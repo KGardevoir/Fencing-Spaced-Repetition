@@ -25,9 +25,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.LearningGroup
+import com.fencing.spacedrepetition.ui.components.ConfirmDeleteDialog
 import com.fencing.spacedrepetition.ui.components.AppIcons
+import com.fencing.spacedrepetition.ui.components.SelectableListTopBar
 import com.fencing.spacedrepetition.ui.components.SelectionAction
-import com.fencing.spacedrepetition.ui.components.SelectionTopBar
 import com.fencing.spacedrepetition.ui.components.rememberSelectionState
 
 /**
@@ -58,49 +59,23 @@ fun LearningGroupsScreen(
     onNavigateBack: () -> Unit
 ) {
     var deleting by remember { mutableStateOf<List<LearningGroup>?>(null) }
-    var showMenu by remember { mutableStateOf(false) }
     val selection = rememberSelectionState(learningGroups.map { it.id })
 
     val globalGroups = groups.filter { group -> learningGroups.none { it.id == group.learningGroupId } }
 
     Scaffold(
         topBar = {
-            if (selection.active) {
-                SelectionTopBar(
-                    selectedCount = selection.selected.size,
-                    onExit = selection::exit,
-                    onSelectAll = { selection.selectAll(learningGroups.map { it.id }) },
-                    actions = listOf(
-                        SelectionAction("Delete", Icons.Default.Delete, destructive = true) {
-                            deleting = learningGroups.filter { it.id in selection.selected }
-                        }
-                    )
-                )
-            } else TopAppBar(
-                title = { Text("Learning Groups") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            SelectableListTopBar(
+                title = "Learning Groups",
+                selection = selection,
+                selectableIds = learningGroups.map { it.id },
+                selectLabel = "Select Learning Groups",
+                selectionActions = listOf(
+                    SelectionAction("Delete", Icons.Default.Delete, destructive = true) {
+                        deleting = learningGroups.filter { it.id in selection.selected }
                     }
-                },
-                actions = {
-                    Box {
-                        IconButton(onClick = { showMenu = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "More options")
-                        }
-                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text("Select Learning Groups") },
-                                onClick = { showMenu = false; selection.start() },
-                                enabled = learningGroups.isNotEmpty(),
-                                leadingIcon = { Icon(Icons.Default.CheckBox, contentDescription = null) }
-                            )
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
+                ),
+                onNavigateBack = onNavigateBack
             )
         },
         floatingActionButton = {
@@ -158,32 +133,15 @@ fun LearningGroupsScreen(
     deleting?.let { doomed ->
         val memberCount = groups.count { group -> doomed.any { it.id == group.learningGroupId } }
         val what = doomed.singleOrNull()?.let { "\"${it.name}\"" } ?: "${doomed.size} learning groups"
-        AlertDialog(
-            onDismissRequest = { deleting = null },
-            icon = { Icon(Icons.Default.Delete, contentDescription = null) },
-            title = { Text(if (doomed.size == 1) "Delete Learning Group" else "Delete Learning Groups") },
-            text = {
-                Text(
-                    "Delete $what? " +
-                        (if (memberCount > 0) "$memberCount card group${if (memberCount == 1) "" else "s"} " +
-                            "will go back to Global, and " else "") +
-                        "the learning progress kept in ${if (doomed.size == 1) "it" else "them"} will be lost. " +
-                        "Cards are not deleted."
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onDeleteLearningGroups(doomed)
-                        deleting = null
-                        selection.exit()
-                    },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) { Text("Delete") }
-            },
-            dismissButton = {
-                TextButton(onClick = { deleting = null }) { Text("Cancel") }
-            }
+        ConfirmDeleteDialog(
+            title = if (doomed.size == 1) "Delete Learning Group" else "Delete Learning Groups",
+            text = "Delete $what? " +
+                (if (memberCount > 0) "$memberCount card group${if (memberCount == 1) "" else "s"} " +
+                    "will go back to Global, and " else "") +
+                "the learning progress kept in ${if (doomed.size == 1) "it" else "them"} will be lost. " +
+                "Cards are not deleted.",
+            onConfirm = { onDeleteLearningGroups(doomed); deleting = null; selection.exit() },
+            onDismiss = { deleting = null }
         )
     }
 }

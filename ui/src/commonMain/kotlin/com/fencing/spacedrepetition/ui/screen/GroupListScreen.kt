@@ -17,15 +17,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.fencing.spacedrepetition.ui.components.ConfirmDeleteDialog
 import com.fencing.spacedrepetition.ui.components.AppIcons
 import com.fencing.spacedrepetition.ui.components.KeptListPosition
 import com.fencing.spacedrepetition.ui.components.ScrollToTopOnSortChange
+import com.fencing.spacedrepetition.ui.components.SelectableListTopBar
 import com.fencing.spacedrepetition.ui.components.SelectionAction
-import com.fencing.spacedrepetition.ui.components.SelectionTopBar
 import com.fencing.spacedrepetition.ui.components.rememberSelectionState
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.LearningGroup
-import com.fencing.spacedrepetition.ui.components.CsvGroupSelectionDialog
+import com.fencing.spacedrepetition.ui.components.ImportExportDialogs
 import com.fencing.spacedrepetition.util.ParsedCard
 import com.fencing.spacedrepetition.ui.viewmodel.GroupSortOption
 import com.fencing.spacedrepetition.ui.viewmodel.ImportExportState
@@ -70,7 +71,6 @@ fun GroupListScreen(
 ) {
     var showDeleteDialog by remember { mutableStateOf<List<Group>?>(null) }
     var showSortMenu by remember { mutableStateOf(false) }
-    var showMenu by remember { mutableStateOf(false) }
     val selection = rememberSelectionState(groups.map { it.id })
 
     // Scroll to top when sort option changes
@@ -79,67 +79,33 @@ fun GroupListScreen(
 
     Scaffold(
         topBar = {
-            if (selection.active) {
-                SelectionTopBar(
-                    selectedCount = selection.selected.size,
-                    onExit = selection::exit,
-                    onSelectAll = { selection.selectAll(groups.map { it.id }) },
-                    actions = listOf(
-                        SelectionAction("Delete", Icons.Default.Delete, destructive = true) {
-                            showDeleteDialog = groups.filter { it.id in selection.selected }
-                        }
-                    )
-                )
-            } else TopAppBar(
-                title = { Text("Groups") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            SelectableListTopBar(
+                title = "Groups",
+                selection = selection,
+                selectableIds = groups.map { it.id },
+                selectLabel = "Select Groups",
+                selectionActions = listOf(
+                    SelectionAction("Delete", Icons.Default.Delete, destructive = true) {
+                        showDeleteDialog = groups.filter { it.id in selection.selected }
                     }
-                },
-                actions = {
-                    Box {
-                        IconButton(onClick = { showSortMenu = true }) {
-                            Icon(Icons.Default.Sort, contentDescription = "Sort")
-                        }
-                        DropdownMenu(
-                            expanded = showSortMenu,
-                            onDismissRequest = { showSortMenu = false }
-                        ) {
-                            GroupSortOption.entries.forEach { option ->
-                                DropdownMenuItem(
-                                    text = { Text(option.label) },
-                                    onClick = {
-                                        onSetSortOption(option)
-                                        showSortMenu = false
-                                    },
-                                    leadingIcon = {
-                                        if (sortOption == option) {
-                                            Icon(Icons.Default.Check, contentDescription = null)
-                                        }
-                                    }
-                                )
-                            }
-                        }
+                ),
+                onNavigateBack = onNavigateBack
+            ) {
+                Box {
+                    IconButton(onClick = { showSortMenu = true }) {
+                        Icon(Icons.Default.Sort, contentDescription = "Sort")
                     }
-                    Box {
-                        IconButton(onClick = { showMenu = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "More options")
-                        }
-                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
+                        GroupSortOption.entries.forEach { option ->
                             DropdownMenuItem(
-                                text = { Text("Select Groups") },
-                                onClick = { showMenu = false; selection.start() },
-                                enabled = groups.isNotEmpty(),
-                                leadingIcon = { Icon(Icons.Default.CheckBox, contentDescription = null) }
+                                text = { Text(option.label) },
+                                onClick = { onSetSortOption(option); showSortMenu = false },
+                                leadingIcon = { if (sortOption == option) Icon(Icons.Default.Check, contentDescription = null) }
                             )
                         }
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
-            )
+                }
+            }
         },
         floatingActionButton = {
             FloatingActionButton(onClick = onNavigateToAdd) {
@@ -210,144 +176,21 @@ fun GroupListScreen(
     // Delete confirmation dialog
     showDeleteDialog?.let { doomed ->
         val what = doomed.singleOrNull()?.let { "\"${it.name}\"" } ?: "${doomed.size} groups"
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = null },
-            icon = { Icon(Icons.Default.Warning, contentDescription = null) },
-            title = { Text(if (doomed.size == 1) "Delete Group?" else "Delete Groups?") },
-            text = {
-                Text(
-                    "Are you sure you want to delete $what?\n\nCards in " +
-                        (if (doomed.size == 1) "this group" else "these groups") +
-                        " will NOT be deleted, only removed from " +
-                        (if (doomed.size == 1) "it." else "them.")
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onDeleteGroups(doomed)
-                        showDeleteDialog = null
-                        selection.exit()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Delete")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = null }) {
-                    Text("Cancel")
-                }
-            }
+        ConfirmDeleteDialog(
+            title = if (doomed.size == 1) "Delete Group?" else "Delete Groups?",
+            text = "Delete $what? Cards in " + (if (doomed.size == 1) "this group" else "these groups") +
+                " are not deleted, only removed from " + (if (doomed.size == 1) "it." else "them."),
+            onConfirm = { onDeleteGroups(doomed); showDeleteDialog = null; selection.exit() },
+            onDismiss = { showDeleteDialog = null }
         )
     }
 
     // Import/Export state dialogs
-    when (val state = importExportState) {
-        is ImportExportState.Loading -> {
-            AlertDialog(
-                onDismissRequest = { },
-                icon = { CircularProgressIndicator(modifier = Modifier.size(48.dp)) },
-                title = { Text("Processing...") },
-                text = { Text("Please wait while the operation completes.") },
-                confirmButton = { }
-            )
-        }
-        is ImportExportState.ImportSuccess -> {
-            AlertDialog(
-                onDismissRequest = { onDismissImportExport() },
-                icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                title = { Text("Import Complete") },
-                text = {
-                    Column {
-                        Text("Successfully imported ${state.importedCount} cards.")
-                        if (state.skippedCount > 0) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                "${state.skippedCount} lines skipped due to errors:",
-                                color = MaterialTheme.colorScheme.error
-                            )
-                            state.errors.take(5).forEach { error ->
-                                Text("• $error", style = MaterialTheme.typography.bodySmall)
-                            }
-                            if (state.errors.size > 5) {
-                                Text("...and ${state.errors.size - 5} more", style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    Button(onClick = { onDismissImportExport() }) {
-                        Text("OK")
-                    }
-                }
-            )
-        }
-        is ImportExportState.ExportSuccess -> {
-            AlertDialog(
-                onDismissRequest = { onDismissImportExport() },
-                icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                title = { Text("Export Complete") },
-                text = { Text("Successfully exported ${state.exportedCount} cards.") },
-                confirmButton = {
-                    Button(onClick = { onDismissImportExport() }) {
-                        Text("OK")
-                    }
-                }
-            )
-        }
-        is ImportExportState.PhotoExportSuccess -> {
-            AlertDialog(
-                onDismissRequest = { onDismissImportExport() },
-                icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                title = { Text("Export Complete") },
-                text = { Text("Successfully exported ${state.exportedCount} photos.") },
-                confirmButton = {
-                    Button(onClick = { onDismissImportExport() }) {
-                        Text("OK")
-                    }
-                }
-            )
-        }
-        is ImportExportState.Error -> {
-            AlertDialog(
-                onDismissRequest = { onDismissImportExport() },
-                icon = { Icon(Icons.Default.Error, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                title = { Text("Error") },
-                text = { Text(state.message) },
-                confirmButton = {
-                    Button(onClick = { onDismissImportExport() }) {
-                        Text("OK")
-                    }
-                }
-            )
-        }
-        is ImportExportState.CsvPendingGroupSelection -> {
-            // A group-level import already knows where the cards go, so it
-            // skips the picker. Which group that is belongs to whoever
-            // launched the file chooser, so it arrives as a parameter.
-            val targetGroup = pendingCsvTargetGroup
-            if (targetGroup != null) {
-                LaunchedEffect(state) {
-                    onCsvImportInto(state.parsedCards, state.parseErrors, targetGroup.id)
-                }
-            } else {
-                CsvGroupSelectionDialog(
-                    suggestedGroupName = state.suggestedGroupName,
-                    existingGroups = groups,
-                    cardCount = state.parsedCards.size,
-                    onConfirm = { groupId ->
-                        onCsvImportInto(state.parsedCards, state.parseErrors, groupId)
-                    },
-                    onCreateGroup = { groupName ->
-                        onCsvImportIntoNewGroup(state.parsedCards, state.parseErrors, groupName)
-                    },
-                    onDismiss = { onDismissImportExport() }
-                )
-            }
-        }
-        is ImportExportState.Idle -> { /* No dialog */ }
-    }
+    ImportExportDialogs(
+        importExportState, groups, onDismissImportExport, onCsvImportInto, onCsvImportIntoNewGroup,
+        // A group-level import already knows where the cards go, so it skips the picker.
+        csvTargetGroupId = pendingCsvTargetGroup?.id
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)

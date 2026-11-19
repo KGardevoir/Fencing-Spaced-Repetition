@@ -34,14 +34,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.fencing.spacedrepetition.ui.components.ConfirmDeleteDialog
 import com.fencing.spacedrepetition.ui.components.GuardedBack
 import com.fencing.spacedrepetition.ui.components.rememberLeaveGuard
 import com.fencing.spacedrepetition.data.model.Concept
 import com.fencing.spacedrepetition.data.model.ConceptLearningState
 import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.ui.components.AppIcons
+import com.fencing.spacedrepetition.ui.components.SelectableListTopBar
 import com.fencing.spacedrepetition.ui.components.SelectionAction
-import com.fencing.spacedrepetition.ui.components.SelectionTopBar
 import com.fencing.spacedrepetition.ui.components.rememberSelectionState
 import com.fencing.spacedrepetition.ui.viewmodel.ConceptSummary
 import com.fencing.spacedrepetition.util.Time
@@ -83,7 +84,6 @@ fun ConceptsScreen(
 ) {
     var editing by remember { mutableStateOf<ConceptSummary?>(null) }
     var deleting by remember { mutableStateOf<List<ConceptSummary>?>(null) }
-    var showMenu by remember { mutableStateOf(false) }
     val selection = rememberSelectionState(concepts.map { it.concept.id })
     var query by rememberSaveable { mutableStateOf("") }
     var confirmRederive by remember { mutableStateOf(false) }
@@ -127,47 +127,18 @@ fun ConceptsScreen(
 
     Scaffold(
         topBar = {
-            if (selection.active) {
-                SelectionTopBar(
-                    selectedCount = selection.selected.size,
-                    onExit = selection::exit,
-                    onSelectAll = { selection.selectAll(shown.map { it.concept.id }) },
-                    actions = listOf(
-                        SelectionAction("Delete", Icons.Default.Delete, destructive = true) {
-                            deleting = concepts.filter { it.concept.id in selection.selected }
-                        }
-                    )
-                )
-            } else TopAppBar(
-                title = { Text("Learning Concepts") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            SelectableListTopBar(
+                title = "Learning Concepts",
+                selection = selection,
+                selectableIds = shown.map { it.concept.id },
+                selectLabel = "Select Concepts",
+                selectionActions = listOf(
+                    SelectionAction("Delete", Icons.Default.Delete, destructive = true) {
+                        deleting = concepts.filter { it.concept.id in selection.selected }
                     }
-                },
-                actions = {
-                    Box {
-                        IconButton(onClick = { showMenu = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "More options")
-                        }
-                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text("Select Concepts") },
-                                onClick = { showMenu = false; selection.start() },
-                                enabled = concepts.isNotEmpty(),
-                                leadingIcon = { Icon(Icons.Default.CheckBox, contentDescription = null) }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Rederive from card history") },
-                                onClick = { showMenu = false; confirmRederive = true },
-                                leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) }
-                            )
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
+                ),
+                onNavigateBack = onNavigateBack,
+                menu = listOf(SelectionAction("Rederive from card history", Icons.Default.Refresh) { confirmRederive = true })
             )
         },
         floatingActionButton = {
@@ -270,31 +241,14 @@ fun ConceptsScreen(
     deleting?.let { doomed ->
         val cardCount = doomed.flatMap { it.cardIds }.toSet().size
         val what = doomed.singleOrNull()?.let { "\"${it.concept.name}\"" } ?: "${doomed.size} concepts"
-        AlertDialog(
-            onDismissRequest = { deleting = null },
-            icon = { Icon(Icons.Default.Delete, contentDescription = null) },
-            title = { Text(if (doomed.size == 1) "Delete Concept" else "Delete Concepts") },
-            text = {
-                Text(
-                    "Delete $what? ${if (doomed.size == 1) "Its" else "Their"} learning progress will be lost" +
-                        (if (cardCount > 0) ", and $cardCount card${if (cardCount == 1) "" else "s"} " +
-                            "will lose ${if (doomed.size == 1) "it" else "them"}" else "") +
-                        ". Cards are not deleted."
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onDeleteConcepts(doomed.map { it.concept })
-                        deleting = null
-                        selection.exit()
-                    },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) { Text("Delete") }
-            },
-            dismissButton = {
-                TextButton(onClick = { deleting = null }) { Text("Cancel") }
-            }
+        ConfirmDeleteDialog(
+            title = if (doomed.size == 1) "Delete Concept" else "Delete Concepts",
+            text = "Delete $what? ${if (doomed.size == 1) "Its" else "Their"} learning progress will be lost" +
+                (if (cardCount > 0) ", and $cardCount card${if (cardCount == 1) "" else "s"} " +
+                    "will lose ${if (doomed.size == 1) "it" else "them"}" else "") +
+                ". Cards are not deleted.",
+            onConfirm = { onDeleteConcepts(doomed.map { it.concept }); deleting = null; selection.exit() },
+            onDismiss = { deleting = null }
         )
     }
 

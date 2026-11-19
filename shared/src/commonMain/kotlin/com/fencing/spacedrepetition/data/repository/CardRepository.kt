@@ -146,8 +146,6 @@ class CardRepository(
 
     suspend fun updateCard(card: Card) = cardDao.updateCard(card)
 
-    suspend fun deleteCard(card: Card) = deleteCardById(card.id)
-
     /** Deletes the card and its history; its concepts are rederived without either. */
     suspend fun deleteCardById(cardId: Long) {
         val conceptIds = conceptDao.getConceptsForCardSync(cardId).map { it.id }

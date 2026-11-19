@@ -196,13 +196,6 @@ class CardViewModel(
         _showDisabledFilter.value = !_showDisabledFilter.value
     }
 
-    fun toggleCardDisabled(cardId: Long) {
-        viewModelScope.launch {
-            val card = repository.getCardById(cardId) ?: return@launch
-            repository.updateCard(card.copy(isDisabled = !card.isDisabled, modified = Time.now()))
-        }
-    }
-
     fun setSelectedCardsDisabled(disabled: Boolean, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             val idsToUpdate = _selectedCardIds.value.toList()
@@ -316,12 +309,6 @@ class CardViewModel(
             } catch (e: Exception) {
                 // Handle error
             }
-        }
-    }
-
-    fun deleteCard(card: Card) {
-        viewModelScope.launch {
-            repository.deleteCard(card)
         }
     }
 

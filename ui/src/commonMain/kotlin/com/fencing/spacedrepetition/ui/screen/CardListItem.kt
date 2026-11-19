@@ -61,8 +61,6 @@ fun CardListItem(
     isSelected: Boolean = false,
     sortOption: CardSortOption = CardSortOption.DUE_DATE,
     onEdit: () -> Unit,
-    onDelete: () -> Unit,
-    onToggleDisabled: () -> Unit = {},
     onToggleSelection: () -> Unit = {},
     onLongPress: () -> Unit = {}
 ) {

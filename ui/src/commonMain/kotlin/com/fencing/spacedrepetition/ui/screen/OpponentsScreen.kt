@@ -27,12 +27,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.fencing.spacedrepetition.ui.components.ConfirmDeleteDialog
 import com.fencing.spacedrepetition.ui.components.GuardedBack
 import com.fencing.spacedrepetition.ui.components.rememberLeaveGuard
 import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.ui.components.MergeOpponentsDialog
+import com.fencing.spacedrepetition.ui.components.SelectableListTopBar
 import com.fencing.spacedrepetition.ui.components.SelectionAction
-import com.fencing.spacedrepetition.ui.components.SelectionTopBar
 import com.fencing.spacedrepetition.ui.components.rememberSelectionState
 import com.fencing.spacedrepetition.util.toTwoDecimals
 
@@ -51,63 +52,36 @@ fun OpponentsScreen(
     var editing by remember { mutableStateOf<Opponent?>(null) }
     var showAdd by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<List<Opponent>?>(null) }
-    var showMenu by remember { mutableStateOf(false) }
     /** Non-null while the merge dialog is open: the ids to preselect (merge away, keep). */
     var pendingMerge by remember { mutableStateOf<Pair<Long?, Long?>?>(null) }
     val selection = rememberSelectionState(opponents.map { it.id })
 
     Scaffold(
         topBar = {
-            if (selection.active) {
-                SelectionTopBar(
-                    selectedCount = selection.selected.size,
-                    onExit = selection::exit,
-                    onSelectAll = { selection.selectAll(opponents.map { it.id }) },
-                    actions = listOf(
-                        // One selected: who to merge away. Two: merge the first into the second.
-                        SelectionAction(
-                            "Merge",
-                            Icons.Default.MergeType,
-                            enabled = opponents.size >= 2 && selection.selected.size in 1..2
-                        ) {
-                            val picked = opponents.filter { it.id in selection.selected }.map { it.id }
-                            pendingMerge = picked.getOrNull(0) to picked.getOrNull(1)
-                        },
-                        SelectionAction("Delete", Icons.Default.Delete, destructive = true) {
-                            pendingDelete = opponents.filter { it.id in selection.selected }
-                        }
-                    )
-                )
-            } else TopAppBar(
-                title = { Text("Opponents") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            SelectableListTopBar(
+                title = "Opponents",
+                selection = selection,
+                selectableIds = opponents.map { it.id },
+                selectLabel = "Select Opponents",
+                selectionActions = listOf(
+                    // One selected: who to merge away. Two: merge the first into the second.
+                    SelectionAction(
+                        "Merge",
+                        Icons.Default.MergeType,
+                        enabled = opponents.size >= 2 && selection.selected.size in 1..2
+                    ) {
+                        val picked = opponents.filter { it.id in selection.selected }.map { it.id }
+                        pendingMerge = picked.getOrNull(0) to picked.getOrNull(1)
+                    },
+                    SelectionAction("Delete", Icons.Default.Delete, destructive = true) {
+                        pendingDelete = opponents.filter { it.id in selection.selected }
                     }
-                },
-                actions = {
-                    Box {
-                        IconButton(onClick = { showMenu = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "More options")
-                        }
-                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text("Select Opponents") },
-                                onClick = { showMenu = false; selection.start() },
-                                enabled = opponents.isNotEmpty(),
-                                leadingIcon = { Icon(Icons.Default.CheckBox, contentDescription = null) }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Merge Opponents") },
-                                onClick = { showMenu = false; pendingMerge = null to null },
-                                enabled = opponents.size >= 2,
-                                leadingIcon = { Icon(Icons.Default.MergeType, contentDescription = null) }
-                            )
-                        }
+                ),
+                onNavigateBack = onNavigateBack,
+                menu = listOf(
+                    SelectionAction("Merge Opponents", Icons.Default.MergeType, enabled = opponents.size >= 2) {
+                        pendingMerge = null to null
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
                 )
             )
         },
@@ -223,24 +197,11 @@ fun OpponentsScreen(
     }
 
     pendingDelete?.let { doomed ->
-        AlertDialog(
-            onDismissRequest = { pendingDelete = null },
-            icon = { Icon(Icons.Default.Delete, contentDescription = null) },
-            title = { Text("Delete ${doomed.singleOrNull()?.name ?: "${doomed.size} opponents"}?") },
-            text = { Text("Past review history will keep the opponent ID but show as \"[deleted]\".") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onDeleteOpponents(doomed)
-                        pendingDelete = null
-                        selection.exit()
-                    },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) { Text("Delete") }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) { Text("Cancel") }
-            }
+        ConfirmDeleteDialog(
+            title = "Delete ${doomed.singleOrNull()?.name ?: "${doomed.size} opponents"}?",
+            text = "Past review history will keep the opponent ID but show as \"[deleted]\".",
+            onConfirm = { onDeleteOpponents(doomed); pendingDelete = null; selection.exit() },
+            onDismiss = { pendingDelete = null }
         )
     }
 }

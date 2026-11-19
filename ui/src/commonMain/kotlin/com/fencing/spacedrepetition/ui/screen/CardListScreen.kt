@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.fencing.spacedrepetition.ui.components.ConfirmDeleteDialog
 import com.fencing.spacedrepetition.ui.components.AppIcons
 import com.fencing.spacedrepetition.ui.components.KeptListPosition
 import com.fencing.spacedrepetition.ui.components.ScrollToTopOnSortChange
@@ -41,7 +42,7 @@ import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.ui.viewmodel.CardSortOption
 import com.fencing.spacedrepetition.ui.viewmodel.ImportExportState
 import com.fencing.spacedrepetition.ui.viewmodel.SortDirection
-import com.fencing.spacedrepetition.ui.components.CsvGroupSelectionDialog
+import com.fencing.spacedrepetition.ui.components.ImportExportDialogs
 import com.fencing.spacedrepetition.ui.components.MarkdownText
 import com.fencing.spacedrepetition.util.ParsedCard
 import com.fencing.spacedrepetition.util.formatDate
@@ -88,8 +89,6 @@ fun CardListScreen(
     onSelectAllCards: () -> Unit,
     onToggleCardSelection: (Long) -> Unit,
     onSetSelectedCardsDisabled: (Boolean) -> Unit,
-    onToggleCardDisabled: (Long) -> Unit,
-    onDeleteCard: (Card) -> Unit,
     onDeleteSelectedCards: () -> Unit,
     onUpdateSelectedCardsGroups: (List<Long>) -> Unit,
     onResetSelectedCardsGlobalState: () -> Unit,
@@ -114,7 +113,6 @@ fun CardListScreen(
     /** Where the list is scrolled; held by the caller so it survives opening a card. */
     listPosition: KeptListPosition = remember { KeptListPosition() }
 ) {
-    var showDeleteDialog by remember { mutableStateOf<Card?>(null) }
     var showMenu by remember { mutableStateOf(false) }
     var showSortMenu by remember { mutableStateOf(false) }
     var showBulkDeleteDialog by remember { mutableStateOf(false) }
@@ -483,8 +481,6 @@ fun CardListScreen(
                             isSelected = card.id in selectedCardIds,
                             sortOption = cardSortOption,
                             onEdit = { onNavigateToEditCard(card) },
-                            onDelete = { showDeleteDialog = card },
-                            onToggleDisabled = { onToggleCardDisabled(card.id) },
                             onToggleSelection = { onToggleCardSelection(card.id) },
                             onLongPress = {
                                 if (!isSelectionMode) {
@@ -499,156 +495,17 @@ fun CardListScreen(
         }
     }
 
-    // Delete confirmation dialog
-    showDeleteDialog?.let { card ->
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = null },
-            icon = { Icon(Icons.Default.Delete, contentDescription = null) },
-            title = { Text("Delete Card?") },
-            text = { Text("Are you sure you want to delete this card? This action cannot be undone.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onDeleteCard(card)
-                        showDeleteDialog = null
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("Delete")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = null }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
 
     // Import/Export state dialogs
-    when (val state = importExportState) {
-        is ImportExportState.Loading -> {
-            AlertDialog(
-                onDismissRequest = { },
-                icon = { CircularProgressIndicator(modifier = Modifier.size(48.dp)) },
-                title = { Text("Processing...") },
-                text = { Text("Please wait while the operation completes.") },
-                confirmButton = { }
-            )
-        }
-        is ImportExportState.ImportSuccess -> {
-            AlertDialog(
-                onDismissRequest = onResetImportExportState,
-                icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                title = { Text("Import Complete") },
-                text = {
-                    Column {
-                        Text("Successfully imported ${state.importedCount} cards.")
-                        if (state.skippedCount > 0) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                "${state.skippedCount} lines skipped due to errors:",
-                                color = MaterialTheme.colorScheme.error
-                            )
-                            state.errors.take(5).forEach { error ->
-                                Text("• $error", style = MaterialTheme.typography.bodySmall)
-                            }
-                            if (state.errors.size > 5) {
-                                Text("...and ${state.errors.size - 5} more", style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    Button(onClick = onResetImportExportState) {
-                        Text("OK")
-                    }
-                }
-            )
-        }
-        is ImportExportState.ExportSuccess -> {
-            AlertDialog(
-                onDismissRequest = onResetImportExportState,
-                icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                title = { Text("Export Complete") },
-                text = { Text("Successfully exported ${state.exportedCount} cards.") },
-                confirmButton = {
-                    Button(onClick = onResetImportExportState) {
-                        Text("OK")
-                    }
-                }
-            )
-        }
-        is ImportExportState.PhotoExportSuccess -> {
-            AlertDialog(
-                onDismissRequest = onResetImportExportState,
-                icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                title = { Text("Export Complete") },
-                text = { Text("Successfully exported ${state.exportedCount} photos.") },
-                confirmButton = {
-                    Button(onClick = onResetImportExportState) {
-                        Text("OK")
-                    }
-                }
-            )
-        }
-        is ImportExportState.Error -> {
-            AlertDialog(
-                onDismissRequest = onResetImportExportState,
-                icon = { Icon(Icons.Default.Error, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                title = { Text("Error") },
-                text = { Text(state.message) },
-                confirmButton = {
-                    Button(onClick = onResetImportExportState) {
-                        Text("OK")
-                    }
-                }
-            )
-        }
-        is ImportExportState.CsvPendingGroupSelection -> {
-            CsvGroupSelectionDialog(
-                suggestedGroupName = state.suggestedGroupName,
-                existingGroups = groups,
-                cardCount = state.parsedCards.size,
-                onConfirm = { groupId ->
-                    onCsvImportInto(state.parsedCards, state.parseErrors, groupId)
-                },
-                onCreateGroup = { groupName ->
-                    onCsvImportIntoNewGroup(state.parsedCards, state.parseErrors, groupName)
-                },
-                onDismiss = onResetImportExportState
-            )
-        }
-        is ImportExportState.Idle -> { /* No dialog */ }
-    }
+    ImportExportDialogs(importExportState, groups, onResetImportExportState, onCsvImportInto, onCsvImportIntoNewGroup)
 
     // Bulk delete confirmation dialog
     if (showBulkDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showBulkDeleteDialog = false },
-            icon = { Icon(Icons.Default.Delete, contentDescription = null) },
-            title = { Text("Delete ${selectedCardIds.size} Cards?") },
-            text = { Text("Are you sure you want to delete these cards? This action cannot be undone.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onDeleteSelectedCards()
-                        showBulkDeleteDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("Delete")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showBulkDeleteDialog = false }) {
-                    Text("Cancel")
-                }
-            }
+        ConfirmDeleteDialog(
+            title = "Delete ${selectedCardIds.size} Cards?",
+            text = "Are you sure you want to delete these cards? This action cannot be undone.",
+            onConfirm = { onDeleteSelectedCards(); showBulkDeleteDialog = false },
+            onDismiss = { showBulkDeleteDialog = false }
         )
     }
 
