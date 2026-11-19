@@ -301,10 +301,29 @@ object RetentionReportBuilder {
             return retrievability(elapsed, s.stability)
         }
 
+        // Each review's predecessor: the review of the same card before it in
+        // the same context.
+        val previousReview = HashMap<ReviewLog, ReviewLog>()
+        gradedByContext.values.forEach { contextLogs ->
+            contextLogs.groupBy { it.cardId }.values.forEach { cardLogs ->
+                cardLogs.sortedBy { it.reviewTime }.zipWithNext { before, after -> previousReview[after] = before }
+            }
+        }
+
+        /**
+         * FSRS's predicted recall just before [log]: its stability then, after
+         * the time since its predecessor -- to the millisecond, when the
+         * predecessor is what left that stability. The log's own elapsedDays is
+         * whole days, so reviews 23 hours apart would read as the same day and
+         * predict 100 %; it is only the fallback.
+         */
         fun predictedAtReview(log: ReviewLog): Double? {
-            val stability = parseStability(log.stateBefore) ?: return null
-            if (stability <= 0.0) return null
-            return retrievability(log.elapsedDays.toDouble(), stability)
+            val stability = parseStability(log.stateBefore)?.takeIf { it > 0.0 } ?: return null
+            val elapsedDays = previousReview[log]
+                ?.takeIf { parseStability(it.stateAfter) == stability }
+                ?.let { (log.reviewTime - it.reviewTime).toDouble() / DAY_MILLIS }
+                ?: log.elapsedDays.toDouble()
+            return retrievability(elapsedDays, stability)
         }
 
         fun summarize(

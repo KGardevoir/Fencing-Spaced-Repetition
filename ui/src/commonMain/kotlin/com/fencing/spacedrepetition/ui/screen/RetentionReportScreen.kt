@@ -756,8 +756,13 @@ private fun TrendChart(points: List<RetentionPoint>, period: RetentionPeriod) {
  * The card's own recall as it has gone so far: after each review, the share
  * of its reviews up to then that were not Again, with a 95 % error bar -- the
  * per-card counterpart of the group recall trend. Each dot is coloured by the
- * grade of that review, so the review that moved the line is visible, and
- * FSRS's prediction just before each review is the dashed line.
+ * grade of that review, so the review that moved the line is visible.
+ *
+ * The dashed line is what FSRS expected of those same reviews: the mean of its
+ * predicted recall just before each, up to then. Running, like the measured
+ * line, so the two can be compared point for point. A single review's
+ * prediction swings with the time since the one before -- and, for a
+ * concept, with which of its cards was reviewed.
  *
  * With a handful of reviews the bars are long, and that is the point: two
  * passes out of two is not evidence of a well-known card.
@@ -772,13 +777,18 @@ private fun CardHistoryChart(card: CardRetention) {
     val labelStyle = MaterialTheme.typography.labelSmall
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
 
-    // Running recall and its interval after each review.
+    // Running recall and its interval after each review, and the running mean
+    // of the predictions so far (null until a review has one).
     val running = remember(history) {
         var recalled = 0
+        var predictedSum = 0.0
+        var predictedCount = 0
         history.mapIndexed { i, p ->
             if (p.grade >= 2) recalled++
+            p.predicted?.let { predictedSum += it; predictedCount++ }
             val n = i + 1
-            Triple(recalled.toDouble() / n, wilsonInterval(recalled, n)!!, p)
+            val expected = if (predictedCount == 0) null else predictedSum / predictedCount
+            Triple(recalled.toDouble() / n, wilsonInterval(recalled, n)!!, p.copy(predicted = expected))
         }
     }
     val lowest = running.minOf { (_, interval, p) -> minOf(interval.start, p.predicted ?: 1.0) }

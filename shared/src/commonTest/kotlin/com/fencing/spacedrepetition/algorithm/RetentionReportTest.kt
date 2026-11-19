@@ -127,6 +127,18 @@ class RetentionReportTest {
     }
 
     @Test
+    fun `predicted recall counts the hours since the review before, not whole days`() {
+        val first = monday + 9 * 60 * 60 * 1000L
+        val logs = listOf(
+            log(1, 3, first, stability = 4.0, elapsed = 4, after = 6.0),
+            // 18 hours later: the log says 0 whole days.
+            log(1, 3, first + 18 * 60 * 60 * 1000L, stability = 6.0, elapsed = 0)
+        )
+        val history = build(logs = logs).learningContexts[0].cards.first { it.cardId == 1L }.history
+        assertEquals(1.0 / (1.0 + 0.75 / 6.0), history[1].predicted!!, 1e-9)
+    }
+
+    @Test
     fun `trend buckets reviews by week and records predicted recall at review time`() {
         val logs = listOf(
             log(1, 3, monday - 3 * day, stability = 5.0, elapsed = 5),
