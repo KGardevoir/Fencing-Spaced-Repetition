@@ -14,6 +14,7 @@ import com.fencing.spacedrepetition.data.model.Concept
 import com.fencing.spacedrepetition.data.model.ConceptLearningGroupCrossRef
 import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.CardWithGroups
+import com.fencing.spacedrepetition.data.model.FsrsState
 import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.Opponent
@@ -219,11 +220,8 @@ class CardViewModel(
     fun getLearningStatesForCard(cardId: Long): Flow<List<CardLearningState>> =
         groupRepository.getAllLearningStatesForCard(cardId)
 
-    fun updateLearningState(learningState: CardLearningState, onComplete: () -> Unit = {}) {
-        viewModelScope.launch {
-            repository.updateLearningState(learningState)
-            onComplete()
-        }
+    fun saveLearningState(learningState: CardLearningState) {
+        viewModelScope.launch { repository.saveLearningState(learningState) }
     }
 
     fun getDueCardCountByGroup(groupId: Long): Flow<Int> =
@@ -299,11 +297,12 @@ class CardViewModel(
     }
 
     /** [concepts]: each concept the card carries and how much of it; null leaves them as they are. */
-    fun updateCard(card: Card, groupIds: List<Long>, concepts: Map<Long, Double>?, onSuccess: () -> Unit) {
+    /** Saves [card]; [groupIds] and [concepts] are left as they are when null. */
+    fun updateCard(card: Card, groupIds: List<Long>?, concepts: Map<Long, Double>?, onSuccess: () -> Unit) {
         viewModelScope.launch {
             try {
                 repository.updateCard(card.copy(modified = Time.now()))
-                repository.updateCardGroups(card.id, groupIds)
+                groupIds?.let { repository.updateCardGroups(card.id, it) }
                 concepts?.let { repository.setCardConcepts(card.id, it.keys, it) }
                 onSuccess()
             } catch (e: Exception) {
@@ -416,10 +415,10 @@ class CardViewModel(
         }
     }
 
-    fun resetCardState(cardId: Long, resetGroupStates: Boolean = false, onComplete: () -> Unit = {}) {
+    /** Resets [cardId]'s Global progress (and every learning group's, if asked); [onComplete] gets the card as reset. */
+    fun resetCardState(cardId: Long, resetGroupStates: Boolean = false, onComplete: (Card) -> Unit = {}) {
         viewModelScope.launch {
-            repository.resetCardState(cardId, resetGroupStates)
-            onComplete()
+            repository.resetCardState(cardId, resetGroupStates)?.let(onComplete)
         }
     }
 
@@ -430,11 +429,15 @@ class CardViewModel(
         }
     }
 
-    /** Records a review log for a grade applied from the Add/Edit card screen, without updating card state. */
-    fun recordGradeFromEdit(cardBefore: Card, cardAfter: Card, grade: Grade, groupId: Long? = null) {
+    /**
+     * Logs a grade staged in the card editor, without changing any progress:
+     * [before] and [after] are the progress where it was graded, in [groupId]'s
+     * learning context (Global for none).
+     */
+    fun recordGradeFromEdit(cardId: Long, before: FsrsState, after: FsrsState, grade: Grade, groupId: Long?) {
         viewModelScope.launch {
             try {
-                repository.logGradeFromEdit(cardBefore, cardAfter, grade, groupId)
+                repository.logGradeFromEdit(cardId, before, after, grade, groupId)
             } catch (e: Exception) {
                 // Non-fatal: history logging should not break the save flow
             }

@@ -688,17 +688,13 @@ private fun CardEditor(
         onComputeGrade = { cardId, grade, groupId, onComputed ->
             cardViewModel.computeGradeCard(cardId, grade, groupId, onComputed)
         },
-        onResetCardState = { cardId, resetGroupStates, onDone ->
-            cardViewModel.resetCardState(cardId, resetGroupStates, onDone)
-        },
+        onResetCardState = cardViewModel::resetCardState,
         onResetCardStateInGroup = { cardId, groupId, onDone ->
             cardViewModel.resetCardStateInGroup(cardId, groupId, onDone)
         },
         onUpdateCard = cardViewModel::updateCard,
-        onRecordGradeFromEdit = { before, after, grade, groupId ->
-            cardViewModel.recordGradeFromEdit(before, after, grade, groupId)
-        },
-        onUpdateLearningState = { cardViewModel.updateLearningState(it) },
+        onRecordGradeFromEdit = cardViewModel::recordGradeFromEdit,
+        onSaveLearningState = cardViewModel::saveLearningState,
         onAddCard = { question, answer, groupIds, imagePaths, concepts, onSuccess ->
             cardViewModel.addCard(question, answer, groupIds, imagePaths, concepts, onSuccess)
         },

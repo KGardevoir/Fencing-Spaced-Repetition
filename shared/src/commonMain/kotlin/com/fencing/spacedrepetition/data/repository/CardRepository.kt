@@ -146,8 +146,8 @@ class CardRepository(
         if (conceptIds.isNotEmpty()) rederiveConcepts(conceptIds)
     }
 
-    suspend fun resetCardState(cardId: Long, resetGroupStates: Boolean = false) {
-        val card = cardDao.getCardById(cardId) ?: return
+    suspend fun resetCardState(cardId: Long, resetGroupStates: Boolean = false): Card? {
+        val card = cardDao.getCardById(cardId) ?: return null
         val now = Time.now()
         // Back to new; reviews before now stop counting towards anything derived.
         val resetCard = card.withFsrs(FsrsState()).copy(modified = now, lastReset = now)
@@ -164,6 +164,7 @@ class CardRepository(
             }
         }
         rederiveConceptsForCards(listOf(cardId))
+        return resetCard
     }
 
     /** Resets the state [cardId] keeps in the learning group that [groupId] practises against. */
@@ -251,12 +252,14 @@ class CardRepository(
     }
 
     /**
-     * Records a review log entry for a grade applied from the Add/Edit card screen.
-     * Does not update card state (the caller is responsible for that via updateCard).
+     * Logs a grade staged in the card editor: [before] and [after] are the
+     * progress where it was graded, in [groupId]'s learning context (Global
+     * for none). Changes no progress; the editor saves that itself.
      */
     suspend fun logGradeFromEdit(
-        cardBefore: Card,
-        cardAfter: Card,
+        cardId: Long,
+        before: FsrsState,
+        after: FsrsState,
         grade: Grade,
         groupId: Long? = null,
         opponentId: Long? = null,
@@ -267,12 +270,12 @@ class CardRepository(
         val mode = if (usesConcepts(group?.let { learningGroupIdFor(it.id) })) SelectionMode.CONCEPT else SelectionMode.CARD
         reviewLogDao.insertReviewLog(
             reviewLogOf(
-                cardBefore.id, null, now, grade, cardBefore.fsrs, cardAfter.fsrs, group,
+                cardId, null, now, grade, before, after, group,
                 fightOf(opponentId, fightDifficulty), CardSelection(mode, SelectionReason.EDITOR)
             ).let { if (group == null) it.copy(groupName = GROUP_NAME_CARD_EDIT) else it }
         )
         // A new review in the card's history: its concepts follow.
-        rederiveConceptsForCards(listOf(cardBefore.id))
+        rederiveConceptsForCards(listOf(cardId))
     }
 
     /**
@@ -1038,8 +1041,9 @@ class CardRepository(
     suspend fun cardIdsByUid(): Map<String, Long> = cardDao.getAllCardsAsList().associate { it.uid to it.id }
 
     // Learning group state operations
-    suspend fun updateLearningState(learningState: CardLearningState) =
-        groupDao.updateLearningState(learningState)
+    /** Saves a card's progress in a learning group, held there before or not. */
+    suspend fun saveLearningState(learningState: CardLearningState) =
+        groupDao.insertLearningState(learningState)
 
     // Review operations
 

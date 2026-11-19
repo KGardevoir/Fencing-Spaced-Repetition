@@ -17,6 +17,7 @@ import com.fencing.spacedrepetition.data.model.CardConceptCrossRef
 import com.fencing.spacedrepetition.data.model.CardGroupCrossRef
 import com.fencing.spacedrepetition.data.model.Concept
 import com.fencing.spacedrepetition.data.model.conceptShares
+import com.fencing.spacedrepetition.data.model.fsrs
 import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.LearningGroup
@@ -819,7 +820,7 @@ class ConceptSchedulingDbTest {
         )
 
         // A grade from the card editor says so.
-        repo.logGradeFromEdit(graded, graded, Grade.HARD)
+        repo.logGradeFromEdit(graded.id, graded.fsrs, graded.fsrs, Grade.HARD)
         assertEquals("EDITOR", db.reviewLogDao().getAllReviewLogsSync().maxBy { it.id }.selectionReason)
     }
 
