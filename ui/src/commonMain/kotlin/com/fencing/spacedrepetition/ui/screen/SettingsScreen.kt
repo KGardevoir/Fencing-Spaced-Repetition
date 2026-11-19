@@ -21,6 +21,7 @@ import com.fencing.spacedrepetition.SupportLinks
 import com.fencing.spacedrepetition.data.preferences.SettingsConstants
 import com.fencing.spacedrepetition.data.preferences.ThemeMode
 import com.fencing.spacedrepetition.util.formatDateAtTime
+import com.fencing.spacedrepetition.ui.viewmodel.AppSettings
 import kotlin.math.roundToInt
 
 /**
@@ -34,12 +35,7 @@ private const val DISABLED_ALPHA = 0.38f
 @Composable
 fun SettingsScreen(
     buildInfo: BuildInfo,
-    themeMode: ThemeMode,
-    autoShowAnswer: Boolean,
-    autoBackupEnabled: Boolean,
-    autoBackupIntervalDays: Int,
-    lastBackupTime: Long,
-    maxBackupsKept: Int,
+    settings: AppSettings,
     /**
      * Whether this platform can back up on its own.
      *
@@ -49,8 +45,6 @@ fun SettingsScreen(
      * reminder below them takes over the job.
      */
     automaticBackupAvailable: Boolean,
-    backupReminderEnabled: Boolean,
-    backupReminderIntervalDays: Int,
     // Where backups go. The screen only ever shows this name and asks for a
     // new folder; picking one is the platform's business, not the screen's.
     backupFolderName: String?,
@@ -70,14 +64,14 @@ fun SettingsScreen(
 
 
     val backupIntervalPresets = SettingsConstants.BACKUP_INTERVAL_PRESETS
-    val currentBackupIntervalIndex = SettingsConstants.findPresetIndex(backupIntervalPresets, autoBackupIntervalDays)
+    val currentBackupIntervalIndex = SettingsConstants.findPresetIndex(backupIntervalPresets, settings.autoBackupIntervalDays)
 
     val maxBackupsKeptPresets = SettingsConstants.MAX_BACKUPS_KEPT_PRESETS
-    val currentMaxBackupsKeptIndex = SettingsConstants.findPresetIndex(maxBackupsKeptPresets, maxBackupsKept)
+    val currentMaxBackupsKeptIndex = SettingsConstants.findPresetIndex(maxBackupsKeptPresets, settings.maxBackupsKept)
 
     val reminderIntervalPresets = SettingsConstants.BACKUP_REMINDER_INTERVAL_PRESETS
     val currentReminderIntervalIndex =
-        SettingsConstants.findPresetIndex(reminderIntervalPresets, backupReminderIntervalDays)
+        SettingsConstants.findPresetIndex(reminderIntervalPresets, settings.backupReminderIntervalDays)
 
     Scaffold(
         topBar = {
@@ -118,7 +112,7 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     RadioButton(
-                        selected = themeMode == mode,
+                        selected = settings.themeMode == mode,
                         onClick = { onSetThemeMode(mode) }
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -160,7 +154,7 @@ fun SettingsScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onSetAutoShowAnswer(!autoShowAnswer) }
+                    .clickable { onSetAutoShowAnswer(!settings.autoShowAnswer) }
                     .padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -177,7 +171,7 @@ fun SettingsScreen(
                     )
                 }
                 Switch(
-                    checked = autoShowAnswer,
+                    checked = settings.autoShowAnswer,
                     onCheckedChange = onSetAutoShowAnswer
                 )
             }
@@ -217,7 +211,7 @@ fun SettingsScreen(
                     .fillMaxWidth()
                     .then(
                         if (automaticBackupAvailable) {
-                            Modifier.clickable { onSetAutoBackupEnabled(!autoBackupEnabled) }
+                            Modifier.clickable { onSetAutoBackupEnabled(!settings.autoBackupEnabled) }
                         } else {
                             Modifier
                         }
@@ -247,7 +241,7 @@ fun SettingsScreen(
                     // Off, not merely disabled, where nothing is scheduled: a
                     // switch left showing on would be claiming a backup is
                     // being taken.
-                    checked = autoBackupEnabled && automaticBackupAvailable,
+                    checked = settings.autoBackupEnabled && automaticBackupAvailable,
                     onCheckedChange = onSetAutoBackupEnabled,
                     enabled = automaticBackupAvailable
                 )
@@ -380,7 +374,7 @@ fun SettingsScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onSetBackupReminderEnabled(!backupReminderEnabled) }
+                        .clickable { onSetBackupReminderEnabled(!settings.backupReminderEnabled) }
                         .padding(vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -399,7 +393,7 @@ fun SettingsScreen(
                         )
                     }
                     Switch(
-                        checked = backupReminderEnabled,
+                        checked = settings.backupReminderEnabled,
                         onCheckedChange = onSetBackupReminderEnabled
                     )
                 }
@@ -432,7 +426,7 @@ fun SettingsScreen(
                         },
                         valueRange = 0f..(reminderIntervalPresets.size - 1).toFloat(),
                         steps = reminderIntervalPresets.size - 2,
-                        enabled = backupReminderEnabled,
+                        enabled = settings.backupReminderEnabled,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -441,8 +435,8 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = if (lastBackupTime > 0) {
-                    "Last backup: " + formatDateAtTime(lastBackupTime)
+                text = if (settings.lastBackupTime > 0) {
+                    "Last backup: " + formatDateAtTime(settings.lastBackupTime)
                 } else {
                     "No backup has been made yet"
                 },

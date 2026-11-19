@@ -33,6 +33,7 @@ import com.fencing.spacedrepetition.ui.components.MaximumIntervalSlider
 import com.fencing.spacedrepetition.ui.components.PracticeDaysPicker
 import com.fencing.spacedrepetition.ui.components.FsrsRetentionPreview
 import com.fencing.spacedrepetition.ui.components.RetentionSelector
+import com.fencing.spacedrepetition.ui.viewmodel.LearningDefaults
 
 /**
  * A learning group: its name and description, which card groups are in it,
@@ -52,13 +53,8 @@ fun LearningGroupEditScreen(
     learningGroup: LearningGroup,
     learningGroups: List<LearningGroup>,
     groups: List<Group>,
-    globalCardsPerSession: Int,
-    globalRandomizeDueCards: Boolean,
-    globalRandomizeBucketHours: Int,
-    globalPracticeDays: Set<Int>,
-    globalMaximumInterval: Int,
-    globalFsrsRetention: Int,
-    globalFsrsEnableFuzzing: Boolean,
+    /** Global's settings, which the learning group uses where it sets nothing itself. */
+    globalDefaults: LearningDefaults,
     practiceScheduleEstimate: ScheduleEstimate?,
     historyWindowDays: Int,
     onHistoryWindowDaysChange: (Int) -> Unit,
@@ -78,27 +74,27 @@ fun LearningGroupEditScreen(
     var useConcepts by rememberSaveable { mutableStateOf(learningGroup.useConcepts) }
 
     var overrideCardsPerSession by remember { mutableStateOf(learningGroup.cardsPerSession != null) }
-    var cardsPerSession by remember { mutableIntStateOf(learningGroup.cardsPerSession ?: globalCardsPerSession) }
+    var cardsPerSession by remember { mutableIntStateOf(learningGroup.cardsPerSession ?: globalDefaults.cardsPerSession) }
 
     var overrideRandomizeDueCards by remember { mutableStateOf(learningGroup.randomizeDueCards != null) }
-    var randomizeDueCards by remember { mutableStateOf(learningGroup.randomizeDueCards ?: globalRandomizeDueCards) }
+    var randomizeDueCards by remember { mutableStateOf(learningGroup.randomizeDueCards ?: globalDefaults.randomizeDueCards) }
 
     var overrideRandomizeBucketHours by remember { mutableStateOf(learningGroup.randomizeBucketHours != null) }
     var randomizeBucketHours by remember {
-        mutableIntStateOf(learningGroup.randomizeBucketHours ?: globalRandomizeBucketHours)
+        mutableIntStateOf(learningGroup.randomizeBucketHours ?: globalDefaults.randomizeBucketHours)
     }
 
     var overridePracticeDays by remember { mutableStateOf(learningGroup.practiceDays != null) }
-    var practiceDays by remember { mutableStateOf(learningGroup.parsePracticeDays() ?: globalPracticeDays) }
+    var practiceDays by remember { mutableStateOf(learningGroup.parsePracticeDays() ?: globalDefaults.practiceDays) }
 
     var overrideMaximumInterval by remember { mutableStateOf(learningGroup.maximumInterval != null) }
-    var maximumInterval by remember { mutableIntStateOf(learningGroup.maximumInterval ?: globalMaximumInterval) }
+    var maximumInterval by remember { mutableIntStateOf(learningGroup.maximumInterval ?: globalDefaults.maximumInterval) }
 
     var overrideFsrsRetention by remember { mutableStateOf(learningGroup.fsrsRetention != null) }
-    var fsrsRetention by remember { mutableIntStateOf(learningGroup.fsrsRetention ?: globalFsrsRetention) }
+    var fsrsRetention by remember { mutableIntStateOf(learningGroup.fsrsRetention ?: globalDefaults.fsrsRetention) }
 
     var overrideFsrsEnableFuzzing by remember { mutableStateOf(learningGroup.fsrsEnableFuzzing != null) }
-    var fsrsEnableFuzzing by remember { mutableStateOf(learningGroup.fsrsEnableFuzzing ?: globalFsrsEnableFuzzing) }
+    var fsrsEnableFuzzing by remember { mutableStateOf(learningGroup.fsrsEnableFuzzing ?: globalDefaults.fsrsEnableFuzzing) }
 
     var cardCount by remember { mutableIntStateOf(0) }
     LaunchedEffect(memberIds) { cardCount = countCards(memberIds) }

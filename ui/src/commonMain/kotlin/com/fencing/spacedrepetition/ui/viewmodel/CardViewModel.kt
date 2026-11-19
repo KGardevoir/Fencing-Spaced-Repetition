@@ -11,12 +11,14 @@ import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardFilter
 import com.fencing.spacedrepetition.data.model.CardConceptCrossRef
 import com.fencing.spacedrepetition.data.model.Concept
-import com.fencing.spacedrepetition.data.model.ConceptLearningGroupCrossRef
 import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.CardWithGroups
 import com.fencing.spacedrepetition.data.model.FsrsState
 import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.LearningContexts
+import com.fencing.spacedrepetition.data.model.ConceptOffer
+import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
@@ -56,6 +58,40 @@ import kotlinx.coroutines.launch
  * images and stores them; an export reads them back. Both are asynchronous in
  * a browser and neither is a file path any more.
  */
+/** What the card editor loads for a card it edits; empty for a new one. */
+data class EditedCard(
+    val groups: List<Group> = emptyList(),
+    val learningStates: List<CardLearningState> = emptyList(),
+    val concepts: List<Concept> = emptyList(),
+    /** How much of each concept the card contains, where that is not 1. */
+    val conceptWeights: Map<Long, Double> = emptyMap()
+)
+
+/**
+ * What the card list shows: the cards that pass its filters, in its order,
+ * and the filters, sorting and selection themselves.
+ */
+data class CardListState(
+    /** The cards shown: filtered and sorted. */
+    val cards: List<Card> = emptyList(),
+    /** Every card with its groups, filtered or not. */
+    val cardsWithGroups: List<CardWithGroups> = emptyList(),
+    val groups: List<Group> = emptyList(),
+    val learningGroups: List<LearningGroup> = emptyList(),
+    val concepts: List<Concept> = emptyList(),
+    /** Each card's concepts with how much of each it contains, by card id. */
+    val conceptsByCard: Map<Long, List<Pair<Concept, Double>>> = emptyMap(),
+    val cardCount: Int = 0,
+    val groupFilters: Set<Long> = emptySet(),
+    val conceptFilters: Set<Long> = emptySet(),
+    val showDisabled: Boolean = false,
+    val searchQuery: String = "",
+    val sortOption: CardSortOption = CardSortOption.DUE_DATE,
+    val sortDirection: SortDirection = SortDirection.ASCENDING,
+    val selectionMode: Boolean = false,
+    val selectedCardIds: Set<Long> = emptySet()
+)
+
 class CardViewModel(
     private val repository: CardRepository,
     private val groupRepository: GroupRepository,
@@ -67,7 +103,7 @@ class CardViewModel(
     val allCards: StateFlow<List<Card>> = repository.getAllCards()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val allCardsWithGroups: StateFlow<List<CardWithGroups>> = repository.getAllCardsWithGroups()
+    private val allCardsWithGroups: StateFlow<List<CardWithGroups>> = repository.getAllCardsWithGroups()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val dueCardCount: StateFlow<Int> = repository.drawing.getDueCardCount()
@@ -99,15 +135,15 @@ class CardViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     // Groups for filtering
-    val allGroups: StateFlow<List<Group>> = groupRepository.getAllGroups()
+    private val allGroups: StateFlow<List<Group>> = groupRepository.getAllGroups()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _selectedGroupFilters = MutableStateFlow<Set<Long>>(emptySet())
-    val selectedGroupFilters: StateFlow<Set<Long>> = _selectedGroupFilters.asStateFlow()
+    private val selectedGroupFilters: StateFlow<Set<Long>> = _selectedGroupFilters.asStateFlow()
 
     /** Concepts to filter the card list by: a card carrying any of them is shown. */
     private val _selectedConceptFilters = MutableStateFlow<Set<Long>>(emptySet())
-    val selectedConceptFilters: StateFlow<Set<Long>> = _selectedConceptFilters.asStateFlow()
+    private val selectedConceptFilters: StateFlow<Set<Long>> = _selectedConceptFilters.asStateFlow()
 
     fun toggleConceptFilter(conceptId: Long) {
         _selectedConceptFilters.update { if (conceptId in it) it - conceptId else it + conceptId }
@@ -131,16 +167,16 @@ class CardViewModel(
     }
 
     private val _showDisabledFilter = MutableStateFlow(false)
-    val showDisabledFilter: StateFlow<Boolean> = _showDisabledFilter.asStateFlow()
+    private val showDisabledFilter: StateFlow<Boolean> = _showDisabledFilter.asStateFlow()
 
     private val _searchQuery = MutableStateFlow("")
-    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+    private val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
     private val _cardSortOption = MutableStateFlow(CardSortOption.DUE_DATE)
-    val cardSortOption: StateFlow<CardSortOption> = _cardSortOption.asStateFlow()
+    private val cardSortOption: StateFlow<CardSortOption> = _cardSortOption.asStateFlow()
 
     private val _sortDirection = MutableStateFlow(SortDirection.ASCENDING)
-    val sortDirection: StateFlow<SortDirection> = _sortDirection.asStateFlow()
+    private val sortDirection: StateFlow<SortDirection> = _sortDirection.asStateFlow()
 
     fun setCardSortOption(option: CardSortOption) {
         _cardSortOption.value = option
@@ -156,7 +192,7 @@ class CardViewModel(
     // flatMapLatest is still experimental, and this is the second place in the
     // class that uses it -- the other one is annotated a few dozen lines up.
     @OptIn(ExperimentalCoroutinesApi::class)
-    val filteredCards: StateFlow<List<Card>> = _showDisabledFilter.flatMapLatest { showDisabled ->
+    private val filteredCards: StateFlow<List<Card>> = _showDisabledFilter.flatMapLatest { showDisabled ->
         combine(
             combine(allCardsWithGroups, conceptRepository.getAllCardConceptCrossRefs()) { cards, refs -> cards to refs },
             combine(_selectedGroupFilters, _selectedConceptFilters) { groups, concepts -> groups to concepts },
@@ -242,7 +278,7 @@ class CardViewModel(
      * Each card's concepts with how much of each it contains, by card id,
      * sorted by name -- for showing them on the card list.
      */
-    val conceptsByCard: StateFlow<Map<Long, List<Pair<Concept, Double>>>> = combine(
+    private val conceptsByCard: StateFlow<Map<Long, List<Pair<Concept, Double>>>> = combine(
         conceptRepository.getAllConcepts(),
         conceptRepository.getAllCardConceptCrossRefs()
     ) { concepts, refs ->
@@ -251,10 +287,25 @@ class CardViewModel(
             .mapValues { (_, list) -> list.filterNotNull().sortedBy { it.first.name.lowercase() } }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
-    /** Which learning groups offer which concepts, for the card editor. */
-    val conceptLearningGroups: StateFlow<List<ConceptLearningGroupCrossRef>> =
+    /** What the card editor offers a card: see [ConceptOffer]. */
+    val conceptOffer: StateFlow<ConceptOffer> = combine(
+        groupRepository.getAllGroups(),
+        groupRepository.getAllLearningGroups(),
+        conceptRepository.getAllConcepts(),
         conceptRepository.getAllConceptLearningGroups()
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    ) { groups, learningGroups, concepts, links ->
+        ConceptOffer(LearningContexts(groups, learningGroups), concepts, links)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ConceptOffer.NONE)
+
+    /** What the card editor loads for [cardId]: its groups, learning-group progress and concepts. */
+    fun editedCard(cardId: Long): Flow<EditedCard> = combine(
+        getGroupsForCard(cardId),
+        getLearningStatesForCard(cardId),
+        getConceptsForCard(cardId),
+        getConceptLinksForCard(cardId)
+    ) { groups, states, concepts, links ->
+        EditedCard(groups, states, concepts, links.filter { it.weight != 1.0 }.associate { it.conceptId to it.weight })
+    }
 
     /**
      * Create a concept from the card editor -- or find the one of that name --
@@ -312,10 +363,39 @@ class CardViewModel(
 
     // Selection state for bulk operations
     private val _selectedCardIds = MutableStateFlow<Set<Long>>(emptySet())
-    val selectedCardIds: StateFlow<Set<Long>> = _selectedCardIds.asStateFlow()
+    private val selectedCardIds: StateFlow<Set<Long>> = _selectedCardIds.asStateFlow()
 
     private val _isSelectionMode = MutableStateFlow(false)
-    val isSelectionMode: StateFlow<Boolean> = _isSelectionMode.asStateFlow()
+    private val isSelectionMode: StateFlow<Boolean> = _isSelectionMode.asStateFlow()
+
+    /** Everything the card list shows, as one value. */
+    val cardListState: StateFlow<CardListState> = combine(
+        combine(filteredCards, allCardsWithGroups, allGroups, groupRepository.getAllLearningGroups(), cardCount) {
+                cards, withGroups, groups, learningGroups, count ->
+            CardListState(cards, withGroups, groups, learningGroups, cardCount = count)
+        },
+        combine(allConcepts, conceptsByCard, _selectedGroupFilters, _selectedConceptFilters, _showDisabledFilter) {
+                concepts, byCard, groupFilters, conceptFilters, showDisabled ->
+            CardListState(
+                concepts = concepts, conceptsByCard = byCard, groupFilters = groupFilters,
+                conceptFilters = conceptFilters, showDisabled = showDisabled
+            )
+        },
+        combine(_searchQuery, _cardSortOption, _sortDirection, _isSelectionMode, _selectedCardIds) {
+                query, sortOption, direction, selecting, selected ->
+            CardListState(
+                searchQuery = query, sortOption = sortOption, sortDirection = direction,
+                selectionMode = selecting, selectedCardIds = selected
+            )
+        }
+    ) { content, filters, view ->
+        content.copy(
+            concepts = filters.concepts, conceptsByCard = filters.conceptsByCard, groupFilters = filters.groupFilters,
+            conceptFilters = filters.conceptFilters, showDisabled = filters.showDisabled,
+            searchQuery = view.searchQuery, sortOption = view.sortOption, sortDirection = view.sortDirection,
+            selectionMode = view.selectionMode, selectedCardIds = view.selectedCardIds
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), CardListState())
 
     fun toggleSelectionMode() {
         _isSelectionMode.value = !_isSelectionMode.value

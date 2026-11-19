@@ -37,3 +37,36 @@ fun offeredConceptIds(
             learningGroups.any { it in cardContexts }
     }.map { it.id }.toSet()
 }
+
+/**
+ * What the card editor offers a card, for the groups it has selected: the
+ * learning contexts it is learnt in, the concepts available there
+ * ([offeredConceptIds]), and a note when some of those contexts do not
+ * schedule by concept -- tagging is allowed either way.
+ */
+class ConceptOffer(
+    private val contexts: LearningContexts,
+    private val concepts: List<Concept>,
+    private val links: List<ConceptLearningGroupCrossRef>
+) {
+    fun contextsFor(groupIds: Set<Long>): Set<Long?> = contexts.ofCardInGroups(groupIds)
+
+    fun offeredFor(groupIds: Set<Long>): Set<Long> = offeredConceptIds(concepts, links, contextsFor(groupIds))
+
+    /** Where concept scheduling is off for the card, said for the editor; null when it is on everywhere. */
+    fun schedulingOffNote(groupIds: Set<Long>, globalByConcept: Boolean): String? {
+        val cardContexts = contextsFor(groupIds)
+        val on = contexts.schedulingByConcept(cardContexts, globalByConcept)
+        val off = (cardContexts - on).map(contexts::name).sorted().joinToString(", ")
+        return when {
+            off.isEmpty() -> null
+            on.isEmpty() -> "Concept scheduling is off for $off. Tags are kept, but this card is " +
+                "scheduled card by card until it is turned on."
+            else -> "Concept scheduling is off in $off: there, this card is scheduled card by card."
+        }
+    }
+
+    companion object {
+        val NONE = ConceptOffer(LearningContexts(emptyList(), emptyList()), emptyList(), emptyList())
+    }
+}

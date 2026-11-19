@@ -39,6 +39,18 @@ class ConceptAvailabilityTest {
     }
 
     @Test
+    fun `the editor notes where concept scheduling is off`() {
+        val offer = ConceptOffer(contexts, concepts, links)
+        assertEquals(null, offer.schedulingOffNote(setOf(10L), globalByConcept = false))
+        assertEquals(
+            "Concept scheduling is off in Global: there, this card is scheduled card by card.",
+            offer.schedulingOffNote(setOf(10L, 12L), globalByConcept = false)
+        )
+        assertTrue(offer.schedulingOffNote(setOf(11L), globalByConcept = true)!!.startsWith("Concept scheduling is off for Drills."))
+        assertEquals(setOf(100L), offer.offeredFor(setOf(10L)))
+    }
+
+    @Test
     fun `tagging is allowed where concept scheduling is off`() {
         // Blade belongs to Drills, which does not schedule by concept: still offered.
         assertEquals(setOf(102L), offered(setOf(11L)))

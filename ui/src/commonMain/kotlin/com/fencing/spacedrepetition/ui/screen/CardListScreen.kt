@@ -49,6 +49,7 @@ import com.fencing.spacedrepetition.util.ParsedCard
 import com.fencing.spacedrepetition.util.formatDate
 import com.fencing.spacedrepetition.util.toOneDecimal
 import com.fencing.spacedrepetition.util.Time
+import com.fencing.spacedrepetition.ui.viewmodel.CardListState
 
 @OptIn(
     ExperimentalMaterial3Api::class,
@@ -57,26 +58,11 @@ import com.fencing.spacedrepetition.util.Time
 )
 @Composable
 fun CardListScreen(
-    allCards: List<Card>,
-    allCardsWithGroups: List<CardWithGroups>,
-    groups: List<Group>,
-    selectedGroupFilters: Set<Long>,
-    showDisabledFilter: Boolean,
-    /** Every concept, for the concept filter row; empty hides the row. */
-    concepts: List<com.fencing.spacedrepetition.data.model.Concept> = emptyList(),
-    selectedConceptFilters: Set<Long> = emptySet(),
-    /** Each card's concepts, by card id, shown on the card the way its groups are. */
-    conceptsByCard: Map<Long, List<Pair<com.fencing.spacedrepetition.data.model.Concept, Double>>> = emptyMap(),
+    /** The cards, filters, sorting and selection; see [CardListState]. */
+    state: CardListState,
     onToggleConceptFilter: (Long) -> Unit = {},
-    searchQuery: String,
-    cardCount: Int,
     importExportState: ImportExportState,
-    cardSortOption: CardSortOption,
-    sortDirection: SortDirection,
-    isSelectionMode: Boolean,
-    selectedCardIds: Set<Long>,
     learningStatesFor: @Composable (Long) -> List<CardLearningState>,
-    learningGroups: List<LearningGroup> = emptyList(),
     /** Whether Global schedules by concept; each learning group carries its own switch. */
     globalConceptScheduling: Boolean = false,
     onUpdateSearchQuery: (String) -> Unit,
@@ -121,9 +107,9 @@ fun CardListScreen(
     var showBulkResetDialog by remember { mutableStateOf(false) }
     // Resetting a card where concepts schedule would reset the concepts'
     // progress from it too, so reset is offered only where none do.
-    val learningContexts = LearningContexts(groups, learningGroups)
+    val learningContexts = LearningContexts(state.groups, state.learningGroups)
     fun schedulesByConcept(cardIds: Collection<Long>): Boolean = cardIds.any { cardId ->
-        val cardGroups = allCardsWithGroups.find { it.card.id == cardId }?.groups.orEmpty()
+        val cardGroups = state.cardsWithGroups.find { it.card.id == cardId }?.groups.orEmpty()
         learningContexts.ofCard(cardGroups).any { learningContexts.schedulesByConcept(it, globalConceptScheduling) }
     }
     var showGroupSelectionDialog by remember { mutableStateOf(false) }
@@ -133,24 +119,24 @@ fun CardListScreen(
     var includeHistoryInExport by remember { mutableStateOf(false) }
 
     // Handle back press when in selection mode
-    if (isSelectionMode) {
+    if (state.selectionMode) {
         BackHandler(onBack = onExitSelectionMode)
     }
 
     // Scroll to top when sort option or direction changes, and only then.
     val cardListState = listPosition.list
-    ScrollToTopOnSortChange(listPosition, cardSortOption to sortDirection)
+    ScrollToTopOnSortChange(listPosition, state.sortOption to state.sortDirection)
 
     Scaffold(
         topBar = {
-            if (isSelectionMode) {
+            if (state.selectionMode) {
                 SelectionTopBar(
-                    selectedCount = selectedCardIds.size,
+                    selectedCount = state.selectedCardIds.size,
                     onExit = onExitSelectionMode,
                     onSelectAll = onSelectAllCards,
                     actions = listOf(
                         SelectionAction("Change groups", AppIcons.CardGroups) { showBulkGroupDialog = true },
-                        if (schedulesByConcept(selectedCardIds)) {
+                        if (schedulesByConcept(state.selectedCardIds)) {
                             SelectionAction("Reset (concept scheduling on)", Icons.Default.Refresh, enabled = false) {}
                         } else {
                             SelectionAction("Reset state", Icons.Default.Refresh) { showBulkResetDialog = true }
@@ -163,7 +149,7 @@ fun CardListScreen(
             } else {
                 // Normal top bar
                 TopAppBar(
-                    title = { Text("My Cards ($cardCount)") },
+                    title = { Text("My Cards (${state.cardCount})") },
                     navigationIcon = {
                         IconButton(onClick = onNavigateBack) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
@@ -172,7 +158,7 @@ fun CardListScreen(
                     actions = {
                         IconButton(onClick = onToggleSortDirection) {
                             Icon(
-                                imageVector = if (sortDirection == SortDirection.ASCENDING)
+                                imageVector = if (state.sortDirection == SortDirection.ASCENDING)
                                     Icons.Default.ArrowUpward
                                 else
                                     Icons.Default.ArrowDownward,
@@ -195,7 +181,7 @@ fun CardListScreen(
                                             showSortMenu = false
                                         },
                                         leadingIcon = {
-                                            if (cardSortOption == option) {
+                                            if (state.sortOption == option) {
                                                 Icon(Icons.Default.Check, contentDescription = null)
                                             }
                                         }
@@ -252,7 +238,7 @@ fun CardListScreen(
                                     leadingIcon = {
                                         Icon(AppIcons.CardGroups, contentDescription = null)
                                     },
-                                    enabled = groups.isNotEmpty()
+                                    enabled = state.groups.isNotEmpty()
                                 )
                                 DropdownMenuItem(
                                     text = { Text("Export All Photos") },
@@ -294,7 +280,7 @@ fun CardListScreen(
                                     leadingIcon = {
                                         Icon(AppIcons.CardGroups, contentDescription = null)
                                     },
-                                    enabled = groups.isNotEmpty()
+                                    enabled = state.groups.isNotEmpty()
                                 )
                             }
                         }
@@ -306,9 +292,9 @@ fun CardListScreen(
             }
         },
         floatingActionButton = {
-            if (!isSelectionMode) {
+            if (!state.selectionMode) {
                 FloatingActionButton(
-                    onClick = { onNavigateToAddCard(selectedGroupFilters.firstOrNull()) },
+                    onClick = { onNavigateToAddCard(state.groupFilters.firstOrNull()) },
                     containerColor = MaterialTheme.colorScheme.primary
                 ) {
                     Icon(Icons.Default.Add, "Add Card")
@@ -323,7 +309,7 @@ fun CardListScreen(
         ) {
             // Search field
             OutlinedTextField(
-                value = searchQuery,
+                value = state.searchQuery,
                 onValueChange = onUpdateSearchQuery,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -336,7 +322,7 @@ fun CardListScreen(
                     )
                 },
                 trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
+                    if (state.searchQuery.isNotEmpty()) {
                         IconButton(onClick = { onUpdateSearchQuery("") }) {
                             Icon(
                                 imageVector = Icons.Default.Close,
@@ -358,21 +344,21 @@ fun CardListScreen(
             ) {
                 item {
                     FilterChip(
-                        selected = selectedGroupFilters.isEmpty() && selectedConceptFilters.isEmpty() && !showDisabledFilter,
+                        selected = state.groupFilters.isEmpty() && state.conceptFilters.isEmpty() && !state.showDisabled,
                         onClick = onClearGroupFilters,
                         label = { Text("All") }
                     )
                 }
-                items(groups) { group ->
+                items(state.groups) { group ->
                     FilterChip(
-                        selected = group.id in selectedGroupFilters,
+                        selected = group.id in state.groupFilters,
                         onClick = { onToggleGroupFilter(group.id) },
                         label = { Text(group.name) }
                     )
                 }
                 item {
                     FilterChip(
-                        selected = showDisabledFilter,
+                        selected = state.showDisabled,
                         onClick = onToggleDisabledFilter,
                         label = { Text("Disabled") },
                         leadingIcon = {
@@ -387,16 +373,16 @@ fun CardListScreen(
             }
 
             // Concept filter chips: a card carrying any selected concept is shown.
-            if (concepts.isNotEmpty()) {
+            if (state.concepts.isNotEmpty()) {
                 LazyRow(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(concepts, key = { it.id }) { concept ->
+                    items(state.concepts, key = { it.id }) { concept ->
                         FilterChip(
-                            selected = concept.id in selectedConceptFilters,
+                            selected = concept.id in state.conceptFilters,
                             onClick = { onToggleConceptFilter(concept.id) },
                             label = { Text(concept.name) },
                             leadingIcon = {
@@ -412,7 +398,7 @@ fun CardListScreen(
             }
 
             // Cards list
-            if (allCards.isEmpty()) {
+            if (state.cards.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -422,7 +408,7 @@ fun CardListScreen(
                         modifier = Modifier.padding(32.dp)
                     ) {
                         Icon(
-                            imageVector = if (searchQuery.isNotEmpty()) Icons.Outlined.Search else Icons.Default.Description,
+                            imageVector = if (state.searchQuery.isNotEmpty()) Icons.Outlined.Search else Icons.Default.Description,
                             contentDescription = null,
                             modifier = Modifier.size(64.dp),
                             tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
@@ -430,11 +416,11 @@ fun CardListScreen(
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = when {
-                                searchQuery.isNotEmpty() -> "No cards match your search"
-                                showDisabledFilter && selectedGroupFilters.isNotEmpty() -> "No disabled cards in selected groups"
-                                showDisabledFilter -> "No disabled cards"
-                                selectedGroupFilters.isNotEmpty() -> "No cards in selected groups"
-                                selectedConceptFilters.isNotEmpty() -> "No cards with the selected concepts"
+                                state.searchQuery.isNotEmpty() -> "No cards match your search"
+                                state.showDisabled && state.groupFilters.isNotEmpty() -> "No disabled cards in selected groups"
+                                state.showDisabled -> "No disabled cards"
+                                state.groupFilters.isNotEmpty() -> "No cards in selected groups"
+                                state.conceptFilters.isNotEmpty() -> "No cards with the selected concepts"
                                 else -> "No cards yet"
                             },
                             style = MaterialTheme.typography.titleMedium,
@@ -442,9 +428,9 @@ fun CardListScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = if (searchQuery.isNotEmpty()) {
+                            text = if (state.searchQuery.isNotEmpty()) {
                                 "Try a different search term"
-                            } else if (showDisabledFilter) {
+                            } else if (state.showDisabled) {
                                 "Disabled cards are hidden from practice sessions"
                             } else {
                                 "Tap + to add a card or use menu to import"
@@ -461,9 +447,9 @@ fun CardListScreen(
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 80.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(allCards, key = { it.id }) { card ->
+                    items(state.cards, key = { it.id }) { card ->
                         // Find groups for this card
-                        val cardGroups = allCardsWithGroups
+                        val cardGroups = state.cardsWithGroups
                             .find { it.card.id == card.id }?.groups ?: emptyList()
 
                         // Get learning states for this card
@@ -472,16 +458,16 @@ fun CardListScreen(
                         CardListItem(
                             card = card,
                             groups = cardGroups,
-                            concepts = conceptsByCard[card.id].orEmpty(),
+                            concepts = state.conceptsByCard[card.id].orEmpty(),
                             learningStates = learningStates,
-                            learningGroups = learningGroups,
-                            isSelectionMode = isSelectionMode,
-                            isSelected = card.id in selectedCardIds,
-                            sortOption = cardSortOption,
+                            learningGroups = state.learningGroups,
+                            isSelectionMode = state.selectionMode,
+                            isSelected = card.id in state.selectedCardIds,
+                            sortOption = state.sortOption,
                             onEdit = { onNavigateToEditCard(card) },
                             onToggleSelection = { onToggleCardSelection(card.id) },
                             onLongPress = {
-                                if (!isSelectionMode) {
+                                if (!state.selectionMode) {
                                     onToggleSelectionMode()
                                     onToggleCardSelection(card.id)
                                 }
@@ -495,12 +481,12 @@ fun CardListScreen(
 
 
     // Import/Export state dialogs
-    ImportExportDialogs(importExportState, groups, onResetImportExportState, onCsvImportInto, onCsvImportIntoNewGroup)
+    ImportExportDialogs(importExportState, state.groups, onResetImportExportState, onCsvImportInto, onCsvImportIntoNewGroup)
 
     // Bulk delete confirmation dialog
     if (showBulkDeleteDialog) {
         ConfirmDeleteDialog(
-            title = "Delete ${selectedCardIds.size} Cards?",
+            title = "Delete ${state.selectedCardIds.size} Cards?",
             text = "Are you sure you want to delete these cards? This action cannot be undone.",
             onConfirm = { onDeleteSelectedCards(); showBulkDeleteDialog = false },
             onDismiss = { showBulkDeleteDialog = false }
@@ -510,9 +496,9 @@ fun CardListScreen(
     // Bulk reset state confirmation dialog
     if (showBulkResetDialog) {
         BulkResetDialog(
-            selectedCardIds = selectedCardIds,
-            allCardsWithGroups = allCardsWithGroups,
-            learningGroups = learningGroups,
+            selectedCardIds = state.selectedCardIds,
+            allCardsWithGroups = state.cardsWithGroups,
+            learningGroups = state.learningGroups,
             onDismiss = { showBulkResetDialog = false },
             onResetGlobal = {
                 onResetSelectedCardsGlobalState()
@@ -532,7 +518,7 @@ fun CardListScreen(
     // Bulk change groups dialog
     if (showBulkGroupDialog) {
         BulkGroupDialog(
-            groups = groups,
+            groups = state.groups,
             onDismiss = { showBulkGroupDialog = false },
             onConfirm = { selectedGroupIds ->
                 onUpdateSelectedCardsGroups(selectedGroupIds)
@@ -544,8 +530,8 @@ fun CardListScreen(
     // Export selected groups dialog
     if (showGroupSelectionDialog) {
         ExportGroupSelectionDialog(
-            groups = groups,
-            initiallySelected = selectedGroupFilters,
+            groups = state.groups,
+            initiallySelected = state.groupFilters,
             onDismiss = { showGroupSelectionDialog = false },
             onConfirm = { selectedGroupIds ->
                 showGroupSelectionDialog = false
@@ -604,8 +590,8 @@ fun CardListScreen(
     // CSV export selected groups dialog
     if (showCsvGroupSelectionForExport) {
         ExportGroupSelectionDialog(
-            groups = groups,
-            initiallySelected = selectedGroupFilters,
+            groups = state.groups,
+            initiallySelected = state.groupFilters,
             onDismiss = { showCsvGroupSelectionForExport = false },
             onConfirm = { selectedGroupIds ->
                 showCsvGroupSelectionForExport = false

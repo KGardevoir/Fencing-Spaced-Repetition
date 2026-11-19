@@ -22,6 +22,7 @@ import com.fencing.spacedrepetition.ui.components.FuzzingSwitch
 import com.fencing.spacedrepetition.ui.components.MaximumIntervalSlider
 import com.fencing.spacedrepetition.ui.components.PracticeDaysPicker
 import com.fencing.spacedrepetition.ui.components.RetentionSelector
+import com.fencing.spacedrepetition.ui.viewmodel.LearningDefaults
 
 /**
  * The Global learning group's settings: the app-wide defaults that Global
@@ -34,14 +35,7 @@ import com.fencing.spacedrepetition.ui.components.RetentionSelector
 @Composable
 fun GlobalLearningSettingsScreen(
     totalCards: Int,
-    cardsPerSession: Int,
-    randomizeDueCards: Boolean,
-    randomizeBucketHours: Int,
-    practiceDays: Set<Int>,
-    maximumInterval: Int,
-    fsrsRetention: Int,
-    fsrsEnableFuzzing: Boolean,
-    conceptScheduling: Boolean,
+    defaults: LearningDefaults,
     practiceScheduleEstimate: ScheduleEstimate?,
     historyWindowDays: Int,
     onSetCardsPerSession: (Int) -> Unit,
@@ -85,44 +79,44 @@ fun GlobalLearningSettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
             // Not a default: Global's own switch. Each learning group has one of its own.
-            ConceptSchedulingSwitch(conceptScheduling, onSetConceptScheduling)
+            ConceptSchedulingSwitch(defaults.conceptScheduling, onSetConceptScheduling)
 
             GlobalSetting("Cards per Session", null) {
-                CardsPerSessionSlider(cardsPerSession, onSetCardsPerSession)
+                CardsPerSessionSlider(defaults.cardsPerSession, onSetCardsPerSession)
             }
             GlobalSetting("Randomize Due Cards", null) {
-                RandomizeDueCardsSwitch(randomizeDueCards, onSetRandomizeDueCards)
+                RandomizeDueCardsSwitch(defaults.randomizeDueCards, onSetRandomizeDueCards)
             }
             // Only matters while shuffling is on, as on the Settings screen it came from.
-            if (randomizeDueCards) {
+            if (defaults.randomizeDueCards) {
                 GlobalSetting("Sampling Bucket Size", null) {
-                    BucketSizeSlider(randomizeBucketHours, onSetRandomizeBucketHours)
+                    BucketSizeSlider(defaults.randomizeBucketHours, onSetRandomizeBucketHours)
                 }
             }
             GlobalSetting("Practice Days", "Cards come due on these days.") {
-                PracticeDaysPicker(practiceDays, onSetPracticeDays)
+                PracticeDaysPicker(defaults.practiceDays, onSetPracticeDays)
             }
             GlobalSetting("Maximum Interval", null) {
-                MaximumIntervalSlider(maximumInterval, onSetMaximumInterval)
+                MaximumIntervalSlider(defaults.maximumInterval, onSetMaximumInterval)
             }
             GlobalSetting(
                 "FSRS Desired Retention",
                 "Chance of remembering a card when due."
             ) {
                 RetentionSelector(
-                    retentionPercent = fsrsRetention,
+                    retentionPercent = defaults.fsrsRetention,
                     onRetentionChange = onSetFsrsRetention,
                     cardsInRotation = totalCards,
-                    scheduleDaysPerWeek = practiceDays.size,
-                    scheduleSetsPerPractice = cardsPerSession,
+                    scheduleDaysPerWeek = defaults.practiceDays.size,
+                    scheduleSetsPerPractice = defaults.cardsPerSession,
                     historyEstimate = practiceScheduleEstimate,
                     historyWindowDays = historyWindowDays,
                     onHistoryWindowDaysChange = onSetHistoryWindowDays
                 )
-                FsrsRetentionPreview(retentionPercent = fsrsRetention)
+                FsrsRetentionPreview(retentionPercent = defaults.fsrsRetention)
             }
             GlobalSetting("FSRS Interval Fuzzing", null) {
-                FuzzingSwitch(fsrsEnableFuzzing, onSetFsrsEnableFuzzing)
+                FuzzingSwitch(defaults.fsrsEnableFuzzing, onSetFsrsEnableFuzzing)
             }
             Spacer(modifier = Modifier.height(32.dp))
         }

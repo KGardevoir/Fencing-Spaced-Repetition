@@ -12,10 +12,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.backhandler.BackHandler
 import com.fencing.spacedrepetition.BuildInfo
-import com.fencing.spacedrepetition.data.model.CardLearningState
-import com.fencing.spacedrepetition.data.model.Concept
-import com.fencing.spacedrepetition.data.model.LearningContexts
-import com.fencing.spacedrepetition.data.model.offeredConceptIds
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.ui.navigation.Destination
 import com.fencing.spacedrepetition.ui.navigation.Navigator
@@ -37,6 +33,10 @@ import com.fencing.spacedrepetition.ui.screen.RetentionReportScreen
 import com.fencing.spacedrepetition.ui.screen.SettingsScreen
 import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.ConceptViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.AppSettings
+import com.fencing.spacedrepetition.ui.viewmodel.LearningDefaults
+import com.fencing.spacedrepetition.ui.viewmodel.CardListState
+import com.fencing.spacedrepetition.ui.viewmodel.EditedCard
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
@@ -55,10 +55,11 @@ import kotlinx.coroutines.flow.flowOf
  * and scheduling backups -- arrive as [FileTransfer] and are handled inside
  * the view models respectively.
  *
- * This holds the state collection that the screens used to do for themselves.
- * It reads as a lot of collectAsState, and that is the point: it is the only
- * place in the app where a Flow becomes a value, so a screen can be looked at
- * and understood without knowing where its data comes from.
+ * This is the only place in the app where a Flow becomes a value, so a screen
+ * can be looked at and understood without knowing where its data comes from.
+ * Where a screen shows a lot, its view model hands it over as one value --
+ * [CardListState], [LearningDefaults], [AppSettings] -- rather than a flow per
+ * field.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -113,25 +114,21 @@ fun App(
             val groups by groupViewModel.allGroups.collectAsState()
             val learningGroups by groupViewModel.learningGroups.collectAsState()
             val savedGroupId by settingsViewModel.selectedGroupId.collectAsState()
-            val globalCardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
+            val defaults by settingsViewModel.learningDefaults.collectAsState()
+            val settings by settingsViewModel.settings.collectAsState()
             val totalCardCount by cardViewModel.cardCount.collectAsState()
             val totalDueCount by cardViewModel.dueCardCount.collectAsState()
-            val reminderEnabled by settingsViewModel.backupReminderEnabled.collectAsState()
-            val reminderIntervalDays by settingsViewModel.backupReminderIntervalDays.collectAsState()
-            val lastBackupTime by settingsViewModel.lastBackupTime.collectAsState()
-            val reminderDismissedTime by
-                settingsViewModel.backupReminderDismissedTime.collectAsState()
 
             // Only where nothing backs up on its own. Read at composition
             // rather than on a timer: a reminder measured in days does not
             // need to appear the moment it comes due, and the home screen is
             // composed every time the user comes back to it.
             val reminder = if (settingsViewModel.automaticBackups) null else backupReminder(
-                enabled = reminderEnabled,
+                enabled = settings.backupReminderEnabled,
                 cardCount = totalCardCount,
-                lastBackupTime = lastBackupTime,
-                dismissedTime = reminderDismissedTime,
-                intervalDays = reminderIntervalDays
+                lastBackupTime = settings.lastBackupTime,
+                dismissedTime = settings.backupReminderDismissedTime,
+                intervalDays = settings.backupReminderIntervalDays
             )
 
             val selectedGroup = groups.find { it.id == savedGroupId } ?: groups.firstOrNull()
@@ -147,7 +144,7 @@ fun App(
             // The learning group's cards-per-session overrides the global setting.
             val cardsPerSession =
                 learningGroups.find { it.id == selectedGroup?.learningGroupId }?.cardsPerSession
-                    ?: globalCardsPerSession
+                    ?: defaults.cardsPerSession
 
             val cardsToPractise = selectedGroup?.let { group ->
                 cardViewModel.getCardCountByGroup(group.id).collectAsState(initial = 0).value
@@ -195,13 +192,13 @@ fun App(
             val uiState by practiceViewModel.uiState.collectAsState()
             val sessionCards by practiceViewModel.sessionCards.collectAsState()
             val currentCardIndex by practiceViewModel.currentCardIndex.collectAsState()
-            val globalAutoShowAnswer by settingsViewModel.autoShowAnswer.collectAsState()
+            val settings by settingsViewModel.settings.collectAsState()
             val groups by groupViewModel.allGroups.collectAsState()
             val savedGroupId by settingsViewModel.selectedGroupId.collectAsState()
             // The session is drawn from the selected group, the same fallback
             // as the home screen's; its own auto-show overrides the global one.
             val practisedGroup = groups.find { it.id == savedGroupId } ?: groups.firstOrNull()
-            val autoShowAnswer = practisedGroup?.autoShowAnswer ?: globalAutoShowAnswer
+            val autoShowAnswer = practisedGroup?.autoShowAnswer ?: settings.autoShowAnswer
 
             PracticeScreen(
                 uiState = uiState,
@@ -256,48 +253,19 @@ fun App(
         }
 
         Destination.CardList -> {
-            val allCards by cardViewModel.filteredCards.collectAsState()
-            val allCardsWithGroups by cardViewModel.allCardsWithGroups.collectAsState()
-            val groups by groupViewModel.allGroups.collectAsState()
-            val selectedGroupFilters by cardViewModel.selectedGroupFilters.collectAsState()
-            val selectedConceptFilters by cardViewModel.selectedConceptFilters.collectAsState()
-            val conceptsForFilter by cardViewModel.allConcepts.collectAsState()
-            val conceptsByCard by cardViewModel.conceptsByCard.collectAsState()
-            val learningGroups by groupViewModel.learningGroups.collectAsState()
-            val showDisabledFilter by cardViewModel.showDisabledFilter.collectAsState()
-            val searchQuery by cardViewModel.searchQuery.collectAsState()
-            val cardCount by cardViewModel.cardCount.collectAsState()
+            val state by cardViewModel.cardListState.collectAsState()
             val importExportState by cardViewModel.importExportState.collectAsState()
-            val cardSortOption by cardViewModel.cardSortOption.collectAsState()
-            val sortDirection by cardViewModel.sortDirection.collectAsState()
-            val isSelectionMode by cardViewModel.isSelectionMode.collectAsState()
-            val selectedCardIds by cardViewModel.selectedCardIds.collectAsState()
-
-            val cardsGlobalConceptScheduling by settingsViewModel.globalConceptScheduling.collectAsState()
+            val defaults by settingsViewModel.learningDefaults.collectAsState()
             CardListScreen(
                 listPosition = cardListPosition,
-                allCards = allCards,
-                allCardsWithGroups = allCardsWithGroups,
-                groups = groups,
-                selectedGroupFilters = selectedGroupFilters,
-                showDisabledFilter = showDisabledFilter,
-                concepts = conceptsForFilter,
-                selectedConceptFilters = selectedConceptFilters,
+                state = state,
                 onToggleConceptFilter = cardViewModel::toggleConceptFilter,
-                conceptsByCard = conceptsByCard,
-                searchQuery = searchQuery,
-                cardCount = cardCount,
                 importExportState = importExportState,
-                cardSortOption = cardSortOption,
-                sortDirection = sortDirection,
-                isSelectionMode = isSelectionMode,
-                selectedCardIds = selectedCardIds,
                 learningStatesFor = { cardId ->
                     remember(cardId) { cardViewModel.getLearningStatesForCard(cardId) }
                         .collectAsState(initial = emptyList()).value
                 },
-                learningGroups = learningGroups,
-                globalConceptScheduling = cardsGlobalConceptScheduling,
+                globalConceptScheduling = defaults.conceptScheduling,
                 onUpdateSearchQuery = cardViewModel::updateSearchQuery,
                 onClearGroupFilters = cardViewModel::clearGroupFilters,
                 onToggleGroupFilter = cardViewModel::toggleGroupFilter,
@@ -405,13 +373,12 @@ fun App(
         Destination.LearningGroups -> {
             val learningGroups by groupViewModel.learningGroups.collectAsState()
             val groups by groupViewModel.allGroups.collectAsState()
-
-            val globalConceptScheduling by settingsViewModel.globalConceptScheduling.collectAsState()
+            val defaults by settingsViewModel.learningDefaults.collectAsState()
 
             LearningGroupsScreen(
                 learningGroups = learningGroups,
                 groups = groups,
-                globalConceptScheduling = globalConceptScheduling,
+                globalConceptScheduling = defaults.conceptScheduling,
                 onEditLearningGroup = { navigator.go(Destination.EditLearningGroup(it)) },
                 onEditGlobal = { navigator.go(Destination.GlobalLearningSettings) },
                 onDeleteLearningGroups = groupViewModel::deleteLearningGroups,
@@ -421,27 +388,13 @@ fun App(
 
         Destination.GlobalLearningSettings -> {
             val totalCards by cardViewModel.cardCount.collectAsState()
-            val cardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
-            val randomizeDueCards by settingsViewModel.randomizeDueCards.collectAsState()
-            val randomizeBucketHours by settingsViewModel.randomizeBucketHours.collectAsState()
-            val practiceDays by settingsViewModel.practiceDays.collectAsState()
-            val maximumInterval by settingsViewModel.maximumInterval.collectAsState()
-            val fsrsRetention by settingsViewModel.fsrsRetention.collectAsState()
-            val fsrsEnableFuzzing by settingsViewModel.fsrsEnableFuzzing.collectAsState()
-            val conceptScheduling by settingsViewModel.globalConceptScheduling.collectAsState()
+            val defaults by settingsViewModel.learningDefaults.collectAsState()
             val practiceScheduleEstimate by cardViewModel.practiceScheduleEstimate.collectAsState()
             val historyWindowDays by cardViewModel.historyWindowDays.collectAsState()
 
             GlobalLearningSettingsScreen(
                 totalCards = totalCards,
-                cardsPerSession = cardsPerSession,
-                randomizeDueCards = randomizeDueCards,
-                randomizeBucketHours = randomizeBucketHours,
-                practiceDays = practiceDays,
-                maximumInterval = maximumInterval,
-                fsrsRetention = fsrsRetention,
-                fsrsEnableFuzzing = fsrsEnableFuzzing,
-                conceptScheduling = conceptScheduling,
+                defaults = defaults,
                 practiceScheduleEstimate = practiceScheduleEstimate,
                 historyWindowDays = historyWindowDays,
                 onSetCardsPerSession = settingsViewModel::setCardsPerSession,
@@ -460,13 +413,7 @@ fun App(
         is Destination.EditLearningGroup -> {
             val learningGroups by groupViewModel.learningGroups.collectAsState()
             val groups by groupViewModel.allGroups.collectAsState()
-            val globalCardsPerSession by settingsViewModel.cardsPerSession.collectAsState()
-            val globalRandomizeDueCards by settingsViewModel.randomizeDueCards.collectAsState()
-            val globalRandomizeBucketHours by settingsViewModel.randomizeBucketHours.collectAsState()
-            val globalPracticeDays by settingsViewModel.practiceDays.collectAsState()
-            val globalMaximumInterval by settingsViewModel.maximumInterval.collectAsState()
-            val globalFsrsRetention by settingsViewModel.fsrsRetention.collectAsState()
-            val globalFsrsEnableFuzzing by settingsViewModel.fsrsEnableFuzzing.collectAsState()
+            val defaults by settingsViewModel.learningDefaults.collectAsState()
             val practiceScheduleEstimate by cardViewModel.practiceScheduleEstimate.collectAsState()
             val historyWindowDays by cardViewModel.historyWindowDays.collectAsState()
 
@@ -474,13 +421,7 @@ fun App(
                 learningGroup = destination.learningGroup,
                 learningGroups = learningGroups,
                 groups = groups,
-                globalCardsPerSession = globalCardsPerSession,
-                globalRandomizeDueCards = globalRandomizeDueCards,
-                globalRandomizeBucketHours = globalRandomizeBucketHours,
-                globalPracticeDays = globalPracticeDays,
-                globalMaximumInterval = globalMaximumInterval,
-                globalFsrsRetention = globalFsrsRetention,
-                globalFsrsEnableFuzzing = globalFsrsEnableFuzzing,
+                globalDefaults = defaults,
                 practiceScheduleEstimate = practiceScheduleEstimate,
                 historyWindowDays = historyWindowDays,
                 onHistoryWindowDaysChange = { cardViewModel.setHistoryWindowDays(it) },
@@ -496,11 +437,11 @@ fun App(
             val concepts by conceptViewModel.concepts.collectAsState()
             val conceptLearningGroups by conceptViewModel.learningGroups.collectAsState()
             val error by conceptViewModel.error.collectAsState()
-            val globalConceptScheduling by settingsViewModel.globalConceptScheduling.collectAsState()
+            val defaults by settingsViewModel.learningDefaults.collectAsState()
 
             ConceptsScreen(
                 concepts = concepts,
-                globalConceptScheduling = globalConceptScheduling,
+                globalConceptScheduling = defaults.conceptScheduling,
                 onNavigateToLearningGroups = { navigator.go(Destination.LearningGroups) },
                 learningGroups = conceptLearningGroups,
                 error = error,
@@ -577,27 +518,12 @@ fun App(
         }
 
         Destination.Settings -> {
-            val themeMode by settingsViewModel.themeMode.collectAsState()
-            val autoShowAnswer by settingsViewModel.autoShowAnswer.collectAsState()
-            val autoBackupEnabled by settingsViewModel.autoBackupEnabled.collectAsState()
-            val autoBackupIntervalDays by settingsViewModel.autoBackupIntervalDays.collectAsState()
-            val lastBackupTime by settingsViewModel.lastBackupTime.collectAsState()
-            val maxBackupsKept by settingsViewModel.maxBackupsKept.collectAsState()
-            val backupReminderEnabled by settingsViewModel.backupReminderEnabled.collectAsState()
-            val backupReminderIntervalDays by
-                settingsViewModel.backupReminderIntervalDays.collectAsState()
+            val settings by settingsViewModel.settings.collectAsState()
 
             SettingsScreen(
                 buildInfo = buildInfo,
-                themeMode = themeMode,
-                autoShowAnswer = autoShowAnswer,
-                autoBackupEnabled = autoBackupEnabled,
-                autoBackupIntervalDays = autoBackupIntervalDays,
-                lastBackupTime = lastBackupTime,
-                maxBackupsKept = maxBackupsKept,
+                settings = settings,
                 automaticBackupAvailable = settingsViewModel.automaticBackups,
-                backupReminderEnabled = backupReminderEnabled,
-                backupReminderIntervalDays = backupReminderIntervalDays,
                 backupFolderName = backupFolderName,
                 onPickBackupFolder = onPickBackupFolder,
                 onSetThemeMode = settingsViewModel::setThemeMode,
@@ -618,9 +544,8 @@ fun App(
 /**
  * Binds the view models the card editor needs.
  *
- * Both flows are remembered by card id so collectAsState does not restart --
- * and briefly re-emit emptyList() -- on every recomposition, which would
- * reset the editor's group selection under it.
+ * The card's own data is remembered by card id so collectAsState does not
+ * restart -- and briefly re-emit an empty card -- on every recomposition.
  */
 @Composable
 private fun CardEditor(
@@ -633,56 +558,21 @@ private fun CardEditor(
 ) {
     val allGroups by groupViewModel.allGroups.collectAsState()
     val learningGroups by groupViewModel.learningGroups.collectAsState()
-    val cardGroupsFlow = remember(cardToEdit?.id) {
-        cardToEdit?.let { cardViewModel.getGroupsForCard(it.id) } ?: flowOf(emptyList<Group>())
-    }
-    val cardGroups by cardGroupsFlow.collectAsState(initial = emptyList())
-    val learningStatesFlow = remember(cardToEdit?.id) {
-        cardToEdit?.let { cardViewModel.getLearningStatesForCard(it.id) }
-            ?: flowOf(emptyList<CardLearningState>())
-    }
-    val learningStates by learningStatesFlow.collectAsState(initial = emptyList())
     val allConcepts by cardViewModel.allConcepts.collectAsState()
-    val cardConceptsFlow = remember(cardToEdit?.id) {
-        cardToEdit?.let { cardViewModel.getConceptsForCard(it.id) } ?: flowOf(emptyList<Concept>())
-    }
-    val cardConcepts by cardConceptsFlow.collectAsState(initial = emptyList())
-    val cardConceptLinksFlow = remember(cardToEdit?.id) {
-        cardToEdit?.let { cardViewModel.getConceptLinksForCard(it.id) }
-            ?: flowOf(emptyList<com.fencing.spacedrepetition.data.model.CardConceptCrossRef>())
-    }
-    val cardConceptLinks by cardConceptLinksFlow.collectAsState(initial = emptyList())
-    val conceptLinks by cardViewModel.conceptLearningGroups.collectAsState()
-    val globalConceptScheduling by settingsViewModel.globalConceptScheduling.collectAsState()
-    // Where this card is learnt, the concepts available there, and -- when
-    // some of those contexts do not schedule by concept -- a note saying so.
-    // Tagging is allowed either way.
-    val learningContexts = LearningContexts(allGroups, learningGroups)
-    val cardContextsFor = { groupIds: Set<Long> -> learningContexts.ofCardInGroups(groupIds) }
-    val offeredConceptIdsFor = { groupIds: Set<Long> ->
-        offeredConceptIds(allConcepts, conceptLinks, learningContexts.ofCardInGroups(groupIds))
-    }
-    val schedulingOffNoteFor = { groupIds: Set<Long> ->
-        val contexts = learningContexts.ofCardInGroups(groupIds)
-        val on = learningContexts.schedulingByConcept(contexts, globalConceptScheduling)
-        val off = (contexts - on).map(learningContexts::name).sorted()
-        when {
-            off.isEmpty() -> null
-            on.isEmpty() -> "Concept scheduling is off for ${off.joinToString(", ")}. Tags are kept, " +
-                "but this card is scheduled card by card until it is turned on."
-            else -> "Concept scheduling is off in ${off.joinToString(", ")}: there, this card is " +
-                "scheduled card by card."
-        }
-    }
+    val offer by cardViewModel.conceptOffer.collectAsState()
+    val defaults by settingsViewModel.learningDefaults.collectAsState()
+    val loaded by remember(cardToEdit?.id) {
+        cardToEdit?.let { cardViewModel.editedCard(it.id) } ?: flowOf(EditedCard())
+    }.collectAsState(initial = EditedCard())
 
     AddEditCardScreen(
         allGroups = allGroups,
-        cardGroups = cardGroups,
-        learningStates = learningStates,
+        cardGroups = loaded.groups,
+        learningStates = loaded.learningStates,
         learningGroups = learningGroups,
         allConcepts = allConcepts,
-        cardConcepts = cardConcepts,
-        cardConceptWeights = cardConceptLinks.filter { it.weight != 1.0 }.associate { it.conceptId to it.weight },
+        cardConcepts = loaded.concepts,
+        cardConceptWeights = loaded.conceptWeights,
         cardToEdit = cardToEdit,
         initialGroupId = initialGroupId,
         onComputeGrade = { cardId, grade, groupId, onComputed ->
@@ -699,9 +589,9 @@ private fun CardEditor(
             cardViewModel.addCard(question, answer, groupIds, imagePaths, concepts, onSuccess)
         },
         onCreateGroup = { name, onCreated -> groupViewModel.addGroup(name, onSuccess = onCreated) },
-        cardContextsFor = cardContextsFor,
-        offeredConceptIdsFor = offeredConceptIdsFor,
-        schedulingOffNoteFor = schedulingOffNoteFor,
+        cardContextsFor = offer::contextsFor,
+        offeredConceptIdsFor = offer::offeredFor,
+        schedulingOffNoteFor = { offer.schedulingOffNote(it, defaults.conceptScheduling) },
         onCreateConcept = cardViewModel::createConcept,
         onNavigateBack = onNavigateBack
     )
@@ -717,13 +607,13 @@ private fun GroupEditor(
     onNavigateBack: () -> Unit
 ) {
     val learningGroups by groupViewModel.learningGroups.collectAsState()
-    val globalAutoShowAnswer by settingsViewModel.autoShowAnswer.collectAsState()
+    val settings by settingsViewModel.settings.collectAsState()
 
     GroupEditScreen(
         group = group,
         learningGroups = learningGroups,
         onCreateLearningGroup = { name, onCreated -> groupViewModel.addLearningGroup(name, onCreated) },
-        globalAutoShowAnswer = globalAutoShowAnswer,
+        globalAutoShowAnswer = settings.autoShowAnswer,
         onSave = onSave,
         onNavigateBack = onNavigateBack
     )
