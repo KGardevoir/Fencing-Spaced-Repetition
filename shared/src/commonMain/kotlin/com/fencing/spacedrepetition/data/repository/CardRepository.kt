@@ -32,7 +32,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 
-const val GROUP_NAME_CARD_EDIT = "card_edit"
+const val GROUP_NAME_CARD_EDIT = LearningContexts.CARD_EDITOR
 
 /**
  * Recorded on every [ReviewLog]. FSRS is the only scheduler now; the column
@@ -106,19 +106,11 @@ class CardRepository(
         preferences.globalConceptScheduling,
         minuteTicker()
     ) { (cardsWithGroups, cardStates, learningGroups), (concepts, links, conceptStates), globalByConcept, now ->
-        val learningGroupIds = learningGroups.map { it.id }.toSet()
-        val pool: List<Card>
-        val learningGroupId: Long?
-        if (groupId == null) {
-            pool = cardsWithGroups.map { it.card }
-            learningGroupId = null
-        } else {
-            val group = cardsWithGroups.firstNotNullOfOrNull { cwg -> cwg.groups.firstOrNull { it.id == groupId } }
-            pool = cardsWithGroups.filter { cwg -> cwg.groups.any { it.id == groupId } }.map { it.card }
-            learningGroupId = group?.learningGroupId?.takeIf { it in learningGroupIds }
-        }
-        val byConcept = if (learningGroupId == null) globalByConcept
-            else learningGroups.first { it.id == learningGroupId }.useConcepts
+        val contexts = LearningContexts(cardsWithGroups.flatMap { it.groups }.distinctBy { it.id }, learningGroups)
+        val pool = if (groupId == null) cardsWithGroups.map { it.card }
+            else cardsWithGroups.filter { cwg -> cwg.groups.any { it.id == groupId } }.map { it.card }
+        val learningGroupId = contexts.ofGroupId(groupId)
+        val byConcept = contexts.schedulesByConcept(learningGroupId, globalByConcept)
         val enabled = pool.filter { !it.isDisabled }
         val enabledIds = enabled.map { it.id }.toSet()
         countDue(
@@ -883,14 +875,13 @@ class CardRepository(
             .groupBy({ it.conceptId }, { it.cardId to shares.getValue(it.cardId to it.conceptId) })
             .mapValues { it.value.toMap() }
         val logsByCard = reviewLogDao.getAllReviewLogsSync().groupBy { it.cardId }
-        val groups = GroupLookup(groupDao.getAllGroups().first())
-        val learningGroupIds = groupDao.getAllLearningGroups().first().map { it.id }.toSet()
+        val contexts = LearningContexts(groupDao.getAllGroups().first(), groupDao.getAllLearningGroups().first())
         // When each card's progress was last reset, per context: the card's
         // own for Global, its learning-group state's for each learning group.
         val globalResets = cardDao.getAllCardsAsList().associate { it.id to it.lastReset }
         val learningGroupResets = groupDao.getAllLearningStatesSync()
             .associate { (it.cardId to it.learningGroupId) to it.lastReset }
-        fun resetOf(cardId: Long, context: ContextKey): Long = when (val lg = context.learningGroupId) {
+        fun resetOf(cardId: Long, context: LearningContext): Long = when (val lg = context.learningGroupId) {
             null -> globalResets[cardId] ?: 0L
             else -> learningGroupResets[cardId to lg] ?: 0L
         }
@@ -902,44 +893,23 @@ class CardRepository(
             if (onlyWithHistory && logs.isEmpty()) return@forEach
 
             val byContext = logs.mapNotNull { log ->
-                val context = when {
-                    log.groupUid == null && (log.groupName == null || log.groupName == GROUP_NAME_CARD_EDIT) ->
-                        ContextKey(null)
-                    else -> groups.of(log)?.let { ContextKey(it.learningGroupId) } ?: return@mapNotNull null
-                }
+                val context = contexts.ofReview(log) ?: return@mapNotNull null
                 // Only progress since the card was last reset in that context.
                 if (log.reviewTime <= resetOf(log.cardId, context)) null else context to log
             }.groupBy({ it.first }, { it.second })
 
             val weightOf = { cardId: Long -> weights[cardId] ?: 1.0 }
-            val global = replayConceptHistory(concept.id, 0L, byContext[ContextKey(null)].orEmpty(), groups, weightOf)
+            val global = replayConceptHistory(concept.id, 0L, byContext[LearningContext.GLOBAL].orEmpty(), contexts, weightOf)
                 ?: ConceptLearningState(concept.id, 0L)
             conceptDao.updateConcept(concept.withGlobalState(global))
 
             conceptDao.deleteAllLearningStatesForConcept(concept.id)
             byContext.forEach { (key, contextLogs) ->
                 val learningGroupId = key.learningGroupId ?: return@forEach
-                if (learningGroupId !in learningGroupIds) return@forEach
-                replayConceptHistory(concept.id, learningGroupId, contextLogs, groups, weightOf)
+                replayConceptHistory(concept.id, learningGroupId, contextLogs, contexts, weightOf)
                     ?.let { conceptDao.upsertConceptLearningState(it) }
             }
         }
-    }
-
-    /** A learning context: a learning group's id, or null for Global. */
-    private data class ContextKey(val learningGroupId: Long?)
-
-    /**
-     * Finds the group a review was made in: by its stable identifier, or --
-     * for a review recorded or imported without one -- by the name it noted,
-     * the oldest group of that name winning, as the migration did.
-     */
-    private class GroupLookup(groups: List<Group>) {
-        private val byUid = groups.associateBy { it.uid }
-        private val byName = groups.sortedBy { it.id }.groupBy { it.name }.mapValues { it.value.first() }
-        fun of(log: ReviewLog): Group? = of(log.groupUid, log.groupName)
-        fun of(uid: String?, name: String?): Group? =
-            if (uid != null) byUid[uid] else name?.let { byName[it] }
     }
 
     /** Replay one context's logs into a state, or null when they hold no review. */
@@ -947,14 +917,14 @@ class CardRepository(
         conceptId: Long,
         learningGroupId: Long,
         logs: List<ReviewLog>,
-        groups: GroupLookup,
+        contexts: LearningContexts,
         weightOf: (cardId: Long) -> Double
     ): ConceptLearningState? {
         val events = conceptReviewEvents(logs, weightOf)
         if (events.isEmpty()) return null
         var state = ConceptLearningState(conceptId, learningGroupId)
         events.forEach { event ->
-            val groupId = groups.of(event.groupUid, event.groupName)?.id
+            val groupId = contexts.groupOf(event.groupUid, event.groupName)?.id
             state = scheduleConceptState(state, event.grade, event.time, groupId, event.stabilityMultiplier)
         }
         return state

@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.LearningContexts
 import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.ui.components.ConfirmDeleteDialog
 import com.fencing.spacedrepetition.ui.components.AppIcons
@@ -61,7 +62,7 @@ fun LearningGroupsScreen(
     var deleting by remember { mutableStateOf<List<LearningGroup>?>(null) }
     val selection = rememberSelectionState(learningGroups.map { it.id })
 
-    val globalGroups = groups.filter { group -> learningGroups.none { it.id == group.learningGroupId } }
+    val globalGroups = LearningContexts(groups, learningGroups).let { contexts -> groups.filter { contexts.of(it) == null } }
 
     Scaffold(
         topBar = {

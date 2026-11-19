@@ -115,14 +115,13 @@ fun ConceptsScreen(
 
     // Learning-context filter chips, as on the card list: null is Global.
     var contextFilters by remember { mutableStateOf(emptySet<Long?>()) }
-    val learningGroupIds = learningGroups.map { it.id }.toSet()
 
     val shown = concepts.filter { summary ->
         (query.isBlank() ||
             summary.concept.name.contains(query.trim(), ignoreCase = true) ||
             summary.concept.description.contains(query.trim(), ignoreCase = true) ||
             summary.groups.any { it.name.contains(query.trim(), ignoreCase = true) }) &&
-            (contextFilters.isEmpty() || conceptContextsOf(summary, learningGroupIds).any { it in contextFilters })
+            (contextFilters.isEmpty() || conceptContextsOf(summary).any { it in contextFilters })
     }
 
     Scaffold(
@@ -288,13 +287,12 @@ private fun <T> Set<T>.toggled(item: T): Set<T> = if (item in this) this - item 
  * Global): where it is restricted to, when it is; otherwise -- available
  * everywhere -- where its cards are learnt.
  */
-private fun conceptContextsOf(summary: ConceptSummary, learningGroupIds: Set<Long>): Set<Long?> {
+private fun conceptContextsOf(summary: ConceptSummary): Set<Long?> {
     val restricted = buildSet<Long?> {
         addAll(summary.learningGroupIds)
         if (summary.concept.inGlobal) add(null)
     }
-    if (restricted.isNotEmpty()) return restricted
-    return summary.groups.map { group -> group.learningGroupId?.takeIf { it in learningGroupIds } }.toSet()
+    return restricted.ifEmpty { summary.cardContexts }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -509,13 +507,10 @@ private fun LearningParameters(
     lastContextKey: String?,
     onContextChosen: (String) -> Unit
 ) {
-    // Its cards' learning contexts: each group's learning group, or Global
-    // for a group in none (or one since deleted) and for cards in no group.
-    val learningGroupIds = learningGroups.map { it.id }.toSet()
-    val inGlobal = summary.cardIds.isNotEmpty() &&
-        (summary.groups.isEmpty() || summary.groups.any { it.learningGroupId !in learningGroupIds })
-    val contexts: List<LearningGroup?> = (if (inGlobal) listOf<LearningGroup?>(null) else emptyList()) +
-        learningGroups.filter { lg -> summary.groups.any { it.learningGroupId == lg.id } }
+    // Its cards' learning contexts, Global first.
+    val contexts: List<LearningGroup?> =
+        (if (null in summary.cardContexts) listOf<LearningGroup?>(null) else emptyList()) +
+            learningGroups.filter { it.id in summary.cardContexts }
     if (contexts.isEmpty()) {
         Text(
             "No cards carry this concept yet.",

@@ -26,14 +26,10 @@ class ConceptAvailabilityTest {
         ConceptLearningGroupCrossRef(102, 2)
     )
 
-    private fun offered(groupIds: Set<Long>) =
-        offeredConceptIds(concepts, links, learningContextsOf(groupIds, groups))
+    private val contexts = LearningContexts(groups, learningGroups)
 
-    @Test
-    fun `a card is learnt in its groups' learning contexts, or Global with none`() {
-        assertEquals(setOf<Long?>(1L, null), learningContextsOf(setOf(10L, 12L), groups))
-        assertEquals(setOf<Long?>(null), learningContextsOf(emptySet(), groups))
-    }
+    private fun offered(groupIds: Set<Long>) =
+        offeredConceptIds(concepts, links, contexts.ofCardInGroups(groupIds))
 
     @Test
     fun `only concepts available in the card's contexts are offered`() {
@@ -49,22 +45,14 @@ class ConceptAvailabilityTest {
     }
 
     @Test
-    fun `concept contexts are the ones whose switch is on`() {
-        assertEquals(setOf<Long?>(1L), conceptContexts(setOf(1L, 2L, null), false, learningGroups))
-        assertEquals(setOf<Long?>(1L, null), conceptContexts(setOf(1L, 2L, null), true, learningGroups))
-        assertEquals("Global", contextName(null, learningGroups))
-        assertEquals("Drills", contextName(2L, learningGroups))
-    }
-
-    @Test
     fun `a concept with no availability set is available everywhere`() {
         val anywhere = Concept(id = 103, name = "Footwork")
         val withIt = concepts + anywhere
         for (groupIds in listOf(setOf(10L), setOf(11L), setOf(12L), emptySet())) {
-            val offered = offeredConceptIds(withIt, links, learningContextsOf(groupIds, groups))
+            val offered = offeredConceptIds(withIt, links, contexts.ofCardInGroups(groupIds))
             assertTrue(103L in offered, "not offered for $groupIds")
         }
         // Restricted concepts stay restricted.
-        assertEquals(setOf(100L, 103L), offeredConceptIds(withIt, links, learningContextsOf(setOf(10L), groups)))
+        assertEquals(setOf(100L, 103L), offeredConceptIds(withIt, links, contexts.ofCardInGroups(setOf(10L))))
     }
 }

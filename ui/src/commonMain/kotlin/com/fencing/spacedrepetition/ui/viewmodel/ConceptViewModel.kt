@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.data.model.Concept
 import com.fencing.spacedrepetition.data.model.ConceptLearningState
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.LearningContexts
 import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.ConceptRepository
@@ -32,13 +33,16 @@ import kotlinx.coroutines.launch
  *   holds progress in, so nothing learnt disappears from view.
  * @param learningGroupIds the learning groups the concept belongs to -- where
  *   the card editor offers it; Global is [Concept.inGlobal].
+ * @param cardContexts the learning contexts its cards are learnt in (null is
+ *   Global); see [LearningContexts.ofCard].
  */
 data class ConceptSummary(
     val concept: Concept,
     val cardIds: Set<Long>,
     val groups: List<Group>,
     val states: List<Pair<LearningGroup?, ConceptLearningState>>,
-    val learningGroupIds: Set<Long> = emptySet()
+    val learningGroupIds: Set<Long> = emptySet(),
+    val cardContexts: Set<Long?> = emptySet()
 )
 
 class ConceptViewModel(
@@ -62,6 +66,7 @@ class ConceptViewModel(
             groupsWithCards.forEach { gwc -> gwc.cards.forEach { getOrPut(it.id) { mutableListOf() } += gwc.group } }
         }
         val statesByConcept = learningStates.groupBy { it.conceptId }
+        val contexts = LearningContexts(groupsWithCards.map { it.group }, learningGroups)
 
         concepts.map { concept ->
             val cardIds = cardsByConcept[concept.id].orEmpty()
@@ -70,17 +75,16 @@ class ConceptViewModel(
                 .sortedBy { it.name.lowercase() }
             val stored = statesByConcept[concept.id].orEmpty().associateBy { it.learningGroupId }
 
-            val usedLearningGroupIds = groups.mapNotNull { it.learningGroupId }.toSet() + stored.keys
-            val showGlobal = groups.isEmpty() || groups.any { it.learningGroupId == null } ||
-                concept.fsrsReps > 0
+            val cardContexts = cardIds.flatMap { contexts.ofCard(groupsByCard[it].orEmpty()) }.toSet()
+            val showGlobal = cardIds.isEmpty() || null in cardContexts || concept.fsrsReps > 0
             val states = buildList {
                 if (showGlobal) add(null to concept.globalState())
-                learningGroups.filter { it.id in usedLearningGroupIds }.forEach { lg ->
+                learningGroups.filter { it.id in cardContexts || it.id in stored }.forEach { lg ->
                     add(lg to (stored[lg.id] ?: ConceptLearningState(concept.id, lg.id)))
                 }
             }
 
-            ConceptSummary(concept, cardIds, groups, states)
+            ConceptSummary(concept, cardIds, groups, states, cardContexts = cardContexts)
         }
     }
 

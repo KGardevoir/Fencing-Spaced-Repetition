@@ -63,7 +63,12 @@ learning group is the context. No group (all-cards practice, the card editor
 without a group) is Global. A review whose group no longer exists belongs to
 no context. Because the group is found by `uid`, renaming a group keeps its
 history where it was; moving a group to another learning group moves its
-history with it.
+history with it. A review logged before groups had a `uid` is found by the
+name it recorded, the oldest group of that name.
+
+`LearningContexts` (shared `data/model`) is the one implementation of these
+rules; scheduling, concept derivation, the retention report and the screens
+all go through it.
 
 ## Learning concepts
 

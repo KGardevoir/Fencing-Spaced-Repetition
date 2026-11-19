@@ -14,9 +14,7 @@ import androidx.compose.ui.backhandler.BackHandler
 import com.fencing.spacedrepetition.BuildInfo
 import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.Concept
-import com.fencing.spacedrepetition.data.model.conceptContexts
-import com.fencing.spacedrepetition.data.model.contextName
-import com.fencing.spacedrepetition.data.model.learningContextsOf
+import com.fencing.spacedrepetition.data.model.LearningContexts
 import com.fencing.spacedrepetition.data.model.offeredConceptIds
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.ui.navigation.Destination
@@ -659,14 +657,15 @@ private fun CardEditor(
     // Where this card is learnt, the concepts available there, and -- when
     // some of those contexts do not schedule by concept -- a note saying so.
     // Tagging is allowed either way.
-    val cardContextsFor = { groupIds: Set<Long> -> learningContextsOf(groupIds, allGroups) }
+    val learningContexts = LearningContexts(allGroups, learningGroups)
+    val cardContextsFor = { groupIds: Set<Long> -> learningContexts.ofCardInGroups(groupIds) }
     val offeredConceptIdsFor = { groupIds: Set<Long> ->
-        offeredConceptIds(allConcepts, conceptLinks, learningContextsOf(groupIds, allGroups))
+        offeredConceptIds(allConcepts, conceptLinks, learningContexts.ofCardInGroups(groupIds))
     }
     val schedulingOffNoteFor = { groupIds: Set<Long> ->
-        val contexts = learningContextsOf(groupIds, allGroups)
-        val on = conceptContexts(contexts, globalConceptScheduling, learningGroups)
-        val off = (contexts - on).map { contextName(it, learningGroups) }.sorted()
+        val contexts = learningContexts.ofCardInGroups(groupIds)
+        val on = learningContexts.schedulingByConcept(contexts, globalConceptScheduling)
+        val off = (contexts - on).map(learningContexts::name).sorted()
         when {
             off.isEmpty() -> null
             on.isEmpty() -> "Concept scheduling is off for ${off.joinToString(", ")}. Tags are kept, " +

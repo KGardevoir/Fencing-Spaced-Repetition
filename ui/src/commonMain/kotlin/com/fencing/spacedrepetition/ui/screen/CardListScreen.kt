@@ -38,6 +38,7 @@ import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.CardWithGroups
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.LearningContexts
 import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.ui.viewmodel.CardSortOption
 import com.fencing.spacedrepetition.ui.viewmodel.ImportExportState
@@ -120,13 +121,10 @@ fun CardListScreen(
     var showBulkResetDialog by remember { mutableStateOf(false) }
     // Resetting a card where concepts schedule would reset the concepts'
     // progress from it too, so reset is offered only where none do.
+    val learningContexts = LearningContexts(groups, learningGroups)
     fun schedulesByConcept(cardIds: Collection<Long>): Boolean = cardIds.any { cardId ->
         val cardGroups = allCardsWithGroups.find { it.card.id == cardId }?.groups.orEmpty()
-        val contexts = if (cardGroups.isEmpty()) setOf<Long?>(null) else cardGroups.map { it.learningGroupId }.toSet()
-        contexts.any { context ->
-            if (context == null) globalConceptScheduling
-            else learningGroups.find { it.id == context }?.useConcepts ?: globalConceptScheduling
-        }
+        learningContexts.ofCard(cardGroups).any { learningContexts.schedulesByConcept(it, globalConceptScheduling) }
     }
     var showGroupSelectionDialog by remember { mutableStateOf(false) }
     var showCsvGroupSelectionForExport by remember { mutableStateOf(false) }

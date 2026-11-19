@@ -12,6 +12,8 @@ import com.fencing.spacedrepetition.data.model.ConceptLearningState
 import com.fencing.spacedrepetition.data.model.CardGroupCrossRef
 import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.LearningContext
+import com.fencing.spacedrepetition.data.model.LearningContexts
 import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.repository.GROUP_NAME_CARD_EDIT
@@ -241,17 +243,8 @@ object RetentionReportBuilder {
     ): RetentionReport {
         val enabledCards = cards.filter { !it.isDisabled }
         val cardsById = cards.associateBy { it.id }
-        val groupsByName = groups.associateBy { it.name }
-        val groupsByUid = groups.associateBy { it.uid }
-        // The group a review was made in: by its stable identifier, or by the
-        // name it noted for a review recorded without one.
-        fun groupOf(log: ReviewLog): Group? =
-            log.groupUid?.let { groupsByUid[it] } ?: log.groupName?.let { groupsByName[it] }
-        val learningGroupIds = learningGroups.map { it.id }.toSet()
+        val contexts = LearningContexts(groups, learningGroups)
         val statesByKey = learningStates.associateBy { it.cardId to it.learningGroupId }
-
-        // A group pointed at a learning group that no longer exists learns Global.
-        fun contextOf(group: Group): Long? = group.learningGroupId?.takeIf { it in learningGroupIds }
 
         val cardIdsByGroup: Map<Long, Set<Long>> = crossRefs
             .groupBy({ it.groupId }, { it.cardId })
@@ -263,22 +256,11 @@ object RetentionReportBuilder {
         fun ReviewLog.counts() = parseState(stateBefore) != STATE_NEW
         val countedLogs = gradedLogs.filter { it.counts() }
 
-        // Which context a log graded. A log keeps the stable identifier of the
-        // group it was practised in, so this follows the group as it is today:
-        // renaming a group or moving it between learning groups moves its
-        // history with it.
-        // Practice across all cards, and grades from the card editor, are Global.
-        // A group that has since been deleted is attributed nowhere but overall.
-        val unattributed = Any()
-        fun logContext(log: ReviewLog): Any? {
-            val name = log.groupName
-            if (log.groupUid == null && (name.isNullOrBlank() || name == GROUP_NAME_CARD_EDIT)) return null
-            val group = groupOf(log) ?: return unattributed
-            return contextOf(group)
-        }
-        // Graded logs, first sightings included: they set a card's first stability.
-        val gradedByContext: Map<Any?, List<ReviewLog>> = gradedLogs.groupBy(::logContext)
-        val logsByGroupId = countedLogs.groupBy { groupOf(it)?.id }
+        // Graded logs, first sightings included (they set a card's first
+        // stability), by the context they graded as the groups are today; a
+        // log from a group since deleted (key null) counts only overall.
+        val gradedByContext: Map<LearningContext?, List<ReviewLog>> = gradedLogs.groupBy(contexts::ofReview)
+        val logsByGroupId = countedLogs.groupBy { contexts.groupOf(it)?.id }
 
         /**
          * Stability as of the end of each period, from the latest grade each
@@ -375,9 +357,6 @@ object RetentionReportBuilder {
         val conceptIdsByCard = cardConceptLinks.groupBy({ it.cardId }, { it.conceptId })
         val conceptStatesByKey = conceptStates.associateBy { it.conceptId to it.learningGroupId }
 
-        fun schedulesByConcept(lgId: Long?): Boolean =
-            if (lgId == null) globalConceptScheduling else learningGroups.firstOrNull { it.id == lgId }?.useConcepts == true
-
         fun conceptSnapshot(concept: Concept, lgId: Long?): FsrsState =
             (if (lgId == null) concept.fsrs else conceptStatesByKey[concept.id to lgId]?.fsrs) ?: FsrsState()
 
@@ -424,7 +403,7 @@ object RetentionReportBuilder {
             learningGroups.sortedBy { it.name.lowercase() }.map { it.id }
 
         val contextReports = contextIds.map { lgId ->
-            val memberGroups = groups.filter { contextOf(it) == lgId }
+            val memberGroups = groups.filter { contexts.of(it) == lgId }
             // Every card keeps a Global state, so Global covers the whole
             // collection; a learning group covers the cards in its groups.
             val contextCards = if (lgId == null) enabledCards else {
@@ -432,7 +411,7 @@ object RetentionReportBuilder {
                 enabledCards.filter { it.id in ids }
             }
             val contextCardIds = contextCards.map { it.id }.toSet()
-            val contextGraded = gradedByContext[lgId].orEmpty()
+            val contextGraded = gradedByContext[LearningContext(lgId)].orEmpty()
             val contextLogs = contextGraded.filter { it.counts() }
             val logsByCard = contextLogs.groupBy { it.cardId }
             val gradedByCard = contextGraded.groupBy { it.cardId }
@@ -473,7 +452,7 @@ object RetentionReportBuilder {
                     stabilityTrendOf(contextGraded.filter { it.cardId in contextCardIds }.map { it.cardId to it })
                 ),
                 cards = cardRows,
-                conceptScheduling = schedulesByConcept(lgId),
+                conceptScheduling = contexts.schedulesByConcept(lgId, globalConceptScheduling),
                 conceptSummary = conceptSummary,
                 concepts = conceptRows
             )
@@ -485,7 +464,7 @@ object RetentionReportBuilder {
         // --- Card groups --------------------------------------------------------
 
         val groupReports = groups.sortedBy { it.name.lowercase() }.map { group ->
-            val lgId = contextOf(group)
+            val lgId = contexts.of(group)
             val ids = cardIdsByGroup[group.id].orEmpty()
             val groupCards = enabledCards.filter { it.id in ids }
             val (conceptSummary, conceptRows) =
@@ -501,13 +480,13 @@ object RetentionReportBuilder {
                     // Stability is the state the group's cards share in its
                     // learning context, whichever group the grade came from.
                     stabilityTrendOf(
-                        gradedByContext[lgId].orEmpty()
+                        gradedByContext[LearningContext(lgId)].orEmpty()
                             .filter { it.cardId in ids && cardsById[it.cardId]?.isDisabled == false }
                             .map { it.cardId to it }
                     )
                 ),
                 cards = contextCards[lgId].orEmpty().filter { it.cardId in ids },
-                conceptScheduling = schedulesByConcept(lgId),
+                conceptScheduling = contexts.schedulesByConcept(lgId, globalConceptScheduling),
                 conceptSummary = conceptSummary,
                 concepts = conceptRows
             )
@@ -527,7 +506,7 @@ object RetentionReportBuilder {
             stabilityTrendOf(
                 gradedLogs
                     .filter { it.cardId in enabledIds }
-                    .mapNotNull { log -> logContext(log).takeIf { it !== unattributed }?.let { ctx -> (log.cardId to ctx) to log } }
+                    .mapNotNull { log -> contexts.ofReview(log)?.let { ctx -> (log.cardId to ctx) to log } }
             )
         )
 
