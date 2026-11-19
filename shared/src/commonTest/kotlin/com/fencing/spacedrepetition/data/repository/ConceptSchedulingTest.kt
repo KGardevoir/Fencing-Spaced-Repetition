@@ -18,28 +18,28 @@ class ConceptSchedulingTest {
     @Test
     fun `a single grade passes straight through`() {
         Grade.entries.filter { it != Grade.SKIP }.forEach {
-            assertEquals(it, CardRepository.combineConceptGrades(listOf(it)))
+            assertEquals(it, ConceptScheduling.combineConceptGrades(listOf(it)))
         }
     }
 
     @Test
     fun `several grades average to the nearest grade, half up`() {
-        assertEquals(Grade.HARD, CardRepository.combineConceptGrades(listOf(Grade.AGAIN, Grade.GOOD)))
-        assertEquals(Grade.GOOD, CardRepository.combineConceptGrades(listOf(Grade.HARD, Grade.GOOD)))
-        assertEquals(Grade.GOOD, CardRepository.combineConceptGrades(listOf(Grade.AGAIN, Grade.EASY, Grade.EASY)))
-        assertEquals(Grade.HARD, CardRepository.combineConceptGrades(listOf(Grade.AGAIN, Grade.AGAIN, Grade.EASY)))
+        assertEquals(Grade.HARD, ConceptScheduling.combineConceptGrades(listOf(Grade.AGAIN, Grade.GOOD)))
+        assertEquals(Grade.GOOD, ConceptScheduling.combineConceptGrades(listOf(Grade.HARD, Grade.GOOD)))
+        assertEquals(Grade.GOOD, ConceptScheduling.combineConceptGrades(listOf(Grade.AGAIN, Grade.EASY, Grade.EASY)))
+        assertEquals(Grade.HARD, ConceptScheduling.combineConceptGrades(listOf(Grade.AGAIN, Grade.AGAIN, Grade.EASY)))
     }
 
     @Test
     fun `skips and empty lists are refused`() {
-        assertFailsWith<IllegalArgumentException> { CardRepository.combineConceptGrades(emptyList()) }
-        assertFailsWith<IllegalArgumentException> { CardRepository.combineConceptGrades(listOf(Grade.SKIP)) }
+        assertFailsWith<IllegalArgumentException> { ConceptScheduling.combineConceptGrades(emptyList()) }
+        assertFailsWith<IllegalArgumentException> { ConceptScheduling.combineConceptGrades(listOf(Grade.SKIP)) }
     }
 
     // ==================== greedyDotProduct ====================
 
     private fun draw(vectors: Map<Long, Map<String, Double>>, need: Map<String, Double>, limit: Int = 10) =
-        CardRepository.greedyDotProduct(vectors.keys.sorted(), vectors, need, limit)
+        ConceptScheduling.greedyDotProduct(vectors.keys.sorted(), vectors, need, limit)
 
     @Test
     fun `the card meeting the most need is taken first`() {
@@ -82,22 +82,22 @@ class ConceptSchedulingTest {
         // Card 1 meets a little more need, but was graded just now; card 2 has rested.
         val vectors = mapOf(1L to mapOf("A" to 1.0), 2L to mapOf("B" to 1.0))
         val need = mapOf("A" to 0.6, "B" to 0.5)
-        val fresh = CardRepository.stalenessFactor(0.0)
-        val rested = CardRepository.stalenessFactor(30.0)
-        val picks = CardRepository.greedyDotProduct(listOf(1L, 2L), vectors, need, 1) { if (it == 1L) fresh else rested }
+        val fresh = ConceptScheduling.stalenessFactor(0.0)
+        val rested = ConceptScheduling.stalenessFactor(30.0)
+        val picks = ConceptScheduling.greedyDotProduct(listOf(1L, 2L), vectors, need, 1) { if (it == 1L) fresh else rested }
         assertEquals(2L, picks.single().cardId)
         // What it covers is still its plain share of the need.
         assertEquals(0.5, picks.single().score, 1e-9)
         // But staleness never makes a card meet need it does not have.
-        assertEquals(emptyList(), CardRepository.greedyDotProduct(listOf(1L), vectors, mapOf("A" to 0.0), 1) { 1.0 })
+        assertEquals(emptyList(), ConceptScheduling.greedyDotProduct(listOf(1L), vectors, mapOf("A" to 0.0), 1) { 1.0 })
     }
 
     @Test
     fun `staleness runs from a half just after grading to one`() {
-        assertEquals(0.5, CardRepository.stalenessFactor(0.0), 1e-9)
-        assertEquals(1.0, CardRepository.stalenessFactor(null), 1e-9)
-        assertEquals(0.5 + 0.5 * (1 - kotlin.math.exp(-1.0)), CardRepository.stalenessFactor(7.0), 1e-9)
-        assertTrue(CardRepository.stalenessFactor(21.0) > 0.97)
+        assertEquals(0.5, ConceptScheduling.stalenessFactor(0.0), 1e-9)
+        assertEquals(1.0, ConceptScheduling.stalenessFactor(null), 1e-9)
+        assertEquals(0.5 + 0.5 * (1 - kotlin.math.exp(-1.0)), ConceptScheduling.stalenessFactor(7.0), 1e-9)
+        assertTrue(ConceptScheduling.stalenessFactor(21.0) > 0.97)
     }
 
     // ==================== countDue ====================
@@ -109,10 +109,10 @@ class ConceptSchedulingTest {
     @Test
     fun `card by card, cards are counted by their own due dates`() {
         val cards = listOf(c(1, next = 0), c(2, next = 500))
-        assertEquals(1, CardRepository.countDue(cards, null, false, emptyMap(), emptyMap(), emptyMap(), 100, noRecall))
+        assertEquals(1, ConceptScheduling.countDue(cards, null, false, emptyMap(), emptyMap(), emptyMap(), 100, noRecall))
         // In a learning group, a card's state there; one without goes by Global.
         val states = mapOf((1L to 7L) to com.fencing.spacedrepetition.data.model.CardLearningState(1, 7, nextReview = 900))
-        assertEquals(0, CardRepository.countDue(cards, 7L, false, states, emptyMap(), emptyMap(), 100, noRecall))
+        assertEquals(0, ConceptScheduling.countDue(cards, 7L, false, states, emptyMap(), emptyMap(), 100, noRecall))
     }
 
     @Test
@@ -120,14 +120,14 @@ class ConceptSchedulingTest {
         // One new concept on five cards: one card meets all of it.
         val five = (1L..5L).map { c(it, next = 0) }
         val shares = (1L..5L).associate { (it to 10L) to 1.0 }
-        assertEquals(1, CardRepository.countDue(five, null, true, emptyMap(), shares, emptyMap(), 100, noRecall))
+        assertEquals(1, ConceptScheduling.countDue(five, null, true, emptyMap(), shares, emptyMap(), 100, noRecall))
         // Two cards each half of two concepts: both are needed.
         val halves = mapOf((1L to 10L) to 0.5, (1L to 11L) to 0.5, (2L to 10L) to 0.5, (2L to 11L) to 0.5)
-        assertEquals(2, CardRepository.countDue(five.take(2), null, true, emptyMap(), halves, emptyMap(), 100, noRecall))
+        assertEquals(2, ConceptScheduling.countDue(five.take(2), null, true, emptyMap(), halves, emptyMap(), 100, noRecall))
         // A concept not due yet needs nothing; an untagged card due by its own date still counts.
         val later = mapOf(10L to com.fencing.spacedrepetition.data.model.ConceptLearningState(10, 0, nextReview = 500))
         val mixed = listOf(c(1, next = 0), c(6, next = 0))
-        assertEquals(1, CardRepository.countDue(mixed, null, true, emptyMap(), mapOf((1L to 10L) to 1.0), later, 100, noRecall))
+        assertEquals(1, ConceptScheduling.countDue(mixed, null, true, emptyMap(), mapOf((1L to 10L) to 1.0), later, 100, noRecall))
     }
 
     // ==================== shuffleByBucket ====================
@@ -152,7 +152,7 @@ class ConceptSchedulingTest {
 
     @Test
     fun `a session's logs make one review at its first time, with the mean grade`() {
-        val events = CardRepository.conceptReviewEvents(
+        val events = ConceptScheduling.conceptReviewEvents(
             listOf(
                 log(2, Grade.AGAIN, 20, session = 7, group = "Footwork"),
                 log(1, Grade.GOOD, 10, session = 7, group = "Footwork"),
@@ -168,7 +168,7 @@ class ConceptSchedulingTest {
 
     @Test
     fun `logs outside a session are reviews of their own, in time order`() {
-        val events = CardRepository.conceptReviewEvents(
+        val events = ConceptScheduling.conceptReviewEvents(
             listOf(log(1, Grade.EASY, 50), log(2, Grade.AGAIN, 5), log(3, Grade.GOOD, 20, session = 1))
         )
         assertEquals(listOf(5L, 20L, 50L), events.map { it.time })
@@ -179,7 +179,7 @@ class ConceptSchedulingTest {
     fun `a session of nothing but skips is no review`() {
         assertEquals(
             emptyList(),
-            CardRepository.conceptReviewEvents(listOf(log(1, Grade.SKIP, 1, session = 3), log(2, Grade.SKIP, 2, session = 3)))
+            ConceptScheduling.conceptReviewEvents(listOf(log(1, Grade.SKIP, 1, session = 3), log(2, Grade.SKIP, 2, session = 3)))
         )
     }
 
@@ -187,19 +187,19 @@ class ConceptSchedulingTest {
 
     @Test
     fun `weighted grades lean towards the cards with more of the concept`() {
-        assertEquals(Grade.EASY, CardRepository.combineWeightedConceptGrades(listOf(Grade.EASY to 1.0, Grade.AGAIN to 0.2)))
-        assertEquals(Grade.AGAIN, CardRepository.combineWeightedConceptGrades(listOf(Grade.EASY to 0.1, Grade.AGAIN to 1.0)))
+        assertEquals(Grade.EASY, ConceptScheduling.combineWeightedConceptGrades(listOf(Grade.EASY to 1.0, Grade.AGAIN to 0.2)))
+        assertEquals(Grade.AGAIN, ConceptScheduling.combineWeightedConceptGrades(listOf(Grade.EASY to 0.1, Grade.AGAIN to 1.0)))
         // Equal weights are the plain mean, whatever the weight.
         assertEquals(
-            CardRepository.combineConceptGrades(listOf(Grade.HARD, Grade.GOOD)),
-            CardRepository.combineWeightedConceptGrades(listOf(Grade.HARD to 0.5, Grade.GOOD to 0.5))
+            ConceptScheduling.combineConceptGrades(listOf(Grade.HARD, Grade.GOOD)),
+            ConceptScheduling.combineWeightedConceptGrades(listOf(Grade.HARD to 0.5, Grade.GOOD to 0.5))
         )
-        assertFailsWith<IllegalArgumentException> { CardRepository.combineWeightedConceptGrades(listOf(Grade.GOOD to 0.0)) }
+        assertFailsWith<IllegalArgumentException> { ConceptScheduling.combineWeightedConceptGrades(listOf(Grade.GOOD to 0.0)) }
     }
 
     @Test
     fun `a card that contains none of a concept says nothing about it`() {
-        val events = CardRepository.conceptReviewEvents(
+        val events = ConceptScheduling.conceptReviewEvents(
             listOf(log(1, Grade.EASY, 10, session = 1), log(2, Grade.AGAIN, 11, session = 1))
         ) { cardId -> if (cardId == 2L) 0.0 else 1.0 }
         assertEquals(Grade.EASY, events.single().grade)
