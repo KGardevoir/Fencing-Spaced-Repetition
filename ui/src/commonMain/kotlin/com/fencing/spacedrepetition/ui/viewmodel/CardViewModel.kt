@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.algorithm.RetentionPlanner
 import com.fencing.spacedrepetition.algorithm.ScheduleEstimate
 import com.fencing.spacedrepetition.data.model.Card
+import com.fencing.spacedrepetition.data.model.CardFilter
 import com.fencing.spacedrepetition.data.model.CardConceptCrossRef
 import com.fencing.spacedrepetition.data.model.Concept
 import com.fencing.spacedrepetition.data.model.ConceptLearningGroupCrossRef
@@ -168,22 +169,7 @@ class CardViewModel(
             _cardSortOption,
             _sortDirection
         ) { (cardsWithGroups, conceptRefs), (groupIds, conceptIds), query, sortOption, direction ->
-            val cardsWithSelectedConcepts = if (conceptIds.isEmpty()) emptySet() else
-                conceptRefs.filter { it.conceptId in conceptIds }.map { it.cardId }.toSet()
-            var filtered = cardsWithGroups
-                .filter { it.card.isDisabled == showDisabled }
-                .filter { groupIds.isEmpty() || it.groups.any { g -> g.id in groupIds } }
-                .filter { conceptIds.isEmpty() || it.card.id in cardsWithSelectedConcepts }
-                .map { it.card }
-
-            // Apply search filter
-            if (query.isNotBlank()) {
-                val searchLower = query.lowercase()
-                filtered = filtered.filter { card ->
-                    card.question.lowercase().contains(searchLower) ||
-                    card.answer.lowercase().contains(searchLower)
-                }
-            }
+            val filtered = CardFilter(groupIds, conceptIds, showDisabled, query).apply(cardsWithGroups, conceptRefs)
 
             // Apply sort with direction
             val sorted = when (sortOption) {
