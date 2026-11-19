@@ -89,6 +89,9 @@ import com.charleskorn.kaml.SingleLineStringStyle
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.Concept
+import com.fencing.spacedrepetition.data.model.FsrsState
+import com.fencing.spacedrepetition.data.model.fsrs
+import com.fencing.spacedrepetition.data.model.withFsrs
 import com.fencing.spacedrepetition.data.model.ConceptLearningState
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.LearningGroup
@@ -280,6 +283,26 @@ internal data class ArchiveGroupState(
     val elapsedDays: Int = 0
 )
 
+// The three state blocks above carry the same nine FSRS values, flat, as the
+// file has always written them; these move them to and from FsrsState.
+
+internal fun FsrsState.toArchive(lastReset: Long = 0L) = ArchiveState(
+    nextReview, lastReview, stability, difficulty, state, reps, lapses, scheduledDays, elapsedDays, lastReset
+)
+
+internal fun ArchiveState.inLearningGroup(name: String) = ArchiveLearningState(
+    name, nextReview, lastReview, stability, difficulty, fsrsState, reps, lapses, scheduledDays, elapsedDays, lastReset
+)
+
+internal val ArchiveState.fsrs: FsrsState
+    get() = FsrsState(stability, difficulty, elapsedDays, scheduledDays, reps, lapses, fsrsState, lastReview, nextReview)
+
+internal val ArchiveLearningState.state: ArchiveState
+    get() = ArchiveState(nextReview, lastReview, stability, difficulty, fsrsState, reps, lapses, scheduledDays, elapsedDays, lastReset)
+
+internal val ArchiveGroupState.state: ArchiveState
+    get() = ArchiveState(nextReview, lastReview, stability, difficulty, fsrsState, reps, lapses, scheduledDays, elapsedDays)
+
 @Serializable
 internal data class ArchiveReviewLog(
     val card: String,
@@ -418,34 +441,10 @@ internal object ArchiveYaml {
         availableIn = availableIn,
         name = concept.name,
         description = concept.description,
-        state = stateNode(concept.globalState()).takeIf { it != ArchiveState() },
+        state = concept.fsrs.toArchive().takeIf { it != ArchiveState() },
         learningStates = learningStates.mapNotNull { (name, learning) ->
-            val node = stateNode(learning)
-            if (node == ArchiveState()) null else ArchiveLearningState(
-                learningGroup = name,
-                nextReview = node.nextReview,
-                lastReview = node.lastReview,
-                stability = node.stability,
-                difficulty = node.difficulty,
-                fsrsState = node.fsrsState,
-                reps = node.reps,
-                lapses = node.lapses,
-                scheduledDays = node.scheduledDays,
-                elapsedDays = node.elapsedDays
-            )
+            learning.fsrs.toArchive().takeIf { it != ArchiveState() }?.inLearningGroup(name)
         }
-    )
-
-    private fun stateNode(state: ConceptLearningState) = ArchiveState(
-        nextReview = state.nextReview,
-        lastReview = state.lastReview,
-        stability = state.fsrsStability,
-        difficulty = state.fsrsDifficulty,
-        fsrsState = state.fsrsState,
-        reps = state.fsrsReps,
-        lapses = state.fsrsLapses,
-        scheduledDays = state.fsrsScheduledDays,
-        elapsedDays = state.fsrsElapsedDays
     )
 
     /** A concept read back, its states as entities keyed by learning group name ("" = Global). */
@@ -458,29 +457,10 @@ internal object ArchiveYaml {
         globalState = concept.state?.let { conceptState(it) },
         learningStates = concept.learningStates
             .filter { it.learningGroup.isNotBlank() }
-            .associate {
-                it.learningGroup.trim() to conceptState(
-                    ArchiveState(
-                        it.nextReview, it.lastReview, it.stability, it.difficulty, it.fsrsState,
-                        it.reps, it.lapses, it.scheduledDays, it.elapsedDays
-                    )
-                )
-            }
+            .associate { it.learningGroup.trim() to conceptState(it.state) }
     )
 
-    private fun conceptState(state: ArchiveState) = ConceptLearningState(
-        conceptId = 0L,
-        learningGroupId = 0L,
-        fsrsStability = state.stability,
-        fsrsDifficulty = state.difficulty,
-        fsrsElapsedDays = state.elapsedDays,
-        fsrsScheduledDays = state.scheduledDays,
-        fsrsReps = state.reps,
-        fsrsLapses = state.lapses,
-        fsrsState = state.fsrsState,
-        lastReview = state.lastReview,
-        nextReview = state.nextReview
-    )
+    private fun conceptState(state: ArchiveState) = ConceptLearningState(conceptId = 0L, learningGroupId = 0L).withFsrs(state.fsrs)
 
     fun opponentNode(opponent: Opponent) = ArchiveOpponent(
         name = opponent.name,
@@ -506,18 +486,7 @@ internal object ArchiveYaml {
         conceptNames: List<String>? = null,
         conceptWeights: Map<String, Double> = emptyMap()
     ): ArchiveCard {
-        val state = ArchiveState(
-            nextReview = card.nextReview,
-            lastReview = card.lastReview,
-            stability = card.fsrsStability,
-            difficulty = card.fsrsDifficulty,
-            fsrsState = card.fsrsState,
-            reps = card.fsrsReps,
-            lapses = card.fsrsLapses,
-            scheduledDays = card.fsrsScheduledDays,
-            elapsedDays = card.fsrsElapsedDays,
-            lastReset = card.lastReset
-        )
+        val state = card.fsrs.toArchive(card.lastReset)
         return ArchiveCard(
             question = card.question,
             answer = card.answer.ifEmpty { null },
@@ -527,19 +496,7 @@ internal object ArchiveYaml {
             conceptWeights = conceptWeights.filterValues { it != 1.0 }.takeIf { it.isNotEmpty() },
             state = state.takeIf { it != ArchiveState() },
             learningStates = learningStates.map { (name, learning) ->
-                ArchiveLearningState(
-                    learningGroup = name,
-                    nextReview = learning.nextReview,
-                    lastReview = learning.lastReview,
-                    stability = learning.fsrsStability,
-                    difficulty = learning.fsrsDifficulty,
-                    fsrsState = learning.fsrsState,
-                    reps = learning.fsrsReps,
-                    lapses = learning.fsrsLapses,
-                    scheduledDays = learning.fsrsScheduledDays,
-                    elapsedDays = learning.fsrsElapsedDays,
-                    lastReset = learning.lastReset
-                )
+                learning.fsrs.toArchive(learning.lastReset).inLearningGroup(name)
             },
             uid = card.uid
         )
@@ -792,35 +749,14 @@ internal object ArchiveYaml {
             parsedCard(
                 question, answer, lineNumber, emptyList(), emptyList(),
                 learningState.learningGroup.trim(),
-                ArchiveState(
-                    nextReview = learningState.nextReview,
-                    lastReview = learningState.lastReview,
-                    stability = learningState.stability,
-                    difficulty = learningState.difficulty,
-                    fsrsState = learningState.fsrsState,
-                    reps = learningState.reps,
-                    lapses = learningState.lapses,
-                    scheduledDays = learningState.scheduledDays,
-                    elapsedDays = learningState.elapsedDays,
-                    lastReset = learningState.lastReset
-                )
+                learningState.state
             ).copy(learningGroupState = true)
         }
         return listOf(own) + learning + card.groupStates.filter { it.group.isNotBlank() }.map { groupState ->
             parsedCard(
                 question, answer, lineNumber, emptyList(), listOf(groupState.group),
                 groupState.group,
-                ArchiveState(
-                    nextReview = groupState.nextReview,
-                    lastReview = groupState.lastReview,
-                    stability = groupState.stability,
-                    difficulty = groupState.difficulty,
-                    fsrsState = groupState.fsrsState,
-                    reps = groupState.reps,
-                    lapses = groupState.lapses,
-                    scheduledDays = groupState.scheduledDays,
-                    elapsedDays = groupState.elapsedDays
-                )
+                groupState.state
             )
         }
     }

@@ -6,6 +6,8 @@ package com.fencing.spacedrepetition.algorithm
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardConceptCrossRef
 import com.fencing.spacedrepetition.data.model.Concept
+import com.fencing.spacedrepetition.data.model.FsrsState
+import com.fencing.spacedrepetition.data.model.fsrs
 import com.fencing.spacedrepetition.data.model.ConceptLearningState
 import com.fencing.spacedrepetition.data.model.CardGroupCrossRef
 import com.fencing.spacedrepetition.data.model.CardLearningState
@@ -308,22 +310,11 @@ object RetentionReportBuilder {
             return points
         }
 
-        fun snapshotOf(card: Card, learningGroupId: Long?): Snapshot {
-            if (learningGroupId == null) {
-                return Snapshot(
-                    card.fsrsState, card.fsrsStability, card.fsrsDifficulty,
-                    card.fsrsReps, card.fsrsLapses, card.lastReview, card.nextReview
-                )
-            }
-            val state = statesByKey[card.id to learningGroupId]
-                ?: return Snapshot(STATE_NEW, 0.0, 0.0, 0, 0, 0L, 0L)
-            return Snapshot(
-                state.fsrsState, state.fsrsStability, state.fsrsDifficulty,
-                state.fsrsReps, state.fsrsLapses, state.lastReview, state.nextReview
-            )
-        }
+        /** A card's progress in a context; new where it has none. */
+        fun snapshotOf(card: Card, learningGroupId: Long?): FsrsState =
+            if (learningGroupId == null) card.fsrs else statesByKey[card.id to learningGroupId]?.fsrs ?: FsrsState()
 
-        fun retrievabilityNow(s: Snapshot): Double? {
+        fun retrievabilityNow(s: FsrsState): Double? {
             if (s.state == STATE_NEW || s.lastReview <= 0L || s.stability <= 0.0) return null
             val elapsed = (now - s.lastReview).toDouble() / DAY_MILLIS
             return retrievability(elapsed, s.stability)
@@ -336,7 +327,7 @@ object RetentionReportBuilder {
         }
 
         fun summarize(
-            snapshots: List<Snapshot>,
+            snapshots: List<FsrsState>,
             scopeLogs: List<ReviewLog>,
             stabilityTrend: List<StabilityPoint>
         ): RetentionSummary {
@@ -387,14 +378,8 @@ object RetentionReportBuilder {
         fun schedulesByConcept(lgId: Long?): Boolean =
             if (lgId == null) globalConceptScheduling else learningGroups.firstOrNull { it.id == lgId }?.useConcepts == true
 
-        fun conceptSnapshot(concept: Concept, lgId: Long?): Snapshot {
-            val state = if (lgId == null) concept.globalState() else conceptStatesByKey[concept.id to lgId]
-                ?: return Snapshot(STATE_NEW, 0.0, 0.0, 0, 0, 0L, 0L)
-            return Snapshot(
-                state.fsrsState, state.fsrsStability, state.fsrsDifficulty,
-                state.fsrsReps, state.fsrsLapses, state.lastReview, state.nextReview
-            )
-        }
+        fun conceptSnapshot(concept: Concept, lgId: Long?): FsrsState =
+            (if (lgId == null) concept.fsrs else conceptStatesByKey[concept.id to lgId]?.fsrs) ?: FsrsState()
 
         /**
          * The concepts carried by [cardIds], in context [lgId], with the summary
@@ -406,7 +391,7 @@ object RetentionReportBuilder {
                 .filterKeys { it in conceptsById }
             if (cardsByConcept.isEmpty()) return null to emptyList()
             val logsByCard = scopeLogs.groupBy { it.cardId }
-            val snapshots = mutableListOf<Snapshot>()
+            val snapshots = mutableListOf<FsrsState>()
             val rows = cardsByConcept.map { (conceptId, conceptCards) ->
                 val concept = conceptsById.getValue(conceptId)
                 val s = conceptSnapshot(concept, lgId).also { snapshots += it }
@@ -554,15 +539,6 @@ object RetentionReportBuilder {
         )
     }
 
-    private data class Snapshot(
-        val state: String,
-        val stability: Double,
-        val difficulty: Double,
-        val reps: Int,
-        val lapses: Int,
-        val lastReview: Long,
-        val nextReview: Long
-    )
 
     /** Linear-interpolated quantile of an ascending, non-empty list. */
     internal fun quantile(sorted: List<Double>, q: Double): Double {

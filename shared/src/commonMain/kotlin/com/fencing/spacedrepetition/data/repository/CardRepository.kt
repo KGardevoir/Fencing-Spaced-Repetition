@@ -161,22 +161,8 @@ class CardRepository(
     suspend fun resetCardState(cardId: Long, resetGroupStates: Boolean = false) {
         val card = cardDao.getCardById(cardId) ?: return
         val now = Time.now()
-        val resetCard = card.copy(
-            // Reset FSRS state
-            fsrsStability = 0.0,
-            fsrsDifficulty = 0.0,
-            fsrsElapsedDays = 0,
-            fsrsScheduledDays = 0,
-            fsrsReps = 0,
-            fsrsLapses = 0,
-            fsrsState = "NEW",
-            // Reset review times
-            lastReview = 0L,
-            nextReview = 0L,
-            modified = now,
-            // Reviews before now stop counting towards anything derived.
-            lastReset = now
-        )
+        // Back to new; reviews before now stop counting towards anything derived.
+        val resetCard = card.withFsrs(FsrsState()).copy(modified = now, lastReset = now)
         cardDao.updateCard(resetCard)
 
         // Optionally reset the learning-group progress too: every learning

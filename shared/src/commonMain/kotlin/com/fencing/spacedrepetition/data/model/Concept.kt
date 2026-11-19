@@ -62,34 +62,11 @@ data class Concept(
     val uid: String = newUid()
 ) {
     /** The Global state, in the same shape a learning group's state has. */
-    fun globalState(): ConceptLearningState = ConceptLearningState(
-        conceptId = id,
-        learningGroupId = 0L,
-        fsrsStability = fsrsStability,
-        fsrsDifficulty = fsrsDifficulty,
-        fsrsElapsedDays = fsrsElapsedDays,
-        fsrsScheduledDays = fsrsScheduledDays,
-        fsrsReps = fsrsReps,
-        fsrsLapses = fsrsLapses,
-        fsrsState = fsrsState,
-        lastReview = lastReview,
-        nextReview = nextReview,
-        modified = modified
-    )
+    fun globalState(): ConceptLearningState =
+        ConceptLearningState(conceptId = id, learningGroupId = 0L, modified = modified).withFsrs(fsrs)
 
     /** This concept with [state] written back as its Global state. */
-    fun withGlobalState(state: ConceptLearningState): Concept = copy(
-        fsrsStability = state.fsrsStability,
-        fsrsDifficulty = state.fsrsDifficulty,
-        fsrsElapsedDays = state.fsrsElapsedDays,
-        fsrsScheduledDays = state.fsrsScheduledDays,
-        fsrsReps = state.fsrsReps,
-        fsrsLapses = state.fsrsLapses,
-        fsrsState = state.fsrsState,
-        lastReview = state.lastReview,
-        nextReview = state.nextReview,
-        modified = state.modified
-    )
+    fun withGlobalState(state: ConceptLearningState): Concept = withFsrs(state.fsrs).copy(modified = state.modified)
 }
 
 /**

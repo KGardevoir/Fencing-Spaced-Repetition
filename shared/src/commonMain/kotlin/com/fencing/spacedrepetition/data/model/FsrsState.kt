@@ -59,3 +59,13 @@ fun ConceptLearningState.withFsrs(state: FsrsState): ConceptLearningState = copy
     fsrsScheduledDays = state.scheduledDays, fsrsReps = state.reps, fsrsLapses = state.lapses,
     fsrsState = state.state, lastReview = state.lastReview, nextReview = state.nextReview
 )
+
+val Concept.fsrs: FsrsState
+    get() = FsrsState(fsrsStability, fsrsDifficulty, fsrsElapsedDays, fsrsScheduledDays, fsrsReps, fsrsLapses, fsrsState, lastReview, nextReview)
+
+/** This concept with [state] as its Global progress. */
+fun Concept.withFsrs(state: FsrsState): Concept = copy(
+    fsrsStability = state.stability, fsrsDifficulty = state.difficulty, fsrsElapsedDays = state.elapsedDays,
+    fsrsScheduledDays = state.scheduledDays, fsrsReps = state.reps, fsrsLapses = state.lapses,
+    fsrsState = state.state, lastReview = state.lastReview, nextReview = state.nextReview
+)
