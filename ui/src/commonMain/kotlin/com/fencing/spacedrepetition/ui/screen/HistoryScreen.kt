@@ -32,6 +32,7 @@ import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.repository.GROUP_NAME_CARD_EDIT
 import com.fencing.spacedrepetition.ui.components.CardImagesDisplay
+import com.fencing.spacedrepetition.ui.components.GradeBadge
 import com.fencing.spacedrepetition.ui.components.CardImagesEdit
 import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
 import com.fencing.spacedrepetition.ui.components.MergeOpponentsDialog
@@ -591,29 +592,6 @@ private fun QuickGradeCard(
     val grade = Grade.fromValue(log.grade)
     var showNoteEditor by remember { mutableStateOf(false) }
 
-    val gradeColor = when (grade) {
-        Grade.AGAIN -> MaterialTheme.colorScheme.errorContainer
-        Grade.HARD -> MaterialTheme.colorScheme.tertiaryContainer
-        Grade.GOOD -> MaterialTheme.colorScheme.secondaryContainer
-        Grade.EASY -> MaterialTheme.colorScheme.primaryContainer
-        else -> MaterialTheme.colorScheme.surfaceVariant
-    }
-    val gradeLabel = when (grade) {
-        Grade.AGAIN -> "Again"
-        Grade.HARD -> "Hard"
-        Grade.GOOD -> "Good"
-        Grade.EASY -> "Easy"
-        Grade.SKIP -> "Skip"
-        null -> "?"
-    }
-    val gradeContentColor = when (grade) {
-        Grade.AGAIN -> MaterialTheme.colorScheme.onErrorContainer
-        Grade.HARD -> MaterialTheme.colorScheme.onTertiaryContainer
-        Grade.GOOD -> MaterialTheme.colorScheme.onSecondaryContainer
-        Grade.EASY -> MaterialTheme.colorScheme.onPrimaryContainer
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-
     val noteImages = remember(log.imagePaths) {
         log.imagePaths.split(",").filter { it.isNotBlank() }
     }
@@ -633,14 +611,7 @@ private fun QuickGradeCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Surface(shape = MaterialTheme.shapes.small, color = gradeColor) {
-                    Text(
-                        text = gradeLabel,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = gradeContentColor
-                    )
-                }
+                GradeBadge(grade)
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -778,29 +749,6 @@ private fun ReviewLogRow(
     val log = logWithCard.reviewLog
     val grade = Grade.fromValue(log.grade)
 
-    val gradeColor = when (grade) {
-        Grade.AGAIN -> MaterialTheme.colorScheme.errorContainer
-        Grade.HARD -> MaterialTheme.colorScheme.tertiaryContainer
-        Grade.GOOD -> MaterialTheme.colorScheme.secondaryContainer
-        Grade.EASY -> MaterialTheme.colorScheme.primaryContainer
-        else -> MaterialTheme.colorScheme.surfaceVariant
-    }
-    val gradeLabel = when (grade) {
-        Grade.AGAIN -> "Again"
-        Grade.HARD -> "Hard"
-        Grade.GOOD -> "Good"
-        Grade.EASY -> "Easy"
-        Grade.SKIP -> "Skip"
-        null -> "?"
-    }
-    val gradeContentColor = when (grade) {
-        Grade.AGAIN -> MaterialTheme.colorScheme.onErrorContainer
-        Grade.HARD -> MaterialTheme.colorScheme.onTertiaryContainer
-        Grade.GOOD -> MaterialTheme.colorScheme.onSecondaryContainer
-        Grade.EASY -> MaterialTheme.colorScheme.onPrimaryContainer
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-
     val opponentLabel = opponentLabel(log.opponentId, opponents)
     val fightLabel = fightDifficultyLabel(log.fightDifficulty)
     val multiplierLabel = stabilityMultiplierLabel(log.stabilityMultiplier)
@@ -811,18 +759,7 @@ private fun ReviewLogRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Surface(
-                shape = MaterialTheme.shapes.small,
-                color = gradeColor,
-                modifier = Modifier.width(52.dp)
-            ) {
-                Text(
-                    text = gradeLabel,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = gradeContentColor
-                )
-            }
+            GradeBadge(grade, Modifier.width(52.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
