@@ -69,8 +69,6 @@ class CardRepository(
 
     suspend fun getCardById(cardId: Long): Card? = cardDao.getCardById(cardId)
 
-    fun getCardByIdFlow(cardId: Long): Flow<Card?> = cardDao.getCardByIdFlow(cardId)
-
     suspend fun getDueCards(limit: Int = 100): List<Card> {
         val shouldRandomize = preferences.randomizeDueCards.first()
         // When randomizing, fetch all due cards so we can sample from the full pool
@@ -86,8 +84,6 @@ class CardRepository(
             cards
         }
     }
-
-    fun getDueCardsFlow(limit: Int = 100): Flow<List<Card>> = cardDao.getDueCardsFlow(limit = limit)
 
     /** How many cards are due in all-cards practice (Global); see [dueCount]. */
     fun getDueCardCount(): Flow<Int> = dueCount(null)
@@ -145,8 +141,6 @@ class CardRepository(
             delay(60_000L)
         }
     }
-
-    fun getCardsByCategory(category: String): Flow<List<Card>> = cardDao.getCardsByCategory(category)
 
     suspend fun insertCard(card: Card): Long = cardDao.insertCard(card)
 
@@ -219,8 +213,6 @@ class CardRepository(
 
     fun getPracticeHistoryStats(startTime: Long): Flow<PracticeHistoryStats> =
         reviewLogDao.getPracticeHistoryStats(startTime)
-
-    fun getAllCategories(): Flow<List<String>> = cardDao.getAllCategories()
 
     // History operations
     fun getCompletedSessions(): Flow<List<PracticeSession>> = sessionDao.getCompletedSessions()
@@ -371,8 +363,6 @@ class CardRepository(
     // Group-aware card operations
     fun getAllCardsWithGroups(): Flow<List<CardWithGroups>> = cardDao.getAllCardsWithGroups()
 
-    fun getCardWithGroups(cardId: Long): Flow<CardWithGroups?> = cardDao.getCardWithGroups(cardId)
-
     suspend fun getDueCardsByGroup(groupId: Long, limit: Int = 100): List<Card> {
         val learningGroup = learningGroupFor(groupId)
         val shouldRandomize = learningGroup?.randomizeDueCards ?: preferences.randomizeDueCards.first()
@@ -403,8 +393,6 @@ class CardRepository(
     fun getDueCardCountByGroup(groupId: Long): Flow<Int> = dueCount(groupId)
 
     fun getCardCountByGroup(groupId: Long): Flow<Int> = cardDao.getCardCountByGroup(groupId)
-
-    fun getCardsByGroup(groupId: Long): Flow<List<Card>> = cardDao.getCardsByGroup(groupId)
 
     suspend fun insertCardWithGroups(card: Card, groupIds: List<Long>): Long {
         val cardId = cardDao.insertCard(card)
@@ -1043,10 +1031,6 @@ class CardRepository(
         return sessionDao.insertSession(session)
     }
 
-    suspend fun getActiveSession(): PracticeSession? = sessionDao.getActiveSession()
-
-    fun getActiveSessionFlow(): Flow<PracticeSession?> = sessionDao.getActiveSessionFlow()
-
     suspend fun getSessionById(sessionId: Long): PracticeSession? = sessionDao.getSessionById(sessionId)
 
     suspend fun completeSession(
@@ -1129,8 +1113,6 @@ class CardRepository(
 
     /** Local card id by stable identifier, for placing imported history. */
     suspend fun cardIdsByUid(): Map<String, Long> = cardDao.getAllCardsAsList().associate { it.uid to it.id }
-
-    fun getAllSessions(): Flow<List<PracticeSession>> = sessionDao.getAllSessions()
 
     // Learning group state operations
     suspend fun updateLearningState(learningState: CardLearningState) =

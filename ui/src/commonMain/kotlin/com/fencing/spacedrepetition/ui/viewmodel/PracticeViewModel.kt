@@ -289,14 +289,6 @@ class PracticeViewModel(
         }
     }
 
-    fun updateCardText(cardIndex: Int, question: String, answer: String) {
-        editCard(cardIndex) { it.copy(question = question, answer = answer) }
-    }
-
-    fun updateCardImages(cardIndex: Int, imagePaths: List<String>) {
-        editCard(cardIndex) { it.copy(imagePaths = imagePaths) }
-    }
-
     fun updateCardComplete(cardIndex: Int, question: String, answer: String, imagePaths: List<String>) {
         editCard(cardIndex) { it.copy(question = question, answer = answer, imagePaths = imagePaths) }
     }

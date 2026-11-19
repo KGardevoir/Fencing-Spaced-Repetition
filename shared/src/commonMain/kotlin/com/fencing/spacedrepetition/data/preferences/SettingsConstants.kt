@@ -32,10 +32,6 @@ object SettingsConstants {
     const val MIN_MAXIMUM_INTERVAL = 7
     const val MAX_MAXIMUM_INTERVAL = 3650
 
-    const val DEFAULT_PRACTICES_PER_WEEK = 7
-    const val MIN_PRACTICES_PER_WEEK = 1
-    const val MAX_PRACTICES_PER_WEEK = 7
-
     const val DEFAULT_RANDOMIZE_BUCKET_HOURS = 24
 
     /** ISO-8601 weekdays, 1 = Monday. Every day, by default. */

@@ -45,7 +45,6 @@ class OpponentMergeTest {
             // MutableMap.replaceAll is JVM-only; this runs on wasm too.
             logOpponents.keys.filter { logOpponents[it] == fromId }.forEach { logOpponents[it] = toId }
         }
-        override fun getOpponentCount(): Flow<Int> = rows.map { it.size }
     }
 
     @Test

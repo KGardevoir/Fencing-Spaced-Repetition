@@ -24,7 +24,6 @@ class ThemePreferences(private val context: Context) : AppPreferences {
     private val SELECTED_GROUP_ID_KEY = longPreferencesKey("selected_group_id")
     private val RANDOMIZE_DUE_CARDS_KEY = booleanPreferencesKey("randomize_due_cards")
     private val MAXIMUM_INTERVAL_KEY = intPreferencesKey("maximum_interval")
-    private val PRACTICES_PER_WEEK_KEY = intPreferencesKey("practices_per_week")
     private val PRACTICE_DAYS_KEY = stringPreferencesKey("practice_days")
     private val RANDOMIZE_BUCKET_HOURS_KEY = intPreferencesKey("randomize_bucket_hours")
     private val FSRS_RETENTION_KEY = intPreferencesKey("fsrs_retention")
@@ -51,9 +50,6 @@ class ThemePreferences(private val context: Context) : AppPreferences {
         const val DEFAULT_MAXIMUM_INTERVAL = SettingsConstants.DEFAULT_MAXIMUM_INTERVAL
         const val MIN_MAXIMUM_INTERVAL = SettingsConstants.MIN_MAXIMUM_INTERVAL
         const val MAX_MAXIMUM_INTERVAL = SettingsConstants.MAX_MAXIMUM_INTERVAL
-        const val DEFAULT_PRACTICES_PER_WEEK = SettingsConstants.DEFAULT_PRACTICES_PER_WEEK
-        const val MIN_PRACTICES_PER_WEEK = SettingsConstants.MIN_PRACTICES_PER_WEEK
-        const val MAX_PRACTICES_PER_WEEK = SettingsConstants.MAX_PRACTICES_PER_WEEK
         const val DEFAULT_RANDOMIZE_BUCKET_HOURS = SettingsConstants.DEFAULT_RANDOMIZE_BUCKET_HOURS
         val DEFAULT_PRACTICE_DAYS: Set<Int> = SettingsConstants.DEFAULT_PRACTICE_DAYS
         const val DEFAULT_FSRS_RETENTION = SettingsConstants.DEFAULT_FSRS_RETENTION
@@ -100,11 +96,6 @@ class ThemePreferences(private val context: Context) : AppPreferences {
     override val maximumInterval: Flow<Int> = context.dataStore.data
         .map { preferences ->
             preferences[MAXIMUM_INTERVAL_KEY] ?: DEFAULT_MAXIMUM_INTERVAL
-        }
-
-    override val practicesPerWeek: Flow<Int> = context.dataStore.data
-        .map { preferences ->
-            preferences[PRACTICES_PER_WEEK_KEY] ?: DEFAULT_PRACTICES_PER_WEEK
         }
 
     override val practiceDays: Flow<Set<Int>> = context.dataStore.data
@@ -226,13 +217,6 @@ class ThemePreferences(private val context: Context) : AppPreferences {
         val validDays = days.coerceIn(MIN_MAXIMUM_INTERVAL, MAX_MAXIMUM_INTERVAL)
         context.dataStore.edit { preferences ->
             preferences[MAXIMUM_INTERVAL_KEY] = validDays
-        }
-    }
-
-    override suspend fun setPracticesPerWeek(count: Int) {
-        val validCount = count.coerceIn(MIN_PRACTICES_PER_WEEK, MAX_PRACTICES_PER_WEEK)
-        context.dataStore.edit { preferences ->
-            preferences[PRACTICES_PER_WEEK_KEY] = validCount
         }
     }
 

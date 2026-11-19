@@ -38,9 +38,6 @@ class SettingsViewModel(
     val maximumInterval: StateFlow<Int> = themePreferences.maximumInterval
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsConstants.DEFAULT_MAXIMUM_INTERVAL)
 
-    val practicesPerWeek: StateFlow<Int> = themePreferences.practicesPerWeek
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsConstants.DEFAULT_PRACTICES_PER_WEEK)
-
     val practiceDays: StateFlow<Set<Int>> = themePreferences.practiceDays
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsConstants.DEFAULT_PRACTICE_DAYS)
 
@@ -133,28 +130,9 @@ class SettingsViewModel(
         }
     }
 
-    fun setPracticesPerWeek(count: Int) {
-        viewModelScope.launch {
-            themePreferences.setPracticesPerWeek(count)
-        }
-    }
-
     fun setPracticeDays(days: Set<Int>) {
         viewModelScope.launch {
             themePreferences.setPracticeDays(days)
-        }
-    }
-
-    fun togglePracticeDay(day: Int) {
-        viewModelScope.launch {
-            val current = themePreferences.practiceDays.first()
-            val updated = if (current.contains(day)) {
-                // Don't allow deselecting the last day
-                if (current.size > 1) current - day else current
-            } else {
-                current + day
-            }
-            themePreferences.setPracticeDays(updated)
         }
     }
 

@@ -61,16 +61,6 @@ class GroupViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val groupCount: StateFlow<Int> = groupRepository.getGroupCount()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
-
-    private val _selectedGroupForPractice = MutableStateFlow<Group?>(null)
-    val selectedGroupForPractice: StateFlow<Group?> = _selectedGroupForPractice.asStateFlow()
-
-    fun selectGroupForPractice(group: Group?) {
-        _selectedGroupForPractice.value = group
-    }
-
     fun addGroup(name: String, description: String = "", onSuccess: (Long) -> Unit = {}) {
         viewModelScope.launch {
             try {

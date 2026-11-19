@@ -45,8 +45,6 @@ class LocalStoragePreferences : AppPreferences {
         MutableStateFlow(readBoolean("randomize_due_cards", false))
     private val maximumIntervalState =
         MutableStateFlow(readInt("maximum_interval", Defaults.DEFAULT_MAXIMUM_INTERVAL))
-    private val practicesPerWeekState =
-        MutableStateFlow(readInt("practices_per_week", Defaults.DEFAULT_PRACTICES_PER_WEEK))
     private val practiceDaysState = MutableStateFlow(
         readString("practice_days")
             ?.split(",")
@@ -88,7 +86,6 @@ class LocalStoragePreferences : AppPreferences {
     override val selectedGroupId: Flow<Long?> = selectedGroupIdState.asStateFlow()
     override val randomizeDueCards: Flow<Boolean> = randomizeDueCardsState.asStateFlow()
     override val maximumInterval: Flow<Int> = maximumIntervalState.asStateFlow()
-    override val practicesPerWeek: Flow<Int> = practicesPerWeekState.asStateFlow()
     override val practiceDays: Flow<Set<Int>> = practiceDaysState.asStateFlow()
     override val randomizeBucketHours: Flow<Int> = randomizeBucketHoursState.asStateFlow()
     override val fsrsRetention: Flow<Int> = fsrsRetentionState.asStateFlow()
@@ -127,11 +124,6 @@ class LocalStoragePreferences : AppPreferences {
     override suspend fun setMaximumInterval(days: Int) {
         val valid = days.coerceIn(Defaults.MIN_MAXIMUM_INTERVAL, Defaults.MAX_MAXIMUM_INTERVAL)
         write("maximum_interval", valid.toString(), maximumIntervalState, valid)
-    }
-
-    override suspend fun setPracticesPerWeek(count: Int) {
-        val valid = count.coerceIn(Defaults.MIN_PRACTICES_PER_WEEK, Defaults.MAX_PRACTICES_PER_WEEK)
-        write("practices_per_week", valid.toString(), practicesPerWeekState, valid)
     }
 
     override suspend fun setPracticeDays(days: Set<Int>) =

@@ -106,9 +106,6 @@ class ConceptRepository(private val conceptDao: ConceptDao) {
 
     suspend fun deleteConcept(concept: Concept) = conceptDao.deleteConcept(concept)
 
-    suspend fun addConceptToCard(cardId: Long, conceptId: Long) =
-        conceptDao.insertCardConceptCrossRef(CardConceptCrossRef(cardId, conceptId))
-
     /**
      * Create or update the concepts an import carries, and any it only names
      * on cards, returning name -> id for linking the cards.
@@ -187,12 +184,4 @@ class ConceptRepository(private val conceptDao: ConceptDao) {
         return getOrCreateConcept(concept.name, concept.description)
     }
 
-    /** Import support: write a concept's Global state onto it. */
-    suspend fun setGlobalState(conceptId: Long, state: ConceptLearningState) {
-        val concept = conceptDao.getConceptById(conceptId) ?: return
-        conceptDao.updateConcept(concept.withGlobalState(state))
-    }
-
-    /** Import support: write a concept's state in one learning group. */
-    suspend fun setLearningGroupState(state: ConceptLearningState) = conceptDao.upsertConceptLearningState(state)
 }

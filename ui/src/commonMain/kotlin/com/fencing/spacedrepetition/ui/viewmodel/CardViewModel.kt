@@ -98,14 +98,9 @@ class CardViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    fun getCardCountForGroup(groupId: Long): Flow<Int> = repository.getCardCountByGroup(groupId)
-
     // Groups for filtering
     val allGroups: StateFlow<List<Group>> = groupRepository.getAllGroups()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    private val _selectedGroupFilter = MutableStateFlow<Group?>(null)
-    val selectedGroupFilter: StateFlow<Group?> = _selectedGroupFilter.asStateFlow()
 
     private val _selectedGroupFilters = MutableStateFlow<Set<Long>>(emptySet())
     val selectedGroupFilters: StateFlow<Set<Long>> = _selectedGroupFilters.asStateFlow()
@@ -182,10 +177,6 @@ class CardViewModel(
             if (direction == SortDirection.DESCENDING) sorted.reversed() else sorted
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    fun selectGroupFilter(group: Group?) {
-        _selectedGroupFilter.value = group
-    }
 
     fun toggleGroupFilter(groupId: Long) {
         _selectedGroupFilters.value = if (groupId in _selectedGroupFilters.value) {
@@ -369,10 +360,6 @@ class CardViewModel(
             else _selectedCardIds.value + shown
     }
 
-    fun clearSelection() {
-        _selectedCardIds.value = emptySet()
-    }
-
     // Bulk operations
     fun deleteSelectedCards(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
@@ -391,18 +378,6 @@ class CardViewModel(
             val idsToUpdate = _selectedCardIds.value.toList()
             idsToUpdate.forEach { cardId ->
                 repository.updateCardGroups(cardId, groupIds)
-            }
-            _selectedCardIds.value = emptySet()
-            _isSelectionMode.value = false
-            onComplete()
-        }
-    }
-
-    fun resetSelectedCardsState(onComplete: () -> Unit = {}) {
-        viewModelScope.launch {
-            val idsToReset = _selectedCardIds.value.toList()
-            idsToReset.forEach { cardId ->
-                repository.resetCardState(cardId)
             }
             _selectedCardIds.value = emptySet()
             _isSelectionMode.value = false
@@ -465,22 +440,6 @@ class CardViewModel(
         viewModelScope.launch {
             repository.resetCardStateInGroup(cardId, groupId)
             onComplete()
-        }
-    }
-
-    fun gradeCard(cardId: Long, grade: Grade, groupId: Long? = null, onComplete: (Card) -> Unit = {}) {
-        viewModelScope.launch {
-            try {
-                val card = repository.getCardById(cardId) ?: return@launch
-                val updatedCard = if (groupId != null) {
-                    repository.reviewCardWithGroup(card, grade, groupId)
-                } else {
-                    repository.reviewCard(card, grade)
-                }
-                onComplete(updatedCard)
-            } catch (e: Exception) {
-                // Handle error
-            }
         }
     }
 

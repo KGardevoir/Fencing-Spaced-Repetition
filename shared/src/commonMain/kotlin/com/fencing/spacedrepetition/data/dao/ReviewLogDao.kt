@@ -25,9 +25,6 @@ interface ReviewLogDao {
     @Query("SELECT * FROM review_logs WHERE sessionId IS NULL ORDER BY reviewTime DESC")
     fun getReviewLogsWithoutSession(): Flow<List<ReviewLog>>
 
-    @Query("SELECT * FROM review_logs WHERE reviewTime >= :startTime AND reviewTime <= :endTime ORDER BY reviewTime DESC")
-    fun getReviewLogsByDateRange(startTime: Long, endTime: Long): Flow<List<ReviewLog>>
-
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertReviewLog(reviewLog: ReviewLog): Long
 
@@ -36,9 +33,6 @@ interface ReviewLogDao {
 
     @Update
     suspend fun updateReviewLog(reviewLog: ReviewLog)
-
-    @Delete
-    suspend fun deleteReviewLog(reviewLog: ReviewLog)
 
     @Query("UPDATE review_logs SET opponentId = :opponentId, opponentUid = :opponentUid WHERE sessionId = :sessionId")
     suspend fun updateOpponentForSession(sessionId: Long, opponentId: Long?, opponentUid: String?)
@@ -63,12 +57,6 @@ interface ReviewLogDao {
 
     @Query("DELETE FROM review_logs WHERE cardId = :cardId")
     suspend fun deleteReviewLogsByCard(cardId: Long)
-
-    @Query("SELECT COUNT(*) FROM review_logs")
-    fun getReviewLogCount(): Flow<Int>
-
-    @Query("SELECT COUNT(*) FROM review_logs WHERE reviewTime >= :startTime")
-    fun getReviewCountSince(startTime: Long): Flow<Int>
 
     @Query(
         """

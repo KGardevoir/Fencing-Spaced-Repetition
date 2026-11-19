@@ -41,9 +41,6 @@ interface ConceptDao {
     @Update
     suspend fun updateConcept(concept: Concept)
 
-    @Update
-    suspend fun updateConcepts(concepts: List<Concept>)
-
     @Delete
     suspend fun deleteConcept(concept: Concept)
 
@@ -82,14 +79,8 @@ interface ConceptDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertCardConceptCrossRef(crossRef: CardConceptCrossRef)
 
-    @Delete
-    suspend fun deleteCardConceptCrossRef(crossRef: CardConceptCrossRef)
-
     @Query("DELETE FROM card_concept_cross_ref WHERE cardId = :cardId")
     suspend fun deleteAllConceptsForCard(cardId: Long)
-
-    @Query("DELETE FROM card_concept_cross_ref WHERE conceptId = :conceptId")
-    suspend fun deleteAllCardsForConcept(conceptId: Long)
 
     // Which learning groups offer a concept
     @Query("SELECT * FROM concept_learning_group")
@@ -122,9 +113,6 @@ interface ConceptDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertConceptLearningState(state: ConceptLearningState)
-
-    @Query("DELETE FROM concept_learning_state WHERE conceptId = :conceptId AND learningGroupId = :learningGroupId")
-    suspend fun deleteConceptLearningState(conceptId: Long, learningGroupId: Long)
 
     @Query("DELETE FROM concept_learning_state WHERE conceptId = :conceptId")
     suspend fun deleteAllLearningStatesForConcept(conceptId: Long)

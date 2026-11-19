@@ -9,20 +9,12 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface PracticeSessionDao {
-    @Query("SELECT * FROM practice_sessions ORDER BY startTime DESC")
-    fun getAllSessions(): Flow<List<PracticeSession>>
 
     @Query("SELECT * FROM practice_sessions WHERE id = :sessionId")
     suspend fun getSessionById(sessionId: Long): PracticeSession?
 
     @Query("SELECT * FROM practice_sessions WHERE id = :sessionId")
     fun getSessionByIdFlow(sessionId: Long): Flow<PracticeSession?>
-
-    @Query("SELECT * FROM practice_sessions WHERE completed = 0 ORDER BY startTime DESC LIMIT 1")
-    suspend fun getActiveSession(): PracticeSession?
-
-    @Query("SELECT * FROM practice_sessions WHERE completed = 0 ORDER BY startTime DESC LIMIT 1")
-    fun getActiveSessionFlow(): Flow<PracticeSession?>
 
     @Query("SELECT * FROM practice_sessions WHERE completed = 1 ORDER BY startTime DESC")
     fun getCompletedSessions(): Flow<List<PracticeSession>>
@@ -33,12 +25,6 @@ interface PracticeSessionDao {
     @Update
     suspend fun updateSession(session: PracticeSession)
 
-    @Delete
-    suspend fun deleteSession(session: PracticeSession)
-
-    @Query("DELETE FROM practice_sessions WHERE id = :sessionId")
-    suspend fun deleteSessionById(sessionId: Long)
-
     @Query("SELECT * FROM practice_sessions ORDER BY startTime DESC")
     suspend fun getAllSessionsSync(): List<PracticeSession>
 
@@ -48,6 +34,4 @@ interface PracticeSessionDao {
     @Query("SELECT * FROM practice_sessions WHERE startTime = :startTime LIMIT 1")
     suspend fun getSessionByStartTime(startTime: Long): PracticeSession?
 
-    @Query("SELECT COUNT(*) FROM practice_sessions WHERE completed = 1")
-    fun getCompletedSessionCount(): Flow<Int>
 }

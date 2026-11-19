@@ -20,26 +20,11 @@ interface CardDao {
     @Query("SELECT * FROM cards WHERE id = :cardId")
     suspend fun getCardById(cardId: Long): Card?
 
-    @Query("SELECT * FROM cards WHERE id = :cardId")
-    fun getCardByIdFlow(cardId: Long): Flow<Card?>
-
     @Query("SELECT * FROM cards WHERE nextReview <= :now AND isDisabled = 0 ORDER BY nextReview ASC LIMIT :limit")
     suspend fun getDueCards(now: Long = Time.now(), limit: Int = 100): List<Card>
 
-    @Query("SELECT * FROM cards WHERE nextReview <= :now AND isDisabled = 0 ORDER BY nextReview ASC LIMIT :limit")
-    fun getDueCardsFlow(now: Long = Time.now(), limit: Int = 100): Flow<List<Card>>
-
-    @Query("SELECT COUNT(*) FROM cards WHERE nextReview <= :now AND isDisabled = 0")
-    fun getDueCardCount(now: Long = Time.now()): Flow<Int>
-
-    @Query("SELECT * FROM cards WHERE category = :category ORDER BY nextReview ASC")
-    fun getCardsByCategory(category: String): Flow<List<Card>>
-
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCard(card: Card): Long
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertCards(cards: List<Card>)
 
     @Update
     suspend fun updateCard(card: Card)
@@ -56,30 +41,10 @@ interface CardDao {
     @Query("SELECT COUNT(*) FROM cards")
     fun getCardCount(): Flow<Int>
 
-    @Query("SELECT DISTINCT category FROM cards WHERE category != '' ORDER BY category")
-    fun getAllCategories(): Flow<List<String>>
-
     // Group-related queries
-    @Transaction
-    @Query("SELECT * FROM cards WHERE id = :cardId")
-    fun getCardWithGroups(cardId: Long): Flow<CardWithGroups?>
-
     @Transaction
     @Query("SELECT * FROM cards ORDER BY nextReview ASC")
     fun getAllCardsWithGroups(): Flow<List<CardWithGroups>>
-
-    @Query("""
-        SELECT DISTINCT c.* FROM cards c
-        INNER JOIN card_group_cross_ref cgc ON c.id = cgc.cardId
-        INNER JOIN groups g ON cgc.groupId = g.id
-        LEFT JOIN card_learning_state cls ON cls.cardId = c.id AND cls.learningGroupId = g.learningGroupId
-        WHERE cgc.groupId = :groupId
-        ORDER BY CASE
-            WHEN g.learningGroupId IS NOT NULL THEN COALESCE(cls.nextReview, c.nextReview)
-            ELSE c.nextReview
-          END ASC
-    """)
-    fun getCardsByGroup(groupId: Long): Flow<List<Card>>
 
     @Query("""
         SELECT DISTINCT c.* FROM cards c
@@ -112,20 +77,6 @@ interface CardDao {
         LIMIT :limit
     """)
     suspend fun getDueCardsByGroup(groupId: Long, now: Long = Time.now(), limit: Int = 100): List<Card>
-
-    @Query("""
-        SELECT COUNT(DISTINCT c.id) FROM cards c
-        INNER JOIN card_group_cross_ref cgc ON c.id = cgc.cardId
-        INNER JOIN groups g ON cgc.groupId = g.id
-        LEFT JOIN card_learning_state cls ON cls.cardId = c.id AND cls.learningGroupId = g.learningGroupId
-        WHERE cgc.groupId = :groupId
-          AND c.isDisabled = 0
-          AND CASE
-            WHEN g.learningGroupId IS NOT NULL THEN COALESCE(cls.nextReview, c.nextReview)
-            ELSE c.nextReview
-          END <= :now
-    """)
-    fun getDueCardCountByGroup(groupId: Long, now: Long = Time.now()): Flow<Int>
 
     @Query("""
         SELECT COUNT(DISTINCT c.id) FROM cards c

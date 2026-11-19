@@ -160,9 +160,6 @@ class HistoryViewModel(
                 emit(logsWithCards)
             }
 
-    fun getReviewLogsForCard(cardId: Long): Flow<List<ReviewLog>> =
-        repository.getReviewLogsByCard(cardId)
-
     fun updateReviewLogNotes(reviewLog: ReviewLog, notes: String, imagePaths: List<String>) {
         viewModelScope.launch {
             repository.updateReviewLog(

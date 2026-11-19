@@ -46,6 +46,4 @@ interface OpponentDao {
     """)
     suspend fun reassignReviewLogs(fromId: Long, toId: Long, fromUid: String, toUid: String)
 
-    @Query("SELECT COUNT(*) FROM opponents")
-    fun getOpponentCount(): Flow<Int>
 }
