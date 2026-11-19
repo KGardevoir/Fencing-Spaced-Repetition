@@ -3,6 +3,7 @@
 
 package com.fencing.spacedrepetition.ui.viewmodel
 
+import com.fencing.spacedrepetition.data.model.LearningContexts
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.data.model.Opponent
@@ -10,7 +11,6 @@ import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.repository.CardRepository
 import com.fencing.spacedrepetition.data.repository.ConceptRepository
-import com.fencing.spacedrepetition.data.repository.GROUP_NAME_CARD_EDIT
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -92,7 +92,7 @@ class HistoryViewModel(
     val availableGroups: StateFlow<List<String>> = allLogsWithCards
         .map { logs ->
             logs.mapNotNull { lwc ->
-                lwc.reviewLog.groupName?.takeIf { it.isNotBlank() && it != GROUP_NAME_CARD_EDIT }
+                lwc.reviewLog.groupName?.takeIf { it.isNotBlank() && it != LearningContexts.CARD_EDITOR }
             }.distinct().sorted()
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())

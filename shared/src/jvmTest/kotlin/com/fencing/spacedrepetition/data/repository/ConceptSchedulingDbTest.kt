@@ -94,9 +94,9 @@ class ConceptSchedulingDbTest {
         // Each card meets 1 to start with; the tie goes to the lowest id, c1.
         // c1 then leaves half of A and half of B, so c3 and c4, still meeting
         // a whole 1 each, come before c2 and c5, which now meet 0.5.
-        assertEquals(listOf(c1, c3), repo.drawCards(2, null).map { it.id })
-        assertEquals(listOf(c1, c3, c4), repo.drawCards(3, null).map { it.id })
-        assertEquals(listOf(c1, c3, c4, c2, c5), repo.drawCards(5, null).map { it.id })
+        assertEquals(listOf(c1, c3), repo.drawing.drawCards(2, null).map { it.id })
+        assertEquals(listOf(c1, c3, c4), repo.drawing.drawCards(3, null).map { it.id })
+        assertEquals(listOf(c1, c3, c4, c2, c5), repo.drawing.drawCards(5, null).map { it.id })
     }
 
     @Test
@@ -105,7 +105,7 @@ class ConceptSchedulingDbTest {
         val recent = db.cardDao().insertCard(Card(question = "graded yesterday", answer = "", lastReview = Time.now() - day))
         val rested = db.cardDao().insertCard(Card(question = "graded a month ago", answer = "", lastReview = Time.now() - 30 * day))
         tag(recent, a); tag(rested, a)
-        assertEquals(listOf(rested), repo.drawCards(1, null).map { it.id })
+        assertEquals(listOf(rested), repo.drawing.drawCards(1, null).map { it.id })
     }
 
     @Test
@@ -116,7 +116,7 @@ class ConceptSchedulingDbTest {
         val waiting = card("waiting"); tag(waiting, notDue)
         val ready = card("ready"); tag(ready, due)
 
-        assertEquals(listOf(ready), repo.drawCards(1, null).map { it.id })
+        assertEquals(listOf(ready), repo.drawing.drawCards(1, null).map { it.id })
     }
 
     private val day = 86_400_000L
@@ -143,14 +143,14 @@ class ConceptSchedulingDbTest {
         log(practised, Grade.GOOD, t0)
         log(practised, Grade.GOOD, t0 + 3 * day)
 
-        repo.setCardConcepts(practised, listOf(a))
+        repo.conceptDerivation.setCardConcepts(practised, listOf(a))
         val derived = global(a)
         assertEquals(2, derived.fsrsReps)
         assertEquals(t0 + 3 * day, derived.lastReview)
         assertTrue(derived.fsrsStability > 0)
 
         // Untagging takes the history away again: no cards, no history, new.
-        repo.setCardConcepts(practised, emptyList())
+        repo.conceptDerivation.setCardConcepts(practised, emptyList())
         assertEquals("NEW", global(a).fsrsState)
         assertEquals(0, global(a).fsrsReps)
         assertEquals(0L, global(a).nextReview)
@@ -160,7 +160,7 @@ class ConceptSchedulingDbTest {
     fun `a concept whose cards have no history stays uninitialised`() = runTest {
         val a = concept("A")
         val fresh = card("fresh")
-        repo.setCardConcepts(fresh, listOf(a))
+        repo.conceptDerivation.setCardConcepts(fresh, listOf(a))
         assertEquals("NEW", global(a).fsrsState)
         assertEquals(0, global(a).fsrsReps)
     }
@@ -174,8 +174,8 @@ class ConceptSchedulingDbTest {
         log(two, Grade.AGAIN, t0 + 5 * day)
         log(one, Grade.GOOD, t0 + 10 * day)
 
-        repo.setCardConcepts(one, listOf(a, onlyOne))
-        repo.setCardConcepts(two, listOf(a))
+        repo.conceptDerivation.setCardConcepts(one, listOf(a, onlyOne))
+        repo.conceptDerivation.setCardConcepts(two, listOf(a))
         val derived = global(a)
         assertEquals(3, derived.fsrsReps)
         assertEquals(t0 + 10 * day, derived.lastReview)
@@ -198,10 +198,10 @@ class ConceptSchedulingDbTest {
         // Graded the way a practice session grades them.
         val session = repo.createPracticeSession(listOf(c1, c2, c3))
         val cards = listOf(c1, c2, c3).map { db.cardDao().getCardById(it)!! }
-        repo.reviewCardWithGroup(cards[0], Grade.GOOD, groupId, session)
-        repo.reviewCardWithGroup(cards[1], Grade.AGAIN, groupId, session)
-        repo.reviewCardWithGroup(cards[2], Grade.SKIP, groupId, session)
-        repo.rederiveConceptsForCards(listOf(c1, c2, c3))
+        repo.grading.reviewCardWithGroup(cards[0], Grade.GOOD, groupId, session)
+        repo.grading.reviewCardWithGroup(cards[1], Grade.AGAIN, groupId, session)
+        repo.grading.reviewCardWithGroup(cards[2], Grade.SKIP, groupId, session)
+        repo.conceptDerivation.rederiveConceptsForCards(listOf(c1, c2, c3))
 
         val stateA = db.conceptDao().getConceptLearningState(a, learningGroupId)!!
         val stateB = db.conceptDao().getConceptLearningState(b, learningGroupId)!!
@@ -215,13 +215,13 @@ class ConceptSchedulingDbTest {
         assertEquals(0, global(a).fsrsReps)
 
         // A Global review (no group) moves Global only.
-        repo.reviewCard(cards[0], Grade.EASY)
-        repo.rederiveConceptsForCards(listOf(c1))
+        repo.grading.reviewCard(cards[0], Grade.EASY)
+        repo.conceptDerivation.rederiveConceptsForCards(listOf(c1))
         assertEquals(1, global(a).fsrsReps)
         assertEquals(1, db.conceptDao().getConceptLearningState(a, learningGroupId)!!.fsrsReps)
 
         // Untagging c2 rederives A from c1 alone: GOOD, the same as B.
-        repo.setCardConcepts(c2, emptyList())
+        repo.conceptDerivation.setCardConcepts(c2, emptyList())
         assertEquals(
             stateB.fsrsStability,
             db.conceptDao().getConceptLearningState(a, learningGroupId)!!.fsrsStability
@@ -238,9 +238,9 @@ class ConceptSchedulingDbTest {
         log(keep, Grade.EASY, t0 + 15 * day)
         tag(keep, a); tag(drop, a)
 
-        repo.rederiveConcepts()
+        repo.conceptDerivation.rederiveConcepts()
         val first = global(a)
-        repo.rederiveConcepts()
+        repo.conceptDerivation.rederiveConcepts()
         assertEquals(first.globalState(), global(a).globalState())
         assertEquals(3, first.fsrsReps)
 
@@ -253,7 +253,7 @@ class ConceptSchedulingDbTest {
         val a = concept("A")
         val c = card("c")
         log(c, Grade.GOOD, Time.now() - day, group = "Deleted group")
-        repo.setCardConcepts(c, listOf(a))
+        repo.conceptDerivation.setCardConcepts(c, listOf(a))
         assertEquals(0, global(a).fsrsReps)
     }
 
@@ -261,10 +261,10 @@ class ConceptSchedulingDbTest {
     fun `an import keeps a concept's state when there is no history to derive it from`() = runTest {
         val a = db.conceptDao().insertConcept(Concept(name = "A", fsrsReps = 4, fsrsState = "REVIEW", fsrsStability = 9.0))
         val c = card("c"); tag(c, a)
-        repo.rederiveConcepts(onlyWithHistory = true)
+        repo.conceptDerivation.rederiveConcepts(onlyWithHistory = true)
         assertEquals(4, global(a).fsrsReps)
         // A full rederive is the rule, though: no history, new.
-        repo.rederiveConcepts()
+        repo.conceptDerivation.rederiveConcepts()
         assertEquals(0, global(a).fsrsReps)
     }
 
@@ -277,7 +277,7 @@ class ConceptSchedulingDbTest {
         val tagged = card("tagged", nextReview = Time.now() + 30L * 86_400_000L); tag(tagged, a)
         db.groupDao().insertCardGroupCrossRef(CardGroupCrossRef(tagged, groupId))
 
-        assertEquals(listOf(tagged), repo.drawCards(1, groupId).map { it.id })
+        assertEquals(listOf(tagged), repo.drawing.drawCards(1, groupId).map { it.id })
     }
 
     @Test
@@ -289,7 +289,7 @@ class ConceptSchedulingDbTest {
         val second = card("second", nextReview = 2L)
         val third = card("third", nextReview = 3L); tag(third, a, b)
 
-        assertEquals(listOf(first, second), repo.drawCards(2, null).map { it.id })
+        assertEquals(listOf(first, second), repo.drawing.drawCards(2, null).map { it.id })
     }
 
     @Test
@@ -307,23 +307,23 @@ class ConceptSchedulingDbTest {
             db.groupDao().insertCardGroupCrossRef(CardGroupCrossRef(it, onGroup))
         }
 
-        assertTrue(repo.usesConcepts(on))
-        assertTrue(!repo.usesConcepts(off))
+        assertTrue(repo.scheduler.usesConcepts(on))
+        assertTrue(!repo.scheduler.usesConcepts(off))
         // Off: soonest-due card. On: the card covering the most due concepts.
-        assertEquals(listOf(onlyA), repo.drawCards(1, offGroup).map { it.id })
-        assertEquals(listOf(ab), repo.drawCards(1, onGroup).map { it.id })
+        assertEquals(listOf(onlyA), repo.drawing.drawCards(1, offGroup).map { it.id })
+        assertEquals(listOf(ab), repo.drawing.drawCards(1, onGroup).map { it.id })
 
         // State is derived in both, whether or not they schedule by it.
         val card = db.cardDao().getCardById(ab)!!
-        repo.reviewCardWithGroup(card, Grade.GOOD, offGroup)
-        repo.reviewCardWithGroup(card, Grade.GOOD, onGroup)
-        repo.rederiveConceptsForCards(listOf(ab))
+        repo.grading.reviewCardWithGroup(card, Grade.GOOD, offGroup)
+        repo.grading.reviewCardWithGroup(card, Grade.GOOD, onGroup)
+        repo.conceptDerivation.rederiveConceptsForCards(listOf(ab))
         assertEquals(1, db.conceptDao().getConceptLearningState(a, off)!!.fsrsReps)
         assertEquals(1, db.conceptDao().getConceptLearningState(a, on)!!.fsrsReps)
 
         // Switching a learning group off takes effect at once.
         db.groupDao().setLearningGroupUseConcepts(on, false)
-        assertEquals(listOf(onlyA), repo.drawCards(1, onGroup).map { it.id })
+        assertEquals(listOf(onlyA), repo.drawing.drawCards(1, onGroup).map { it.id })
     }
 
     // ==================== stable identifiers ====================
@@ -338,7 +338,7 @@ class ConceptSchedulingDbTest {
         log(c, Grade.GOOD, Time.now() - 3 * day, group = "Footwork", groupUid = group.uid)
 
         db.groupDao().updateGroup(group.copy(name = "Footwork (renamed)"))
-        repo.rederiveConcepts()
+        repo.conceptDerivation.rederiveConcepts()
         assertEquals(1, db.conceptDao().getConceptLearningState(a, learningGroupId)!!.fsrsReps)
         assertEquals(0, global(a).fsrsReps)
     }
@@ -347,7 +347,7 @@ class ConceptSchedulingDbTest {
     fun `new reviews record the group's stable identifier`() = runTest {
         val groupId = db.groupDao().insertGroup(Group(name = "Footwork"))
         val c = db.cardDao().getCardById(card("c"))!!
-        repo.reviewCard(c, Grade.GOOD, groupId = groupId)
+        repo.grading.reviewCard(c, Grade.GOOD, groupId = groupId)
         val log = db.reviewLogDao().getAllReviewLogsSync().single()
         assertEquals(db.groupDao().getGroupById(groupId)!!.uid, log.groupUid)
         assertTrue(log.uid.isNotBlank())
@@ -371,12 +371,12 @@ class ConceptSchedulingDbTest {
         val t = Time.now() - day
         val first = ReviewLog(cardId = c, sessionId = null, reviewTime = t, grade = 3, algorithm = "FSRS",
             stateBefore = "", stateAfter = "", scheduledDays = 0, elapsedDays = 0)
-        assertEquals(1, repo.importReviewLogs(listOf(first)))
+        assertEquals(1, repo.archive.importReviewLogs(listOf(first)))
         // The same review again: by identifier, and -- for a file from before
         // identifiers -- by card, moment and grade.
-        assertEquals(0, repo.importReviewLogs(listOf(first)))
-        assertEquals(0, repo.importReviewLogs(listOf(first.copy(uid = "fresh-from-an-old-file"))))
-        assertEquals(1, repo.importReviewLogs(listOf(first.copy(uid = "another", reviewTime = t + 1))))
+        assertEquals(0, repo.archive.importReviewLogs(listOf(first)))
+        assertEquals(0, repo.archive.importReviewLogs(listOf(first.copy(uid = "fresh-from-an-old-file"))))
+        assertEquals(1, repo.archive.importReviewLogs(listOf(first.copy(uid = "another", reviewTime = t + 1))))
         assertEquals(2, db.reviewLogDao().getAllReviewLogsSync().size)
     }
 
@@ -387,7 +387,7 @@ class ConceptSchedulingDbTest {
         val parsed = com.fencing.spacedrepetition.util.ParsedCard(
             concept = "New question", answer = "", lineNumber = 1, stateContext = "GLOBAL", uid = uid
         )
-        repo.importCardsWithGroupStates(listOf(parsed), emptyMap()) {
+        repo.archive.importCardsWithGroupStates(listOf(parsed), emptyMap()) {
             com.fencing.spacedrepetition.util.CardImportExport.parsedCardToCard(it)
         }
         val cards = db.cardDao().getAllCardsAsList()
@@ -412,7 +412,7 @@ class ConceptSchedulingDbTest {
         val opponentId = db.opponentDao().insertOpponent(Opponent(name = "Alex"))
         val alex = db.opponentDao().getOpponentById(opponentId)!!
         val c = db.cardDao().getCardById(card("c"))!!
-        repo.reviewCard(c, Grade.GOOD, opponentId = opponentId)
+        repo.grading.reviewCard(c, Grade.GOOD, opponentId = opponentId)
         val log = db.reviewLogDao().getAllReviewLogsSync().single()
         assertEquals(alex.uid, log.opponentUid)
 
@@ -430,7 +430,7 @@ class ConceptSchedulingDbTest {
         val sam = db.opponentDao().insertOpponent(Opponent(name = "Sam"))
         val session = repo.createPracticeSession(emptyList())
         val c = db.cardDao().getCardById(card("c"))!!
-        repo.reviewCard(c, Grade.GOOD, sessionId = session, opponentId = alex)
+        repo.grading.reviewCard(c, Grade.GOOD, sessionId = session, opponentId = alex)
 
         repo.updateSessionOpponent(session, sam)
         val log = db.reviewLogDao().getAllReviewLogsSync().single()
@@ -483,7 +483,7 @@ class ConceptSchedulingDbTest {
         val t0 = Time.now() - 30 * day
         log(c, Grade.GOOD, t0)
         log(c, Grade.GOOD, t0 + 5 * day)
-        repo.rederiveConcepts()
+        repo.conceptDerivation.rederiveConcepts()
         assertEquals(2, global(a).fsrsReps)
 
         repo.resetCardState(c)
@@ -493,7 +493,7 @@ class ConceptSchedulingDbTest {
 
         // Progress after the reset counts again.
         log(c, Grade.EASY, Time.now() + 1)
-        repo.rederiveConcepts()
+        repo.conceptDerivation.rederiveConcepts()
         assertEquals(1, global(a).fsrsReps)
         // The history itself is all still there.
         assertEquals(3, db.reviewLogDao().getAllReviewLogsSync().size)
@@ -509,7 +509,7 @@ class ConceptSchedulingDbTest {
         val t0 = Time.now() - 10 * day
         log(c, Grade.GOOD, t0, group = "Footwork", groupUid = groupUid)
         log(c, Grade.GOOD, t0 + day)
-        repo.rederiveConcepts()
+        repo.conceptDerivation.rederiveConcepts()
         assertEquals(1, db.conceptDao().getConceptLearningState(a, learningGroupId)!!.fsrsReps)
 
         repo.resetCardStateInLearningGroup(c, learningGroupId)
@@ -760,7 +760,7 @@ class ConceptSchedulingDbTest {
         val uids = db.conceptDao().getAllConceptsSync().associate { it.id to it.uid }
 
         // "both" meets half of each need, which beats all of the smaller one.
-        val drawn = repo.drawSession(1, null).single()
+        val drawn = repo.drawing.drawSession(1, null).single()
         assertEquals(both, drawn.card.id)
         assertEquals(uids.getValue(stale), drawn.selection.triggerConceptUid)
         assertEquals(listOf(uids.getValue(stale), uids.getValue(fresh)).sorted(), drawn.selection.conceptUids)
@@ -772,7 +772,7 @@ class ConceptSchedulingDbTest {
         val covering = card("covers A and B"); tag(covering, a, b)
         val untagged = card("untagged")
         val later = card("not due", nextReview = Time.now() + 10 * day)
-        val drawn = repo.drawSession(10, null).associate { it.card.id to it.selection }
+        val drawn = repo.drawing.drawSession(10, null).associate { it.card.id to it.selection }
 
         val uids = db.conceptDao().getAllConceptsSync().associate { it.id to it.uid }
         assertEquals(SelectionMode.CONCEPT, drawn.getValue(covering).mode)
@@ -792,7 +792,7 @@ class ConceptSchedulingDbTest {
         globalConcepts = flowOf(false)
         val due = card("due")
         val later = card("later", nextReview = Time.now() + 10 * day)
-        val drawn = repo.drawSession(2, null).associate { it.card.id to it.selection }
+        val drawn = repo.drawing.drawSession(2, null).associate { it.card.id to it.selection }
         assertEquals(CardSelection(SelectionMode.CARD, SelectionReason.DUE), drawn.getValue(due))
         assertEquals(CardSelection(SelectionMode.CARD, SelectionReason.EXTRA), drawn.getValue(later))
     }
@@ -802,9 +802,9 @@ class ConceptSchedulingDbTest {
         val a = concept("A")
         val c = card("c"); tag(c, a)
         val rival = db.opponentDao().insertOpponent(Opponent(name = "Rival", skillMultiplier = 1.25))
-        val selection = repo.drawSession(1, null).single().selection
+        val selection = repo.drawing.drawSession(1, null).single().selection
         val graded = repo.getCardById(c)!!
-        repo.reviewMultipleCards(listOf(graded to Grade.GOOD), null, rival, fightDifficulty = 4, selections = mapOf(c to selection))
+        repo.grading.reviewMultipleCards(listOf(graded to Grade.GOOD), null, rival, fightDifficulty = 4, selections = mapOf(c to selection))
 
         val log = db.reviewLogDao().getAllReviewLogsSync().single()
         assertEquals("CONCEPT", log.selectionMode)
@@ -820,7 +820,7 @@ class ConceptSchedulingDbTest {
         )
 
         // A grade from the card editor says so.
-        repo.logGradeFromEdit(graded.id, graded.fsrs, graded.fsrs, Grade.HARD)
+        repo.grading.logGradeFromEdit(graded.id, graded.fsrs, graded.fsrs, Grade.HARD)
         assertEquals("EDITOR", db.reviewLogDao().getAllReviewLogsSync().maxBy { it.id }.selectionReason)
     }
 
@@ -845,7 +845,7 @@ class ConceptSchedulingDbTest {
             val other = repo.createPracticeSession(listOf(one, two))
             log(one, Grade.EASY, Time.now() - day, session = other)
             log(two, Grade.AGAIN, Time.now() - day, session = other)
-            repo.rederiveConcepts()
+            repo.conceptDerivation.rederiveConcepts()
 
             // A: (4 * 1 + 1 * 0.2) / 1.2 = 3.5 -> EASY; C: 2.5 -> GOOD.
             assertTrue(global(a).fsrsStability > global(c).fsrsStability, "the AGAIN on a card that is barely A should count for less")
@@ -859,9 +859,9 @@ class ConceptSchedulingDbTest {
         val a = concept("A")
         val c = card("c")
         log(c, Grade.GOOD, Time.now() - day)
-        repo.setCardConcepts(c, listOf(a), mapOf(a to 1.0))
+        repo.conceptDerivation.setCardConcepts(c, listOf(a), mapOf(a to 1.0))
         assertEquals(1, global(a).fsrsReps)
-        repo.setCardConcepts(c, listOf(a), mapOf(a to 0.0))
+        repo.conceptDerivation.setCardConcepts(c, listOf(a), mapOf(a to 0.0))
         assertEquals(0, global(a).fsrsReps)
         assertEquals(listOf(0.0), db.conceptDao().getCardConceptLinksSync(c).map { it.weight })
     }
@@ -878,7 +878,7 @@ class ConceptSchedulingDbTest {
         val half = card("half A")
         db.conceptDao().insertCardConceptCrossRef(CardConceptCrossRef(half, a, weight = 2.0))
         db.conceptDao().insertCardConceptCrossRef(CardConceptCrossRef(half, c, weight = 2.0))
-        assertEquals(listOf(half), repo.drawCards(1, null).map { it.id })
+        assertEquals(listOf(half), repo.drawing.drawCards(1, null).map { it.id })
     }
 
     @Test

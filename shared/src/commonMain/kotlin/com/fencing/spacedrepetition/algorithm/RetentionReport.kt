@@ -16,7 +16,6 @@ import com.fencing.spacedrepetition.data.model.LearningContext
 import com.fencing.spacedrepetition.data.model.LearningContexts
 import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.data.model.ReviewLog
-import com.fencing.spacedrepetition.data.repository.GROUP_NAME_CARD_EDIT
 import kotlin.math.sqrt
 
 /**

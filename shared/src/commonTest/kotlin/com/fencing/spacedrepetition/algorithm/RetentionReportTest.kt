@@ -3,13 +3,13 @@
 
 package com.fencing.spacedrepetition.algorithm
 
+import com.fencing.spacedrepetition.data.model.LearningContexts
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupCrossRef
 import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.data.model.ReviewLog
-import com.fencing.spacedrepetition.data.repository.GROUP_NAME_CARD_EDIT
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -96,7 +96,7 @@ class RetentionReportTest {
         val logs = listOf(
             log(1, 3, monday, group = "Parries"),
             log(1, 1, monday + day, group = null),
-            log(1, 4, monday + day, group = GROUP_NAME_CARD_EDIT),
+            log(1, 4, monday + day, group = LearningContexts.CARD_EDITOR),
             log(2, 3, monday, group = "Cuts"),
             log(2, 1, monday + 2 * day, group = "Cuts"),
             log(2, 3, monday, group = "Cuts", before = "NEW"),   // first sighting

@@ -84,7 +84,7 @@ class BackupWorker(
             opponentDao = database.opponentDao()
         )
 
-        val cardsWithStates = cardRepository.getAllCardsWithGroupStates()
+        val cardsWithStates = cardRepository.archive.getAllCardsWithGroupStates()
         if (cardsWithStates.isEmpty()) {
             return Result.success()
         }
@@ -109,7 +109,7 @@ class BackupWorker(
                     cardsWithStates, outputStream, allGroups, reviewLogs, cardQuestions,
                     opponents, opponentNamesById, FileImageReader(applicationContext),
                     sessions, groupRepository.getAllLearningGroupsSync(),
-                    cardRepository.getAllConceptsWithStates()
+                    cardRepository.archive.getAllConceptsWithStates()
                 )
                 outputStream.close()
                 result

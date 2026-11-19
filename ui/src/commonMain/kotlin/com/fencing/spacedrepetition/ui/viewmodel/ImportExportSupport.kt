@@ -176,7 +176,7 @@ internal suspend fun importConceptsAndLinks(
     val parsedConcepts = CardImportExport.lastParsedConcepts
     if (namedOnCards.isEmpty() && parsedConcepts.isEmpty() && parsedCards.none { it.conceptsStated }) return
     val conceptIds = concepts.importConcepts(parsedConcepts, namedOnCards) { groups.ensureLearningGroup(it) }
-    cards.linkImportedConcepts(parsedCards, conceptIds)
+    cards.archive.linkImportedConcepts(parsedCards, conceptIds)
 }
 
 /** [cardsWithStates] with each card's concept names filled in, for an export. */

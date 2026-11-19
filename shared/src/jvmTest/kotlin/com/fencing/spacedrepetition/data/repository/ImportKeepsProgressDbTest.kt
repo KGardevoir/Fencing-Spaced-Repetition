@@ -67,7 +67,7 @@ class ImportKeepsProgressDbTest {
     fun tearDown() = db.close()
 
     private suspend fun import(vararg records: ParsedCard, groups: Map<String, Long> = emptyMap(), learningGroups: Map<String, Long> = emptyMap()) =
-        repo.importCardsWithGroupStates(records.toList(), groups, learningGroups) { CardImportExport.parsedCardToCard(it) }
+        repo.archive.importCardsWithGroupStates(records.toList(), groups, learningGroups) { CardImportExport.parsedCardToCard(it) }
 
     @Test
     fun `a card already here takes the file's content and keeps its progress`() = runTest {
@@ -172,11 +172,11 @@ class ImportKeepsProgressDbTest {
         fun record(names: List<String>, stated: Boolean) =
             ParsedCard(concept = "Q", answer = "", lineNumber = 1, conceptNames = names, conceptsStated = stated)
 
-        repo.linkImportedConcepts(listOf(record(emptyList(), stated = false)), ids)
+        repo.archive.linkImportedConcepts(listOf(record(emptyList(), stated = false)), ids)
         assertEquals(listOf(a), db.conceptDao().getConceptsForCardSync(id).map { it.id })
-        repo.linkImportedConcepts(listOf(record(listOf("B"), stated = true)), ids)
+        repo.archive.linkImportedConcepts(listOf(record(listOf("B"), stated = true)), ids)
         assertEquals(listOf(b), db.conceptDao().getConceptsForCardSync(id).map { it.id })
-        repo.linkImportedConcepts(listOf(record(emptyList(), stated = true)), ids)
+        repo.archive.linkImportedConcepts(listOf(record(emptyList(), stated = true)), ids)
         assertTrue(db.conceptDao().getConceptsForCardSync(id).isEmpty())
     }
 
@@ -198,7 +198,7 @@ class ImportKeepsProgressDbTest {
         val cardId = db.cardDao().insertCard(Card(question = "Q", answer = ""))
         val sessionId = db.practiceSessionDao().insertSession(PracticeSession(startTime = 10L, endTime = 20L, notes = "old"))
         val session = db.practiceSessionDao().getSessionById(sessionId)!!
-        repo.ensureSession(session.copy(id = 0, endTime = 99L, notes = "new"))
+        repo.archive.ensureSession(session.copy(id = 0, endTime = 99L, notes = "new"))
         val after = db.practiceSessionDao().getSessionById(sessionId)!!
         assertEquals("new", after.notes)
         assertEquals(20L, after.endTime)
@@ -207,8 +207,8 @@ class ImportKeepsProgressDbTest {
             cardId = cardId, sessionId = sessionId, reviewTime = 15L, grade = 3, algorithm = "FSRS",
             stateBefore = "", stateAfter = "", scheduledDays = 1, elapsedDays = 0, notes = "old"
         )
-        repo.importReviewLogs(listOf(log))
-        repo.importReviewLogs(listOf(log.copy(notes = "new", stabilityMultiplier = 2.0)))
+        repo.archive.importReviewLogs(listOf(log))
+        repo.archive.importReviewLogs(listOf(log.copy(notes = "new", stabilityMultiplier = 2.0)))
         val stored = db.reviewLogDao().getAllReviewLogsSync().single()
         assertEquals("new", stored.notes)
         assertEquals(1.0, stored.stabilityMultiplier)

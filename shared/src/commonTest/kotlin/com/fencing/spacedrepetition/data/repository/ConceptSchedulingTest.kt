@@ -136,7 +136,7 @@ class ConceptSchedulingTest {
     fun `bucket shuffling keeps buckets in order`() {
         val hour = 60 * 60 * 1000L
         val items = listOf(5 * hour, 0L, 1L, 3 * hour, 2L)
-        val shuffled = CardRepository.shuffleByBucket(items, bucketHours = 2) { it }
+        val shuffled = SessionDrawing.shuffleByBucket(items, bucketHours = 2) { it }
         assertEquals(setOf(0L, 1L, 2L), shuffled.take(3).toSet())
         assertEquals(listOf(3 * hour, 5 * hour), shuffled.drop(3))
     }

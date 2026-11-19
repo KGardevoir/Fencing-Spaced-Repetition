@@ -124,6 +124,6 @@ class ConceptViewModel(
      * tags, history or groups change; this is the manual way to the same place.
      */
     fun rederiveAll() {
-        viewModelScope.launch { cardRepository.rederiveConcepts() }
+        viewModelScope.launch { cardRepository.conceptDerivation.rederiveConcepts() }
     }
 }

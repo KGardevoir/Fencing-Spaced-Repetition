@@ -71,7 +71,7 @@ class CardViewModel(
     val allCardsWithGroups: StateFlow<List<CardWithGroups>> = repository.getAllCardsWithGroups()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val dueCardCount: StateFlow<Int> = repository.getDueCardCount()
+    val dueCardCount: StateFlow<Int> = repository.drawing.getDueCardCount()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     val cardCount: StateFlow<Int> = repository.getCardCount()
@@ -225,7 +225,7 @@ class CardViewModel(
     }
 
     fun getDueCardCountByGroup(groupId: Long): Flow<Int> =
-        repository.getDueCardCountByGroup(groupId)
+        repository.drawing.getDueCardCountByGroup(groupId)
 
     fun getCardCountByGroup(groupId: Long): Flow<Int> =
         repository.getCardCountByGroup(groupId)
@@ -288,7 +288,7 @@ class CardViewModel(
                     imagePaths = imagePaths
                 )
                 val cardId = repository.insertCardWithGroups(card, groupIds)
-                if (concepts.isNotEmpty()) repository.setCardConcepts(cardId, concepts.keys, concepts)
+                if (concepts.isNotEmpty()) repository.conceptDerivation.setCardConcepts(cardId, concepts.keys, concepts)
                 onSuccess()
             } catch (e: Exception) {
                 // Handle error
@@ -303,7 +303,7 @@ class CardViewModel(
             try {
                 repository.updateCard(card.copy(modified = Time.now()))
                 groupIds?.let { repository.updateCardGroups(card.id, it) }
-                concepts?.let { repository.setCardConcepts(card.id, it.keys, it) }
+                concepts?.let { repository.conceptDerivation.setCardConcepts(card.id, it.keys, it) }
                 onSuccess()
             } catch (e: Exception) {
                 // Handle error
@@ -437,7 +437,7 @@ class CardViewModel(
     fun recordGradeFromEdit(cardId: Long, before: FsrsState, after: FsrsState, grade: Grade, groupId: Long?) {
         viewModelScope.launch {
             try {
-                repository.logGradeFromEdit(cardId, before, after, grade, groupId)
+                repository.grading.logGradeFromEdit(cardId, before, after, grade, groupId)
             } catch (e: Exception) {
                 // Non-fatal: history logging should not break the save flow
             }
@@ -450,9 +450,9 @@ class CardViewModel(
             try {
                 val card = repository.getCardById(cardId) ?: return@launch
                 val computed = if (groupId != null) {
-                    repository.computeReviewWithGroup(card, grade, groupId)
+                    repository.grading.computeReviewWithGroup(card, grade, groupId)
                 } else {
-                    repository.computeReview(card, grade)
+                    repository.grading.computeReview(card, grade)
                 }
                 onComplete(computed)
             } catch (e: Exception) {
@@ -493,18 +493,18 @@ class CardViewModel(
                 val importedCount = when {
                     // V2/V3, where a card can hold one learning state per group.
                     parsedCards.any { it.isGroupSpecificState } ->
-                        repository.importCardsWithGroupStates(parsedCards, groupIds, targets.learningGroupIds) {
+                        repository.archive.importCardsWithGroupStates(parsedCards, groupIds, targets.learningGroupIds) {
                             CardImportExport.parsedCardToCard(it, imageStore)
                         }
                     // V1, which has full state but only one of it per card.
                     parsedCards.any { it.hasFullState } ->
-                        repository.importFullCards(
+                        repository.archive.importFullCards(
                             parsedCards.map { CardImportExport.parsedCardToCard(it, imageStore) },
                             parsedCards.map { it.groupNames },
                             groupIds
                         )
                     // Question and answer, and nothing else.
-                    else -> repository.importCards(
+                    else -> repository.archive.importCards(
                         parsedCards.map { it.concept to it.answer }
                     )
                 }
@@ -513,7 +513,7 @@ class CardViewModel(
                 importOpponentsAndHistory()
                 // With the history in, concepts are derived from it -- except
                 // those with none, which keep the state the file brought.
-                repository.rederiveConcepts(onlyWithHistory = true)
+                repository.conceptDerivation.rederiveConcepts(onlyWithHistory = true)
 
                 _importExportState.value = ImportExportState.ImportSuccess(
                     importedCount = importedCount,
@@ -551,7 +551,7 @@ class CardViewModel(
         }
 
         val questionToCardId = repository.getAllCardsSync().associate { it.question to it.id }
-        val cardIdByUid = repository.cardIdsByUid()
+        val cardIdByUid = repository.archive.cardIdsByUid()
         // A review's card: by stable identifier where the file has one.
         val cardIdOf = { log: CardImportExport.ParsedReviewLog ->
             log.cardUid?.let { cardIdByUid[it] } ?: questionToCardId[log.cardQuestion]
@@ -564,7 +564,7 @@ class CardViewModel(
             sessionIdByUid = sessionIds.byUid
         )
         // Reviews already in the history are left out, so nothing counts twice.
-        if (reviewLogs.isNotEmpty()) repository.importReviewLogs(reviewLogs)
+        if (reviewLogs.isNotEmpty()) repository.archive.importReviewLogs(reviewLogs)
         // Each review's opponent: the identifier the file gave, pointed at
         // whoever has it here; a review the file named only by name gets the
         // identifier of the opponent that name found.
@@ -602,7 +602,7 @@ class CardViewModel(
                 grades = reviews.map { it.grade },
                 images = imageStore
             )
-            val id = repository.ensureSession(session)
+            val id = repository.archive.ensureSession(session)
             byStart[parsed.startTime] = id
             parsed.uid?.let { byUid[it] = id }
         }
@@ -648,7 +648,7 @@ class CardViewModel(
         file: ExportFile,
         includeHistory: Boolean
     ): ImportExportState = try {
-        val cardsWithStates = repository.getAllCardsWithGroupStates()
+        val cardsWithStates = repository.archive.getAllCardsWithGroupStates()
         if (cardsWithStates.isEmpty()) {
             ImportExportState.Error("No cards to export")
         } else {
@@ -690,7 +690,7 @@ class CardViewModel(
                 }
 
                 val groupNames = groups.map { it.name }.toSet()
-                val cardsWithStates = repository.getAllCardsWithGroupStates()
+                val cardsWithStates = repository.archive.getAllCardsWithGroupStates()
                     .filter { cardWithState -> cardWithState.groupNames.any { it in groupNames } }
                 if (cardsWithStates.isEmpty()) {
                     _importExportState.value =
@@ -748,7 +748,7 @@ class CardViewModel(
         }
         val images = imageStore.exportReader(cardsWithStates.map { it.card }, reviewLogs, sessions)
         val learningGroups = groupRepository.getAllLearningGroupsSync()
-        val concepts = repository.getAllConceptsWithStates()
+        val concepts = repository.archive.getAllConceptsWithStates()
 
         return file.write { out ->
             CardImportExport.exportCardsWithGroupStates(
@@ -868,7 +868,7 @@ class CardViewModel(
         viewModelScope.launch {
             _importExportState.value = ImportExportState.Loading
             try {
-                val cardsWithGroups = repository.getAllCardsWithGroupNames()
+                val cardsWithGroups = repository.archive.getAllCardsWithGroupNames()
                     .map { (card, groupNames) -> CardWithGroupNames(card, groupNames) }
 
                 if (cardsWithGroups.isEmpty()) {
@@ -897,7 +897,7 @@ class CardViewModel(
                     return@launch
                 }
 
-                val cardsWithGroups = repository.getAllCardsWithGroupNames()
+                val cardsWithGroups = repository.archive.getAllCardsWithGroupNames()
                     .map { (card, names) -> CardWithGroupNames(card, names) }
                     .filter { cardWithGroups -> cardWithGroups.groupNames.any { it in groupNames } }
 

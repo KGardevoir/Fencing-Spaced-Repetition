@@ -38,7 +38,7 @@ class CardRepositoryCalendarDifferentialTest {
 
                 assertEquals(
                     expected,
-                    CardRepository.isoDayOfWeekAfter(sundayNoonUtc, days, offsetSeconds),
+                    Scheduler.isoDayOfWeekAfter(sundayNoonUtc, days, offsetSeconds),
                     "offset=$offsetSeconds days=$days"
                 )
             }

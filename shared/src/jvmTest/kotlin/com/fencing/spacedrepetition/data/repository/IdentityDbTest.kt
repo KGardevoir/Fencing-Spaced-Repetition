@@ -70,7 +70,7 @@ class IdentityDbTest {
     fun `new reviews record the group's stable identifier`() = runTest {
         val groupId = db.groupDao().insertGroup(Group(name = "Footwork"))
         val c = db.cardDao().getCardById(card("c"))!!
-        repo.reviewCard(c, Grade.GOOD, groupId = groupId)
+        repo.grading.reviewCard(c, Grade.GOOD, groupId = groupId)
         val log = db.reviewLogDao().getAllReviewLogsSync().single()
         assertEquals(db.groupDao().getGroupById(groupId)!!.uid, log.groupUid)
         assertTrue(log.uid.isNotBlank())
@@ -94,12 +94,12 @@ class IdentityDbTest {
         val t = Time.now() - day
         val first = ReviewLog(cardId = c, sessionId = null, reviewTime = t, grade = 3, algorithm = "FSRS",
             stateBefore = "", stateAfter = "", scheduledDays = 0, elapsedDays = 0)
-        assertEquals(1, repo.importReviewLogs(listOf(first)))
+        assertEquals(1, repo.archive.importReviewLogs(listOf(first)))
         // The same review again: by identifier, and -- for a file from before
         // identifiers -- by card, moment and grade.
-        assertEquals(0, repo.importReviewLogs(listOf(first)))
-        assertEquals(0, repo.importReviewLogs(listOf(first.copy(uid = "fresh-from-an-old-file"))))
-        assertEquals(1, repo.importReviewLogs(listOf(first.copy(uid = "another", reviewTime = t + 1))))
+        assertEquals(0, repo.archive.importReviewLogs(listOf(first)))
+        assertEquals(0, repo.archive.importReviewLogs(listOf(first.copy(uid = "fresh-from-an-old-file"))))
+        assertEquals(1, repo.archive.importReviewLogs(listOf(first.copy(uid = "another", reviewTime = t + 1))))
         assertEquals(2, db.reviewLogDao().getAllReviewLogsSync().size)
     }
 
@@ -110,7 +110,7 @@ class IdentityDbTest {
         val parsed = com.fencing.spacedrepetition.util.ParsedCard(
             concept = "New question", answer = "", lineNumber = 1, stateContext = "GLOBAL", uid = uid
         )
-        repo.importCardsWithGroupStates(listOf(parsed), emptyMap()) {
+        repo.archive.importCardsWithGroupStates(listOf(parsed), emptyMap()) {
             com.fencing.spacedrepetition.util.CardImportExport.parsedCardToCard(it)
         }
         val cards = db.cardDao().getAllCardsAsList()
@@ -135,7 +135,7 @@ class IdentityDbTest {
         val opponentId = db.opponentDao().insertOpponent(Opponent(name = "Alex"))
         val alex = db.opponentDao().getOpponentById(opponentId)!!
         val c = db.cardDao().getCardById(card("c"))!!
-        repo.reviewCard(c, Grade.GOOD, opponentId = opponentId)
+        repo.grading.reviewCard(c, Grade.GOOD, opponentId = opponentId)
         val log = db.reviewLogDao().getAllReviewLogsSync().single()
         assertEquals(alex.uid, log.opponentUid)
 
@@ -153,7 +153,7 @@ class IdentityDbTest {
         val bob = db.opponentDao().insertOpponent(Opponent(name = "Bob"))
         val bobby = db.opponentDao().insertOpponent(Opponent(name = "Bobby"))
         val c = db.cardDao().getCardById(card("c"))!!
-        repo.reviewCard(c, Grade.GOOD, opponentId = bobby)
+        repo.grading.reviewCard(c, Grade.GOOD, opponentId = bobby)
 
         opponents.mergeOpponents(sourceId = bobby, targetId = bob)
         val log = db.reviewLogDao().getAllReviewLogsSync().single()
@@ -170,7 +170,7 @@ class IdentityDbTest {
         val sam = db.opponentDao().insertOpponent(Opponent(name = "Sam"))
         val session = repo.createPracticeSession(emptyList())
         val c = db.cardDao().getCardById(card("c"))!!
-        repo.reviewCard(c, Grade.GOOD, sessionId = session, opponentId = alex)
+        repo.grading.reviewCard(c, Grade.GOOD, sessionId = session, opponentId = alex)
 
         repo.updateSessionOpponent(session, sam)
         val log = db.reviewLogDao().getAllReviewLogsSync().single()
@@ -188,7 +188,7 @@ class IdentityDbTest {
         val learningGroupId = db.groupDao().insertLearningGroup(LearningGroup(name = "Bouting"))
         val c = db.cardDao().getCardById(card("c"))!!
         val before = Time.now()
-        repo.reviewCard(c, Grade.GOOD)
+        repo.grading.reviewCard(c, Grade.GOOD)
 
         repo.resetCardStateInLearningGroup(c.id, learningGroupId)
         assertTrue(db.groupDao().getLearningState(c.id, learningGroupId)!!.lastReset >= before)

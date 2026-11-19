@@ -136,7 +136,7 @@ class PracticeViewModel(
                 // Cards deleted since the lock was taken simply drop out.
                 val lockedCards = lockedIds.mapNotNull { repository.getCardById(it) }
                 val drawn = if (lockedCards.isNotEmpty()) {
-                    val locked = CardSelection(repository.selectionModeFor(groupId), SelectionReason.LOCKED)
+                    val locked = CardSelection(repository.drawing.selectionModeFor(groupId), SelectionReason.LOCKED)
                     lockedCards.map { DrawnCard(it, locked) }
                 } else drawCards(numberOfCards, groupId)
                 val cardsForSession = drawn.map { it.card }
@@ -190,7 +190,7 @@ class PracticeViewModel(
      * on, card by card otherwise. See [CardRepository.drawCards].
      */
     private suspend fun drawCards(numberOfCards: Int, groupId: Long?): List<DrawnCard> =
-        repository.drawSession(numberOfCards, groupId)
+        repository.drawing.drawSession(numberOfCards, groupId)
 
     fun nextCard() {
         val currentIndex = _currentCardIndex.value
@@ -335,18 +335,18 @@ class PracticeViewModel(
                     // If practicing within a group, use group-aware review method
                     if (groupId != null) {
                         cardsWithGrades.forEach { (card, grade) ->
-                            repository.reviewCardWithGroup(
+                            repository.grading.reviewCardWithGroup(
                                 card, grade, groupId, sid, opponentId, fightDifficulty, selections[card.id]
                             )
                         }
                     } else {
-                        repository.reviewMultipleCards(
+                        repository.grading.reviewMultipleCards(
                             cardsWithGrades, sid, opponentId, fightDifficulty, selections
                         )
                     }
                     // The session is now in these cards' history, and their
                     // concepts are derived from that history.
-                    repository.rederiveConceptsForCards(cardsWithGrades.map { it.first.id })
+                    repository.conceptDerivation.rederiveConceptsForCards(cardsWithGrades.map { it.first.id })
                 }
 
                 // Complete the session, and with it what was noted about the

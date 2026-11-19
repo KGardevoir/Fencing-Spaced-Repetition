@@ -101,7 +101,7 @@ class GroupViewModel(
         viewModelScope.launch {
             groups.forEach { groupRepository.deleteGroup(it) }
             // Reviews naming the group can no longer be placed in a context.
-            cardRepository.rederiveConcepts()
+            cardRepository.conceptDerivation.rederiveConcepts()
         }
     }
 
@@ -120,7 +120,7 @@ class GroupViewModel(
                 // Concept history is placed by group, so a group changing
                 // learning group (or name) moves where its reviews count.
                 if (updated.learningGroupId != previous.learningGroupId || updated.name != previous.name) {
-                    cardRepository.rederiveConcepts()
+                    cardRepository.conceptDerivation.rederiveConcepts()
                 }
                 onSuccess()
             } catch (e: Exception) {
@@ -156,7 +156,7 @@ class GroupViewModel(
                         wasIn && !isIn -> groupRepository.setLearningGroup(group.id, null)
                     }
                 }
-                cardRepository.rederiveConcepts()
+                cardRepository.conceptDerivation.rederiveConcepts()
                 onSuccess()
             } catch (e: Exception) {
                 // Handle error
@@ -183,12 +183,12 @@ class GroupViewModel(
         viewModelScope.launch {
             learningGroups.forEach { groupRepository.deleteLearningGroup(it) }
             // Its groups learn Global now, and so does their history.
-            cardRepository.rederiveConcepts()
+            cardRepository.conceptDerivation.rederiveConcepts()
         }
     }
 
     fun getDueCardCountForGroup(groupId: Long): Flow<Int> =
-        cardRepository.getDueCardCountByGroup(groupId)
+        cardRepository.drawing.getDueCardCountByGroup(groupId)
 
     // Import and export state, rendered by the group list screen.
     private val _importExportState = MutableStateFlow<ImportExportState>(ImportExportState.Idle)
@@ -230,7 +230,7 @@ class GroupViewModel(
                     .filter { it.name in exportedGroupNames }
                 val images = imageStore.exportReader(cardsWithStates.map { it.card })
                 val learningGroups = groupRepository.getAllLearningGroupsSync()
-                val concepts = cardRepository.getAllConceptsWithStates()
+                val concepts = cardRepository.archive.getAllConceptsWithStates()
 
                 _importExportState.value = file.write { out ->
                     CardImportExport.exportCardsWithGroupStates(
@@ -280,11 +280,11 @@ class GroupViewModel(
 
                 val importedCount = when {
                     parsedCards.any { it.isGroupSpecificState } ->
-                        cardRepository.importCardsWithGroupStates(parsedCards, groupIds, targets.learningGroupIds) {
+                        cardRepository.archive.importCardsWithGroupStates(parsedCards, groupIds, targets.learningGroupIds) {
                             CardImportExport.parsedCardToCard(it, imageStore)
                         }
                     parsedCards.any { it.hasFullState } ->
-                        cardRepository.importFullCards(
+                        cardRepository.archive.importFullCards(
                             parsedCards.map { CardImportExport.parsedCardToCard(it, imageStore) },
                             parsedCards.map { parsed ->
                                 if (targetGroupName == null || targetGroupName in parsed.groupNames) {
@@ -295,13 +295,13 @@ class GroupViewModel(
                             },
                             groupIds
                         )
-                    else -> cardRepository.importCardsToGroup(
+                    else -> cardRepository.archive.importCardsToGroup(
                         parsedCards.map { it.concept to it.answer },
                         groupId
                     )
                 }
                 importConceptsAndLinks(parsedCards, cardRepository, conceptRepository, groupRepository)
-                cardRepository.rederiveConcepts(onlyWithHistory = true)
+                cardRepository.conceptDerivation.rederiveConcepts(onlyWithHistory = true)
 
                 _importExportState.value = ImportExportState.ImportSuccess(
                     importedCount = importedCount,

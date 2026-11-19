@@ -3,6 +3,7 @@
 
 package com.fencing.spacedrepetition.ui.screen
 
+import com.fencing.spacedrepetition.data.model.LearningContexts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -30,7 +31,6 @@ import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
-import com.fencing.spacedrepetition.data.repository.GROUP_NAME_CARD_EDIT
 import com.fencing.spacedrepetition.ui.components.CardImagesDisplay
 import com.fencing.spacedrepetition.ui.components.GradeBadge
 import com.fencing.spacedrepetition.ui.components.CardImagesEdit
@@ -621,7 +621,7 @@ private fun QuickGradeCard(
                         overflow = TextOverflow.Ellipsis
                     )
                     ConceptsUnderTest(logWithCard.concepts)
-                    val groupLabel = log.groupName?.takeIf { it != GROUP_NAME_CARD_EDIT }
+                    val groupLabel = log.groupName?.takeIf { it != LearningContexts.CARD_EDITOR }
                     Text(
                         text = buildString {
                             append("Quick Grade")
@@ -769,7 +769,7 @@ private fun ReviewLogRow(
                     overflow = TextOverflow.Ellipsis
                 )
                 ConceptsUnderTest(logWithCard.concepts)
-                val groupLabel = log.groupName?.takeIf { it != GROUP_NAME_CARD_EDIT }
+                val groupLabel = log.groupName?.takeIf { it != LearningContexts.CARD_EDITOR }
                 val metaText = buildString {
                     if (groupLabel != null) append(groupLabel)
                     if (opponentLabel != null) {
