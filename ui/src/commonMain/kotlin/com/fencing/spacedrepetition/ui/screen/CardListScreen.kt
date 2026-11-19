@@ -29,6 +29,8 @@ import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.ui.components.AppIcons
+import com.fencing.spacedrepetition.ui.components.KeptListPosition
+import com.fencing.spacedrepetition.ui.components.ScrollToTopOnSortChange
 import com.fencing.spacedrepetition.ui.components.SelectionAction
 import com.fencing.spacedrepetition.ui.components.SelectionTopBar
 import com.fencing.spacedrepetition.data.model.Card
@@ -108,7 +110,9 @@ fun CardListScreen(
     onExportAllPhotos: () -> Unit,
     onNavigateToAddCard: (Long?) -> Unit,
     onNavigateToEditCard: (Card) -> Unit,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    /** Where the list is scrolled; held by the caller so it survives opening a card. */
+    listPosition: KeptListPosition = remember { KeptListPosition() }
 ) {
     var showDeleteDialog by remember { mutableStateOf<Card?>(null) }
     var showMenu by remember { mutableStateOf(false) }
@@ -137,11 +141,9 @@ fun CardListScreen(
         BackHandler(onBack = onExitSelectionMode)
     }
 
-    // Scroll to top when sort option or direction changes
-    val cardListState = rememberLazyListState()
-    LaunchedEffect(cardSortOption, sortDirection) {
-        cardListState.scrollToItem(0)
-    }
+    // Scroll to top when sort option or direction changes, and only then.
+    val cardListState = listPosition.list
+    ScrollToTopOnSortChange(listPosition, cardSortOption to sortDirection)
 
     Scaffold(
         topBar = {

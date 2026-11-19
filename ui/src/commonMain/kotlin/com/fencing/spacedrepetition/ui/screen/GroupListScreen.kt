@@ -18,6 +18,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.ui.components.AppIcons
+import com.fencing.spacedrepetition.ui.components.KeptListPosition
+import com.fencing.spacedrepetition.ui.components.ScrollToTopOnSortChange
 import com.fencing.spacedrepetition.ui.components.SelectionAction
 import com.fencing.spacedrepetition.ui.components.SelectionTopBar
 import com.fencing.spacedrepetition.ui.components.rememberSelectionState
@@ -62,7 +64,9 @@ fun GroupListScreen(
     onCsvImportIntoNewGroup: (List<ParsedCard>, List<String>, String) -> Unit = { _, _, _ -> },
     onNavigateBack: () -> Unit,
     onNavigateToEdit: (Long) -> Unit = {},
-    onNavigateToAdd: () -> Unit = {}
+    onNavigateToAdd: () -> Unit = {},
+    /** Where the list is scrolled; held by the caller so it survives opening a group. */
+    listPosition: KeptListPosition = remember { KeptListPosition() }
 ) {
     var showDeleteDialog by remember { mutableStateOf<List<Group>?>(null) }
     var showSortMenu by remember { mutableStateOf(false) }
@@ -70,10 +74,8 @@ fun GroupListScreen(
     val selection = rememberSelectionState(groups.map { it.id })
 
     // Scroll to top when sort option changes
-    val groupListState = rememberLazyListState()
-    LaunchedEffect(sortOption) {
-        groupListState.scrollToItem(0)
-    }
+    val groupListState = listPosition.list
+    ScrollToTopOnSortChange(listPosition, sortOption)
 
     Scaffold(
         topBar = {

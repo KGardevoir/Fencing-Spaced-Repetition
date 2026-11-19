@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -89,6 +90,8 @@ fun ConceptsScreen(
     // The learning context last looked at in a concept's parameters ("global",
     // or a learning group's id), so the next concept opens on it where it can.
     var lastContextKey by rememberSaveable { mutableStateOf<String?>(null) }
+    // Held here, above the editor, so closing a concept returns to the same place.
+    val conceptListState = rememberLazyListState()
 
     // Editing is a full screen of its own, in place of the list.
     editing?.let { summary ->
@@ -175,6 +178,7 @@ fun ConceptsScreen(
         }
     ) { paddingValues ->
         LazyColumn(
+            state = conceptListState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),

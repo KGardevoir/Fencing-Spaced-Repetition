@@ -3,6 +3,7 @@
 
 package com.fencing.spacedrepetition.ui
 
+import com.fencing.spacedrepetition.ui.components.KeptListPosition
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -103,6 +104,10 @@ fun App(
     // never routed here, because Compose does not touch session history. See
     // BackNavigationEventInput in compose-ui, which is the whole of it.
     BackHandler(enabled = navigator.canGoBack) { navigator.back() }
+
+    // List positions kept while their screen is left for an editor and come back to.
+    val cardListPosition = remember { KeptListPosition() }
+    val groupListPosition = remember { KeptListPosition() }
 
     when (val destination = navigator.current) {
 
@@ -272,6 +277,7 @@ fun App(
 
             val cardsGlobalConceptScheduling by settingsViewModel.globalConceptScheduling.collectAsState()
             CardListScreen(
+                listPosition = cardListPosition,
                 allCards = allCards,
                 allCardsWithGroups = allCardsWithGroups,
                 groups = groups,
@@ -353,6 +359,7 @@ fun App(
             val learningGroups by groupViewModel.learningGroups.collectAsState()
 
             GroupListScreen(
+                listPosition = groupListPosition,
                 groups = sortedGroups,
                 learningGroups = learningGroups,
                 sortOption = groupSortOption,
