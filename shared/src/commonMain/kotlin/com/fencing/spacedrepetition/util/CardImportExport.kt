@@ -72,85 +72,27 @@ object CardImportExport {
     private const val REVIEW_HISTORY_START = "#REVIEW_HISTORY_START"
     private const val REVIEW_HISTORY_END = "#REVIEW_HISTORY_END"
 
-    // Column indices for the tab-separated V1-V4 layouts. Read, never
-    // written: an export is YAML. The Algorithm and SM2_* columns the older
-    // ones reserve are read past and discarded -- SM-2 is gone, and FSRS is
-    // the only scheduler an algorithm column could have named.
-    // Column indices for V1 export format
-    private const val COL_V1_QUESTION = 0
-    private const val COL_V1_ANSWER = 1
-    private const val COL_V1_ALGORITHM = 2
-    private const val COL_V1_NEXT_REVIEW = 3
-    private const val COL_V1_LAST_REVIEW = 4
-    private const val COL_V1_FSRS_STABILITY = 5
-    private const val COL_V1_FSRS_DIFFICULTY = 6
-    private const val COL_V1_FSRS_STATE = 7
-    private const val COL_V1_FSRS_REPS = 8
-    private const val COL_V1_FSRS_LAPSES = 9
-    private const val COL_V1_FSRS_SCHEDULED_DAYS = 10
-    private const val COL_V1_FSRS_ELAPSED_DAYS = 11
-    private const val COL_V1_SM2_EASE_FACTOR = 12
-    private const val COL_V1_SM2_INTERVAL = 13
-    private const val COL_V1_SM2_REPETITIONS = 14
-    private const val COL_V1_GROUPS = 15
+    /**
+     * Where each value sits in one of the tab-separated V1-V4 layouts. Read,
+     * never written: an export is YAML. The Algorithm and SM2_* columns the
+     * older ones reserve are read past -- SM-2 is gone, and FSRS is the only
+     * scheduler an algorithm column could have named. Null: the layout has
+     * no such column (V1 holds only the Global state; V1 and V2 no images).
+     */
+    private class LegacyLayout(
+        val images: Int?, val stateContext: Int?, val nextReview: Int, val lastReview: Int,
+        val stability: Int, val difficulty: Int, val state: Int, val reps: Int, val lapses: Int,
+        val scheduledDays: Int, val elapsedDays: Int, val groups: Int
+    )
 
-    // Column indices for V2 export format (includes StateContext)
-    private const val COL_V2_QUESTION = 0
-    private const val COL_V2_ANSWER = 1
-    private const val COL_V2_ALGORITHM = 2
-    private const val COL_V2_STATE_CONTEXT = 3  // GLOBAL or group name
-    private const val COL_V2_NEXT_REVIEW = 4
-    private const val COL_V2_LAST_REVIEW = 5
-    private const val COL_V2_FSRS_STABILITY = 6
-    private const val COL_V2_FSRS_DIFFICULTY = 7
-    private const val COL_V2_FSRS_STATE = 8
-    private const val COL_V2_FSRS_REPS = 9
-    private const val COL_V2_FSRS_LAPSES = 10
-    private const val COL_V2_FSRS_SCHEDULED_DAYS = 11
-    private const val COL_V2_FSRS_ELAPSED_DAYS = 12
-    private const val COL_V2_SM2_EASE_FACTOR = 13
-    private const val COL_V2_SM2_INTERVAL = 14
-    private const val COL_V2_SM2_REPETITIONS = 15
-    private const val COL_V2_GROUPS = 16
-
-    // Column indices for V3 export format (includes ImagePaths)
-    private const val COL_V3_QUESTION = 0
-    private const val COL_V3_ANSWER = 1
-    private const val COL_V3_IMAGE_PATHS = 2
-    private const val COL_V3_ALGORITHM = 3
-    private const val COL_V3_STATE_CONTEXT = 4
-    private const val COL_V3_NEXT_REVIEW = 5
-    private const val COL_V3_LAST_REVIEW = 6
-    private const val COL_V3_FSRS_STABILITY = 7
-    private const val COL_V3_FSRS_DIFFICULTY = 8
-    private const val COL_V3_FSRS_STATE = 9
-    private const val COL_V3_FSRS_REPS = 10
-    private const val COL_V3_FSRS_LAPSES = 11
-    private const val COL_V3_FSRS_SCHEDULED_DAYS = 12
-    private const val COL_V3_FSRS_ELAPSED_DAYS = 13
-    private const val COL_V3_SM2_EASE_FACTOR = 14
-    private const val COL_V3_SM2_INTERVAL = 15
-    private const val COL_V3_SM2_REPETITIONS = 16
-    private const val COL_V3_GROUPS = 17
-
-    // Column indices for V4, the last of the tab-separated layouts and the
-    // one every export wrote until the format moved to YAML. V3 minus the
-    // Algorithm and SM2_* columns, which SM-2's removal left with nothing to
-    // say.
-    private const val COL_V4_QUESTION = 0
-    private const val COL_V4_ANSWER = 1
-    private const val COL_V4_IMAGE_PATHS = 2
-    private const val COL_V4_STATE_CONTEXT = 3
-    private const val COL_V4_NEXT_REVIEW = 4
-    private const val COL_V4_LAST_REVIEW = 5
-    private const val COL_V4_FSRS_STABILITY = 6
-    private const val COL_V4_FSRS_DIFFICULTY = 7
-    private const val COL_V4_FSRS_STATE = 8
-    private const val COL_V4_FSRS_REPS = 9
-    private const val COL_V4_FSRS_LAPSES = 10
-    private const val COL_V4_FSRS_SCHEDULED_DAYS = 11
-    private const val COL_V4_FSRS_ELAPSED_DAYS = 12
-    private const val COL_V4_GROUPS = 13
+    /** Question and answer are always columns 0 and 1. */
+    private val LEGACY_LAYOUTS = mapOf(
+        1 to LegacyLayout(null, null, 3, 4, 5, 6, 7, 8, 9, 10, 11, groups = 15),
+        2 to LegacyLayout(null, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, groups = 16),
+        3 to LegacyLayout(2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, groups = 17),
+        // The last tab-separated layout: V3 without the Algorithm and SM2_* columns.
+        4 to LegacyLayout(2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, groups = 13),
+    )
 
     /** Parsed group settings from an import file */
     var lastParsedGroupSettings: Map<String, Map<String, String>> = emptyMap()
@@ -435,10 +377,7 @@ object CardImportExport {
 
                 try {
                     val parsedCard = when (formatVersion) {
-                        4 -> parseV4FormatLine(trimmedLine, lineNumber)
-                        3 -> parseV3FormatLine(trimmedLine, lineNumber)
-                        2 -> parseV2FormatLine(trimmedLine, lineNumber)
-                        1 -> parseV1FormatLine(trimmedLine, lineNumber)
+                        in LEGACY_LAYOUTS -> parseLegacyLine(trimmedLine, lineNumber, formatVersion)
                         else -> parseSimpleLine(trimmedLine, lineNumber)
                     }
 
@@ -474,198 +413,35 @@ object CardImportExport {
         }
     }
 
-    private fun parseV1FormatLine(line: String, lineNumber: Int): ParsedCard? {
+    /** One line of a V1-V4 file; two columns alone are a question and its answer. */
+    private fun parseLegacyLine(line: String, lineNumber: Int, version: Int): ParsedCard {
         val parts = line.split(DELIMITER)
-
-        if (parts.size < 2) {
-            throw IllegalArgumentException("Missing answer")
-        }
-
-        val concept = unescapeNewlines(parts.getOrNull(COL_V1_QUESTION)?.trim() ?: "")
-        val answer = unescapeNewlines(parts.getOrNull(COL_V1_ANSWER)?.trim() ?: "")
-
+        if (parts.size < 2) throw IllegalArgumentException("Missing answer")
+        val concept = unescapeNewlines(parts[0].trim())
+        val answer = unescapeNewlines(parts[1].trim())
         if (concept.isBlank()) throw IllegalArgumentException("Empty question")
+        if (parts.size == 2) return ParsedCard(concept = concept, answer = answer, lineNumber = lineNumber)
 
-        // If only 2 columns, treat as simple format
-        if (parts.size == 2) {
-            return ParsedCard(concept = concept, answer = answer, lineNumber = lineNumber)
-        }
-
-        // Parse full format
-        val groupsStr = parts.getOrNull(COL_V1_GROUPS)?.trim() ?: ""
-        val groupNames = if (groupsStr.isNotEmpty()) {
-            groupsStr.split(GROUP_SEPARATOR).map { it.trim() }.filter { it.isNotEmpty() }
-        } else {
-            emptyList()
-        }
-
+        val at = LEGACY_LAYOUTS.getValue(version)
+        fun text(i: Int?) = i?.let { parts.getOrNull(it)?.trim() }
+        fun list(i: Int?, separator: String) =
+            text(i).orEmpty().split(separator).map { it.trim() }.filter { it.isNotEmpty() }
         return ParsedCard(
             concept = concept,
             answer = answer,
             lineNumber = lineNumber,
-            stateContext = "GLOBAL",  // V1 format only has global state
-            nextReview = parts.getOrNull(COL_V1_NEXT_REVIEW)?.toLongOrNull() ?: 0L,
-            lastReview = parts.getOrNull(COL_V1_LAST_REVIEW)?.toLongOrNull() ?: 0L,
-            fsrsStability = parts.getOrNull(COL_V1_FSRS_STABILITY)?.toDoubleOrNull() ?: 0.0,
-            fsrsDifficulty = parts.getOrNull(COL_V1_FSRS_DIFFICULTY)?.toDoubleOrNull() ?: 0.0,
-            fsrsState = parts.getOrNull(COL_V1_FSRS_STATE)?.trim() ?: "NEW",
-            fsrsReps = parts.getOrNull(COL_V1_FSRS_REPS)?.toIntOrNull() ?: 0,
-            fsrsLapses = parts.getOrNull(COL_V1_FSRS_LAPSES)?.toIntOrNull() ?: 0,
-            fsrsScheduledDays = parts.getOrNull(COL_V1_FSRS_SCHEDULED_DAYS)?.toIntOrNull() ?: 0,
-            fsrsElapsedDays = parts.getOrNull(COL_V1_FSRS_ELAPSED_DAYS)?.toIntOrNull() ?: 0,
-            groupNames = groupNames
-        )
-    }
-
-    private fun parseV2FormatLine(line: String, lineNumber: Int): ParsedCard? {
-        val parts = line.split(DELIMITER)
-
-        if (parts.size < 2) {
-            throw IllegalArgumentException("Missing answer")
-        }
-
-        val concept = unescapeNewlines(parts.getOrNull(COL_V2_QUESTION)?.trim() ?: "")
-        val answer = unescapeNewlines(parts.getOrNull(COL_V2_ANSWER)?.trim() ?: "")
-
-        if (concept.isBlank()) throw IllegalArgumentException("Empty question")
-
-        // If only 2 columns, treat as simple format
-        if (parts.size == 2) {
-            return ParsedCard(concept = concept, answer = answer, lineNumber = lineNumber)
-        }
-
-        // Parse V2 full format
-        val stateContext = parts.getOrNull(COL_V2_STATE_CONTEXT)?.trim() ?: "GLOBAL"
-
-        val groupsStr = parts.getOrNull(COL_V2_GROUPS)?.trim() ?: ""
-        val groupNames = if (groupsStr.isNotEmpty()) {
-            groupsStr.split(GROUP_SEPARATOR).map { it.trim() }.filter { it.isNotEmpty() }
-        } else {
-            emptyList()
-        }
-
-        return ParsedCard(
-            concept = concept,
-            answer = answer,
-            lineNumber = lineNumber,
-            stateContext = stateContext,
-            nextReview = parts.getOrNull(COL_V2_NEXT_REVIEW)?.toLongOrNull() ?: 0L,
-            lastReview = parts.getOrNull(COL_V2_LAST_REVIEW)?.toLongOrNull() ?: 0L,
-            fsrsStability = parts.getOrNull(COL_V2_FSRS_STABILITY)?.toDoubleOrNull() ?: 0.0,
-            fsrsDifficulty = parts.getOrNull(COL_V2_FSRS_DIFFICULTY)?.toDoubleOrNull() ?: 0.0,
-            fsrsState = parts.getOrNull(COL_V2_FSRS_STATE)?.trim() ?: "NEW",
-            fsrsReps = parts.getOrNull(COL_V2_FSRS_REPS)?.toIntOrNull() ?: 0,
-            fsrsLapses = parts.getOrNull(COL_V2_FSRS_LAPSES)?.toIntOrNull() ?: 0,
-            fsrsScheduledDays = parts.getOrNull(COL_V2_FSRS_SCHEDULED_DAYS)?.toIntOrNull() ?: 0,
-            fsrsElapsedDays = parts.getOrNull(COL_V2_FSRS_ELAPSED_DAYS)?.toIntOrNull() ?: 0,
-            groupNames = groupNames
-        )
-    }
-
-    private fun parseV4FormatLine(line: String, lineNumber: Int): ParsedCard? {
-        val parts = line.split(DELIMITER)
-
-        if (parts.size < 2) {
-            throw IllegalArgumentException("Missing answer")
-        }
-
-        val concept = unescapeNewlines(parts.getOrNull(COL_V4_QUESTION)?.trim() ?: "")
-        val answer = unescapeNewlines(parts.getOrNull(COL_V4_ANSWER)?.trim() ?: "")
-
-        if (concept.isBlank()) throw IllegalArgumentException("Empty question")
-
-        // If only 2 columns, treat as simple format
-        if (parts.size == 2) {
-            return ParsedCard(concept = concept, answer = answer, lineNumber = lineNumber)
-        }
-
-        // Parse image data (base64 encoded)
-        val imageDataStr = parts.getOrNull(COL_V4_IMAGE_PATHS)?.trim() ?: ""
-        val imageData = if (imageDataStr.isNotEmpty()) {
-            imageDataStr.split(IMAGE_SEPARATOR).map { it.trim() }.filter { it.isNotEmpty() }
-        } else {
-            emptyList()
-        }
-
-        val stateContext = parts.getOrNull(COL_V4_STATE_CONTEXT)?.trim() ?: "GLOBAL"
-
-        val groupsStr = parts.getOrNull(COL_V4_GROUPS)?.trim() ?: ""
-        val groupNames = if (groupsStr.isNotEmpty()) {
-            groupsStr.split(GROUP_SEPARATOR).map { it.trim() }.filter { it.isNotEmpty() }
-        } else {
-            emptyList()
-        }
-
-        return ParsedCard(
-            concept = concept,
-            answer = answer,
-            lineNumber = lineNumber,
-            imageData = imageData,  // Store base64 data for later decoding
-            stateContext = stateContext,
-            nextReview = parts.getOrNull(COL_V4_NEXT_REVIEW)?.toLongOrNull() ?: 0L,
-            lastReview = parts.getOrNull(COL_V4_LAST_REVIEW)?.toLongOrNull() ?: 0L,
-            fsrsStability = parts.getOrNull(COL_V4_FSRS_STABILITY)?.toDoubleOrNull() ?: 0.0,
-            fsrsDifficulty = parts.getOrNull(COL_V4_FSRS_DIFFICULTY)?.toDoubleOrNull() ?: 0.0,
-            fsrsState = parts.getOrNull(COL_V4_FSRS_STATE)?.trim() ?: "NEW",
-            fsrsReps = parts.getOrNull(COL_V4_FSRS_REPS)?.toIntOrNull() ?: 0,
-            fsrsLapses = parts.getOrNull(COL_V4_FSRS_LAPSES)?.toIntOrNull() ?: 0,
-            fsrsScheduledDays = parts.getOrNull(COL_V4_FSRS_SCHEDULED_DAYS)?.toIntOrNull() ?: 0,
-            fsrsElapsedDays = parts.getOrNull(COL_V4_FSRS_ELAPSED_DAYS)?.toIntOrNull() ?: 0,
-            groupNames = groupNames
-        )
-    }
-
-    private fun parseV3FormatLine(line: String, lineNumber: Int): ParsedCard? {
-        val parts = line.split(DELIMITER)
-
-        if (parts.size < 2) {
-            throw IllegalArgumentException("Missing answer")
-        }
-
-        val concept = unescapeNewlines(parts.getOrNull(COL_V3_QUESTION)?.trim() ?: "")
-        val answer = unescapeNewlines(parts.getOrNull(COL_V3_ANSWER)?.trim() ?: "")
-
-        if (concept.isBlank()) throw IllegalArgumentException("Empty question")
-
-        // If only 2 columns, treat as simple format
-        if (parts.size == 2) {
-            return ParsedCard(concept = concept, answer = answer, lineNumber = lineNumber)
-        }
-
-        // Parse image data (base64 encoded)
-        val imageDataStr = parts.getOrNull(COL_V3_IMAGE_PATHS)?.trim() ?: ""
-        val imageData = if (imageDataStr.isNotEmpty()) {
-            imageDataStr.split(IMAGE_SEPARATOR).map { it.trim() }.filter { it.isNotEmpty() }
-        } else {
-            emptyList()
-        }
-
-        // Parse V3 full format
-        val stateContext = parts.getOrNull(COL_V3_STATE_CONTEXT)?.trim() ?: "GLOBAL"
-
-        val groupsStr = parts.getOrNull(COL_V3_GROUPS)?.trim() ?: ""
-        val groupNames = if (groupsStr.isNotEmpty()) {
-            groupsStr.split(GROUP_SEPARATOR).map { it.trim() }.filter { it.isNotEmpty() }
-        } else {
-            emptyList()
-        }
-
-        return ParsedCard(
-            concept = concept,
-            answer = answer,
-            lineNumber = lineNumber,
-            imageData = imageData,  // Store base64 data for later decoding
-            stateContext = stateContext,
-            nextReview = parts.getOrNull(COL_V3_NEXT_REVIEW)?.toLongOrNull() ?: 0L,
-            lastReview = parts.getOrNull(COL_V3_LAST_REVIEW)?.toLongOrNull() ?: 0L,
-            fsrsStability = parts.getOrNull(COL_V3_FSRS_STABILITY)?.toDoubleOrNull() ?: 0.0,
-            fsrsDifficulty = parts.getOrNull(COL_V3_FSRS_DIFFICULTY)?.toDoubleOrNull() ?: 0.0,
-            fsrsState = parts.getOrNull(COL_V3_FSRS_STATE)?.trim() ?: "NEW",
-            fsrsReps = parts.getOrNull(COL_V3_FSRS_REPS)?.toIntOrNull() ?: 0,
-            fsrsLapses = parts.getOrNull(COL_V3_FSRS_LAPSES)?.toIntOrNull() ?: 0,
-            fsrsScheduledDays = parts.getOrNull(COL_V3_FSRS_SCHEDULED_DAYS)?.toIntOrNull() ?: 0,
-            fsrsElapsedDays = parts.getOrNull(COL_V3_FSRS_ELAPSED_DAYS)?.toIntOrNull() ?: 0,
-            groupNames = groupNames
+            imageData = list(at.images, IMAGE_SEPARATOR),  // base64, decoded later
+            stateContext = text(at.stateContext) ?: "GLOBAL",
+            nextReview = text(at.nextReview)?.toLongOrNull() ?: 0L,
+            lastReview = text(at.lastReview)?.toLongOrNull() ?: 0L,
+            fsrsStability = text(at.stability)?.toDoubleOrNull() ?: 0.0,
+            fsrsDifficulty = text(at.difficulty)?.toDoubleOrNull() ?: 0.0,
+            fsrsState = text(at.state) ?: "NEW",
+            fsrsReps = text(at.reps)?.toIntOrNull() ?: 0,
+            fsrsLapses = text(at.lapses)?.toIntOrNull() ?: 0,
+            fsrsScheduledDays = text(at.scheduledDays)?.toIntOrNull() ?: 0,
+            fsrsElapsedDays = text(at.elapsedDays)?.toIntOrNull() ?: 0,
+            groupNames = list(at.groups, GROUP_SEPARATOR)
         )
     }
 
