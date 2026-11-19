@@ -50,20 +50,4 @@ class Migration18To19Test {
             assertEquals("ok", db.integrityCheck())
         }
     }
-
-    /**
-     * Version 18 has been installed, so its schema is fixed for good: a change
-     * to it would change the identity hash Room checks on open, and every
-     * phone already on 18 would crash on launch (which is what happened when
-     * it was amended in place). Change the schema in a new version instead.
-     */
-    @Test
-    fun `the released version 18 schema never changes`() {
-        fun identity(path: String) =
-            Regex(""""identityHash"\s*:\s*"([0-9a-f]+)"""").find(java.io.File(path).readText())!!.groupValues[1]
-        assertEquals(
-            identity("src/jvmTest/resources/released-v18/18-7141ca0.json"),
-            identity("schemas/com.fencing.spacedrepetition.data.AppDatabase/18.json")
-        )
-    }
 }

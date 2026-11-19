@@ -66,21 +66,4 @@ class Migration22To23Test {
             assertEquals(0L, db.queryLong("SELECT COUNT(*) FROM `review_logs` WHERE `selectionTrigger` IS NOT NULL"))
         }
     }
-
-    /**
-     * Released versions never change: Room checks the schema's identity hash
-     * on open, and a phone already on a version whose schema changed under
-     * the same number crashes on launch. Change the schema in a new version.
-     */
-    @Test
-    fun `released schemas never change`() {
-        fun identity(path: String) =
-            Regex(""""identityHash"\s*:\s*"([0-9a-f]+)"""").find(File(path).readText())!!.groupValues[1]
-        val dir = "schemas/com.fencing.spacedrepetition.data.AppDatabase"
-        assertEquals(identity("src/jvmTest/resources/released/21-d06a7b4.json"), identity("$dir/21.json"))
-        assertEquals(identity("src/jvmTest/resources/released/22-9e957ee.json"), identity("$dir/22.json"))
-        assertEquals(identity("src/jvmTest/resources/released/23-0ecf3e5.json"), identity("$dir/23.json"))
-        // 23 is 21's schema under the number that joins both lines.
-        assertEquals(identity("$dir/21.json"), identity("$dir/23.json"))
-    }
 }

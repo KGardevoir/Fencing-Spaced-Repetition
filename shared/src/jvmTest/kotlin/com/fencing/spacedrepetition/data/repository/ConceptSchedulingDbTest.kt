@@ -8,6 +8,7 @@ import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.execSQL
 import com.fencing.spacedrepetition.data.ALL_MIGRATIONS
 import com.fencing.spacedrepetition.data.AppDatabase
+import com.fencing.spacedrepetition.data.ReleasedSchemas
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardSelection
 import com.fencing.spacedrepetition.data.model.SelectionMode
@@ -608,7 +609,7 @@ class ConceptSchedulingDbTest {
     private fun upgradesFromReleasedV18(commit: String) = runTest {
         val file = File.createTempFile("v18-$commit", ".db").apply { delete() }
         try {
-            createFromExportedSchema(File("src/jvmTest/resources/released-v18/18-$commit.json"), 18, file.absolutePath)
+            createFromExportedSchema(if (commit == "7141ca0") ReleasedSchemas.schema(18) else ReleasedSchemas.v18Variant(commit), 18, file.absolutePath)
             val path = file.absolutePath
             insertRow(path, "cards", mapOf("id" to 1, "question" to "Lunge", "answer" to "", "imagePaths" to "", "fsrsState" to "REVIEW", "category" to "", "tags" to "", "uid" to "seed-card"))
             insertRow(path, "groups", mapOf("id" to 2, "name" to "Footwork", "description" to "", "uid" to "seed-group"))
@@ -657,7 +658,7 @@ class ConceptSchedulingDbTest {
         val file = File.createTempFile("v19", ".db").apply { delete() }
         try {
             val path = file.absolutePath
-            createFromExportedSchema(File("src/jvmTest/resources/released/19-b490cfe.json"), 19, path)
+            createFromExportedSchema(ReleasedSchemas.schema(19), 19, path)
             insertRow(path, "cards", mapOf("id" to 1, "question" to "Lunge", "answer" to "", "imagePaths" to "", "fsrsState" to "NEW", "category" to "", "tags" to "", "uid" to "seed-card"))
             insertRow(path, "concepts", mapOf("id" to 5, "name" to "Distance", "description" to "", "fsrsState" to "NEW", "uid" to "seed-concept"))
             insertRow(path, "card_concept_cross_ref", mapOf("cardId" to 1, "conceptId" to 5))
@@ -678,7 +679,7 @@ class ConceptSchedulingDbTest {
         val file = File.createTempFile("v20", ".db").apply { delete() }
         try {
             val path = file.absolutePath
-            createFromExportedSchema(File("src/jvmTest/resources/released/20-c4cceb5.json"), 20, path)
+            createFromExportedSchema(ReleasedSchemas.schema(20), 20, path)
             insertRow(path, "cards", mapOf("id" to 1, "question" to "Lunge", "answer" to "", "imagePaths" to "", "fsrsState" to "NEW", "category" to "", "tags" to "", "uid" to "seed-card"))
             insertRow(path, "review_logs", mapOf("id" to 1, "cardId" to 1, "reviewTime" to 5, "grade" to 3, "algorithm" to "FSRS", "stateBefore" to "", "stateAfter" to "", "scheduledDays" to 0, "elapsedDays" to 0, "notes" to "", "imagePaths" to "", "stabilityMultiplier" to 1.0, "uid" to "seed-log"))
             val migrated = openMigrated(path)
@@ -701,7 +702,7 @@ class ConceptSchedulingDbTest {
         val file = File.createTempFile("v21", ".db").apply { delete() }
         try {
             val path = file.absolutePath
-            createFromExportedSchema(File("src/jvmTest/resources/released/21-d06a7b4.json"), 21, path)
+            createFromExportedSchema(ReleasedSchemas.schema(21), 21, path)
             insertRow(path, "cards", mapOf("id" to 1, "question" to "Lunge", "answer" to "", "imagePaths" to "", "fsrsState" to "NEW", "category" to "", "tags" to "", "uid" to "seed-card"))
             insertRow(path, "concepts", mapOf("id" to 5, "name" to "Distance", "description" to "", "fsrsState" to "NEW", "uid" to "seed-concept"))
             insertRow(path, "card_concept_cross_ref", mapOf("cardId" to 1, "conceptId" to 5, "weight" to 2.0))
@@ -722,7 +723,7 @@ class ConceptSchedulingDbTest {
         val file = File.createTempFile("v22", ".db").apply { delete() }
         try {
             val path = file.absolutePath
-            createFromExportedSchema(File("src/jvmTest/resources/released/22-9e957ee.json"), 22, path)
+            createFromExportedSchema(ReleasedSchemas.schema(22), 22, path)
             insertRow(path, "cards", mapOf("id" to 1, "question" to "Lunge", "answer" to "", "imagePaths" to "", "fsrsState" to "NEW", "category" to "", "tags" to "", "uid" to "seed-card"))
             insertRow(path, "learning_groups", mapOf("id" to 3, "name" to "Bouting", "description" to "", "uid" to "seed-lg"))
             val migrated = openMigrated(path)

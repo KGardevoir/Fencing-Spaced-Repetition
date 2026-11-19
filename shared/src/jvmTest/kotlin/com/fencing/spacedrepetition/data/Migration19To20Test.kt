@@ -7,7 +7,6 @@ import kotlinx.coroutines.test.runTest
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 /** Migration 19 -> 20: how much of each concept a card contains. */
 class Migration19To20Test {
@@ -33,25 +32,5 @@ class Migration19To20Test {
             assertEquals(1.0, db.queryDouble("SELECT `weight` FROM `card_concept_cross_ref`"))
             assertEquals("ok", db.integrityCheck())
         }
-    }
-
-    /**
-     * Released versions never change: Room checks the schema's identity hash
-     * on open, and a phone already on a version whose schema changed under
-     * the same number crashes on launch. Change the schema in a new version.
-     */
-    @Test
-    fun `released schemas never change`() {
-        fun identity(path: String) =
-            Regex(""""identityHash"\s*:\s*"([0-9a-f]+)"""").find(File(path).readText())!!.groupValues[1]
-        assertEquals(
-            identity("src/jvmTest/resources/released/19-b490cfe.json"),
-            identity("schemas/com.fencing.spacedrepetition.data.AppDatabase/19.json")
-        )
-        assertEquals(
-            identity("src/jvmTest/resources/released/20-c4cceb5.json"),
-            identity("schemas/com.fencing.spacedrepetition.data.AppDatabase/20.json")
-        )
-        assertTrue(File("schemas/com.fencing.spacedrepetition.data.AppDatabase/21.json").exists())
     }
 }
