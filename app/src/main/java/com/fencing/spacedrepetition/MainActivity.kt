@@ -90,9 +90,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             // Create settings ViewModel
-            val settingsViewModel: SettingsViewModel = viewModel(
-                factory = SettingsViewModelFactory(application, themePreferences)
-            )
+            val settingsViewModel: SettingsViewModel = viewModel { SettingsViewModel(themePreferences, WorkManagerBackups(application)) }
             val themeMode by settingsViewModel.themeMode.collectAsState()
 
             CompositionLocalProvider(
@@ -106,31 +104,15 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     // Create ViewModels with repositories
-                    val cardViewModel: CardViewModel = viewModel(
-                        factory = CardViewModelFactory(repository, groupRepository, opponentRepository, imageStore, conceptRepository)
-                    )
-                    val practiceViewModel: PracticeViewModel = viewModel(
-                        factory = PracticeViewModelFactory(repository, opponentRepository)
-                    )
-                    val groupViewModel: GroupViewModel = viewModel(
-                        factory = GroupViewModelFactory(groupRepository, repository, imageStore, conceptRepository)
-                    )
-                    val historyViewModel: HistoryViewModel = viewModel(
-                        factory = HistoryViewModelFactory(repository, opponentRepository, conceptRepository)
-                    )
-                    val opponentViewModel: OpponentViewModel = viewModel(
-                        factory = OpponentViewModelFactory(opponentRepository)
-                    )
-                    val retentionReportViewModel: RetentionReportViewModel = viewModel(
-                        factory = RetentionReportViewModelFactory(
-                            repository, groupRepository, conceptRepository, themePreferences.globalConceptScheduling
-                        )
-                    )
+                    val cardViewModel: CardViewModel = viewModel { CardViewModel(repository, groupRepository, opponentRepository, imageStore, conceptRepository) }
+                    val practiceViewModel: PracticeViewModel = viewModel { PracticeViewModel(repository, opponentRepository) }
+                    val groupViewModel: GroupViewModel = viewModel { GroupViewModel(groupRepository, repository, imageStore, conceptRepository) }
+                    val historyViewModel: HistoryViewModel = viewModel { HistoryViewModel(repository, opponentRepository, conceptRepository) }
+                    val opponentViewModel: OpponentViewModel = viewModel { OpponentViewModel(opponentRepository) }
+                    val retentionReportViewModel: RetentionReportViewModel = viewModel { RetentionReportViewModel(repository, groupRepository, conceptRepository, themePreferences.globalConceptScheduling) }
                     // Owns the back stack so it survives Activity recreation.
                     val navigationViewModel: NavigationViewModel = viewModel()
-                    val conceptViewModel: ConceptViewModel = viewModel(
-                        factory = ConceptViewModelFactory(conceptRepository, repository, groupRepository)
-                    )
+                    val conceptViewModel: ConceptViewModel = viewModel { ConceptViewModel(conceptRepository, repository, groupRepository) }
 
                     AppNavigation(
                         cardViewModel = cardViewModel,
@@ -151,102 +133,12 @@ class MainActivity : ComponentActivity() {
 }
 
 // ViewModel Factories
-class CardViewModelFactory(
-    private val repository: CardRepository,
-    private val groupRepository: GroupRepository,
-    private val opponentRepository: OpponentRepository,
-    private val imageStore: ImageStore,
-    private val conceptRepository: ConceptRepository
-) : androidx.lifecycle.ViewModelProvider.Factory {
-    @Suppress("UNCHECKED_CAST")
-    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(CardViewModel::class.java)) {
-            return CardViewModel(repository, groupRepository, opponentRepository, imageStore, conceptRepository) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
-    }
-}
 
-class PracticeViewModelFactory(
-    private val repository: CardRepository,
-    private val opponentRepository: OpponentRepository
-) : androidx.lifecycle.ViewModelProvider.Factory {
-    @Suppress("UNCHECKED_CAST")
-    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(PracticeViewModel::class.java)) {
-            return PracticeViewModel(repository, opponentRepository) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
-    }
-}
 
-class GroupViewModelFactory(
-    private val groupRepository: GroupRepository,
-    private val cardRepository: CardRepository,
-    private val imageStore: ImageStore,
-    private val conceptRepository: ConceptRepository
-) : androidx.lifecycle.ViewModelProvider.Factory {
-    @Suppress("UNCHECKED_CAST")
-    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(GroupViewModel::class.java)) {
-            return GroupViewModel(groupRepository, cardRepository, imageStore, conceptRepository) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
-    }
-}
 
-class ConceptViewModelFactory(
-    private val conceptRepository: ConceptRepository,
-    private val cardRepository: CardRepository,
-    private val groupRepository: GroupRepository
-) : androidx.lifecycle.ViewModelProvider.Factory {
-    @Suppress("UNCHECKED_CAST")
-    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(ConceptViewModel::class.java)) {
-            return ConceptViewModel(conceptRepository, cardRepository, groupRepository) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
-    }
-}
 
-class SettingsViewModelFactory(
-    private val application: android.app.Application,
-    private val themePreferences: ThemePreferences
-) : androidx.lifecycle.ViewModelProvider.Factory {
-    @Suppress("UNCHECKED_CAST")
-    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(SettingsViewModel::class.java)) {
-            return SettingsViewModel(themePreferences, WorkManagerBackups(application)) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
-    }
-}
 
-class HistoryViewModelFactory(
-    private val repository: CardRepository,
-    private val opponentRepository: OpponentRepository,
-    private val conceptRepository: ConceptRepository
-) : androidx.lifecycle.ViewModelProvider.Factory {
-    @Suppress("UNCHECKED_CAST")
-    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(HistoryViewModel::class.java)) {
-            return HistoryViewModel(repository, opponentRepository, conceptRepository) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
-    }
-}
 
-class OpponentViewModelFactory(
-    private val opponentRepository: OpponentRepository
-) : androidx.lifecycle.ViewModelProvider.Factory {
-    @Suppress("UNCHECKED_CAST")
-    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(OpponentViewModel::class.java)) {
-            return OpponentViewModel(opponentRepository) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
-    }
-}
 
 /**
  * The Android half of [BackupScheduling]: WorkManager.
@@ -274,17 +166,3 @@ class WorkManagerBackups(
     }
 }
 
-class RetentionReportViewModelFactory(
-    private val repository: CardRepository,
-    private val groupRepository: GroupRepository,
-    private val conceptRepository: ConceptRepository,
-    private val globalConceptScheduling: kotlinx.coroutines.flow.Flow<Boolean>
-) : androidx.lifecycle.ViewModelProvider.Factory {
-    @Suppress("UNCHECKED_CAST")
-    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(RetentionReportViewModel::class.java)) {
-            return RetentionReportViewModel(repository, groupRepository, conceptRepository, globalConceptScheduling) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
-    }
-}
