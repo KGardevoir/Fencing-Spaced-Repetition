@@ -15,7 +15,6 @@ import com.fencing.spacedrepetition.ui.ImportFile
 import com.fencing.spacedrepetition.util.CardImportExport
 import com.fencing.spacedrepetition.util.CardWithGroupNames
 import com.fencing.spacedrepetition.util.ImageStore
-import com.fencing.spacedrepetition.util.parsedCardToCard
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -253,8 +252,8 @@ class GroupViewModel(
      *
      * A file that names its own groups keeps them and gains this one, so
      * importing a friend's deck into "Warm-ups" does not throw away the
-     * structure they exported. A file that names none -- the oldest format --
-     * has nowhere else to go, and its cards land here alone.
+     * structure they exported. A file that names none has nowhere else to
+     * go, and its cards land here alone.
      *
      * Review history is not restored here even when the file carries some,
      * which is what this has always done: a group import is about the cards,
@@ -272,35 +271,15 @@ class GroupViewModel(
                     _importExportState.value = ImportExportState.Error(contents.message)
                     return@launch
                 }
-                val (parsedCards, parseErrors) = contents as ArchiveContents.Cards
-
-                val targets = groupRepository.groupsForImport(parsedCards)
-                val groupIds = targets.groupIds
+                val (fileCards, parseErrors) = contents as ArchiveContents.Cards
+                // Every card goes in this group as well as the file's own.
                 val targetGroupName = groupRepository.getGroupById(groupId)?.name
-
-                val importedCount = when {
-                    parsedCards.any { it.isGroupSpecificState } ->
-                        cardRepository.archive.importCardsWithGroupStates(parsedCards, groupIds, targets.learningGroupIds) {
-                            CardImportExport.parsedCardToCard(it, imageStore)
-                        }
-                    parsedCards.any { it.hasFullState } ->
-                        cardRepository.archive.importFullCards(
-                            parsedCards.map { CardImportExport.parsedCardToCard(it, imageStore) },
-                            parsedCards.map { parsed ->
-                                if (targetGroupName == null || targetGroupName in parsed.groupNames) {
-                                    parsed.groupNames
-                                } else {
-                                    parsed.groupNames + targetGroupName
-                                }
-                            },
-                            groupIds
-                        )
-                    else -> cardRepository.archive.importCardsToGroup(
-                        parsedCards.map { it.concept to it.answer },
-                        groupId
-                    )
+                val parsedCards = if (targetGroupName == null) fileCards else fileCards.map { parsed ->
+                    if (parsed.isGlobalState && targetGroupName !in parsed.groupNames) {
+                        parsed.copy(groupNames = parsed.groupNames + targetGroupName)
+                    } else parsed
                 }
-                importConceptsAndLinks(parsedCards, cardRepository, conceptRepository, groupRepository)
+                val importedCount = importArchiveCards(parsedCards, cardRepository, groupRepository, conceptRepository, imageStore)
                 cardRepository.conceptDerivation.rederiveConcepts(onlyWithHistory = true)
 
                 _importExportState.value = ImportExportState.ImportSuccess(

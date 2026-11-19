@@ -69,66 +69,74 @@ class CardArchive internal constructor(
         return fresh.size
     }
 
-
-    suspend fun importCardsToGroup(
-        cards: List<Pair<String, String>>,
-        groupId: Long
-    ): Int {
-        var importedCount = 0
-        cards.forEach { (question, answer) ->
-            val existingCard = cardDao.findCardByQuestion(question)
-            val cardId: Long
-
-            if (existingCard != null) {
-                // Update existing card's answer (preserve learning state)
-                cardDao.updateCard(existingCard.copy(
-                    answer = answer,
-                    modified = Time.now()
-                ))
-                cardId = existingCard.id
-            } else {
-                // Create new card
-                val card = Card(
-                    question = question,
-                    answer = answer
-                )
-                cardId = cardDao.insertCard(card)
-            }
-
-            // Add to group if not already in it (ignore conflict)
-            try {
-                groupDao.insertCardGroupCrossRef(CardGroupCrossRef(cardId, groupId))
-            } catch (e: Exception) {
-                // Card already in group, ignore
-            }
-            importedCount++
-        }
-        return importedCount
-    }
-
+    /**
+     * Brings an archive's cards in, returning how many.
+     *
+     * The records for one card -- its own, and one per learning group it has
+     * progress in -- share its question. The card already here is the one with
+     * the file's stable identifier, else the one with its question; it takes
+     * the file's content (see [withImportedContent]) and keeps its progress,
+     * here and in every learning group. A card new here comes in with the
+     * progress the file gives it, in Global and each learning group.
+     *
+     * A record that states anything beyond a question and answer (progress,
+     * groups or concepts) says which groups the card is in, and the card is in
+     * exactly those afterwards; a bare question-and-answer record leaves an
+     * existing card's groups, and its pictures if it brings none.
+     *
+     * @param groupIds each group name the file uses, to its group here.
+     * @param learningGroupIds each learning-group state context, to its
+     *   learning group here; a state whose context is not in it is skipped.
+     * @param toCard turns a record into a Card. Passed in because it decodes
+     *   inline base64 images into the image store -- the one step of an import
+     *   that waits on something (a browser's storage is asynchronous).
+     */
     suspend fun importCards(
-        cards: List<Pair<String, String>>
+        parsedCards: List<ParsedCard>,
+        groupIds: Map<String, Long>,
+        learningGroupIds: Map<String, Long> = emptyMap(),
+        toCard: suspend (ParsedCard) -> Card
     ): Int {
-        var importedCount = 0
-        cards.forEach { (question, answer) ->
-            val existingCard = cardDao.findCardByQuestion(question)
-            if (existingCard != null) {
-                // Update existing card's answer only (preserve learning state)
-                cardDao.updateCard(existingCard.copy(
-                    answer = answer,
-                    modified = Time.now()
-                ))
-            } else {
-                // Create new card
-                val card = Card(
-                    question = question,
-                    answer = answer
-                )
-                cardDao.insertCard(card)
+        val byQuestion = parsedCards.groupBy { it.concept }
+        byQuestion.forEach { (question, records) ->
+            val own = records.find { it.isGlobalState } ?: records.first()
+            val card = toCard(own)
+            val existing = records.firstNotNullOfOrNull { it.uid }?.let { cardDao.findCardByUid(it) }
+                ?: cardDao.findCardByQuestion(question)
+            val cardId = if (existing == null) cardDao.insertCard(card) else {
+                cardDao.updateCard(existing.withImportedContent(card, keepPictures = !own.hasFullState))
+                // Its groups are content, and are the file's -- when it says.
+                if (own.hasFullState) groupDao.deleteAllGroupsForCard(existing.id)
+                existing.id
             }
-            importedCount++
+            records.flatMap { it.groupNames }.toSet().forEach { name ->
+                groupIds[name]?.let { groupDao.insertCardGroupCrossRef(CardGroupCrossRef(cardId, it)) }
+            }
+
+            // Learning-group progress comes in only with a card that is new
+            // here; a card already here keeps its own.
+            if (existing == null) records.filter { it.isGroupSpecificState }.forEach { record ->
+                learningGroupIds[record.stateContext!!]?.let { learningGroupId ->
+                    groupDao.insertLearningState(
+                        CardLearningState(
+                            cardId = cardId,
+                            learningGroupId = learningGroupId,
+                            fsrsStability = record.fsrsStability ?: 0.0,
+                            fsrsDifficulty = record.fsrsDifficulty ?: 0.0,
+                            fsrsElapsedDays = record.fsrsElapsedDays ?: 0,
+                            fsrsScheduledDays = record.fsrsScheduledDays ?: 0,
+                            fsrsReps = record.fsrsReps ?: 0,
+                            fsrsLapses = record.fsrsLapses ?: 0,
+                            fsrsState = record.fsrsState ?: "NEW",
+                            lastReview = record.lastReview ?: 0L,
+                            nextReview = record.nextReview ?: 0L,
+                            lastReset = record.lastReset ?: 0L
+                        )
+                    )
+                }
+            }
         }
-        return importedCount
+        return byQuestion.size
     }
 
     /**
@@ -139,126 +147,15 @@ class CardArchive internal constructor(
      * program can rename, rewrite or regroup cards without resetting anyone's
      * learning. Identity, creation time and whether it is disabled are this
      * device's and stay too. See docs/DESIGN.md, "Archive".
+     *
+     * @param keepPictures keep this card's pictures when [imported] has none.
      */
-    private fun Card.withImportedContent(imported: Card): Card = copy(
+    private fun Card.withImportedContent(imported: Card, keepPictures: Boolean): Card = copy(
         question = imported.question,
         answer = imported.answer,
-        imagePaths = imported.imagePaths,
+        imagePaths = if (keepPictures) imported.imagePaths.ifEmpty { imagePaths } else imported.imagePaths,
         modified = Time.now()
     )
-
-    suspend fun importFullCards(
-        cards: List<Card>,
-        groupNamesPerCard: List<List<String>>,
-        existingGroups: Map<String, Long>
-    ): Int {
-        var importedCount = 0
-        cards.forEachIndexed { index, card ->
-            val existingCard = cardDao.findCardByQuestion(card.question)
-            val cardId: Long
-
-            if (existingCard != null) {
-                // Everything but its progress: see [withImportedContent].
-                cardDao.updateCard(existingCard.withImportedContent(card))
-                cardId = existingCard.id
-
-                // Clear existing group associations before re-adding
-                groupDao.deleteAllGroupsForCard(cardId)
-            } else {
-                // Create new card
-                cardId = cardDao.insertCard(card)
-            }
-
-            // Add group associations
-            val groupNames = groupNamesPerCard.getOrNull(index) ?: emptyList()
-            groupNames.forEach { groupName ->
-                existingGroups[groupName]?.let { groupId ->
-                    groupDao.insertCardGroupCrossRef(CardGroupCrossRef(cardId, groupId))
-                }
-            }
-            importedCount++
-        }
-        return importedCount
-    }
-
-    /**
-     * @param toCard turns a parsed record into a Card. Passed in rather than
-     *   called directly because the conversion decodes inline base64 images
-     *   and puts them in the image store, which is the one step of an import
-     *   that has to wait on something -- a browser's storage is asynchronous,
-     *   which is why the parameter suspends.
-     * @param learningGroups the learning group each non-global state context
-     *   resolves to; a state whose context is not in it is skipped.
-     */
-    suspend fun importCardsWithGroupStates(
-        parsedCards: List<ParsedCard>,
-        existingGroups: Map<String, Long>,
-        learningGroups: Map<String, Long> = emptyMap(),
-        toCard: suspend (ParsedCard) -> Card
-    ): Int {
-        // Group parsed cards by concept (same card, different state contexts)
-        val cardsByQuestion = parsedCards.groupBy { it.concept }
-        var importedCount = 0
-
-        cardsByQuestion.forEach { (question, states) ->
-            // Find the global state (or use the first state if no global)
-            val globalState = states.find { it.isGlobalState } ?: states.first()
-
-            // Create or update the card (decode base64 images). The same card
-            // is the one with the file's stable identifier, else the one with
-            // its question; a card found keeps its own identifier for life.
-            val card = toCard(globalState)
-            val existingCard = states.firstNotNullOfOrNull { it.uid }?.let { cardDao.findCardByUid(it) }
-                ?: cardDao.findCardByQuestion(question)
-            val cardId: Long
-
-            if (existingCard != null) {
-                // Everything but its progress: see [withImportedContent].
-                cardDao.updateCard(existingCard.withImportedContent(card))
-                cardId = existingCard.id
-
-                // Its groups are content, and are the file's now.
-                groupDao.deleteAllGroupsForCard(cardId)
-            } else {
-                cardId = cardDao.insertCard(card)
-            }
-
-            // Collect all unique group names from all state contexts
-            val allGroupNames = states.flatMap { it.groupNames }.toSet()
-
-            // Add group associations
-            allGroupNames.forEach { groupName ->
-                existingGroups[groupName]?.let { groupId ->
-                    groupDao.insertCardGroupCrossRef(CardGroupCrossRef(cardId, groupId))
-                }
-            }
-
-            // Learning-group progress comes in only with a card that is new
-            // here; a card already here keeps its own.
-            if (existingCard == null) states.filter { it.isGroupSpecificState }.forEach { groupState ->
-                learningGroups[groupState.stateContext!!]?.let { learningGroupId ->
-                    val learningState = CardLearningState(
-                        cardId = cardId,
-                        learningGroupId = learningGroupId,
-                        fsrsStability = groupState.fsrsStability ?: 0.0,
-                        fsrsDifficulty = groupState.fsrsDifficulty ?: 0.0,
-                        fsrsElapsedDays = groupState.fsrsElapsedDays ?: 0,
-                        fsrsScheduledDays = groupState.fsrsScheduledDays ?: 0,
-                        fsrsReps = groupState.fsrsReps ?: 0,
-                        fsrsLapses = groupState.fsrsLapses ?: 0,
-                        fsrsState = groupState.fsrsState ?: "NEW",
-                        lastReview = groupState.lastReview ?: 0L,
-                        nextReview = groupState.nextReview ?: 0L,
-                        lastReset = groupState.lastReset ?: 0L
-                    )
-                    groupDao.insertLearningState(learningState)
-                }
-            }
-
-            importedCount++
-        }
-        return importedCount
-    }
 
     /**
      * Tag imported cards with the concepts their records list, finding each

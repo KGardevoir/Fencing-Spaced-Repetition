@@ -36,7 +36,6 @@ import com.fencing.spacedrepetition.util.exportImageKeys
 import com.fencing.spacedrepetition.util.photoArchiveEntries
 import com.fencing.spacedrepetition.util.zipArchive
 import com.fencing.spacedrepetition.util.Time
-import com.fencing.spacedrepetition.util.parsedCardToCard
 import com.fencing.spacedrepetition.util.parsedReviewLogsToEntities
 import com.fencing.spacedrepetition.util.parsedSessionToSession
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -487,29 +486,7 @@ class CardViewModel(
                 }
                 val (parsedCards, parseErrors) = contents as ArchiveContents.Cards
 
-                val targets = groupRepository.groupsForImport(parsedCards)
-                val groupIds = targets.groupIds
-
-                val importedCount = when {
-                    // V2/V3, where a card can hold one learning state per group.
-                    parsedCards.any { it.isGroupSpecificState } ->
-                        repository.archive.importCardsWithGroupStates(parsedCards, groupIds, targets.learningGroupIds) {
-                            CardImportExport.parsedCardToCard(it, imageStore)
-                        }
-                    // V1, which has full state but only one of it per card.
-                    parsedCards.any { it.hasFullState } ->
-                        repository.archive.importFullCards(
-                            parsedCards.map { CardImportExport.parsedCardToCard(it, imageStore) },
-                            parsedCards.map { it.groupNames },
-                            groupIds
-                        )
-                    // Question and answer, and nothing else.
-                    else -> repository.archive.importCards(
-                        parsedCards.map { it.concept to it.answer }
-                    )
-                }
-
-                importConceptsAndLinks(parsedCards, repository, conceptRepository, groupRepository)
+                val importedCount = importArchiveCards(parsedCards, repository, groupRepository, conceptRepository, imageStore)
                 importOpponentsAndHistory()
                 // With the history in, concepts are derived from it -- except
                 // those with none, which keep the state the file brought.

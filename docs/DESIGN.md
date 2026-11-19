@@ -282,7 +282,12 @@ restoring a backup onto a new device restores its learning.
 never wrote, the list is now always written -- a card's `concepts:` and a
 concept's `availableIn:` -- even when empty. Present (even `[]`) sets the
 value; absent, as in a file from before it, leaves the value as it is here. A
-group's `description:` works the same way.
+group's `description:` works the same way. So does a card that is only a
+question and an answer, as in a hand-written deck: it says nothing about
+groups or pictures, and leaves the card's as they are.
+
+Every archive import goes through `CardArchive.importCards`, so these rules
+hold whatever the file carries.
 
 ## Migrations
 

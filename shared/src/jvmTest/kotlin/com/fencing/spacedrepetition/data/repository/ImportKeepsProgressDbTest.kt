@@ -67,7 +67,7 @@ class ImportKeepsProgressDbTest {
     fun tearDown() = db.close()
 
     private suspend fun import(vararg records: ParsedCard, groups: Map<String, Long> = emptyMap(), learningGroups: Map<String, Long> = emptyMap()) =
-        repo.archive.importCardsWithGroupStates(records.toList(), groups, learningGroups) { CardImportExport.parsedCardToCard(it) }
+        repo.archive.importCards(records.toList(), groups, learningGroups) { CardImportExport.parsedCardToCard(it) }
 
     @Test
     fun `a card already here takes the file's content and keeps its progress`() = runTest {

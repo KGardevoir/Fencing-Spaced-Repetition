@@ -27,6 +27,7 @@ import com.fencing.spacedrepetition.util.Time
 import com.fencing.spacedrepetition.util.exportImageKeys
 import com.fencing.spacedrepetition.util.ioDispatcher
 import com.fencing.spacedrepetition.util.storeImages
+import com.fencing.spacedrepetition.util.parsedCardToCard
 import kotlinx.coroutines.withContext
 
 /** What reading a chosen archive produced: cards to import, or a reason not to. */
@@ -166,6 +167,26 @@ internal suspend fun GroupRepository.groupsForImport(parsedCards: List<ParsedCar
  * and tags the imported cards with them. After the cards, which are found by
  * question.
  */
+/**
+ * Brings an archive's cards in: the groups and learning groups it names
+ * first, then the cards, then their concepts. Returns how many cards.
+ * History and opponents are the caller's to restore, if at all.
+ */
+internal suspend fun importArchiveCards(
+    parsedCards: List<ParsedCard>,
+    cards: CardRepository,
+    groups: GroupRepository,
+    concepts: ConceptRepository,
+    images: ImageStore
+): Int {
+    val targets = groups.groupsForImport(parsedCards)
+    val imported = cards.archive.importCards(parsedCards, targets.groupIds, targets.learningGroupIds) {
+        CardImportExport.parsedCardToCard(it, images)
+    }
+    importConceptsAndLinks(parsedCards, cards, concepts, groups)
+    return imported
+}
+
 internal suspend fun importConceptsAndLinks(
     parsedCards: List<ParsedCard>,
     cards: CardRepository,

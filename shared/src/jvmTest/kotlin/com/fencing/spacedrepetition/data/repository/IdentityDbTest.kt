@@ -9,6 +9,7 @@ import androidx.sqlite.execSQL
 import com.fencing.spacedrepetition.data.ALL_MIGRATIONS
 import com.fencing.spacedrepetition.data.AppDatabase
 import com.fencing.spacedrepetition.data.model.Card
+import com.fencing.spacedrepetition.data.model.CardGroupCrossRef
 import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.LearningGroup
@@ -110,13 +111,38 @@ class IdentityDbTest {
         val parsed = com.fencing.spacedrepetition.util.ParsedCard(
             concept = "New question", answer = "", lineNumber = 1, stateContext = "GLOBAL", uid = uid
         )
-        repo.archive.importCardsWithGroupStates(listOf(parsed), emptyMap()) {
+        repo.archive.importCards(listOf(parsed), emptyMap()) {
             com.fencing.spacedrepetition.util.CardImportExport.parsedCardToCard(it)
         }
         val cards = db.cardDao().getAllCardsAsList()
         assertEquals(1, cards.size)
         assertEquals("New question", cards.single().question)
         assertEquals(uid, cards.single().uid)
+    }
+
+    @Test
+    fun `a bare question and answer keeps a card's groups and pictures, a full record sets them`() = runTest {
+        val footwork = db.groupDao().insertGroup(Group(name = "Footwork"))
+        val parries = db.groupDao().insertGroup(Group(name = "Parries"))
+        val id = db.cardDao().insertCard(Card(question = "Lunge", answer = "old", imagePaths = listOf("img-1")))
+        db.groupDao().insertCardGroupCrossRef(CardGroupCrossRef(id, footwork))
+        val groupIds = mapOf("Footwork" to footwork, "Parries" to parries)
+        suspend fun importOne(parsed: com.fencing.spacedrepetition.util.ParsedCard) =
+            repo.archive.importCards(listOf(parsed), groupIds) {
+                com.fencing.spacedrepetition.util.CardImportExport.parsedCardToCard(it)
+            }
+        suspend fun groupsOf() = db.groupDao().getGroupsForCardSync(id).map { it.name }.toSet()
+
+        importOne(com.fencing.spacedrepetition.util.ParsedCard(concept = "Lunge", answer = "new", lineNumber = 1))
+        assertEquals("new", db.cardDao().getCardById(id)!!.answer)
+        assertEquals(listOf("img-1"), db.cardDao().getCardById(id)!!.imagePaths)
+        assertEquals(setOf("Footwork"), groupsOf())
+
+        importOne(com.fencing.spacedrepetition.util.ParsedCard(
+            concept = "Lunge", answer = "new", lineNumber = 1, stateContext = "GLOBAL", groupNames = listOf("Parries")
+        ))
+        assertEquals(setOf("Parries"), groupsOf())
+        assertEquals(1, db.cardDao().getAllCardsAsList().size)
     }
 
     @Test

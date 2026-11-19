@@ -387,7 +387,7 @@ class ConceptSchedulingDbTest {
         val parsed = com.fencing.spacedrepetition.util.ParsedCard(
             concept = "New question", answer = "", lineNumber = 1, stateContext = "GLOBAL", uid = uid
         )
-        repo.archive.importCardsWithGroupStates(listOf(parsed), emptyMap()) {
+        repo.archive.importCards(listOf(parsed), emptyMap()) {
             com.fencing.spacedrepetition.util.CardImportExport.parsedCardToCard(it)
         }
         val cards = db.cardDao().getAllCardsAsList()
