@@ -11,9 +11,9 @@ package com.fencing.spacedrepetition.util
 //
 // Exports are YAML. The document's shape is declared in ArchiveYaml.kt and
 // the YAML itself is kaml's; what is left here is the pipeline around them,
-// the CSV format, the filenames, and the tab-separated V1-V4 layouts, which
-// are still read so that a backup taken before the change still imports.
-// Nothing writes a tab-separated file any more.
+// the CSV format and the filenames. The tab-separated V1-V4 layouts that
+// came before YAML are no longer read; such a file is recognised and refused
+// with LEGACY_FORMAT_ERROR.
 
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
@@ -45,54 +45,22 @@ object CardImportExport {
     private const val YAML_HEADER_COMMENT = "# Fencing Spaced Repetition export"
 
     /**
-     * What every tab-separated export began with, and the one thing that
-     * tells the old format from the new one.
-     *
-     * It is a YAML comment too, so a legacy file handed to the YAML parser
-     * would come back as an empty document rather than as an error. That is
-     * why the check happens before the parser is reached rather than after it
-     * has given up.
+     * What every old tab-separated export began with. It is a YAML comment
+     * too, so such a file handed to the YAML parser would come back as an
+     * empty document; the check comes first so it is refused with a reason.
      */
     private const val LEGACY_HEADER_PREFIX = "#FSR_EXPORT_V"
+
+    /** What an old tab-separated export is told: they are no longer read. */
+    const val LEGACY_FORMAT_ERROR =
+        "This is a tab-separated export from an older version of the app, which can no longer be " +
+            "imported. Import it with an older version and export again, as YAML."
 
     private const val KEY_GROUPS = "groups"
     private const val KEY_LEARNING_GROUPS = "learningGroups"
     private const val KEY_OPPONENTS = "opponents"
 
-    private const val DELIMITER = "\t"
-    private const val NEWLINE_PLACEHOLDER = "<br>"
-    private const val GROUP_SEPARATOR = "|"
-    private const val IMAGE_SEPARATOR = "||"
-    private const val HEADER_MARKER_V1 = "#FSR_EXPORT_V1"
-    private const val HEADER_MARKER_V2 = "#FSR_EXPORT_V2"
-    private const val HEADER_MARKER_V3 = "#FSR_EXPORT_V3"
-    private const val HEADER_MARKER_V4 = "#FSR_EXPORT_V4"
-    private const val GROUP_SETTINGS_PREFIX = "#GROUP_SETTINGS:"
-    private const val OPPONENT_PREFIX = "#OPPONENT:"
-    private const val REVIEW_HISTORY_START = "#REVIEW_HISTORY_START"
-    private const val REVIEW_HISTORY_END = "#REVIEW_HISTORY_END"
 
-    /**
-     * Where each value sits in one of the tab-separated V1-V4 layouts. Read,
-     * never written: an export is YAML. The Algorithm and SM2_* columns the
-     * older ones reserve are read past -- SM-2 is gone, and FSRS is the only
-     * scheduler an algorithm column could have named. Null: the layout has
-     * no such column (V1 holds only the Global state; V1 and V2 no images).
-     */
-    private class LegacyLayout(
-        val images: Int?, val stateContext: Int?, val nextReview: Int, val lastReview: Int,
-        val stability: Int, val difficulty: Int, val state: Int, val reps: Int, val lapses: Int,
-        val scheduledDays: Int, val elapsedDays: Int, val groups: Int
-    )
-
-    /** Question and answer are always columns 0 and 1. */
-    private val LEGACY_LAYOUTS = mapOf(
-        1 to LegacyLayout(null, null, 3, 4, 5, 6, 7, 8, 9, 10, 11, groups = 15),
-        2 to LegacyLayout(null, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, groups = 16),
-        3 to LegacyLayout(2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, groups = 17),
-        // The last tab-separated layout: V3 without the Algorithm and SM2_* columns.
-        4 to LegacyLayout(2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, groups = 13),
-    )
 
     /** Parsed group settings from an import file */
     var lastParsedGroupSettings: Map<String, Map<String, String>> = emptyMap()
@@ -199,10 +167,9 @@ object CardImportExport {
      * the three `lastParsed` properties above, which is how the view models
      * have always collected them.
      *
-     * Which format a file is in is decided by its first line with anything on
-     * it: a tab-separated export opens with `#FSR_EXPORT_V` and a YAML one
-     * does not. Nothing writes the tab-separated form any more, but a backup
-     * folder is full of files that do, and they still import.
+     * Only YAML is read. A file whose first line opens with `#FSR_EXPORT_V`
+     * is one of the old tab-separated exports (V1-V4), which are no longer
+     * read; it gets [LEGACY_FORMAT_ERROR] rather than a YAML parse error.
      */
     fun parseCards(lines: List<String>): Pair<List<ParsedCard>, List<String>> {
         lastParsedGroupSettings = emptyMap()
@@ -219,11 +186,10 @@ object CardImportExport {
         val firstContentLine = lines.firstOrNull { it.isNotBlank() }?.trim()
             ?: return Pair(emptyList(), emptyList())
 
-        return if (firstContentLine.startsWith(LEGACY_HEADER_PREFIX)) {
-            parseLegacyCards(lines)
-        } else {
-            parseYamlCards(lines)
+        if (firstContentLine.startsWith(LEGACY_HEADER_PREFIX)) {
+            return Pair(emptyList(), listOf(LEGACY_FORMAT_ERROR))
         }
+        return parseYamlCards(lines)
     }
 
     /**
@@ -231,8 +197,7 @@ object CardImportExport {
      *
      * A file that is valid YAML but says nothing about cards is rejected
      * rather than reported as empty: someone who picked the wrong file is
-     * better told that than told their deck had nothing in it. The message
-     * names both formats, because at this point either would have been fine.
+     * better told that than told their deck had nothing in it.
      */
     private fun parseYamlCards(lines: List<String>): Pair<List<ParsedCard>, List<String>> {
         val document = try {
@@ -244,10 +209,7 @@ object CardImportExport {
         if (!ArchiveYaml.isArchive(document)) {
             return Pair(
                 emptyList(),
-                listOf(
-                    "Invalid file format: expected a YAML export with a \"cards:\" list, " +
-                        "or a tab-separated export beginning with $HEADER_MARKER_V4"
-                )
+                listOf("Invalid file format: expected a YAML export with a \"cards:\" list")
             )
         }
 
@@ -317,133 +279,8 @@ object CardImportExport {
         return if (where == null) lines.first() else "Line $where: ${lines.first()}"
     }
 
-    /** Reads one of the tab-separated V1-V4 layouts. */
-    private fun parseLegacyCards(lines: List<String>): Pair<List<ParsedCard>, List<String>> {
-        val cards = mutableListOf<ParsedCard>()
-        val errors = mutableListOf<String>()
-        val groupSettings = mutableMapOf<String, Map<String, String>>()
-        val opponents = mutableListOf<ParsedOpponent>()
 
-        try {
-            lastParsedReviewHistory = parseReviewHistory(lines)
-            if (lines.isEmpty()) {
-                return Pair(emptyList(), emptyList())
-            }
 
-            // Detect format version
-            val firstLine = lines.firstOrNull() ?: ""
-            val formatVersion = when {
-                firstLine.startsWith(HEADER_MARKER_V4) -> 4
-                firstLine.startsWith(HEADER_MARKER_V3) -> 3
-                firstLine.startsWith(HEADER_MARKER_V2) -> 2
-                firstLine.startsWith(HEADER_MARKER_V1) -> 1
-                else -> 0
-            }
-
-            if (formatVersion == 0) {
-                return Pair(
-                    emptyList(),
-                    listOf("Invalid file format: file must begin with $HEADER_MARKER_V1, $HEADER_MARKER_V2, $HEADER_MARKER_V3, or $HEADER_MARKER_V4")
-                )
-            }
-
-            val dataLines = lines.drop(1)
-
-            var inHistorySection = false
-            dataLines.forEachIndexed { index, line ->
-                val lineNumber = if (formatVersion > 0) index + 2 else index + 1
-                val trimmedLine = line.trim()
-
-                if (trimmedLine.isEmpty()) return@forEachIndexed
-                // Skip review history section
-                if (trimmedLine == REVIEW_HISTORY_START) { inHistorySection = true; return@forEachIndexed }
-                if (trimmedLine == REVIEW_HISTORY_END) { inHistorySection = false; return@forEachIndexed }
-                if (inHistorySection) return@forEachIndexed
-                // Capture group settings lines
-                if (trimmedLine.startsWith(GROUP_SETTINGS_PREFIX)) {
-                    parseGroupSettingsLine(trimmedLine)?.let { (name, settings) ->
-                        groupSettings[name] = settings
-                    }
-                    return@forEachIndexed
-                }
-                // Capture opponent lines
-                if (trimmedLine.startsWith(OPPONENT_PREFIX)) {
-                    parseOpponentLine(trimmedLine)?.let { opponents.add(it) }
-                    return@forEachIndexed
-                }
-                if (trimmedLine.startsWith("#")) {
-                    return@forEachIndexed // Skip other comments
-                }
-
-                try {
-                    val parsedCard = when (formatVersion) {
-                        in LEGACY_LAYOUTS -> parseLegacyLine(trimmedLine, lineNumber, formatVersion)
-                        else -> parseSimpleLine(trimmedLine, lineNumber)
-                    }
-
-                    if (parsedCard != null) {
-                        cards.add(parsedCard)
-                    } else {
-                        errors.add("Line $lineNumber: Invalid format")
-                    }
-                } catch (e: Exception) {
-                    errors.add("Line $lineNumber: ${e.message}")
-                }
-            }
-        } catch (e: Exception) {
-            errors.add("Failed to read file: ${e.message}")
-        }
-
-        lastParsedGroupSettings = groupSettings
-        lastParsedOpponents = opponents
-        return Pair(cards, errors)
-    }
-
-    private fun parseSimpleLine(line: String, lineNumber: Int): ParsedCard? {
-        val parts = line.split(DELIMITER, limit = 2)
-
-        return when {
-            parts.size < 2 -> throw IllegalArgumentException("Missing answer (no tab delimiter found)")
-            parts[0].isBlank() -> throw IllegalArgumentException("Empty question")
-            else -> ParsedCard(
-                concept = unescapeNewlines(parts[0].trim()),
-                answer = unescapeNewlines(parts[1].trim()),
-                lineNumber = lineNumber
-            )
-        }
-    }
-
-    /** One line of a V1-V4 file; two columns alone are a question and its answer. */
-    private fun parseLegacyLine(line: String, lineNumber: Int, version: Int): ParsedCard {
-        val parts = line.split(DELIMITER)
-        if (parts.size < 2) throw IllegalArgumentException("Missing answer")
-        val concept = unescapeNewlines(parts[0].trim())
-        val answer = unescapeNewlines(parts[1].trim())
-        if (concept.isBlank()) throw IllegalArgumentException("Empty question")
-        if (parts.size == 2) return ParsedCard(concept = concept, answer = answer, lineNumber = lineNumber)
-
-        val at = LEGACY_LAYOUTS.getValue(version)
-        fun text(i: Int?) = i?.let { parts.getOrNull(it)?.trim() }
-        fun list(i: Int?, separator: String) =
-            text(i).orEmpty().split(separator).map { it.trim() }.filter { it.isNotEmpty() }
-        return ParsedCard(
-            concept = concept,
-            answer = answer,
-            lineNumber = lineNumber,
-            imageData = list(at.images, IMAGE_SEPARATOR),  // base64, decoded later
-            stateContext = text(at.stateContext) ?: "GLOBAL",
-            nextReview = text(at.nextReview)?.toLongOrNull() ?: 0L,
-            lastReview = text(at.lastReview)?.toLongOrNull() ?: 0L,
-            fsrsStability = text(at.stability)?.toDoubleOrNull() ?: 0.0,
-            fsrsDifficulty = text(at.difficulty)?.toDoubleOrNull() ?: 0.0,
-            fsrsState = text(at.state) ?: "NEW",
-            fsrsReps = text(at.reps)?.toIntOrNull() ?: 0,
-            fsrsLapses = text(at.lapses)?.toIntOrNull() ?: 0,
-            fsrsScheduledDays = text(at.scheduledDays)?.toIntOrNull() ?: 0,
-            fsrsElapsedDays = text(at.elapsedDays)?.toIntOrNull() ?: 0,
-            groupNames = list(at.groups, GROUP_SEPARATOR)
-        )
-    }
 
     // ======================================================================
     // Export
@@ -655,66 +492,8 @@ object CardImportExport {
     }
 
 
-    /**
-     * Unescapes the newlines a tab-separated export escaped (`<br>` back to a
-     * newline).
-     *
-     * Import only. YAML holds a newline as a newline -- a multi-line answer
-     * is written as a `|-` block, or quoted with the breaks spelled out --
-     * so the placeholder went out with the format that needed it.
-     */
-    private fun unescapeNewlines(text: String): String {
-        return text.replace(NEWLINE_PLACEHOLDER, "\n")
-    }
 
-    /**
-     * Reads a tab-separated export's `#GROUP_SETTINGS:` line.
-     *
-     * Returns the group's name and its settings, or null if the line is not
-     * one. The settings map is the same one [applyGroupSettings] takes, and
-     * the same one the YAML reader builds from a `groups:` entry.
-     */
-    fun parseGroupSettingsLine(line: String): Pair<String, Map<String, String>>? {
-        if (!line.startsWith(GROUP_SETTINGS_PREFIX)) return null
-        val rest = line.removePrefix(GROUP_SETTINGS_PREFIX)
-        val parts = rest.split("\t")
-        if (parts.isEmpty()) return null
-        val groupName = unescapeNewlines(parts[0])
-        val settings = mutableMapOf<String, String>()
-        parts.drop(1).forEach { part ->
-            val eqIndex = part.indexOf('=')
-            if (eqIndex > 0) {
-                settings[part.substring(0, eqIndex)] = part.substring(eqIndex + 1)
-            }
-        }
-        return groupName to settings
-    }
 
-    /**
-     * Reads a tab-separated export's `#OPPONENT:` line, or null if the line
-     * is not one.
-     */
-    fun parseOpponentLine(line: String): ParsedOpponent? {
-        if (!line.startsWith(OPPONENT_PREFIX)) return null
-        val rest = line.removePrefix(OPPONENT_PREFIX)
-        val parts = rest.split("\t")
-        if (parts.isEmpty()) return null
-        val name = unescapeNewlines(parts[0]).trim()
-        if (name.isEmpty()) return null
-        var multiplier = 1.0
-        var notes = ""
-        parts.drop(1).forEach { part ->
-            val eqIndex = part.indexOf('=')
-            if (eqIndex <= 0) return@forEach
-            val key = part.substring(0, eqIndex)
-            val value = part.substring(eqIndex + 1)
-            when (key) {
-                "skillMultiplier" -> value.toDoubleOrNull()?.let { multiplier = it }
-                "notes" -> notes = unescapeNewlines(value)
-            }
-        }
-        return ParsedOpponent(name = name, skillMultiplier = multiplier, notes = notes)
-    }
 
     /**
      * Applies parsed settings to a Group entity.
@@ -897,60 +676,6 @@ object CardImportExport {
         val opponentSkillMultiplier: Double? = null,
         val selectionTrigger: String? = null
     )
-
-    /**
-     * Parses the REVIEW_HISTORY section from a list of all lines in the file.
-     * Returns the parsed review logs, or empty list if no history section found.
-     */
-    fun parseReviewHistory(lines: List<String>): List<ParsedReviewLog> {
-        val startIndex = lines.indexOfFirst { it.trim() == REVIEW_HISTORY_START }
-        if (startIndex < 0) return emptyList()
-
-        val endIndex = lines.indexOfFirst { it.trim() == REVIEW_HISTORY_END }
-        val historyLines = if (endIndex > startIndex) {
-            lines.subList(startIndex + 1, endIndex)
-        } else {
-            lines.subList(startIndex + 1, lines.size)
-        }
-
-        return historyLines.mapNotNull { line ->
-            val trimmed = line.trim()
-            if (trimmed.isEmpty() || trimmed.startsWith("#")) return@mapNotNull null
-            val parts = trimmed.split(DELIMITER)
-            if (parts.size < 8) return@mapNotNull null
-            try {
-                val imageDataRaw = parts.getOrNull(10)?.trim() ?: ""
-                val imageData = if (imageDataRaw.isNotEmpty()) {
-                    imageDataRaw.split("|").filter { it.isNotEmpty() }
-                } else {
-                    emptyList()
-                }
-                val opponentName = parts.getOrNull(11)
-                    ?.let { unescapeNewlines(it) }
-                    ?.takeIf { it.isNotBlank() }
-                val stabilityMultiplier = parts.getOrNull(12)?.toDoubleOrNull() ?: 1.0
-                val fightDifficulty = parts.getOrNull(13)?.toIntOrNull()?.takeIf { it in 1..5 }
-                ParsedReviewLog(
-                    cardQuestion = unescapeNewlines(parts[0]),
-                    reviewTime = parts[1].toLong(),
-                    grade = parts[2].toInt(),
-                    algorithm = parts[3],
-                    stateBefore = unescapeNewlines(parts[4]),
-                    stateAfter = unescapeNewlines(parts[5]),
-                    scheduledDays = parts[6].toInt(),
-                    elapsedDays = parts[7].toInt(),
-                    groupName = parts.getOrNull(8)?.let { it.ifEmpty { null } },
-                    notes = parts.getOrNull(9)?.let { unescapeNewlines(it) } ?: "",
-                    imageData = imageData,
-                    opponentName = opponentName,
-                    fightDifficulty = fightDifficulty,
-                    stabilityMultiplier = stabilityMultiplier
-                )
-            } catch (e: Exception) {
-                null
-            }
-        }
-    }
 
 
     /**

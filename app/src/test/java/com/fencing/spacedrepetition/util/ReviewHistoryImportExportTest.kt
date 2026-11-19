@@ -51,104 +51,6 @@ class ReviewHistoryImportExportTest {
 
     // ==================== parseReviewHistory TESTS ====================
 
-    @Test
-    fun `parseReviewHistory - returns empty list when no history section`() {
-        val lines = listOf(
-            "#FSR_EXPORT_V3",
-            "#Question\tAnswer\t...",
-            "What is a lunge?\tA forward attack"
-        )
-        val result = CardImportExport.parseReviewHistory(lines)
-        assertTrue(result.isEmpty())
-    }
-
-    @Test
-    fun `parseReviewHistory - parses single log entry`() {
-        val lines = listOf(
-            "#FSR_EXPORT_V3",
-            "#REVIEW_HISTORY_START",
-            "#CardQuestion\tReviewTime\tGrade\tAlgorithm\tStateBefore\tStateAfter\tScheduledDays\tElapsedDays",
-            "What is a lunge?\t1000\t3\tFSRS\tNEW\tLEARNING\t1\t0",
-            "#REVIEW_HISTORY_END"
-        )
-        val result = CardImportExport.parseReviewHistory(lines)
-        assertEquals(1, result.size)
-        val log = result[0]
-        assertEquals("What is a lunge?", log.cardQuestion)
-        assertEquals(1000L, log.reviewTime)
-        assertEquals(3, log.grade)
-        assertEquals("FSRS", log.algorithm)
-        assertEquals("NEW", log.stateBefore)
-        assertEquals("LEARNING", log.stateAfter)
-        assertEquals(1, log.scheduledDays)
-        assertEquals(0, log.elapsedDays)
-    }
-
-    @Test
-    fun `parseReviewHistory - parses multiple log entries`() {
-        val lines = listOf(
-            "#REVIEW_HISTORY_START",
-            "#CardQuestion\tReviewTime\tGrade\tAlgorithm\tStateBefore\tStateAfter\tScheduledDays\tElapsedDays",
-            "Card One\t1000\t2\tFSRS\tNEW\tLEARNING\t1\t0",
-            "Card Two\t2000\t4\tSM2\tLEARNING\tREVIEW\t3\t1",
-            "#REVIEW_HISTORY_END"
-        )
-        val result = CardImportExport.parseReviewHistory(lines)
-        assertEquals(2, result.size)
-        assertEquals("Card One", result[0].cardQuestion)
-        assertEquals(2, result[0].grade)
-        assertEquals("Card Two", result[1].cardQuestion)
-        assertEquals(4, result[1].grade)
-    }
-
-    @Test
-    fun `parseReviewHistory - skips comment lines inside section`() {
-        val lines = listOf(
-            "#REVIEW_HISTORY_START",
-            "#CardQuestion\tReviewTime\tGrade\tAlgorithm\tStateBefore\tStateAfter\tScheduledDays\tElapsedDays",
-            "Card One\t1000\t3\tFSRS\tNEW\tLEARNING\t1\t0",
-            "#REVIEW_HISTORY_END"
-        )
-        val result = CardImportExport.parseReviewHistory(lines)
-        assertEquals(1, result.size)
-        assertEquals("Card One", result[0].cardQuestion)
-    }
-
-    @Test
-    fun `parseReviewHistory - skips malformed lines without crashing`() {
-        val lines = listOf(
-            "#REVIEW_HISTORY_START",
-            "too\tfew\tcolumns",
-            "Card One\t1000\t3\tFSRS\tNEW\tLEARNING\t1\t0",
-            "#REVIEW_HISTORY_END"
-        )
-        val result = CardImportExport.parseReviewHistory(lines)
-        assertEquals(1, result.size)
-        assertEquals("Card One", result[0].cardQuestion)
-    }
-
-    @Test
-    fun `parseReviewHistory - handles newline-escaped question text`() {
-        val lines = listOf(
-            "#REVIEW_HISTORY_START",
-            "Line one<br>Line two\t5000\t1\tFSRS\tNEW\tLEARNING\t1\t0",
-            "#REVIEW_HISTORY_END"
-        )
-        val result = CardImportExport.parseReviewHistory(lines)
-        assertEquals(1, result.size)
-        assertEquals("Line one\nLine two", result[0].cardQuestion)
-    }
-
-    @Test
-    fun `parseReviewHistory - reads until end of file if no end marker`() {
-        val lines = listOf(
-            "#REVIEW_HISTORY_START",
-            "Card One\t1000\t3\tFSRS\tNEW\tLEARNING\t1\t0"
-        )
-        val result = CardImportExport.parseReviewHistory(lines)
-        assertEquals(1, result.size)
-    }
-
     // ==================== parsedReviewLogsToEntities TESTS ====================
 
     @Test
@@ -402,20 +304,6 @@ class ReviewHistoryImportExportTest {
     // ==================== SKIP grade (grade = 0) TESTS ====================
 
     @Test
-    fun `parseReviewHistory - parses SKIP grade (0) correctly`() {
-        val lines = listOf(
-            "#REVIEW_HISTORY_START",
-            "What is a lunge?\t1000\t0\tFSRS\tNEW\tNEW\t0\t0",
-            "#REVIEW_HISTORY_END"
-        )
-        val result = CardImportExport.parseReviewHistory(lines)
-        assertEquals(1, result.size)
-        assertEquals(0, result[0].grade)
-        assertEquals("NEW", result[0].stateBefore)
-        assertEquals("NEW", result[0].stateAfter)  // unchanged because skipped
-    }
-
-    @Test
     fun `exportCardsWithGroupStates - SKIP log has identical stateBefore and stateAfter`() {
         val card = makeCard(1L, "Skip me")
         val skipLog = makeReviewLog(
@@ -520,55 +408,6 @@ class ReviewHistoryImportExportTest {
     // ==================== groupName field TESTS ====================
 
     @Test
-    fun `parseReviewHistory - reads groupName column when present`() {
-        val lines = listOf(
-            "#REVIEW_HISTORY_START",
-            "#CardQuestion\tReviewTime\tGrade\tAlgorithm\tStateBefore\tStateAfter\tScheduledDays\tElapsedDays\tGroupName",
-            "Card One\t1000\t3\tFSRS\tNEW\tLEARNING\t1\t0\tSword Basics",
-            "#REVIEW_HISTORY_END"
-        )
-        val result = CardImportExport.parseReviewHistory(lines)
-        assertEquals(1, result.size)
-        assertEquals("Sword Basics", result[0].groupName)
-    }
-
-    @Test
-    fun `parseReviewHistory - groupName is null when column is empty`() {
-        val lines = listOf(
-            "#REVIEW_HISTORY_START",
-            "Card One\t1000\t3\tFSRS\tNEW\tLEARNING\t1\t0\t",
-            "#REVIEW_HISTORY_END"
-        )
-        val result = CardImportExport.parseReviewHistory(lines)
-        assertEquals(1, result.size)
-        assertNull(result[0].groupName)
-    }
-
-    @Test
-    fun `parseReviewHistory - groupName is null when column is absent (old format)`() {
-        val lines = listOf(
-            "#REVIEW_HISTORY_START",
-            "Card One\t1000\t3\tFSRS\tNEW\tLEARNING\t1\t0",
-            "#REVIEW_HISTORY_END"
-        )
-        val result = CardImportExport.parseReviewHistory(lines)
-        assertEquals(1, result.size)
-        assertNull(result[0].groupName)
-    }
-
-    @Test
-    fun `parseReviewHistory - card_edit source is read correctly`() {
-        val lines = listOf(
-            "#REVIEW_HISTORY_START",
-            "Card One\t1000\t3\tFSRS\tNEW\tLEARNING\t1\t0\tcard_edit",
-            "#REVIEW_HISTORY_END"
-        )
-        val result = CardImportExport.parseReviewHistory(lines)
-        assertEquals(1, result.size)
-        assertEquals("card_edit", result[0].groupName)
-    }
-
-    @Test
     fun `round-trip - groupName is preserved for group practice log`() {
         val cardId = 20L
         val cardQuestion = "Lunge with extension"
@@ -653,43 +492,6 @@ class ReviewHistoryImportExportTest {
     }
 
     // ==================== notes field TESTS ====================
-
-    @Test
-    fun `parseReviewHistory - reads notes column when present`() {
-        val lines = listOf(
-            "#REVIEW_HISTORY_START",
-            "Card One\t1000\t3\tFSRS\tNEW\tLEARNING\t1\t0\t\tGood session today\t",
-            "#REVIEW_HISTORY_END"
-        )
-        val result = CardImportExport.parseReviewHistory(lines)
-        assertEquals(1, result.size)
-        assertEquals("Good session today", result[0].notes)
-        assertTrue(result[0].imageData.isEmpty())
-    }
-
-    @Test
-    fun `parseReviewHistory - notes with newlines are unescaped`() {
-        val lines = listOf(
-            "#REVIEW_HISTORY_START",
-            "Card One\t1000\t3\tFSRS\tNEW\tLEARNING\t1\t0\t\tLine one<br>Line two\t",
-            "#REVIEW_HISTORY_END"
-        )
-        val result = CardImportExport.parseReviewHistory(lines)
-        assertEquals(1, result.size)
-        assertEquals("Line one\nLine two", result[0].notes)
-    }
-
-    @Test
-    fun `parseReviewHistory - notes default to empty string when absent`() {
-        val lines = listOf(
-            "#REVIEW_HISTORY_START",
-            "Card One\t1000\t3\tFSRS\tNEW\tLEARNING\t1\t0",
-            "#REVIEW_HISTORY_END"
-        )
-        val result = CardImportExport.parseReviewHistory(lines)
-        assertEquals(1, result.size)
-        assertEquals("", result[0].notes)
-    }
 
     @Test
     fun `round-trip - notes text is preserved through export and parse`() {
@@ -806,22 +608,6 @@ class ReviewHistoryImportExportTest {
             mapOf(question to cardId)
         )
         assertNull(entities.single().fightDifficulty)
-    }
-
-    @Test
-    fun `a history written before fight difficulty existed reads back unrated`() {
-        // The tab-separated format, which has no column for it.
-        val lines = listOf(
-            "#REVIEW_HISTORY_START",
-            "Parry four\t1000\t3\tFSRS\tNEW\tLEARNING\t1\t0\t\t\t\tAlex\t1.25",
-            "#REVIEW_HISTORY_END"
-        )
-
-        val result = CardImportExport.parseReviewHistory(lines)
-
-        assertEquals(1, result.size)
-        assertNull(result[0].fightDifficulty)
-        assertEquals(1.25, result[0].stabilityMultiplier, 0.0001)
     }
 
     // ==================== session TESTS ====================

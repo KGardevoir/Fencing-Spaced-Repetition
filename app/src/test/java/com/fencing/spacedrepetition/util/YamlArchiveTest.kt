@@ -394,7 +394,6 @@ class YamlArchiveTest {
         assertEquals(0, cards.size)
         assertEquals(1, errors.size)
         assertTrue(errors[0], errors[0].contains("cards:"))
-        assertTrue(errors[0], errors[0].contains("FSR_EXPORT"))
     }
 
     @Test
@@ -405,30 +404,15 @@ class YamlArchiveTest {
         assertTrue(errors[0], errors[0].startsWith("Line 2:"))
     }
 
-    // ==================== the format it replaced ====================
+    // ==================== the format it replaced, no longer read ====================
 
     @Test
-    fun `a tab-separated export still imports`() {
-        val legacy = listOf(
-            "#FSR_EXPORT_V4",
-            "#GROUP_SETTINGS:Footwork\tcardsPerSession=15",
-            "#OPPONENT:Alex\tskillMultiplier=1.5\tnotes=lefty",
-            "#Question\tAnswer",
-            "Q1\tA1\t\tGLOBAL\t100\t50\t1.5\t5.0\tREVIEW\t2\t0\t3\t1\tFootwork",
-            "Q1\tA1\t\tFootwork\t200\t60\t2.5\t6.0\tLEARNING\t1\t0\t1\t1\tFootwork",
-            "#REVIEW_HISTORY_START",
-            "Q1\t1000\t3\tFSRS\tbefore\tafter\t2\t1\tFootwork\tnotes\t\tAlex\t1.5",
-            "#REVIEW_HISTORY_END"
-        )
+    fun `an old tab-separated export is refused, saying why`() {
+        val legacy = listOf("#FSR_EXPORT_V4", "#Question\tAnswer", "Q1\tA1")
         val (cards, errors) = CardImportExport.parseCards(legacy)
 
-        assertEquals(emptyList<String>(), errors)
-        assertEquals(2, cards.size)
-        assertEquals(1.5, cards[0].fsrsStability!!, 0.0001)
-        assertEquals("Footwork", cards[1].stateContext)
-        assertEquals(mapOf("cardsPerSession" to "15"), CardImportExport.lastParsedGroupSettings["Footwork"])
-        assertEquals("lefty", CardImportExport.lastParsedOpponents.single().notes)
-        assertEquals("Alex", CardImportExport.lastParsedReviewHistory.single().opponentName)
+        assertEquals(0, cards.size)
+        assertEquals(listOf(CardImportExport.LEGACY_FORMAT_ERROR), errors)
     }
 
     /**
@@ -440,17 +424,25 @@ class YamlArchiveTest {
     @Test
     fun `a second import does not inherit the first one's metadata`() {
         CardImportExport.parseCards(
-            listOf(
-                "#FSR_EXPORT_V4",
-                "#GROUP_SETTINGS:Footwork\tcardsPerSession=15",
-                "#OPPONENT:Alex\tskillMultiplier=1.5",
-                "Q1\tA1",
-                "#REVIEW_HISTORY_START",
-                "Q1\t1000\t3\tFSRS\tbefore\tafter\t2\t1",
-                "#REVIEW_HISTORY_END"
-            )
+            """
+            groups:
+              - name: Footwork
+                description: steps
+            opponents:
+              - name: Alex
+                skillMultiplier: 1.5
+            cards:
+              - question: Q1
+                answer: A1
+            reviewHistory:
+              - card: Q1
+                reviewTime: 1000
+                grade: 3
+            """.trimIndent().lines()
         )
         assertTrue(CardImportExport.lastParsedGroupSettings.isNotEmpty())
+        assertTrue(CardImportExport.lastParsedOpponents.isNotEmpty())
+        assertTrue(CardImportExport.lastParsedReviewHistory.isNotEmpty())
 
         CardImportExport.parseCards("cards:\n  - question: a\n    answer: b".lines())
 

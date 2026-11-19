@@ -69,9 +69,9 @@ An Android app for practicing martial arts and fencing techniques using delayed-
   optionally the full review history
 - Readable and editable by hand -- a minimal deck is just a `cards:` list of
   `question`/`answer` pairs
-- Import auto-detects the format and merges with existing cards; the
-  tab-separated exports written by earlier versions (`#FSR_EXPORT_V1` through
-  `V4`) still import
+- Import merges with existing cards. The tab-separated exports written by
+  much older versions (`#FSR_EXPORT_V1` through `V4`) are no longer read:
+  import one with an older version and export it again as YAML
 - CSV (Concept, Description, Images) remains available for exchanging decks
   with spreadsheets and other tools
 

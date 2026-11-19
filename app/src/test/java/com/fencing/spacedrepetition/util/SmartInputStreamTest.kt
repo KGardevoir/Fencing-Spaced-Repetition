@@ -68,7 +68,7 @@ class SmartInputStreamTest {
 
     @Test
     fun `smartInputStream - roundtrip with parseCards compressed`() {
-        val exportData = "#FSR_EXPORT_V3\n#Headers\nQ1\tA1\t\tFSRS\tGLOBAL\t0\t0\t0\t0\tNEW\t0\t0\t0\t0\t2.5\t0\t0\tGroup1\n"
+        val exportData = "cards:\n  - question: Q1\n    answer: A1\n"
 
         val compressed = ByteArrayOutputStream()
         GZIPOutputStream(compressed).use { it.write(exportData.toByteArray()) }
@@ -84,7 +84,7 @@ class SmartInputStreamTest {
 
     @Test
     fun `smartInputStream - roundtrip with parseCards uncompressed`() {
-        val exportData = "#FSR_EXPORT_V3\n#Headers\nQ1\tA1\t\tFSRS\tGLOBAL\t0\t0\t0\t0\tNEW\t0\t0\t0\t0\t2.5\t0\t0\tGroup1\n"
+        val exportData = "cards:\n  - question: Q1\n    answer: A1\n"
 
         val smart = CardImportExport.smartInputStream(ByteArrayInputStream(exportData.toByteArray()))
         val (cards, errors) = CardImportExport.parseCards(smart)
