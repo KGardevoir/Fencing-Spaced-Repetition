@@ -77,11 +77,8 @@ fun PracticeScreen(
 
     // Edit dialog
     if (showEditDialog && sessionCards.isNotEmpty() && currentCardIndex < sessionCards.size) {
-        val sessionCard = sessionCards[currentCardIndex]
         EditCardDialog(
-            card = sessionCard.card,
-            concepts = sessionCard.concepts,
-            selection = sessionCard.selection,
+            card = sessionCards[currentCardIndex].card,
             onDismiss = { showEditDialog = false },
             onSave = { question, answer, imagePaths ->
                 onUpdateCard(currentCardIndex, question, answer, imagePaths)
@@ -446,6 +443,11 @@ fun PracticeCardView(
                         textAlign = TextAlign.Center
                     )
 
+                    sessionCard.selection?.takeIf { it.mode == SelectionMode.CONCEPT }?.let { selection ->
+                        Spacer(modifier = Modifier.height(16.dp))
+                        DrawnConcepts(sessionCard.concepts, selection)
+                    }
+
                     Spacer(modifier = Modifier.height(32.dp))
 
                     if (showAnswer) {
@@ -571,10 +573,6 @@ fun PracticeCardView(
 @Composable
 fun EditCardDialog(
     card: Card,
-    /** The card's concepts with how much of each it has; shown, not edited, in a session drawn by concept. */
-    concepts: List<Pair<Concept, Double>> = emptyList(),
-    /** Why the card was drawn: decides whether concepts show, and which is highlighted. */
-    selection: CardSelection? = null,
     onDismiss: () -> Unit,
     onSave: (question: String, answer: String, imagePaths: List<String>) -> Unit
 ) {
@@ -708,11 +706,6 @@ fun EditCardDialog(
                     }
                 }
 
-                if (selection?.mode == SelectionMode.CONCEPT) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    DrawnConcepts(concepts, selection)
-                }
-
                 Spacer(modifier = Modifier.height(8.dp))
 
                 MarkdownKeyboardToolbar(markdownToolbarState)
@@ -722,9 +715,9 @@ fun EditCardDialog(
 }
 
 /**
- * The card's concepts in a session drawn by concept, to see and not to change
- * (that is the card editor's job), with the one it was drawn for highlighted
- * and a line saying why it is in the session.
+ * On the practice card, in a session drawn by concept: the card's concepts,
+ * to see and not to change (that is the card editor's job), with the one it
+ * was drawn for highlighted and a line saying why it is in the session.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -732,19 +725,13 @@ private fun DrawnConcepts(concepts: List<Pair<Concept, Double>>, selection: Card
     val names = concepts.associate { (concept, _) -> concept.uid to concept.name }
     val trigger = selection.triggerConceptUid?.let(names::get)
     val alsoDue = selection.conceptUids.filter { it != selection.triggerConceptUid }.mapNotNull(names::get)
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                Icons.Default.Lightbulb,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Concepts", style = MaterialTheme.typography.titleSmall)
-        }
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Concepts:", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
         if (concepts.isNotEmpty()) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 concepts.forEach { (concept, weight) ->
                     ConceptTag(conceptChipLabel(concept.name, weight), highlighted = concept.uid == selection.triggerConceptUid)
                 }
@@ -757,9 +744,10 @@ private fun DrawnConcepts(concepts: List<Pair<Concept, Double>>, selection: Card
                 selection.reason == SelectionReason.DUE -> "Drawn because the card itself was due."
                 selection.reason == SelectionReason.LOCKED -> "Kept from this group's locked draw."
                 else -> "Extra study: nothing due needed this card."
-            } + if (concepts.isEmpty()) " It has no concepts." else " Concepts are changed in the card editor.",
+            } + if (concepts.isEmpty()) " It has no concepts." else "",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
         )
     }
 }
