@@ -44,6 +44,14 @@ import com.fencing.spacedrepetition.ui.components.LargeImageNotice
 import com.fencing.spacedrepetition.ui.image.LARGE_IMAGE_BYTES
 import com.fencing.spacedrepetition.ui.image.LocalImagePicker
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeUiState
+import com.fencing.spacedrepetition.data.model.Concept
+import com.fencing.spacedrepetition.data.model.CardSelection
+import com.fencing.spacedrepetition.data.model.SelectionMode
+import com.fencing.spacedrepetition.data.model.SelectionReason
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -69,8 +77,11 @@ fun PracticeScreen(
 
     // Edit dialog
     if (showEditDialog && sessionCards.isNotEmpty() && currentCardIndex < sessionCards.size) {
+        val sessionCard = sessionCards[currentCardIndex]
         EditCardDialog(
-            card = sessionCards[currentCardIndex].card,
+            card = sessionCard.card,
+            concepts = sessionCard.concepts,
+            selection = sessionCard.selection,
             onDismiss = { showEditDialog = false },
             onSave = { question, answer, imagePaths ->
                 onUpdateCard(currentCardIndex, question, answer, imagePaths)
@@ -560,6 +571,10 @@ fun PracticeCardView(
 @Composable
 fun EditCardDialog(
     card: Card,
+    /** The card's concepts with how much of each it has; shown, not edited, in a session drawn by concept. */
+    concepts: List<Pair<Concept, Double>> = emptyList(),
+    /** Why the card was drawn: decides whether concepts show, and which is highlighted. */
+    selection: CardSelection? = null,
     onDismiss: () -> Unit,
     onSave: (question: String, answer: String, imagePaths: List<String>) -> Unit
 ) {
@@ -589,11 +604,18 @@ fun EditCardDialog(
                     .padding(16.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                Text(
-                    text = "Edit Card",
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
+                // Save at the top right, as in every editor.
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = requestDismiss) { Icon(Icons.Default.Close, contentDescription = "Cancel") }
+                    Text("Edit Card", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    TextButton(
+                        onClick = { onSave(question, answerFieldValue.text, imagePaths) },
+                        enabled = question.isNotBlank() && answerFieldValue.text.isNotBlank()
+                    ) { Text("Save") }
+                }
 
                 OutlinedTextField(
                     value = question,
@@ -686,28 +708,88 @@ fun EditCardDialog(
                     }
                 }
 
+                if (selection?.mode == SelectionMode.CONCEPT) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    DrawnConcepts(concepts, selection)
+                }
+
                 Spacer(modifier = Modifier.height(8.dp))
 
                 MarkdownKeyboardToolbar(markdownToolbarState)
+            }
+        }
+    }
+}
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = requestDismiss) {
-                        Text("Cancel")
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = { onSave(question, answerFieldValue.text, imagePaths) },
-                        enabled = question.isNotBlank() && answerFieldValue.text.isNotBlank()
-                    ) {
-                        Text("Save")
-                    }
+/**
+ * The card's concepts in a session drawn by concept, to see and not to change
+ * (that is the card editor's job), with the one it was drawn for highlighted
+ * and a line saying why it is in the session.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DrawnConcepts(concepts: List<Pair<Concept, Double>>, selection: CardSelection) {
+    val names = concepts.associate { (concept, _) -> concept.uid to concept.name }
+    val trigger = selection.triggerConceptUid?.let(names::get)
+    val alsoDue = selection.conceptUids.filter { it != selection.triggerConceptUid }.mapNotNull(names::get)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Default.Lightbulb,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Concepts", style = MaterialTheme.typography.titleSmall)
+        }
+        if (concepts.isNotEmpty()) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                concepts.forEach { (concept, weight) ->
+                    ConceptTag(conceptChipLabel(concept.name, weight), highlighted = concept.uid == selection.triggerConceptUid)
                 }
             }
+        }
+        Text(
+            when {
+                trigger != null -> "Drawn for $trigger" +
+                    (if (alsoDue.isEmpty()) "." else "; also due: ${alsoDue.joinToString(", ")}.")
+                selection.reason == SelectionReason.DUE -> "Drawn because the card itself was due."
+                selection.reason == SelectionReason.LOCKED -> "Kept from this group's locked draw."
+                else -> "Extra study: nothing due needed this card."
+            } + if (concepts.isEmpty()) " It has no concepts." else " Concepts are changed in the card editor.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/** A concept on the card, shown and not tappable; [highlighted] is the one the card was drawn for. */
+@Composable
+private fun ConceptTag(label: String, highlighted: Boolean) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = if (highlighted) colors.primaryContainer else colors.surface.copy(alpha = 0f),
+        contentColor = if (highlighted) colors.onPrimaryContainer else colors.onSurface,
+        border = BorderStroke(if (highlighted) 2.dp else 1.dp, if (highlighted) colors.primary else colors.outline),
+        modifier = Modifier
+            .heightIn(min = 32.dp)
+            .semantics { if (highlighted) stateDescription = "Drawn for this concept" }
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            if (highlighted) {
+                Icon(Icons.Default.Lightbulb, contentDescription = null, modifier = Modifier.size(16.dp), tint = colors.primary)
+                Spacer(modifier = Modifier.width(6.dp))
+            }
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (highlighted) FontWeight.Bold else FontWeight.Normal
+            )
         }
     }
 }

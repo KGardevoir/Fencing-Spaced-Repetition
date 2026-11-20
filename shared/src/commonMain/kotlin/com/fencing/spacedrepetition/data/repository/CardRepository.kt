@@ -45,6 +45,16 @@ class CardRepository(
 
     suspend fun insertCard(card: Card): Long = cardDao.insertCard(card)
 
+    /** Each of [cardIds]' concepts with how much of each the card contains, by card id, by name. */
+    suspend fun conceptsOfCards(cardIds: Collection<Long>): Map<Long, List<Pair<Concept, Double>>> {
+        val ids = cardIds.toSet()
+        val byId = conceptDao.getAllConceptsSync().associateBy { it.id }
+        return conceptDao.getAllCardConceptCrossRefsSync()
+            .filter { it.cardId in ids }
+            .groupBy({ it.cardId }, { link -> byId[link.conceptId]?.let { it to link.weight } })
+            .mapValues { (_, concepts) -> concepts.filterNotNull().sortedBy { it.first.name.lowercase() } }
+    }
+
     suspend fun findCardByQuestion(question: String): Card? = cardDao.findCardByQuestion(question)
 
     suspend fun updateCard(card: Card) = cardDao.updateCard(card)

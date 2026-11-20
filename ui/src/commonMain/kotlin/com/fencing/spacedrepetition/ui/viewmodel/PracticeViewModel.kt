@@ -6,6 +6,7 @@ package com.fencing.spacedrepetition.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.data.model.Card
+import com.fencing.spacedrepetition.data.model.SelectionMode
 import com.fencing.spacedrepetition.data.model.SelectionReason
 import com.fencing.spacedrepetition.data.model.DrawnCard
 import com.fencing.spacedrepetition.data.model.CardSelection
@@ -107,8 +108,6 @@ class PracticeViewModel(
      */
     private var sessionToken: Long = 0L
 
-    /** Why each card of the session was drawn, by card id; written on its review log. */
-    private var sessionSelections: Map<Long, CardSelection> = emptyMap()
     private var sessionJob: Job? = null
 
     fun startNewSession(numberOfCards: Int = 3, groupId: Long? = null) {
@@ -164,13 +163,19 @@ class PracticeViewModel(
                 val newSessionId = repository.createPracticeSession(cardsForSession.map { it.id })
                 if (token != sessionToken) return@launch
 
+                // The cards' concepts, shown in a session drawn by concept.
+                val concepts = if (drawn.none { it.selection.mode == SelectionMode.CONCEPT }) emptyMap()
+                    else repository.conceptsOfCards(cardsForSession.map { it.id })
+                if (token != sessionToken) return@launch
+
                 // Initialize session cards; no default opponent or fight rating
                 // until the user picks one
                 sessionId = newSessionId
-                sessionSelections = drawn.associate { it.card.id to it.selection }
                 _sessionOpponentId.value = null
                 _sessionFightDifficulty.value = null
-                _sessionCards.value = cardsForSession.map { SessionCard(it, null) }
+                _sessionCards.value = drawn.map { (card, selection) ->
+                    SessionCard(card, null, selection, concepts[card.id].orEmpty())
+                }
                 _currentCardIndex.value = 0
                 _uiState.value = PracticeUiState.Practicing
             } catch (e: CancellationException) {
@@ -321,7 +326,7 @@ class PracticeViewModel(
         val fightDifficulty = _sessionFightDifficulty.value
         val notes = _sessionNotes.value
         val noteImages = _sessionNoteImages.value
-        val selections = sessionSelections
+        val selections = cards.mapNotNull { sessionCard -> sessionCard.selection?.let { sessionCard.card.id to it } }.toMap()
         _uiState.value = PracticeUiState.Submitting
 
         viewModelScope.launch {
@@ -380,7 +385,6 @@ class PracticeViewModel(
         _sessionNotes.value = ""
         _sessionNoteImages.value = emptyList()
         sessionId = null
-        sessionSelections = emptyMap()
         selectedGroupId = null
         sessionStartTime = 0L
         _uiState.value = PracticeUiState.Loading

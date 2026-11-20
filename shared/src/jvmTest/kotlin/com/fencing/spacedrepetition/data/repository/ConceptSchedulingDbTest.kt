@@ -186,6 +186,18 @@ class ConceptSchedulingDbTest {
     }
 
     @Test
+    fun `the due count in a learning group counts concepts never practised there`() = runTest {
+        val learningGroupId = db.groupDao().insertLearningGroup(LearningGroup(name = "Bouting", useConcepts = true))
+        val groupId = db.groupDao().insertGroup(Group(name = "Footwork", learningGroupId = learningGroupId))
+        // Not due on its own, anywhere; its concept is new in the learning group.
+        val c = card("lunge", nextReview = Time.now() + 30 * day)
+        db.groupDao().insertCardGroupCrossRef(CardGroupCrossRef(c, groupId))
+        tag(c, concept("Tempo"))
+        assertEquals(listOf(c), repo.drawing.drawCards(3, groupId).map { it.id })
+        assertEquals(1, repo.drawing.dueCount(groupId).first())
+    }
+
+    @Test
     fun `a session is one concept review, graded with the mean of its cards`() = runTest {
         val learningGroupId = db.groupDao().insertLearningGroup(LearningGroup(name = "Bouting", useConcepts = true))
         val groupId = db.groupDao().insertGroup(Group(name = "Footwork", learningGroupId = learningGroupId))

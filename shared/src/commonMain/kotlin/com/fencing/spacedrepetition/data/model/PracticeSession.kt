@@ -39,16 +39,22 @@ data class PracticeSession(
 )
 
 /**
- * A card and its grade during a practice session.
+ * A card and its grade during a practice session, with why it was drawn.
  *
  * Carries nothing about the opponent, how hard the fight was, or what was
  * noted about it. Those describe the fight, and the session is the fight: they
  * are held once for the session. A copy per card could disagree with the
  * session it belongs to, so there is not one.
+ *
+ * @param selection why the card was drawn; written on its review log.
+ * @param concepts the card's concepts with how much of each it contains, for
+ *   a session drawn by concept; empty otherwise.
  */
 data class SessionCard(
     val card: Card,
-    val grade: Grade? = null
+    val grade: Grade? = null,
+    val selection: CardSelection? = null,
+    val concepts: List<Pair<Concept, Double>> = emptyList()
 )
 
 enum class Grade(val value: Int, val label: String) {
