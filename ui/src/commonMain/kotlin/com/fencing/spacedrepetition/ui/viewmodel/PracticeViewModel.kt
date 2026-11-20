@@ -76,12 +76,19 @@ class PracticeViewModel(
      * Off by default, and held in memory only: a fresh launch starts unlocked.
      */
     private val _cardLocks = MutableStateFlow<Map<Long?, List<Long>>>(emptyMap())
+
+    /**
+     * Why each locked card was drawn in the draw its lock keeps, by group and
+     * card: a locked session shows and logs the same reason, marked locked.
+     */
+    private var lockedSelections: Map<Long?, Map<Long, CardSelection>> = emptyMap()
     val cardLocks: StateFlow<Map<Long?, List<Long>>> = _cardLocks.asStateFlow()
 
     fun setCardLock(groupId: Long?, enabled: Boolean) {
         _cardLocks.update { locks ->
             if (enabled) locks + (groupId to locks[groupId].orEmpty()) else locks - groupId
         }
+        if (!enabled) lockedSelections = lockedSelections - groupId
     }
 
     private var sessionId: Long? = null
@@ -135,8 +142,14 @@ class PracticeViewModel(
                 // Cards deleted since the lock was taken simply drop out.
                 val lockedCards = lockedIds.mapNotNull { repository.getCardById(it) }
                 val drawn = if (lockedCards.isNotEmpty()) {
-                    val locked = CardSelection(repository.drawing.selectionModeFor(groupId), SelectionReason.LOCKED)
-                    lockedCards.map { DrawnCard(it, locked) }
+                    val mode = repository.drawing.selectionModeFor(groupId)
+                    val kept = lockedSelections[groupId].orEmpty()
+                    lockedCards.map { card ->
+                        // The reason from the kept draw, while it was drawn the way the group draws now.
+                        val selection = kept[card.id]?.takeIf { it.mode == mode }?.copy(reason = SelectionReason.LOCKED)
+                            ?: CardSelection(mode, SelectionReason.LOCKED)
+                        DrawnCard(card, selection)
+                    }
                 } else drawCards(numberOfCards, groupId)
                 val cardsForSession = drawn.map { it.card }
 
@@ -156,6 +169,9 @@ class PracticeViewModel(
                     val drawnIds = cardsForSession.map { it.id }
                     _cardLocks.update { locks ->
                         if (groupId in locks) locks + (groupId to drawnIds) else locks
+                    }
+                    if (groupId in _cardLocks.value) {
+                        lockedSelections = lockedSelections + (groupId to drawn.associate { it.card.id to it.selection })
                     }
                 }
 

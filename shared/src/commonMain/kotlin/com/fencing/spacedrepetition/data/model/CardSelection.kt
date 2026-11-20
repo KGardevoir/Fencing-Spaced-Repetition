@@ -23,10 +23,13 @@ enum class SelectionReason {
  *
  * @param conceptUids for a card drawn by concept to cover due concepts, the
  *   stable identifiers of the due concepts it was picked to cover.
- * @param triggerConceptUid for such a card, the due concept it was drawn for
- *   most: the one whose need made up the largest part of its score. Always one
- *   of [conceptUids]. Null for a card that was due itself, extra study, or not
- *   drawn by concept.
+ * @param triggerConceptUid the concept a card drawn by concept was drawn for.
+ *   Drawn because it was due ([SelectionReason.DUE]): the due concept whose
+ *   need made up the largest part of its score, one of [conceptUids]. Extra
+ *   study ([SelectionReason.EXTRA]): its concept coming due soonest, which
+ *   puts it first in line for the top-up. Kept by a locked draw
+ *   ([SelectionReason.LOCKED]): the one from the draw the lock kept. Null for
+ *   a card with no concepts, and one not drawn by concept.
  */
 data class CardSelection(
     val mode: SelectionMode,

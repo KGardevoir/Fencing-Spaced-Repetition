@@ -737,13 +737,15 @@ private fun DrawnConcepts(concepts: List<Pair<Concept, Double>>, selection: Card
                 }
             }
         }
+        val alsoDueNote = if (alsoDue.isEmpty()) "" else "; also due: ${alsoDue.joinToString(", ")}"
         Text(
-            when {
-                trigger != null -> "Drawn for $trigger" +
-                    (if (alsoDue.isEmpty()) "." else "; also due: ${alsoDue.joinToString(", ")}.")
-                selection.reason == SelectionReason.DUE -> "Drawn because the card itself was due."
-                selection.reason == SelectionReason.LOCKED -> "Kept from this group's locked draw."
-                else -> "Extra study: nothing due needed this card."
+            when (selection.reason) {
+                SelectionReason.LOCKED ->
+                    "Kept from this group's locked draw" + (trigger?.let { ", where it was drawn for $it" } ?: "") + "."
+                SelectionReason.DUE ->
+                    trigger?.let { "Drawn for $it$alsoDueNote." } ?: "Drawn because the card itself was due."
+                else ->
+                    "Extra study: nothing due needed this card" + (trigger?.let { "; $it comes due soonest" } ?: "") + "."
             } + if (concepts.isEmpty()) " It has no concepts." else "",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

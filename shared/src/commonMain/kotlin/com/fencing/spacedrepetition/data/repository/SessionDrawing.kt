@@ -236,31 +236,39 @@ class SessionDrawing internal constructor(
         picks.forEach { selected[it.cardId] = cardsById.getValue(it.cardId) }
         val pickById = picks.associateBy { it.cardId }
 
+        // A card's concept coming due soonest (the larger share on a tie):
+        // what puts it first in line for the top-up.
+        fun soonestConcept(cardId: Long): Long? = conceptsByCard[cardId]?.minWithOrNull(
+            compareBy<Long> { conceptStates[it]?.nextReview ?: 0L }
+                .thenByDescending { shares.getValue(cardId to it) }
+                .thenBy { it }
+        )
         if (selected.size < limit) {
-            fun dueOf(card: Card): Long = conceptsByCard[card.id]
-                ?.minOfOrNull { conceptStates[it]?.nextReview ?: 0L }
+            fun dueOf(card: Card): Long = soonestConcept(card.id)?.let { conceptStates[it]?.nextReview ?: 0L }
                 ?: inputs.ownStates.getValue(card.id).nextReview
             val rest = pool.filter { it.id !in selected }.sortedBy(::dueOf)
             val fill = if (shouldRandomize) rest.shuffled() else rest
             fill.take(limit - selected.size).forEach { selected[it.id] = it }
         }
 
-        val conceptUids = if (picks.isEmpty()) emptyMap() else
-            conceptDao.getAllConceptsSync().associate { it.id to it.uid }
+        val conceptUids = conceptDao.getAllConceptsSync().associate { it.id to it.uid }
         return selected.values.map { card ->
             val pick = pickById[card.id]
-            // The concepts whose need it met, and the one it met most of.
+            // The concepts whose need it met, and the one it met most of --
+            // or, for extra study, the concept coming due soonest.
             val conceptTerms = pick?.terms.orEmpty().mapNotNull { (key, term) ->
                 (key as? NeedKey.OfConcept)?.let { it.conceptId to term }
             }
+            val trigger = if (pick != null) {
+                conceptTerms.maxWithOrNull(compareBy<Pair<Long, Double>> { it.second }.thenByDescending { it.first })?.first
+            } else soonestConcept(card.id)
             DrawnCard(
                 card,
                 CardSelection(
                     SelectionMode.CONCEPT,
                     if (pick != null) SelectionReason.DUE else SelectionReason.EXTRA,
                     conceptTerms.mapNotNull { conceptUids[it.first] }.sorted(),
-                    conceptTerms.maxWithOrNull(compareBy<Pair<Long, Double>> { it.second }.thenByDescending { it.first })
-                        ?.let { conceptUids[it.first] }
+                    trigger?.let { conceptUids[it] }
                 )
             )
         }

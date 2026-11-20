@@ -186,6 +186,28 @@ class ConceptSchedulingDbTest {
     }
 
     @Test
+    fun `every card drawn by concept names the concept it was drawn for`() = runTest {
+        val a = concept("A")
+        val b = concept("B", nextReview = Time.now() + 3 * day)   // not due yet
+        val c = concept("C", nextReview = Time.now() + 9 * day)   // not due yet
+        val first = card("all A"); tag(first, a)
+        val second = card("also all A"); tag(second, a)
+        val third = card("B and C"); tag(third, b, c)
+        val uids = db.conceptDao().getAllConceptsSync().associate { it.id to it.uid }
+
+        val drawn = repo.drawing.drawSession(3, null).associateBy { it.card.id }
+        // Due: drawn for A.
+        assertEquals(SelectionReason.DUE, drawn.getValue(first).selection.reason)
+        assertEquals(uids[a], drawn.getValue(first).selection.triggerConceptUid)
+        // A's need already met: extra study, A still the concept due soonest.
+        assertEquals(SelectionReason.EXTRA, drawn.getValue(second).selection.reason)
+        assertEquals(uids[a], drawn.getValue(second).selection.triggerConceptUid)
+        // Nothing due: B, which comes due before C.
+        assertEquals(SelectionReason.EXTRA, drawn.getValue(third).selection.reason)
+        assertEquals(uids[b], drawn.getValue(third).selection.triggerConceptUid)
+    }
+
+    @Test
     fun `the due count in a learning group counts concepts never practised there`() = runTest {
         val learningGroupId = db.groupDao().insertLearningGroup(LearningGroup(name = "Bouting", useConcepts = true))
         val groupId = db.groupDao().insertGroup(Group(name = "Footwork", learningGroupId = learningGroupId))
