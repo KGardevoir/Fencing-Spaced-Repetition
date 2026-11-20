@@ -205,7 +205,7 @@ why the card was in front of the fencer and against whom:
 | `selectionMode` | How the session was drawn: `CARD` (card by card) or `CONCEPT` |
 | `selectionReason` | Why this card: `DUE`; `EXTRA` (topped up a session the due cards did not fill); `LOCKED` (the group's draw was locked, so earlier cards were kept); `EDITOR` (graded in the card editor, not drawn) |
 | `selectionConcepts` | Drawn by concept: the `uid`s of every concept whose need the card met (a term of its score above 0), comma-separated; empty for an untagged card or extra study |
-| `selectionTrigger` | Drawn by concept: the `uid` of the concept that contributed the most to the card's dot-product score (its share times that concept's need) when it was picked. Always one of `selectionConcepts`; null otherwise (since version 24) |
+| `selectionTrigger` | Drawn by concept: the `uid` of the concept the card was drawn for. Reason `DUE`: the concept that contributed the most to its dot-product score (its share times that concept's need), one of `selectionConcepts`. Reason `EXTRA`: its concept coming due soonest, which put it first in line for the top-up. Reason `LOCKED`: the one from the draw the lock kept. Null for a card with no concepts or not drawn by concept (since version 24) |
 | `opponentSkillMultiplier` | The opponent's skill multiplier at the time, before fight difficulty |
 
 With `fightDifficulty` (1-5) and `stabilityMultiplier` (the two
