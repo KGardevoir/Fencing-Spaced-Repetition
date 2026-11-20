@@ -6,6 +6,10 @@ package com.fencing.spacedrepetition.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.data.model.Card
+import com.fencing.spacedrepetition.data.model.SelectionMode
+import com.fencing.spacedrepetition.data.model.SelectionReason
+import com.fencing.spacedrepetition.data.model.DrawnCard
+import com.fencing.spacedrepetition.data.model.CardSelection
 import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.SessionCard
@@ -72,12 +76,19 @@ class PracticeViewModel(
      * Off by default, and held in memory only: a fresh launch starts unlocked.
      */
     private val _cardLocks = MutableStateFlow<Map<Long?, List<Long>>>(emptyMap())
+
+    /**
+     * Why each locked card was drawn in the draw its lock keeps, by group and
+     * card: a locked session shows and logs the same reason, marked locked.
+     */
+    private var lockedSelections: Map<Long?, Map<Long, CardSelection>> = emptyMap()
     val cardLocks: StateFlow<Map<Long?, List<Long>>> = _cardLocks.asStateFlow()
 
     fun setCardLock(groupId: Long?, enabled: Boolean) {
         _cardLocks.update { locks ->
             if (enabled) locks + (groupId to locks[groupId].orEmpty()) else locks - groupId
         }
+        if (!enabled) lockedSelections = lockedSelections - groupId
     }
 
     private var sessionId: Long? = null
@@ -103,6 +114,7 @@ class PracticeViewModel(
      * outlives a cancellation cannot repopulate a session the user has left.
      */
     private var sessionToken: Long = 0L
+
     private var sessionJob: Job? = null
 
     fun startNewSession(numberOfCards: Int = 3, groupId: Long? = null) {
@@ -129,7 +141,17 @@ class PracticeViewModel(
             try {
                 // Cards deleted since the lock was taken simply drop out.
                 val lockedCards = lockedIds.mapNotNull { repository.getCardById(it) }
-                val cardsForSession = lockedCards.ifEmpty { drawCards(numberOfCards, groupId) }
+                val drawn = if (lockedCards.isNotEmpty()) {
+                    val mode = repository.drawing.selectionModeFor(groupId)
+                    val kept = lockedSelections[groupId].orEmpty()
+                    lockedCards.map { card ->
+                        // The reason from the kept draw, while it was drawn the way the group draws now.
+                        val selection = kept[card.id]?.takeIf { it.mode == mode }?.copy(reason = SelectionReason.LOCKED)
+                            ?: CardSelection(mode, SelectionReason.LOCKED)
+                        DrawnCard(card, selection)
+                    }
+                } else drawCards(numberOfCards, groupId)
+                val cardsForSession = drawn.map { it.card }
 
                 // Superseded while we were reading: say nothing and leave the
                 // session that replaced this one alone.
@@ -148,10 +170,18 @@ class PracticeViewModel(
                     _cardLocks.update { locks ->
                         if (groupId in locks) locks + (groupId to drawnIds) else locks
                     }
+                    if (groupId in _cardLocks.value) {
+                        lockedSelections = lockedSelections + (groupId to drawn.associate { it.card.id to it.selection })
+                    }
                 }
 
                 // Create session
                 val newSessionId = repository.createPracticeSession(cardsForSession.map { it.id })
+                if (token != sessionToken) return@launch
+
+                // The cards' concepts, shown in a session drawn by concept.
+                val concepts = if (drawn.none { it.selection.mode == SelectionMode.CONCEPT }) emptyMap()
+                    else repository.conceptsOfCards(cardsForSession.map { it.id })
                 if (token != sessionToken) return@launch
 
                 // Initialize session cards; no default opponent or fight rating
@@ -159,7 +189,9 @@ class PracticeViewModel(
                 sessionId = newSessionId
                 _sessionOpponentId.value = null
                 _sessionFightDifficulty.value = null
-                _sessionCards.value = cardsForSession.map { SessionCard(it, null) }
+                _sessionCards.value = drawn.map { (card, selection) ->
+                    SessionCard(card, null, selection, concepts[card.id].orEmpty())
+                }
                 _currentCardIndex.value = 0
                 _uiState.value = PracticeUiState.Practicing
             } catch (e: CancellationException) {
@@ -173,24 +205,13 @@ class PracticeViewModel(
         }
     }
 
-    private suspend fun drawCards(numberOfCards: Int, groupId: Long?): List<Card> {
-        // Get due cards (randomized from the full pool if setting is enabled)
-        val dueCards = if (groupId != null) {
-            repository.getDueCardsByGroup(groupId, limit = numberOfCards)
-        } else {
-            repository.getDueCards(limit = numberOfCards)
-        }
-
-        // If we have enough due cards, use those
-        // Otherwise, get all cards to allow additional studying
-        if (dueCards.size >= numberOfCards) return dueCards.take(numberOfCards)
-        val allCards = if (groupId != null) {
-            repository.getCardsByGroupSync(groupId)
-        } else {
-            repository.getAllCardsSync()
-        }
-        return allCards.take(numberOfCards)
-    }
+    /**
+     * Due cards first, then the rest of the pool as additional study -- by
+     * learning concept where the group's learning context has that switched
+     * on, card by card otherwise. See [CardRepository.drawCards].
+     */
+    private suspend fun drawCards(numberOfCards: Int, groupId: Long?): List<DrawnCard> =
+        repository.drawing.drawSession(numberOfCards, groupId)
 
     fun nextCard() {
         val currentIndex = _currentCardIndex.value
@@ -289,14 +310,6 @@ class PracticeViewModel(
         }
     }
 
-    fun updateCardText(cardIndex: Int, question: String, answer: String) {
-        editCard(cardIndex) { it.copy(question = question, answer = answer) }
-    }
-
-    fun updateCardImages(cardIndex: Int, imagePaths: List<String>) {
-        editCard(cardIndex) { it.copy(imagePaths = imagePaths) }
-    }
-
     fun updateCardComplete(cardIndex: Int, question: String, answer: String, imagePaths: List<String>) {
         editCard(cardIndex) { it.copy(question = question, answer = answer, imagePaths = imagePaths) }
     }
@@ -329,6 +342,7 @@ class PracticeViewModel(
         val fightDifficulty = _sessionFightDifficulty.value
         val notes = _sessionNotes.value
         val noteImages = _sessionNoteImages.value
+        val selections = cards.mapNotNull { sessionCard -> sessionCard.selection?.let { sessionCard.card.id to it } }.toMap()
         _uiState.value = PracticeUiState.Submitting
 
         viewModelScope.launch {
@@ -342,15 +356,18 @@ class PracticeViewModel(
                     // If practicing within a group, use group-aware review method
                     if (groupId != null) {
                         cardsWithGrades.forEach { (card, grade) ->
-                            repository.reviewCardWithGroup(
-                                card, grade, groupId, sid, opponentId, fightDifficulty
+                            repository.grading.reviewCardWithGroup(
+                                card, grade, groupId, sid, opponentId, fightDifficulty, selections[card.id]
                             )
                         }
                     } else {
-                        repository.reviewMultipleCards(
-                            cardsWithGrades, sid, opponentId, fightDifficulty
+                        repository.grading.reviewMultipleCards(
+                            cardsWithGrades, sid, opponentId, fightDifficulty, selections
                         )
                     }
+                    // The session is now in these cards' history, and their
+                    // concepts are derived from that history.
+                    repository.conceptDerivation.rederiveConceptsForCards(cardsWithGrades.map { it.first.id })
                 }
 
                 // Complete the session, and with it what was noted about the

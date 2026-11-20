@@ -45,8 +45,6 @@ class LocalStoragePreferences : AppPreferences {
         MutableStateFlow(readBoolean("randomize_due_cards", false))
     private val maximumIntervalState =
         MutableStateFlow(readInt("maximum_interval", Defaults.DEFAULT_MAXIMUM_INTERVAL))
-    private val practicesPerWeekState =
-        MutableStateFlow(readInt("practices_per_week", Defaults.DEFAULT_PRACTICES_PER_WEEK))
     private val practiceDaysState = MutableStateFlow(
         readString("practice_days")
             ?.split(",")
@@ -61,6 +59,9 @@ class LocalStoragePreferences : AppPreferences {
         MutableStateFlow(readInt("fsrs_retention", Defaults.DEFAULT_FSRS_RETENTION))
     private val fsrsEnableFuzzingState =
         MutableStateFlow(readBoolean("fsrs_enable_fuzzing", Defaults.DEFAULT_FSRS_ENABLE_FUZZING))
+    private val globalConceptSchedulingState = MutableStateFlow(
+        readBoolean("global_concept_scheduling", Defaults.DEFAULT_GLOBAL_CONCEPT_SCHEDULING)
+    )
     private val autoBackupEnabledState =
         MutableStateFlow(readBoolean("auto_backup_enabled", Defaults.DEFAULT_AUTO_BACKUP_ENABLED))
     private val autoBackupUriState = MutableStateFlow(readString("auto_backup_uri"))
@@ -85,11 +86,11 @@ class LocalStoragePreferences : AppPreferences {
     override val selectedGroupId: Flow<Long?> = selectedGroupIdState.asStateFlow()
     override val randomizeDueCards: Flow<Boolean> = randomizeDueCardsState.asStateFlow()
     override val maximumInterval: Flow<Int> = maximumIntervalState.asStateFlow()
-    override val practicesPerWeek: Flow<Int> = practicesPerWeekState.asStateFlow()
     override val practiceDays: Flow<Set<Int>> = practiceDaysState.asStateFlow()
     override val randomizeBucketHours: Flow<Int> = randomizeBucketHoursState.asStateFlow()
     override val fsrsRetention: Flow<Int> = fsrsRetentionState.asStateFlow()
     override val fsrsEnableFuzzing: Flow<Boolean> = fsrsEnableFuzzingState.asStateFlow()
+    override val globalConceptScheduling: Flow<Boolean> = globalConceptSchedulingState.asStateFlow()
     override val autoBackupEnabled: Flow<Boolean> = autoBackupEnabledState.asStateFlow()
     override val autoBackupUri: Flow<String?> = autoBackupUriState.asStateFlow()
     override val autoBackupIntervalDays: Flow<Int> = autoBackupIntervalDaysState.asStateFlow()
@@ -125,11 +126,6 @@ class LocalStoragePreferences : AppPreferences {
         write("maximum_interval", valid.toString(), maximumIntervalState, valid)
     }
 
-    override suspend fun setPracticesPerWeek(count: Int) {
-        val valid = count.coerceIn(Defaults.MIN_PRACTICES_PER_WEEK, Defaults.MAX_PRACTICES_PER_WEEK)
-        write("practices_per_week", valid.toString(), practicesPerWeekState, valid)
-    }
-
     override suspend fun setPracticeDays(days: Set<Int>) =
         write("practice_days", days.sorted().joinToString(","), practiceDaysState, days)
 
@@ -143,6 +139,9 @@ class LocalStoragePreferences : AppPreferences {
 
     override suspend fun setFsrsEnableFuzzing(enabled: Boolean) =
         write("fsrs_enable_fuzzing", enabled.toString(), fsrsEnableFuzzingState, enabled)
+
+    override suspend fun setGlobalConceptScheduling(enabled: Boolean) =
+        write("global_concept_scheduling", enabled.toString(), globalConceptSchedulingState, enabled)
 
     override suspend fun setAutoBackupEnabled(enabled: Boolean) =
         write("auto_backup_enabled", enabled.toString(), autoBackupEnabledState, enabled)

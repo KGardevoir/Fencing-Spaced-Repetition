@@ -9,6 +9,7 @@ import androidx.sqlite.execSQL
 import com.fencing.spacedrepetition.data.ALL_MIGRATIONS
 import com.fencing.spacedrepetition.data.AppDatabase
 import com.fencing.spacedrepetition.data.model.Card
+import com.fencing.spacedrepetition.data.model.CardGroupCrossRef
 import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.LearningGroup
@@ -41,6 +42,7 @@ class IdentityDbTest {
         override val practiceDays: Flow<Set<Int>> = flowOf((1..7).toSet())
         override val fsrsRetention: Flow<Int> = flowOf(90)
         override val fsrsEnableFuzzing: Flow<Boolean> = flowOf(false)
+        override val globalConceptScheduling: Flow<Boolean> = flowOf(false)
     }
 
     private lateinit var db: AppDatabase
@@ -52,7 +54,8 @@ class IdentityDbTest {
             .setDriver(BundledSQLiteDriver())
             .build()
         repo = CardRepository(
-            db.cardDao(), db.practiceSessionDao(), db.reviewLogDao(), db.groupDao(), db.opponentDao(), prefs
+            db.cardDao(), db.practiceSessionDao(), db.reviewLogDao(), db.groupDao(), db.opponentDao(), prefs,
+            db.conceptDao()
         )
     }
 
@@ -68,7 +71,7 @@ class IdentityDbTest {
     fun `new reviews record the group's stable identifier`() = runTest {
         val groupId = db.groupDao().insertGroup(Group(name = "Footwork"))
         val c = db.cardDao().getCardById(card("c"))!!
-        repo.reviewCard(c, Grade.GOOD, groupId = groupId)
+        repo.grading.reviewCard(c, Grade.GOOD, groupId = groupId)
         val log = db.reviewLogDao().getAllReviewLogsSync().single()
         assertEquals(db.groupDao().getGroupById(groupId)!!.uid, log.groupUid)
         assertTrue(log.uid.isNotBlank())
@@ -92,12 +95,12 @@ class IdentityDbTest {
         val t = Time.now() - day
         val first = ReviewLog(cardId = c, sessionId = null, reviewTime = t, grade = 3, algorithm = "FSRS",
             stateBefore = "", stateAfter = "", scheduledDays = 0, elapsedDays = 0)
-        assertEquals(1, repo.importReviewLogs(listOf(first)))
+        assertEquals(1, repo.archive.importReviewLogs(listOf(first)))
         // The same review again: by identifier, and -- for a file from before
         // identifiers -- by card, moment and grade.
-        assertEquals(0, repo.importReviewLogs(listOf(first)))
-        assertEquals(0, repo.importReviewLogs(listOf(first.copy(uid = "fresh-from-an-old-file"))))
-        assertEquals(1, repo.importReviewLogs(listOf(first.copy(uid = "another", reviewTime = t + 1))))
+        assertEquals(0, repo.archive.importReviewLogs(listOf(first)))
+        assertEquals(0, repo.archive.importReviewLogs(listOf(first.copy(uid = "fresh-from-an-old-file"))))
+        assertEquals(1, repo.archive.importReviewLogs(listOf(first.copy(uid = "another", reviewTime = t + 1))))
         assertEquals(2, db.reviewLogDao().getAllReviewLogsSync().size)
     }
 
@@ -108,13 +111,38 @@ class IdentityDbTest {
         val parsed = com.fencing.spacedrepetition.util.ParsedCard(
             concept = "New question", answer = "", lineNumber = 1, stateContext = "GLOBAL", uid = uid
         )
-        repo.importCardsWithGroupStates(listOf(parsed), emptyMap()) {
+        repo.archive.importCards(listOf(parsed), emptyMap()) {
             com.fencing.spacedrepetition.util.CardImportExport.parsedCardToCard(it)
         }
         val cards = db.cardDao().getAllCardsAsList()
         assertEquals(1, cards.size)
         assertEquals("New question", cards.single().question)
         assertEquals(uid, cards.single().uid)
+    }
+
+    @Test
+    fun `a bare question and answer keeps a card's groups and pictures, a full record sets them`() = runTest {
+        val footwork = db.groupDao().insertGroup(Group(name = "Footwork"))
+        val parries = db.groupDao().insertGroup(Group(name = "Parries"))
+        val id = db.cardDao().insertCard(Card(question = "Lunge", answer = "old", imagePaths = listOf("img-1")))
+        db.groupDao().insertCardGroupCrossRef(CardGroupCrossRef(id, footwork))
+        val groupIds = mapOf("Footwork" to footwork, "Parries" to parries)
+        suspend fun importOne(parsed: com.fencing.spacedrepetition.util.ParsedCard) =
+            repo.archive.importCards(listOf(parsed), groupIds) {
+                com.fencing.spacedrepetition.util.CardImportExport.parsedCardToCard(it)
+            }
+        suspend fun groupsOf() = db.groupDao().getGroupsForCardSync(id).map { it.name }.toSet()
+
+        importOne(com.fencing.spacedrepetition.util.ParsedCard(concept = "Lunge", answer = "new", lineNumber = 1))
+        assertEquals("new", db.cardDao().getCardById(id)!!.answer)
+        assertEquals(listOf("img-1"), db.cardDao().getCardById(id)!!.imagePaths)
+        assertEquals(setOf("Footwork"), groupsOf())
+
+        importOne(com.fencing.spacedrepetition.util.ParsedCard(
+            concept = "Lunge", answer = "new", lineNumber = 1, stateContext = "GLOBAL", groupNames = listOf("Parries")
+        ))
+        assertEquals(setOf("Parries"), groupsOf())
+        assertEquals(1, db.cardDao().getAllCardsAsList().size)
     }
 
     @Test
@@ -133,7 +161,7 @@ class IdentityDbTest {
         val opponentId = db.opponentDao().insertOpponent(Opponent(name = "Alex"))
         val alex = db.opponentDao().getOpponentById(opponentId)!!
         val c = db.cardDao().getCardById(card("c"))!!
-        repo.reviewCard(c, Grade.GOOD, opponentId = opponentId)
+        repo.grading.reviewCard(c, Grade.GOOD, opponentId = opponentId)
         val log = db.reviewLogDao().getAllReviewLogsSync().single()
         assertEquals(alex.uid, log.opponentUid)
 
@@ -146,12 +174,29 @@ class IdentityDbTest {
     }
 
     @Test
+    fun `merging opponents moves their reviews' identity to the one kept`() = runTest {
+        val opponents = OpponentRepository(db.opponentDao())
+        val bob = db.opponentDao().insertOpponent(Opponent(name = "Bob"))
+        val bobby = db.opponentDao().insertOpponent(Opponent(name = "Bobby"))
+        val c = db.cardDao().getCardById(card("c"))!!
+        repo.grading.reviewCard(c, Grade.GOOD, opponentId = bobby)
+
+        opponents.mergeOpponents(sourceId = bobby, targetId = bob)
+        val log = db.reviewLogDao().getAllReviewLogsSync().single()
+        assertEquals(bob, log.opponentId)
+        assertEquals(db.opponentDao().getOpponentById(bob)!!.uid, log.opponentUid)
+        // And reconciling after an import leaves it with Bob.
+        repo.reconcileOpponentReferences()
+        assertEquals(bob, db.reviewLogDao().getAllReviewLogsSync().single().opponentId)
+    }
+
+    @Test
     fun `changing a review's opponent from history changes who it identifies`() = runTest {
         val alex = db.opponentDao().insertOpponent(Opponent(name = "Alex"))
         val sam = db.opponentDao().insertOpponent(Opponent(name = "Sam"))
         val session = repo.createPracticeSession(emptyList())
         val c = db.cardDao().getCardById(card("c"))!!
-        repo.reviewCard(c, Grade.GOOD, sessionId = session, opponentId = alex)
+        repo.grading.reviewCard(c, Grade.GOOD, sessionId = session, opponentId = alex)
 
         repo.updateSessionOpponent(session, sam)
         val log = db.reviewLogDao().getAllReviewLogsSync().single()
@@ -169,7 +214,7 @@ class IdentityDbTest {
         val learningGroupId = db.groupDao().insertLearningGroup(LearningGroup(name = "Bouting"))
         val c = db.cardDao().getCardById(card("c"))!!
         val before = Time.now()
-        repo.reviewCard(c, Grade.GOOD)
+        repo.grading.reviewCard(c, Grade.GOOD)
 
         repo.resetCardStateInLearningGroup(c.id, learningGroupId)
         assertTrue(db.groupDao().getLearningState(c.id, learningGroupId)!!.lastReset >= before)
@@ -220,7 +265,7 @@ class IdentityDbTest {
                 .addMigrations(*ALL_MIGRATIONS)
                 .build()
             try {
-                // Opening runs 17 -> 22 and validates every table against the
+                // Opening runs 17 -> 22 -> 23 and validates every table against the
                 // entities; the backfill itself is Migration17To22Test's.
                 assertEquals(0, migrated.cardDao().getAllCardsAsList().size)
             } finally {

@@ -29,6 +29,7 @@ import com.fencing.spacedrepetition.ui.viewmodel.CardViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.ConceptViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.RetentionReportViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
@@ -57,6 +58,7 @@ fun AppNavigation(
     historyViewModel: HistoryViewModel,
     opponentViewModel: OpponentViewModel,
     retentionReportViewModel: RetentionReportViewModel,
+    conceptViewModel: ConceptViewModel,
     navigator: Navigator
 ) {
     val context = LocalContext.current
@@ -86,6 +88,7 @@ fun AppNavigation(
         historyViewModel = historyViewModel,
         opponentViewModel = opponentViewModel,
         retentionReportViewModel = retentionReportViewModel,
+        conceptViewModel = conceptViewModel,
         buildInfo = BuildInfo(
             versionName = BuildConfig.VERSION_NAME,
             versionCode = BuildConfig.VERSION_CODE,
@@ -296,9 +299,9 @@ private fun rememberAndroidFileTransfer(
 // picker that took the named types literally would grey out the very file the
 // user came to choose.
 //
-// The tab-separated types are still named because a backup taken before the
-// format moved to YAML still imports, and a provider that does report a type
-// will report that one for it.
+// The tab-separated type is still named so that an old pre-YAML export can
+// be picked and told plainly that it is no longer read, rather than greyed
+// out with no explanation.
 private val ARCHIVE_TYPES = arrayOf(
     "application/gzip", "application/x-gzip", "text/plain",
     "application/yaml", "text/yaml", "text/x-yaml",

@@ -55,7 +55,11 @@ class OpponentRepository(private val opponentDao: OpponentDao) {
         val source = opponentDao.getOpponentById(sourceId) ?: return false
         val target = opponentDao.getOpponentById(targetId) ?: return false
 
-        opponentDao.reassignReviewLogs(fromId = sourceId, toId = targetId)
+        // By local id and by stable identifier together, so the reviews -- and
+        // any export of them -- name the opponent who is kept, and those that
+        // only still carried the source's identifier (from a deletion and
+        // re-import) follow too. See docs/DESIGN.md, "History".
+        opponentDao.reassignReviewLogs(fromId = sourceId, toId = targetId, fromUid = source.uid, toUid = target.uid)
 
         val sourceNotes = source.notes.trim()
         if (sourceNotes.isNotEmpty() && !target.notes.contains(sourceNotes)) {
@@ -69,9 +73,16 @@ class OpponentRepository(private val opponentDao: OpponentDao) {
     }
 
     /**
-     * Ensures each named opponent exists, creating missing ones with the supplied
-     * skill multiplier and notes. Existing opponents (matched by name) are left
-     * untouched — their current local values take precedence over imported ones.
+     * Ensures each named opponent exists, and makes each one the file
+     * describes: the same person is the one with the file's stable identifier,
+     * else the one with the name, else a new one carrying the identifier.
+     *
+     * An opponent already here takes the file's name (when no one else has
+     * it), skill multiplier and notes -- an import updates everything but
+     * progress, and an opponent's multiplier is not progress: every past
+     * review recorded the multiplier it was scheduled with. See
+     * docs/DESIGN.md, "Archive".
+     *
      * Returns a map of opponent name -> id for relinking imported review logs.
      */
     suspend fun ensureOpponentsExist(
@@ -83,19 +94,15 @@ class OpponentRepository(private val opponentDao: OpponentDao) {
             val trimmed = name.trim()
             if (trimmed.isEmpty()) return@forEach
             val uid = uidsByName[trimmed]
-            // The same person is the one with the file's stable identifier --
-            // renamed to the file's name when that is free -- else the one
-            // with the name. Their local multiplier is kept either way.
-            val byUid = uid?.let { opponentDao.findByUid(it) }
-            if (byUid != null) {
-                if (byUid.name != trimmed && opponentDao.findByName(trimmed) == null) {
-                    opponentDao.updateOpponent(byUid.copy(name = trimmed, modified = Time.now()))
-                }
-                result[trimmed] = byUid.id
-                return@forEach
-            }
-            val existing = opponentDao.findByName(trimmed)
+            val existing = uid?.let { opponentDao.findByUid(it) } ?: opponentDao.findByName(trimmed)
             if (existing != null) {
+                val nameFree = existing.name == trimmed || opponentDao.findByName(trimmed) == null
+                val updated = existing.copy(
+                    name = if (nameFree) trimmed else existing.name,
+                    skillMultiplier = skillMultiplier,
+                    notes = notes
+                )
+                if (updated != existing) opponentDao.updateOpponent(updated.copy(modified = Time.now()))
                 result[trimmed] = existing.id
             } else {
                 val newId = opponentDao.insertOpponent(

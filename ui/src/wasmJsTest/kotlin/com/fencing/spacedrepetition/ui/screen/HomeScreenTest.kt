@@ -78,6 +78,7 @@ class HomeScreenTest {
                     onNavigateToCards = {},
                     onNavigateToGroups = {},
                     onNavigateToLearningGroups = {},
+                    onNavigateToConcepts = {},
                     onNavigateToSettings = {},
                     onNavigateToHistory = {},
                     onNavigateToRetention = {},

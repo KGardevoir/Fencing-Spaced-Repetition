@@ -3,13 +3,13 @@
 
 package com.fencing.spacedrepetition.algorithm
 
+import com.fencing.spacedrepetition.data.model.LearningContexts
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardGroupCrossRef
 import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.data.model.ReviewLog
-import com.fencing.spacedrepetition.data.repository.GROUP_NAME_CARD_EDIT
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -96,7 +96,7 @@ class RetentionReportTest {
         val logs = listOf(
             log(1, 3, monday, group = "Parries"),
             log(1, 1, monday + day, group = null),
-            log(1, 4, monday + day, group = GROUP_NAME_CARD_EDIT),
+            log(1, 4, monday + day, group = LearningContexts.CARD_EDITOR),
             log(2, 3, monday, group = "Cuts"),
             log(2, 1, monday + 2 * day, group = "Cuts"),
             log(2, 3, monday, group = "Cuts", before = "NEW"),   // first sighting
@@ -124,6 +124,18 @@ class RetentionReportTest {
 
         val card2 = sabre.cards.first { it.cardId == 2L }
         assertEquals(listOf(3, 1), card2.history.map { it.grade })
+    }
+
+    @Test
+    fun `predicted recall counts the hours since the review before, not whole days`() {
+        val first = monday + 9 * 60 * 60 * 1000L
+        val logs = listOf(
+            log(1, 3, first, stability = 4.0, elapsed = 4, after = 6.0),
+            // 18 hours later: the log says 0 whole days.
+            log(1, 3, first + 18 * 60 * 60 * 1000L, stability = 6.0, elapsed = 0)
+        )
+        val history = build(logs = logs).learningContexts[0].cards.first { it.cardId == 1L }.history
+        assertEquals(1.0 / (1.0 + 0.75 / 6.0), history[1].predicted!!, 1e-9)
     }
 
     @Test
@@ -211,5 +223,47 @@ class RetentionReportTest {
         assertEquals(1, ctx.summary.reviews)
         val card1 = ctx.cards.first { it.cardId == 1L }
         assertEquals(listOf(2.0, 8.0), card1.stabilityHistory.map { it.stability })
+    }
+
+    // ==================== concepts ====================
+
+    @Test
+    fun `where concepts schedule, a scope reports its concepts in that context's state`() {
+        val sabre = lg.copy(useConcepts = true)
+        val concepts = listOf(
+            com.fencing.spacedrepetition.data.model.Concept(id = 50, name = "Moulinet"),
+            com.fencing.spacedrepetition.data.model.Concept(id = 51, name = "Unused")
+        )
+        val report = RetentionReportBuilder.build(
+            listOf(card(1), card(2), card(3, state = "NEW")), groups, refs, listOf(sabre), emptyList(),
+            logs = listOf(log(2, 3, now - day, group = "Cuts"), log(3, 1, now - day, group = "Cuts")),
+            now = now, utcOffsetSeconds = 0,
+            concepts = concepts,
+            cardConceptLinks = listOf(
+                com.fencing.spacedrepetition.data.model.CardConceptCrossRef(2, 50),
+                com.fencing.spacedrepetition.data.model.CardConceptCrossRef(3, 50)
+            ),
+            conceptStates = listOf(
+                com.fencing.spacedrepetition.data.model.ConceptLearningState(
+                    50, 7, fsrsStability = 6.0, fsrsState = "REVIEW", lastReview = now - day, nextReview = now + day
+                )
+            ),
+            retrievability = { t, s -> 1.0 / (1.0 + t / s) }
+        )
+        val cuts = report.cardGroups.single { it.name == "Cuts" }
+        assertTrue(cuts.conceptScheduling)
+        val moulinet = cuts.concepts.single()
+        assertEquals("Moulinet", moulinet.question)
+        assertEquals(6.0, moulinet.stabilityDays)
+        // Its reviews are its cards' reviews in the group.
+        assertEquals(2, moulinet.reviews)
+        assertEquals(1, moulinet.recalled)
+        assertEquals(1, cuts.conceptSummary!!.cardCount)
+        assertEquals(1, cuts.conceptSummary!!.learnedCount)
+        // Global does not schedule by concept here, and its card 1 carries none.
+        val parries = report.cardGroups.single { it.name == "Parries" }
+        assertEquals(false, parries.conceptScheduling)
+        assertTrue(parries.concepts.isEmpty())
+        assertNull(parries.conceptSummary)
     }
 }

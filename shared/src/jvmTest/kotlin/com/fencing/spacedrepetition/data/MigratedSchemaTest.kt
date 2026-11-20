@@ -200,22 +200,29 @@ class MigratedSchemaTest {
         // A gap means a user on that version cannot upgrade; a duplicate means
         // Room picks one of two paths and the other is dead. Both are the kind
         // of thing that only shows up on a device that skipped a release.
-        val steps = ALL_MIGRATIONS
-            .map { it.startVersion to it.endVersion }
-            .sortedBy { it.first }
-
-        // One step at a time, except where versions were deliberately skipped
-        // because builds elsewhere already used them (see MIGRATION_SKIPPED_VERSIONS).
+        //
+        // Two lines leave 17 on purpose and meet again at 23: this concepts
+        // line (18 to 21) and master's identifiers (22). See
+        // MIGRATION_SKIPPED_VERSIONS and docs/DESIGN.md, "Migrations".
+        val steps = ALL_MIGRATIONS.map { it.startVersion to it.endVersion }
+        val allowedJumps = setOf(17 to 22, 21 to 23)
         steps.forEach { (from, to) ->
-            val skipped = (from + 1 until to).toSet()
-            assertTrue(skipped.all { it in MIGRATION_SKIPPED_VERSIONS }, "migration $from -> $to skips a version")
+            assertTrue(to == from + 1 || (from to to) in allowedJumps, "migration $from -> $to skips a version")
         }
-
         val starts = steps.map { it.first }
-        assertEquals(starts.distinct(), starts, "two migrations start at the same version: $starts")
-        assertEquals(1, steps.first().first, "the chain does not start at version 1")
-        steps.zipWithNext().forEach { (a, b) ->
-            assertEquals(a.second, b.first, "the chain has a hole in it: $steps")
+        assertEquals(listOf(17), starts.groupBy { it }.filterValues { it.size > 1 }.keys.toList(),
+            "only 17 may start two migrations: $steps")
+        assertEquals(1, steps.minOf { it.first }, "the chain does not start at version 1")
+
+        // Every version anyone can be on reaches the newest, the way Room
+        // walks it: from each version, the step that goes furthest.
+        val newest = steps.maxOf { it.second }
+        (1 until newest).forEach { start ->
+            var version = start
+            while (version < newest) {
+                version = steps.filter { it.first == version && it.second <= newest }.maxOfOrNull { it.second }
+                    ?: error("version $version has no way on to $newest (from $start)")
+            }
         }
     }
 

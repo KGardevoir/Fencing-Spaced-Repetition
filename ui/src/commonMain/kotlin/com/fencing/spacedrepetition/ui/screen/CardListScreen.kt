@@ -28,23 +28,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.fencing.spacedrepetition.ui.components.ConfirmDeleteDialog
 import com.fencing.spacedrepetition.ui.components.AppIcons
+import com.fencing.spacedrepetition.ui.components.KeptListPosition
+import com.fencing.spacedrepetition.ui.components.ScrollToTopOnSortChange
 import com.fencing.spacedrepetition.ui.components.SelectionAction
 import com.fencing.spacedrepetition.ui.components.SelectionTopBar
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.CardWithGroups
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.LearningContexts
 import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.ui.viewmodel.CardSortOption
 import com.fencing.spacedrepetition.ui.viewmodel.ImportExportState
 import com.fencing.spacedrepetition.ui.viewmodel.SortDirection
-import com.fencing.spacedrepetition.ui.components.CsvGroupSelectionDialog
+import com.fencing.spacedrepetition.ui.components.ImportExportDialogs
 import com.fencing.spacedrepetition.ui.components.MarkdownText
 import com.fencing.spacedrepetition.util.ParsedCard
 import com.fencing.spacedrepetition.util.formatDate
 import com.fencing.spacedrepetition.util.toOneDecimal
 import com.fencing.spacedrepetition.util.Time
+import com.fencing.spacedrepetition.ui.viewmodel.CardListState
 
 @OptIn(
     ExperimentalMaterial3Api::class,
@@ -53,20 +58,13 @@ import com.fencing.spacedrepetition.util.Time
 )
 @Composable
 fun CardListScreen(
-    allCards: List<Card>,
-    allCardsWithGroups: List<CardWithGroups>,
-    groups: List<Group>,
-    selectedGroupFilters: Set<Long>,
-    showDisabledFilter: Boolean,
-    searchQuery: String,
-    cardCount: Int,
+    /** The cards, filters, sorting and selection; see [CardListState]. */
+    state: CardListState,
+    onToggleConceptFilter: (Long) -> Unit = {},
     importExportState: ImportExportState,
-    cardSortOption: CardSortOption,
-    sortDirection: SortDirection,
-    isSelectionMode: Boolean,
-    selectedCardIds: Set<Long>,
     learningStatesFor: @Composable (Long) -> List<CardLearningState>,
-    learningGroups: List<LearningGroup> = emptyList(),
+    /** Whether Global schedules by concept; each learning group carries its own switch. */
+    globalConceptScheduling: Boolean = false,
     onUpdateSearchQuery: (String) -> Unit,
     onClearGroupFilters: () -> Unit,
     onToggleGroupFilter: (Long) -> Unit,
@@ -78,8 +76,6 @@ fun CardListScreen(
     onSelectAllCards: () -> Unit,
     onToggleCardSelection: (Long) -> Unit,
     onSetSelectedCardsDisabled: (Boolean) -> Unit,
-    onToggleCardDisabled: (Long) -> Unit,
-    onDeleteCard: (Card) -> Unit,
     onDeleteSelectedCards: () -> Unit,
     onUpdateSelectedCardsGroups: (List<Long>) -> Unit,
     onResetSelectedCardsGlobalState: () -> Unit,
@@ -100,14 +96,22 @@ fun CardListScreen(
     onExportAllPhotos: () -> Unit,
     onNavigateToAddCard: (Long?) -> Unit,
     onNavigateToEditCard: (Card) -> Unit,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    /** Where the list is scrolled; held by the caller so it survives opening a card. */
+    listPosition: KeptListPosition = remember { KeptListPosition() }
 ) {
-    var showDeleteDialog by remember { mutableStateOf<Card?>(null) }
     var showMenu by remember { mutableStateOf(false) }
     var showSortMenu by remember { mutableStateOf(false) }
     var showBulkDeleteDialog by remember { mutableStateOf(false) }
     var showBulkGroupDialog by remember { mutableStateOf(false) }
     var showBulkResetDialog by remember { mutableStateOf(false) }
+    // Resetting a card where concepts schedule would reset the concepts'
+    // progress from it too, so reset is offered only where none do.
+    val learningContexts = LearningContexts(state.groups, state.learningGroups)
+    fun schedulesByConcept(cardIds: Collection<Long>): Boolean = cardIds.any { cardId ->
+        val cardGroups = state.cardsWithGroups.find { it.card.id == cardId }?.groups.orEmpty()
+        learningContexts.ofCard(cardGroups).any { learningContexts.schedulesByConcept(it, globalConceptScheduling) }
+    }
     var showGroupSelectionDialog by remember { mutableStateOf(false) }
     var showCsvGroupSelectionForExport by remember { mutableStateOf(false) }
     var showExportHistoryDialog by remember { mutableStateOf(false) }
@@ -115,26 +119,28 @@ fun CardListScreen(
     var includeHistoryInExport by remember { mutableStateOf(false) }
 
     // Handle back press when in selection mode
-    if (isSelectionMode) {
+    if (state.selectionMode) {
         BackHandler(onBack = onExitSelectionMode)
     }
 
-    // Scroll to top when sort option or direction changes
-    val cardListState = rememberLazyListState()
-    LaunchedEffect(cardSortOption, sortDirection) {
-        cardListState.scrollToItem(0)
-    }
+    // Scroll to top when sort option or direction changes, and only then.
+    val cardListState = listPosition.list
+    ScrollToTopOnSortChange(listPosition, state.sortOption to state.sortDirection)
 
     Scaffold(
         topBar = {
-            if (isSelectionMode) {
+            if (state.selectionMode) {
                 SelectionTopBar(
-                    selectedCount = selectedCardIds.size,
+                    selectedCount = state.selectedCardIds.size,
                     onExit = onExitSelectionMode,
                     onSelectAll = onSelectAllCards,
                     actions = listOf(
                         SelectionAction("Change groups", AppIcons.CardGroups) { showBulkGroupDialog = true },
-                        SelectionAction("Reset state", Icons.Default.Refresh) { showBulkResetDialog = true },
+                        if (schedulesByConcept(state.selectedCardIds)) {
+                            SelectionAction("Reset (concept scheduling on)", Icons.Default.Refresh, enabled = false) {}
+                        } else {
+                            SelectionAction("Reset state", Icons.Default.Refresh) { showBulkResetDialog = true }
+                        },
                         SelectionAction("Disable", Icons.Default.Block) { onSetSelectedCardsDisabled(true) },
                         SelectionAction("Enable", Icons.Default.PlayArrow) { onSetSelectedCardsDisabled(false) },
                         SelectionAction("Delete", Icons.Default.Delete, destructive = true) { showBulkDeleteDialog = true }
@@ -143,7 +149,7 @@ fun CardListScreen(
             } else {
                 // Normal top bar
                 TopAppBar(
-                    title = { Text("My Cards ($cardCount)") },
+                    title = { Text("My Cards (${state.cardCount})") },
                     navigationIcon = {
                         IconButton(onClick = onNavigateBack) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
@@ -152,7 +158,7 @@ fun CardListScreen(
                     actions = {
                         IconButton(onClick = onToggleSortDirection) {
                             Icon(
-                                imageVector = if (sortDirection == SortDirection.ASCENDING)
+                                imageVector = if (state.sortDirection == SortDirection.ASCENDING)
                                     Icons.Default.ArrowUpward
                                 else
                                     Icons.Default.ArrowDownward,
@@ -175,7 +181,7 @@ fun CardListScreen(
                                             showSortMenu = false
                                         },
                                         leadingIcon = {
-                                            if (cardSortOption == option) {
+                                            if (state.sortOption == option) {
                                                 Icon(Icons.Default.Check, contentDescription = null)
                                             }
                                         }
@@ -232,7 +238,7 @@ fun CardListScreen(
                                     leadingIcon = {
                                         Icon(AppIcons.CardGroups, contentDescription = null)
                                     },
-                                    enabled = groups.isNotEmpty()
+                                    enabled = state.groups.isNotEmpty()
                                 )
                                 DropdownMenuItem(
                                     text = { Text("Export All Photos") },
@@ -274,7 +280,7 @@ fun CardListScreen(
                                     leadingIcon = {
                                         Icon(AppIcons.CardGroups, contentDescription = null)
                                     },
-                                    enabled = groups.isNotEmpty()
+                                    enabled = state.groups.isNotEmpty()
                                 )
                             }
                         }
@@ -286,9 +292,9 @@ fun CardListScreen(
             }
         },
         floatingActionButton = {
-            if (!isSelectionMode) {
+            if (!state.selectionMode) {
                 FloatingActionButton(
-                    onClick = { onNavigateToAddCard(selectedGroupFilters.firstOrNull()) },
+                    onClick = { onNavigateToAddCard(state.groupFilters.firstOrNull()) },
                     containerColor = MaterialTheme.colorScheme.primary
                 ) {
                     Icon(Icons.Default.Add, "Add Card")
@@ -303,7 +309,7 @@ fun CardListScreen(
         ) {
             // Search field
             OutlinedTextField(
-                value = searchQuery,
+                value = state.searchQuery,
                 onValueChange = onUpdateSearchQuery,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -316,7 +322,7 @@ fun CardListScreen(
                     )
                 },
                 trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
+                    if (state.searchQuery.isNotEmpty()) {
                         IconButton(onClick = { onUpdateSearchQuery("") }) {
                             Icon(
                                 imageVector = Icons.Default.Close,
@@ -338,21 +344,21 @@ fun CardListScreen(
             ) {
                 item {
                     FilterChip(
-                        selected = selectedGroupFilters.isEmpty() && !showDisabledFilter,
+                        selected = state.groupFilters.isEmpty() && state.conceptFilters.isEmpty() && !state.showDisabled,
                         onClick = onClearGroupFilters,
                         label = { Text("All") }
                     )
                 }
-                items(groups) { group ->
+                items(state.groups) { group ->
                     FilterChip(
-                        selected = group.id in selectedGroupFilters,
+                        selected = group.id in state.groupFilters,
                         onClick = { onToggleGroupFilter(group.id) },
                         label = { Text(group.name) }
                     )
                 }
                 item {
                     FilterChip(
-                        selected = showDisabledFilter,
+                        selected = state.showDisabled,
                         onClick = onToggleDisabledFilter,
                         label = { Text("Disabled") },
                         leadingIcon = {
@@ -366,8 +372,33 @@ fun CardListScreen(
                 }
             }
 
+            // Concept filter chips: a card carrying any selected concept is shown.
+            if (state.concepts.isNotEmpty()) {
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(state.concepts, key = { it.id }) { concept ->
+                        FilterChip(
+                            selected = concept.id in state.conceptFilters,
+                            onClick = { onToggleConceptFilter(concept.id) },
+                            label = { Text(concept.name) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Lightbulb,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+
             // Cards list
-            if (allCards.isEmpty()) {
+            if (state.cards.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -377,7 +408,7 @@ fun CardListScreen(
                         modifier = Modifier.padding(32.dp)
                     ) {
                         Icon(
-                            imageVector = if (searchQuery.isNotEmpty()) Icons.Outlined.Search else Icons.Default.Description,
+                            imageVector = if (state.searchQuery.isNotEmpty()) Icons.Outlined.Search else Icons.Default.Description,
                             contentDescription = null,
                             modifier = Modifier.size(64.dp),
                             tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
@@ -385,10 +416,11 @@ fun CardListScreen(
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = when {
-                                searchQuery.isNotEmpty() -> "No cards match your search"
-                                showDisabledFilter && selectedGroupFilters.isNotEmpty() -> "No disabled cards in selected groups"
-                                showDisabledFilter -> "No disabled cards"
-                                selectedGroupFilters.isNotEmpty() -> "No cards in selected groups"
+                                state.searchQuery.isNotEmpty() -> "No cards match your search"
+                                state.showDisabled && state.groupFilters.isNotEmpty() -> "No disabled cards in selected groups"
+                                state.showDisabled -> "No disabled cards"
+                                state.groupFilters.isNotEmpty() -> "No cards in selected groups"
+                                state.conceptFilters.isNotEmpty() -> "No cards with the selected concepts"
                                 else -> "No cards yet"
                             },
                             style = MaterialTheme.typography.titleMedium,
@@ -396,9 +428,9 @@ fun CardListScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = if (searchQuery.isNotEmpty()) {
+                            text = if (state.searchQuery.isNotEmpty()) {
                                 "Try a different search term"
-                            } else if (showDisabledFilter) {
+                            } else if (state.showDisabled) {
                                 "Disabled cards are hidden from practice sessions"
                             } else {
                                 "Tap + to add a card or use menu to import"
@@ -415,9 +447,9 @@ fun CardListScreen(
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 80.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(allCards, key = { it.id }) { card ->
+                    items(state.cards, key = { it.id }) { card ->
                         // Find groups for this card
-                        val cardGroups = allCardsWithGroups
+                        val cardGroups = state.cardsWithGroups
                             .find { it.card.id == card.id }?.groups ?: emptyList()
 
                         // Get learning states for this card
@@ -426,17 +458,16 @@ fun CardListScreen(
                         CardListItem(
                             card = card,
                             groups = cardGroups,
+                            concepts = state.conceptsByCard[card.id].orEmpty(),
                             learningStates = learningStates,
-                            learningGroups = learningGroups,
-                            isSelectionMode = isSelectionMode,
-                            isSelected = card.id in selectedCardIds,
-                            sortOption = cardSortOption,
+                            learningGroups = state.learningGroups,
+                            isSelectionMode = state.selectionMode,
+                            isSelected = card.id in state.selectedCardIds,
+                            sortOption = state.sortOption,
                             onEdit = { onNavigateToEditCard(card) },
-                            onDelete = { showDeleteDialog = card },
-                            onToggleDisabled = { onToggleCardDisabled(card.id) },
                             onToggleSelection = { onToggleCardSelection(card.id) },
                             onLongPress = {
-                                if (!isSelectionMode) {
+                                if (!state.selectionMode) {
                                     onToggleSelectionMode()
                                     onToggleCardSelection(card.id)
                                 }
@@ -448,165 +479,26 @@ fun CardListScreen(
         }
     }
 
-    // Delete confirmation dialog
-    showDeleteDialog?.let { card ->
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = null },
-            icon = { Icon(Icons.Default.Delete, contentDescription = null) },
-            title = { Text("Delete Card?") },
-            text = { Text("Are you sure you want to delete this card? This action cannot be undone.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onDeleteCard(card)
-                        showDeleteDialog = null
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("Delete")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = null }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
 
     // Import/Export state dialogs
-    when (val state = importExportState) {
-        is ImportExportState.Loading -> {
-            AlertDialog(
-                onDismissRequest = { },
-                icon = { CircularProgressIndicator(modifier = Modifier.size(48.dp)) },
-                title = { Text("Processing...") },
-                text = { Text("Please wait while the operation completes.") },
-                confirmButton = { }
-            )
-        }
-        is ImportExportState.ImportSuccess -> {
-            AlertDialog(
-                onDismissRequest = onResetImportExportState,
-                icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                title = { Text("Import Complete") },
-                text = {
-                    Column {
-                        Text("Successfully imported ${state.importedCount} cards.")
-                        if (state.skippedCount > 0) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                "${state.skippedCount} lines skipped due to errors:",
-                                color = MaterialTheme.colorScheme.error
-                            )
-                            state.errors.take(5).forEach { error ->
-                                Text("• $error", style = MaterialTheme.typography.bodySmall)
-                            }
-                            if (state.errors.size > 5) {
-                                Text("...and ${state.errors.size - 5} more", style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    Button(onClick = onResetImportExportState) {
-                        Text("OK")
-                    }
-                }
-            )
-        }
-        is ImportExportState.ExportSuccess -> {
-            AlertDialog(
-                onDismissRequest = onResetImportExportState,
-                icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                title = { Text("Export Complete") },
-                text = { Text("Successfully exported ${state.exportedCount} cards.") },
-                confirmButton = {
-                    Button(onClick = onResetImportExportState) {
-                        Text("OK")
-                    }
-                }
-            )
-        }
-        is ImportExportState.PhotoExportSuccess -> {
-            AlertDialog(
-                onDismissRequest = onResetImportExportState,
-                icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                title = { Text("Export Complete") },
-                text = { Text("Successfully exported ${state.exportedCount} photos.") },
-                confirmButton = {
-                    Button(onClick = onResetImportExportState) {
-                        Text("OK")
-                    }
-                }
-            )
-        }
-        is ImportExportState.Error -> {
-            AlertDialog(
-                onDismissRequest = onResetImportExportState,
-                icon = { Icon(Icons.Default.Error, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                title = { Text("Error") },
-                text = { Text(state.message) },
-                confirmButton = {
-                    Button(onClick = onResetImportExportState) {
-                        Text("OK")
-                    }
-                }
-            )
-        }
-        is ImportExportState.CsvPendingGroupSelection -> {
-            CsvGroupSelectionDialog(
-                suggestedGroupName = state.suggestedGroupName,
-                existingGroups = groups,
-                cardCount = state.parsedCards.size,
-                onConfirm = { groupId ->
-                    onCsvImportInto(state.parsedCards, state.parseErrors, groupId)
-                },
-                onCreateGroup = { groupName ->
-                    onCsvImportIntoNewGroup(state.parsedCards, state.parseErrors, groupName)
-                },
-                onDismiss = onResetImportExportState
-            )
-        }
-        is ImportExportState.Idle -> { /* No dialog */ }
-    }
+    ImportExportDialogs(importExportState, state.groups, onResetImportExportState, onCsvImportInto, onCsvImportIntoNewGroup)
 
     // Bulk delete confirmation dialog
     if (showBulkDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showBulkDeleteDialog = false },
-            icon = { Icon(Icons.Default.Delete, contentDescription = null) },
-            title = { Text("Delete ${selectedCardIds.size} Cards?") },
-            text = { Text("Are you sure you want to delete these cards? This action cannot be undone.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onDeleteSelectedCards()
-                        showBulkDeleteDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("Delete")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showBulkDeleteDialog = false }) {
-                    Text("Cancel")
-                }
-            }
+        ConfirmDeleteDialog(
+            title = "Delete ${state.selectedCardIds.size} Cards?",
+            text = "Are you sure you want to delete these cards? This action cannot be undone.",
+            onConfirm = { onDeleteSelectedCards(); showBulkDeleteDialog = false },
+            onDismiss = { showBulkDeleteDialog = false }
         )
     }
 
     // Bulk reset state confirmation dialog
     if (showBulkResetDialog) {
         BulkResetDialog(
-            selectedCardIds = selectedCardIds,
-            allCardsWithGroups = allCardsWithGroups,
-            learningGroups = learningGroups,
+            selectedCardIds = state.selectedCardIds,
+            allCardsWithGroups = state.cardsWithGroups,
+            learningGroups = state.learningGroups,
             onDismiss = { showBulkResetDialog = false },
             onResetGlobal = {
                 onResetSelectedCardsGlobalState()
@@ -626,7 +518,7 @@ fun CardListScreen(
     // Bulk change groups dialog
     if (showBulkGroupDialog) {
         BulkGroupDialog(
-            groups = groups,
+            groups = state.groups,
             onDismiss = { showBulkGroupDialog = false },
             onConfirm = { selectedGroupIds ->
                 onUpdateSelectedCardsGroups(selectedGroupIds)
@@ -638,8 +530,8 @@ fun CardListScreen(
     // Export selected groups dialog
     if (showGroupSelectionDialog) {
         ExportGroupSelectionDialog(
-            groups = groups,
-            initiallySelected = selectedGroupFilters,
+            groups = state.groups,
+            initiallySelected = state.groupFilters,
             onDismiss = { showGroupSelectionDialog = false },
             onConfirm = { selectedGroupIds ->
                 showGroupSelectionDialog = false
@@ -698,618 +590,12 @@ fun CardListScreen(
     // CSV export selected groups dialog
     if (showCsvGroupSelectionForExport) {
         ExportGroupSelectionDialog(
-            groups = groups,
-            initiallySelected = selectedGroupFilters,
+            groups = state.groups,
+            initiallySelected = state.groupFilters,
             onDismiss = { showCsvGroupSelectionForExport = false },
             onConfirm = { selectedGroupIds ->
                 showCsvGroupSelectionForExport = false
                 onExportGroupsCsv(selectedGroupIds)
-            }
-        )
-    }
-}
-
-@Composable
-fun BulkGroupDialog(
-    groups: List<Group>,
-    onDismiss: () -> Unit,
-    onConfirm: (List<Long>) -> Unit
-) {
-    var selectedGroupIds by remember { mutableStateOf(setOf<Long>()) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = { Icon(AppIcons.CardGroups, contentDescription = null) },
-        title = { Text("Change Groups") },
-        text = {
-            Column {
-                Text(
-                    "Select groups for the selected cards:",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                if (groups.isEmpty()) {
-                    Text(
-                        "No groups available. Create a group first.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    groups.forEach { group ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = group.id in selectedGroupIds,
-                                onCheckedChange = { checked ->
-                                    selectedGroupIds = if (checked) {
-                                        selectedGroupIds + group.id
-                                    } else {
-                                        selectedGroupIds - group.id
-                                    }
-                                }
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(group.name)
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(onClick = { onConfirm(selectedGroupIds.toList()) }) {
-                Text("Apply")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
-}
-
-@Composable
-fun ExportGroupSelectionDialog(
-    groups: List<Group>,
-    /** Ticked to start with: the group filter chips active on the card list. */
-    initiallySelected: Set<Long> = emptySet(),
-    onDismiss: () -> Unit,
-    onConfirm: (List<Long>) -> Unit
-) {
-    var selectedGroupIds by remember {
-        mutableStateOf(initiallySelected.filter { id -> groups.any { it.id == id } }.toSet())
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = { Icon(AppIcons.CardGroups, contentDescription = null) },
-        title = { Text("Export Selected Groups") },
-        text = {
-            Column {
-                Text(
-                    "Select groups to export:",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                if (groups.isEmpty()) {
-                    Text(
-                        "No groups available. Create a group first.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.heightIn(max = 400.dp)
-                    ) {
-                        items(groups) { group ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = group.id in selectedGroupIds,
-                                    onCheckedChange = { checked ->
-                                        selectedGroupIds = if (checked) {
-                                            selectedGroupIds + group.id
-                                        } else {
-                                            selectedGroupIds - group.id
-                                        }
-                                    }
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column {
-                                    Text(
-                                        text = group.name,
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                    if (group.description.isNotBlank()) {
-                                        Text(
-                                            text = group.description,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onConfirm(selectedGroupIds.toList()) },
-                enabled = selectedGroupIds.isNotEmpty()
-            ) {
-                Text("Export ${selectedGroupIds.size} Groups")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
-}
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
-@Composable
-fun CardListItem(
-    card: Card,
-    groups: List<Group>,
-    learningStates: List<CardLearningState> = emptyList(),
-    learningGroups: List<LearningGroup> = emptyList(),
-    isSelectionMode: Boolean = false,
-    isSelected: Boolean = false,
-    sortOption: CardSortOption = CardSortOption.DUE_DATE,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit,
-    onToggleDisabled: () -> Unit = {},
-    onToggleSelection: () -> Unit = {},
-    onLongPress: () -> Unit = {}
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = {
-                    if (isSelectionMode) {
-                        onToggleSelection()
-                    } else {
-                        expanded = !expanded
-                    }
-                },
-                onLongClick = onLongPress
-            ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = when {
-                isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                card.isDisabled -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                else -> MaterialTheme.colorScheme.surface
-            }
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Selection checkbox
-                if (isSelectionMode) {
-                    Checkbox(
-                        checked = isSelected,
-                        onCheckedChange = { onToggleSelection() },
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-                }
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = card.question,
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = if (expanded) Int.MAX_VALUE else 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    if (!expanded) {
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        // Due date
-                        val dueDateText: String
-                        val dueDateColor: androidx.compose.ui.graphics.Color
-                        if (card.nextReview == 0L) {
-                            dueDateText = "New card"
-                            dueDateColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        } else {
-                            dueDateText = formatDate(card.nextReview)
-                            val now = Time.now()
-                            val diff = card.nextReview - now
-                            val daysDiff = (diff / (1000 * 60 * 60 * 24)).toInt()
-                            dueDateColor = when {
-                                diff <= 0 -> MaterialTheme.colorScheme.error
-                                daysDiff == 0 -> MaterialTheme.colorScheme.tertiary
-                                daysDiff <= 3 -> MaterialTheme.colorScheme.secondary
-                                else -> MaterialTheme.colorScheme.onSurfaceVariant
-                            }
-                        }
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = dueDateText,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = dueDateColor
-                            )
-
-                            // Display additional sort field info
-                            Text(
-                                text = "• ${card.fsrsReps} reviews",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = "• Difficulty: ${card.fsrsDifficulty.toOneDecimal()}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (groups.isNotEmpty()) {
-                                AssistChip(
-                                    onClick = { },
-                                    label = {
-                                        Text(
-                                            groups.firstOrNull()?.name ?: "",
-                                            style = MaterialTheme.typography.labelSmall
-                                        )
-                                    },
-                                    modifier = Modifier.height(24.dp)
-                                )
-                                if (groups.size > 1) {
-                                    Text(
-                                        "+${groups.size - 1}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            if (card.isDisabled) {
-                                AssistChip(
-                                    onClick = { },
-                                    label = {
-                                        Text(
-                                            "Disabled",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            Icons.Default.Block,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(12.dp),
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    },
-                                    modifier = Modifier.height(24.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                if (!isSelectionMode) {
-                    IconButton(onClick = { expanded = !expanded }) {
-                        Icon(
-                            imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                            contentDescription = if (expanded) "Collapse" else "Expand"
-                        )
-                    }
-                }
-            }
-
-            if (expanded && !isSelectionMode) {
-                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-
-                Text(
-                    text = "Description:",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                MarkdownText(
-                    text = card.answer
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Groups display
-                if (groups.isNotEmpty()) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        groups.forEach { group ->
-                            AssistChip(
-                                onClick = { },
-                                label = { Text(group.name, style = MaterialTheme.typography.labelSmall) },
-                                leadingIcon = {
-                                    Icon(
-                                        AppIcons.CardGroups,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                },
-                                modifier = Modifier.height(28.dp)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-
-                // Learning group states display
-                val cardLearningGroups = learningGroups.filter { learningGroup ->
-                    groups.any { it.learningGroupId == learningGroup.id }
-                }
-                if (cardLearningGroups.isNotEmpty()) {
-                    Text(
-                        text = "Learning Groups:",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    cardLearningGroups.forEach { group ->
-                        val state = learningStates.find { it.learningGroupId == group.id }
-                        val stateText = if (state == null) {
-                            "${group.name}: No state"
-                        } else {
-                            val nextReview = if (state.nextReview == 0L) {
-                                "New"
-                            } else {
-                                formatDate(state.nextReview)
-                            }
-                            "${group.name}: Next ${nextReview} (${state.fsrsState})"
-                        }
-                        Text(
-                            text = stateText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-
-                // Next review info
-                val nextReviewText = if (card.nextReview == 0L) {
-                    "New card"
-                } else {
-                    "Next: ${formatDate(card.nextReview)}"
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = nextReviewText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    IconButton(onClick = onEdit) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit", tint = MaterialTheme.colorScheme.primary)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun BulkResetDialog(
-    selectedCardIds: Set<Long>,
-    allCardsWithGroups: List<CardWithGroups>,
-    learningGroups: List<LearningGroup>,
-    onDismiss: () -> Unit,
-    onResetGlobal: () -> Unit,
-    onResetGroups: (Set<Long>) -> Unit,
-    onResetBoth: (Set<Long>) -> Unit
-) {
-    // Every learning group any of the selected cards is learnt in
-    val affectedLearningGroups = remember(selectedCardIds, allCardsWithGroups, learningGroups) {
-        val ids = allCardsWithGroups
-            .filter { it.card.id in selectedCardIds }
-            .flatMap { it.groups }
-            .mapNotNull { it.learningGroupId }
-            .toSet()
-        learningGroups.filter { it.id in ids }.sortedBy { it.name.lowercase() }
-    }
-
-    // Learning group ids to reset
-    var selectedGroupIds by remember(affectedLearningGroups) { mutableStateOf(emptySet<Long>()) }
-
-    if (affectedLearningGroups.isEmpty()) {
-        // Simple dialog for cards not in independent learning groups
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            icon = { Icon(Icons.Default.Refresh, contentDescription = null) },
-            title = { Text("Reset Learning State?") },
-            text = {
-                Text("Reset the learning state for ${selectedCardIds.size} card${if (selectedCardIds.size > 1) "s" else ""}? This will set them back to \"New\" status and clear all progress.")
-            },
-            confirmButton = {
-                Button(
-                    onClick = onResetGlobal,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Text("Reset")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onDismiss) {
-                    Text("Cancel")
-                }
-            }
-        )
-    } else {
-        // Enhanced dialog with group selection
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            icon = { Icon(Icons.Default.Refresh, contentDescription = null) },
-            title = { Text("Reset Learning State") },
-            text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    Text(
-                        "Resetting ${selectedCardIds.size} card${if (selectedCardIds.size > 1) "s" else ""}.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "Some cards are learnt in ${affectedLearningGroups.size} learning group${if (affectedLearningGroups.size > 1) "s" else ""} as well as Global.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text(
-                        "Select learning groups to reset:",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Group selection checkboxes
-                    affectedLearningGroups.forEach { group ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    selectedGroupIds = if (group.id in selectedGroupIds) {
-                                        selectedGroupIds - group.id
-                                    } else {
-                                        selectedGroupIds + group.id
-                                    }
-                                }
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = group.id in selectedGroupIds,
-                                onCheckedChange = { checked ->
-                                    selectedGroupIds = if (checked) {
-                                        selectedGroupIds + group.id
-                                    } else {
-                                        selectedGroupIds - group.id
-                                    }
-                                }
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = group.name,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Quick select buttons
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        TextButton(
-                            onClick = {
-                                selectedGroupIds = affectedLearningGroups.map { it.id }.toSet()
-                            },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Select All", style = MaterialTheme.typography.labelSmall)
-                        }
-                        TextButton(
-                            onClick = { selectedGroupIds = emptySet() },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Clear", style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    // Reset Global State Only
-                    Button(
-                        onClick = onResetGlobal,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error
-                        )
-                    ) {
-                        Text("Reset Global State Only")
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Reset Selected Group States Only
-                    OutlinedButton(
-                        onClick = { onResetGroups(selectedGroupIds) },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = selectedGroupIds.isNotEmpty(),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
-                        )
-                    ) {
-                        Text("Reset Selected Learning Groups Only (${selectedGroupIds.size})")
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Reset Both
-                    OutlinedButton(
-                        onClick = { onResetBoth(selectedGroupIds) },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = selectedGroupIds.isNotEmpty(),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
-                        )
-                    ) {
-                        Text("Reset Both Global & Learning Groups (${selectedGroupIds.size})")
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onDismiss) {
-                    Text("Cancel")
-                }
             }
         )
     }

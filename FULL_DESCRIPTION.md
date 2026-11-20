@@ -30,6 +30,8 @@ ORGANIZE YOUR TRAINING
 
 Create groups to organize cards by focus area -- footwork, blade work, competition prep, or any structure that fits your training. Groups learn against one shared, global progress by default; put groups into a learning group and they share a separate set of progress, so the same technique card can be at different stages in different training contexts.
 
+Tag cards with learning concepts -- distance, tempo, second intention -- and switch concept scheduling on for a learning group (or globally) to have the app schedule the concepts instead of the cards: each session picks the cards that cover the most concepts that are due, and how each card went is passed on to every concept it trains.
+
 SMART SCHEDULING
 
 Tell the app how many days per week you practice (1-7), and review intervals adjust automatically. Cards come due on days you'll actually train, not on rest days. Set a maximum review interval to make sure no technique goes too long without practice.
@@ -52,6 +54,7 @@ KEY FEATURES
 - Configurable session size (1-6 cards per session)
 - FSRS spaced repetition algorithm
 - Learning groups: several card groups sharing one set of learning progress
+- Learning concepts: schedule by the idea being trained, not just the card
 - Image attachments on cards
 - Categories and tags
 - Import/export with three format levels

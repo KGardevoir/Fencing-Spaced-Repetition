@@ -27,11 +27,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import com.fencing.spacedrepetition.ui.components.GuardedBack
+import com.fencing.spacedrepetition.ui.components.rememberLeaveGuard
 import com.fencing.spacedrepetition.util.Time
 import kotlinx.coroutines.launch
 import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.SessionCard
-import com.fencing.spacedrepetition.ui.components.UnsavedChangesDialog
 import com.fencing.spacedrepetition.ui.components.CardImagesDisplay
 import com.fencing.spacedrepetition.ui.components.CardImagesEdit
 import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
@@ -43,6 +44,14 @@ import com.fencing.spacedrepetition.ui.components.LargeImageNotice
 import com.fencing.spacedrepetition.ui.image.LARGE_IMAGE_BYTES
 import com.fencing.spacedrepetition.ui.image.LocalImagePicker
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeUiState
+import com.fencing.spacedrepetition.data.model.Concept
+import com.fencing.spacedrepetition.data.model.CardSelection
+import com.fencing.spacedrepetition.data.model.SelectionMode
+import com.fencing.spacedrepetition.data.model.SelectionReason
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -434,6 +443,11 @@ fun PracticeCardView(
                         textAlign = TextAlign.Center
                     )
 
+                    sessionCard.selection?.takeIf { it.mode == SelectionMode.CONCEPT }?.let { selection ->
+                        Spacer(modifier = Modifier.height(16.dp))
+                        DrawnConcepts(sessionCard.concepts, selection)
+                    }
+
                     Spacer(modifier = Modifier.height(32.dp))
 
                     if (showAnswer) {
@@ -568,16 +582,9 @@ fun EditCardDialog(
     }
     var imagePaths by rememberSaveable(card.id) { mutableStateOf(card.imagePaths.toMutableList()) }
     val markdownToolbarState = rememberMarkdownToolbarState()
-    var showUnsavedChangesDialog by rememberSaveable { mutableStateOf(false) }
     val isDirty = question != card.question || answerFieldValue.text != card.answer || imagePaths != card.imagePaths
-    val requestDismiss = { if (isDirty) showUnsavedChangesDialog = true else onDismiss() }
-
-    if (showUnsavedChangesDialog) {
-        UnsavedChangesDialog(
-            onDiscard = { showUnsavedChangesDialog = false; onDismiss() },
-            onKeepEditing = { showUnsavedChangesDialog = false }
-        )
-    }
+    // A dialog: its own dismissal takes Back.
+    val requestDismiss = rememberLeaveGuard(isDirty, GuardedBack.NONE, onDismiss)
 
     val imagePicker = LocalImagePicker.current
     var lastLargeImageBytes by remember { mutableStateOf<Int?>(null) }
@@ -595,11 +602,18 @@ fun EditCardDialog(
                     .padding(16.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                Text(
-                    text = "Edit Card",
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
+                // Save at the top right, as in every editor.
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = requestDismiss) { Icon(Icons.Default.Close, contentDescription = "Cancel") }
+                    Text("Edit Card", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    TextButton(
+                        onClick = { onSave(question, answerFieldValue.text, imagePaths) },
+                        enabled = question.isNotBlank() && answerFieldValue.text.isNotBlank()
+                    ) { Text("Save") }
+                }
 
                 OutlinedTextField(
                     value = question,
@@ -695,25 +709,77 @@ fun EditCardDialog(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 MarkdownKeyboardToolbar(markdownToolbarState)
+            }
+        }
+    }
+}
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = requestDismiss) {
-                        Text("Cancel")
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = { onSave(question, answerFieldValue.text, imagePaths) },
-                        enabled = question.isNotBlank() && answerFieldValue.text.isNotBlank()
-                    ) {
-                        Text("Save")
-                    }
+/**
+ * On the practice card, in a session drawn by concept: the card's concepts,
+ * to see and not to change (that is the card editor's job), with the one it
+ * was drawn for highlighted and a line saying why it is in the session.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DrawnConcepts(concepts: List<Pair<Concept, Double>>, selection: CardSelection) {
+    val names = concepts.associate { (concept, _) -> concept.uid to concept.name }
+    val trigger = selection.triggerConceptUid?.let(names::get)
+    val alsoDue = selection.conceptUids.filter { it != selection.triggerConceptUid }.mapNotNull(names::get)
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Concepts:", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+        if (concepts.isNotEmpty()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                concepts.forEach { (concept, weight) ->
+                    ConceptTag(conceptChipLabel(concept.name, weight), highlighted = concept.uid == selection.triggerConceptUid)
                 }
             }
+        }
+        val alsoDueNote = if (alsoDue.isEmpty()) "" else "; also due: ${alsoDue.joinToString(", ")}"
+        Text(
+            when (selection.reason) {
+                SelectionReason.LOCKED ->
+                    "Kept from this group's locked draw" + (trigger?.let { ", where it was drawn for $it" } ?: "") + "."
+                SelectionReason.DUE ->
+                    trigger?.let { "Drawn for $it$alsoDueNote." } ?: "Drawn because the card itself was due."
+                else ->
+                    "Extra study: nothing due needed this card" + (trigger?.let { "; $it comes due soonest" } ?: "") + "."
+            } + if (concepts.isEmpty()) " It has no concepts." else "",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+/** A concept on the card, shown and not tappable; [highlighted] is the one the card was drawn for. */
+@Composable
+private fun ConceptTag(label: String, highlighted: Boolean) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = if (highlighted) colors.primaryContainer else colors.surface.copy(alpha = 0f),
+        contentColor = if (highlighted) colors.onPrimaryContainer else colors.onSurface,
+        border = BorderStroke(if (highlighted) 2.dp else 1.dp, if (highlighted) colors.primary else colors.outline),
+        modifier = Modifier
+            .heightIn(min = 32.dp)
+            .semantics { if (highlighted) stateDescription = "Drawn for this concept" }
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            if (highlighted) {
+                Icon(Icons.Default.Lightbulb, contentDescription = null, modifier = Modifier.size(16.dp), tint = colors.primary)
+                Spacer(modifier = Modifier.width(6.dp))
+            }
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (highlighted) FontWeight.Bold else FontWeight.Normal
+            )
         }
     }
 }

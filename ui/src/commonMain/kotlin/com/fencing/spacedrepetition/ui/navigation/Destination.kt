@@ -34,6 +34,7 @@ sealed interface Destination {
     data object LearningGroups : Destination
     data object GlobalLearningSettings : Destination
     data class EditLearningGroup(val learningGroup: LearningGroup) : Destination
+    data object Concepts : Destination
     data object Settings : Destination
     data object History : Destination
     data object RetentionReport : Destination

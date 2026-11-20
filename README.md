@@ -52,6 +52,7 @@ An Android app for practicing martial arts and fencing techniques using delayed-
 - Create groups (decks) to organize cards by topic, technique, or training focus
 - **Learning groups**: card groups learn against Global progress by default, or share a separate set of progress with the other groups in a learning group
 - Each learning group sets how its sessions are drawn -- cards per session, shuffling and its bucket size -- and how its progress is scheduled -- practice days, maximum interval, desired retention, interval fuzzing. The defaults are Global's, edited from the Global row on the Learning Groups screen. A card group's only setting is whether to auto-show the description
+- **Learning concepts** (opt-in per learning group, and for Global): tag cards with the concepts they practise; where switched on, tagged cards are scheduled by their concepts (a session draws the due concepts and shows the cards covering the most of them), concept progress is derived from the review history of the cards that carry it, and respects learning groups
 - Select which group to practice from the home screen
 
 ### Card Management
@@ -68,9 +69,9 @@ An Android app for practicing martial arts and fencing techniques using delayed-
   optionally the full review history
 - Readable and editable by hand -- a minimal deck is just a `cards:` list of
   `question`/`answer` pairs
-- Import auto-detects the format and merges with existing cards; the
-  tab-separated exports written by earlier versions (`#FSR_EXPORT_V1` through
-  `V4`) still import
+- Import merges with existing cards. The tab-separated exports written by
+  much older versions (`#FSR_EXPORT_V1` through `V4`) are no longer read:
+  import one with an older version and export it again as YAML
 - CSV (Concept, Description, Images) remains available for exchanging decks
   with spreadsheets and other tools
 
@@ -173,7 +174,7 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for complete deployment instructions, includi
 
 ## Database Schema
 
-Every user record (cards, groups, learning groups, opponents, sessions, review logs) carries a stable `uid` that survives renames and travels in exports; row ids are local. See [docs/DESIGN.md](docs/DESIGN.md).
+Every user record (cards, groups, learning groups, opponents, concepts, sessions, review logs) carries a stable `uid` that survives renames and travels in exports; row ids are local. See [docs/DESIGN.md](docs/DESIGN.md).
 
 ### Cards
 Question and description content, category, tags, image paths, FSRS scheduling parameters, review scheduling timestamps, and when its progress was last reset.
@@ -183,6 +184,9 @@ Named groups, each pointing at a learning group (null = Global), with an optiona
 
 ### Learning Groups
 Named sets of shared learning progress, with optional overrides for cards per session, shuffling, and the settings that schedule it: practice days, maximum interval, desired retention and interval fuzzing.
+
+### Learning Concepts
+Global named concepts linked to cards many-to-many. Concept scheduling is opt-in per learning context: each learning group has a `useConcepts` flag and Global has a setting; contexts left off schedule card by card as before. A concept's state is derived, not accumulated: it is rebuilt by replaying the review history of the cards that currently carry it, per learning context (a review counts towards the learning group of the group it names; no group or the card editor counts towards Global). Each practice session is one concept review graded with the rounded mean of its cards' grades (skips excluded); reviews outside a session count singly. Tagging or untagging a card, grading, deleting a card, importing history, or changing groups rederives the affected concepts; a concept whose cards have no history is new. The result is stored (Global on the concept, one row per learning group) so drawing a session needs no replay. Where concept scheduling is on, a session's due concepts pick the cards that cover the most of them.
 
 ### Practice Sessions
 Session start/end times, associated card IDs, and assigned grades.
@@ -246,7 +250,7 @@ Source files carry [SPDX](https://spdx.dev/) identifiers
 
 ## Documentation
 
-- [docs/DESIGN.md](docs/DESIGN.md) - Design notes: stable identifiers, learning contexts, resets, history, archive matching
+- [docs/DESIGN.md](docs/DESIGN.md) - Design notes: stable identifiers, learning contexts, derived concept state, resets, archive matching
 - [DEPLOYMENT.md](DEPLOYMENT.md) - Complete Google Play Store deployment guide
 - [KEYSTORE_SETUP.md](KEYSTORE_SETUP.md) - Keystore creation and signing guide
 - [PRIVACY_POLICY.md](PRIVACY_POLICY.md) - Privacy policy and data handling

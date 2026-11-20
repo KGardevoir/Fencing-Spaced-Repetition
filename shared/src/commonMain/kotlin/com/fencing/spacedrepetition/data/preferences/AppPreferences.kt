@@ -32,7 +32,6 @@ interface AppPreferences : SchedulingPreferences {
     val autoShowAnswer: Flow<Boolean>
     val cardsPerSession: Flow<Int>
     val selectedGroupId: Flow<Long?>
-    val practicesPerWeek: Flow<Int>
 
     val autoBackupEnabled: Flow<Boolean>
     val autoBackupUri: Flow<String?>
@@ -52,11 +51,11 @@ interface AppPreferences : SchedulingPreferences {
     suspend fun setSelectedGroupId(groupId: Long?)
     suspend fun setRandomizeDueCards(enabled: Boolean)
     suspend fun setMaximumInterval(days: Int)
-    suspend fun setPracticesPerWeek(count: Int)
     suspend fun setPracticeDays(days: Set<Int>)
     suspend fun setRandomizeBucketHours(hours: Int)
     suspend fun setFsrsRetention(percent: Int)
     suspend fun setFsrsEnableFuzzing(enabled: Boolean)
+    suspend fun setGlobalConceptScheduling(enabled: Boolean)
     suspend fun setAutoBackupEnabled(enabled: Boolean)
     suspend fun setAutoBackupUri(uri: String?)
     suspend fun setAutoBackupIntervalDays(days: Int)

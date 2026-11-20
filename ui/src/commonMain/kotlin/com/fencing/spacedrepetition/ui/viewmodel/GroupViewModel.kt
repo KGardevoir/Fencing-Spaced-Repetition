@@ -8,13 +8,13 @@ import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.data.model.Group
 import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.data.repository.CardRepository
+import com.fencing.spacedrepetition.data.repository.ConceptRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.ui.ExportFile
 import com.fencing.spacedrepetition.ui.ImportFile
 import com.fencing.spacedrepetition.util.CardImportExport
 import com.fencing.spacedrepetition.util.CardWithGroupNames
 import com.fencing.spacedrepetition.util.ImageStore
-import com.fencing.spacedrepetition.util.parsedCardToCard
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -36,7 +36,8 @@ import kotlinx.coroutines.launch
 class GroupViewModel(
     private val groupRepository: GroupRepository,
     private val cardRepository: CardRepository,
-    private val imageStore: ImageStore
+    private val imageStore: ImageStore,
+    private val conceptRepository: ConceptRepository
 ) : ViewModel() {
 
     val allGroups: StateFlow<List<Group>> = groupRepository.getAllGroups()
@@ -58,16 +59,6 @@ class GroupViewModel(
             GroupSortOption.CARD_COUNT -> groupsWithCards.sortedByDescending { it.cards.size }.map { it.group }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val groupCount: StateFlow<Int> = groupRepository.getGroupCount()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
-
-    private val _selectedGroupForPractice = MutableStateFlow<Group?>(null)
-    val selectedGroupForPractice: StateFlow<Group?> = _selectedGroupForPractice.asStateFlow()
-
-    fun selectGroupForPractice(group: Group?) {
-        _selectedGroupForPractice.value = group
-    }
 
     fun addGroup(name: String, description: String = "", onSuccess: (Long) -> Unit = {}) {
         viewModelScope.launch {
@@ -108,6 +99,8 @@ class GroupViewModel(
     fun deleteGroups(groups: List<Group>) {
         viewModelScope.launch {
             groups.forEach { groupRepository.deleteGroup(it) }
+            // Reviews naming the group can no longer be placed in a context.
+            cardRepository.conceptDerivation.rederiveConcepts()
         }
     }
 
@@ -123,6 +116,11 @@ class GroupViewModel(
                     groupRepository.setLearningGroup(updated.id, updated.learningGroupId)
                 }
                 groupRepository.updateGroup(updated)
+                // Concept history is placed by group, so a group changing
+                // learning group (or name) moves where its reviews count.
+                if (updated.learningGroupId != previous.learningGroupId || updated.name != previous.name) {
+                    cardRepository.conceptDerivation.rederiveConcepts()
+                }
                 onSuccess()
             } catch (e: Exception) {
                 // Handle error
@@ -157,6 +155,7 @@ class GroupViewModel(
                         wasIn && !isIn -> groupRepository.setLearningGroup(group.id, null)
                     }
                 }
+                cardRepository.conceptDerivation.rederiveConcepts()
                 onSuccess()
             } catch (e: Exception) {
                 // Handle error
@@ -182,11 +181,13 @@ class GroupViewModel(
     fun deleteLearningGroups(learningGroups: List<LearningGroup>) {
         viewModelScope.launch {
             learningGroups.forEach { groupRepository.deleteLearningGroup(it) }
+            // Its groups learn Global now, and so does their history.
+            cardRepository.conceptDerivation.rederiveConcepts()
         }
     }
 
     fun getDueCardCountForGroup(groupId: Long): Flow<Int> =
-        groupRepository.getDueCardCountByGroup(groupId)
+        cardRepository.drawing.getDueCardCountByGroup(groupId)
 
     // Import and export state, rendered by the group list screen.
     private val _importExportState = MutableStateFlow<ImportExportState>(ImportExportState.Idle)
@@ -214,7 +215,9 @@ class GroupViewModel(
         viewModelScope.launch {
             _importExportState.value = ImportExportState.Loading
             try {
-                val cardsWithStates = groupRepository.getCardsByGroupWithStates(groupId)
+                val cardsWithStates = conceptRepository.withConceptNames(
+                    groupRepository.getCardsByGroupWithStates(groupId)
+                )
                 if (cardsWithStates.isEmpty()) {
                     _importExportState.value =
                         ImportExportState.Error("No cards to export in this group")
@@ -226,6 +229,7 @@ class GroupViewModel(
                     .filter { it.name in exportedGroupNames }
                 val images = imageStore.exportReader(cardsWithStates.map { it.card })
                 val learningGroups = groupRepository.getAllLearningGroupsSync()
+                val concepts = cardRepository.archive.getAllConceptsWithStates()
 
                 _importExportState.value = file.write { out ->
                     CardImportExport.exportCardsWithGroupStates(
@@ -233,7 +237,8 @@ class GroupViewModel(
                         out = out,
                         images = images,
                         groupSettings = groups,
-                        learningGroups = learningGroups
+                        learningGroups = learningGroups,
+                        concepts = concepts
                     )
                 }.asImportExportState()
             } catch (e: Exception) {
@@ -247,8 +252,8 @@ class GroupViewModel(
      *
      * A file that names its own groups keeps them and gains this one, so
      * importing a friend's deck into "Warm-ups" does not throw away the
-     * structure they exported. A file that names none -- the oldest format --
-     * has nowhere else to go, and its cards land here alone.
+     * structure they exported. A file that names none has nowhere else to
+     * go, and its cards land here alone.
      *
      * Review history is not restored here even when the file carries some,
      * which is what this has always done: a group import is about the cards,
@@ -266,34 +271,16 @@ class GroupViewModel(
                     _importExportState.value = ImportExportState.Error(contents.message)
                     return@launch
                 }
-                val (parsedCards, parseErrors) = contents as ArchiveContents.Cards
-
-                val targets = groupRepository.groupsForImport(parsedCards)
-                val groupIds = targets.groupIds
+                val (fileCards, parseErrors) = contents as ArchiveContents.Cards
+                // Every card goes in this group as well as the file's own.
                 val targetGroupName = groupRepository.getGroupById(groupId)?.name
-
-                val importedCount = when {
-                    parsedCards.any { it.isGroupSpecificState } ->
-                        cardRepository.importCardsWithGroupStates(parsedCards, groupIds, targets.learningGroupIds) {
-                            CardImportExport.parsedCardToCard(it, imageStore)
-                        }
-                    parsedCards.any { it.hasFullState } ->
-                        cardRepository.importFullCards(
-                            parsedCards.map { CardImportExport.parsedCardToCard(it, imageStore) },
-                            parsedCards.map { parsed ->
-                                if (targetGroupName == null || targetGroupName in parsed.groupNames) {
-                                    parsed.groupNames
-                                } else {
-                                    parsed.groupNames + targetGroupName
-                                }
-                            },
-                            groupIds
-                        )
-                    else -> cardRepository.importCardsToGroup(
-                        parsedCards.map { it.concept to it.answer },
-                        groupId
-                    )
+                val parsedCards = if (targetGroupName == null) fileCards else fileCards.map { parsed ->
+                    if (parsed.isGlobalState && targetGroupName !in parsed.groupNames) {
+                        parsed.copy(groupNames = parsed.groupNames + targetGroupName)
+                    } else parsed
                 }
+                val importedCount = importArchiveCards(parsedCards, cardRepository, groupRepository, conceptRepository, imageStore)
+                cardRepository.conceptDerivation.rederiveConcepts(onlyWithHistory = true)
 
                 _importExportState.value = ImportExportState.ImportSuccess(
                     importedCount = importedCount,

@@ -24,87 +24,6 @@ class GroupSettingsExportTest {
 
     // ==================== parseGroupSettingsLine TESTS ====================
 
-    @Test
-    fun `parseGroupSettingsLine - full settings line`() {
-        val line = "#GROUP_SETTINGS:MyGroup\tcardsPerSession=5\tautoShowAnswer=true\trandomizeDueCards=false\trandomizeBucketHours=72\tpracticeDays=1,3,5\tmaximumInterval=365"
-
-        val result = CardImportExport.parseGroupSettingsLine(line)
-
-        assertNotNull(result)
-        val (name, settings) = result!!
-        assertEquals("MyGroup", name)
-        assertEquals("5", settings["cardsPerSession"])
-        assertEquals("true", settings["autoShowAnswer"])
-        assertEquals("false", settings["randomizeDueCards"])
-        assertEquals("72", settings["randomizeBucketHours"])
-        assertEquals("1,3,5", settings["practiceDays"])
-        assertEquals("365", settings["maximumInterval"])
-    }
-
-    @Test
-    fun `parseGroupSettingsLine - partial settings`() {
-        val line = "#GROUP_SETTINGS:StudyGroup\tcardsPerSession=3\tmaximumInterval=180"
-
-        val result = CardImportExport.parseGroupSettingsLine(line)
-
-        assertNotNull(result)
-        val (name, settings) = result!!
-        assertEquals("StudyGroup", name)
-        assertEquals(2, settings.size)
-        assertEquals("3", settings["cardsPerSession"])
-        assertEquals("180", settings["maximumInterval"])
-        assertNull(settings["autoShowAnswer"])
-    }
-
-    @Test
-    fun `parseGroupSettingsLine - group name only, no settings`() {
-        val line = "#GROUP_SETTINGS:EmptyGroup"
-
-        val result = CardImportExport.parseGroupSettingsLine(line)
-
-        assertNotNull(result)
-        val (name, settings) = result!!
-        assertEquals("EmptyGroup", name)
-        assertTrue(settings.isEmpty())
-    }
-
-    @Test
-    fun `parseGroupSettingsLine - non-settings line returns null`() {
-        val result = CardImportExport.parseGroupSettingsLine("#FSR_EXPORT_V3")
-        assertNull(result)
-    }
-
-    @Test
-    fun `parseGroupSettingsLine - empty prefix returns null`() {
-        val result = CardImportExport.parseGroupSettingsLine("")
-        assertNull(result)
-    }
-
-    @Test
-    fun `parseGroupSettingsLine - malformed key-value pairs are ignored`() {
-        val line = "#GROUP_SETTINGS:TestGroup\tnoEquals\tvalid=yes\t=noKey"
-
-        val result = CardImportExport.parseGroupSettingsLine(line)
-
-        assertNotNull(result)
-        val (_, settings) = result!!
-        // "noEquals" has no = so ignored, "=noKey" has eqIndex==0 so ignored
-        assertEquals(1, settings.size)
-        assertEquals("yes", settings["valid"])
-    }
-
-    @Test
-    fun `parseGroupSettingsLine - group name with newline placeholder`() {
-        val line = "#GROUP_SETTINGS:Multi<br>Line\tcardsPerSession=2"
-
-        val result = CardImportExport.parseGroupSettingsLine(line)
-
-        assertNotNull(result)
-        val (name, settings) = result!!
-        assertEquals("Multi\nLine", name)
-        assertEquals("2", settings["cardsPerSession"])
-    }
-
     // ==================== applyGroupSettings TESTS ====================
 
     @Test
@@ -238,55 +157,6 @@ class GroupSettingsExportTest {
     }
 
     @Test
-    fun `parseCards populates lastParsedGroupSettings`() {
-        val input = """
-            #FSR_EXPORT_V3
-            #GROUP_SETTINGS:FencingDrills	cardsPerSession=10	maximumInterval=180
-            #GROUP_SETTINGS:Footwork	autoShowAnswer=true	practiceDays=1,3,5
-            #Headers...
-            Q1	A1		FSRS	GLOBAL	0	0	0	0	NEW	0	0	0	0	2.5	0	0	FencingDrills|Footwork
-        """.trimIndent()
-
-        val (cards, errors) = CardImportExport.parseCards(input.byteInputStream())
-
-        assertEquals(1, cards.size)
-        assertEquals(0, errors.size)
-
-        val groupSettings = CardImportExport.lastParsedGroupSettings
-        assertEquals(2, groupSettings.size)
-
-        val drillsSettings = groupSettings["FencingDrills"]!!
-        assertEquals("10", drillsSettings["cardsPerSession"])
-        assertEquals("180", drillsSettings["maximumInterval"])
-
-        val footworkSettings = groupSettings["Footwork"]!!
-        assertEquals("true", footworkSettings["autoShowAnswer"])
-        assertEquals("1,3,5", footworkSettings["practiceDays"])
-    }
-
-    @Test
-    fun `parseCards clears lastParsedGroupSettings between calls`() {
-        // First parse with group settings
-        val input1 = """
-            #FSR_EXPORT_V3
-            #GROUP_SETTINGS:Group1	cardsPerSession=5
-            #Headers...
-            Q1	A1		FSRS	GLOBAL	0	0	0	0	NEW	0	0	0	0	2.5	0	0	Group1
-        """.trimIndent()
-        CardImportExport.parseCards(input1.byteInputStream())
-        assertEquals(1, CardImportExport.lastParsedGroupSettings.size)
-
-        // Second parse without group settings
-        val input2 = """
-            #FSR_EXPORT_V3
-            #Headers...
-            Q2	A2		FSRS	GLOBAL	0	0	0	0	NEW	0	0	0	0	2.5	0	0
-        """.trimIndent()
-        CardImportExport.parseCards(input2.byteInputStream())
-        assertEquals(0, CardImportExport.lastParsedGroupSettings.size)
-    }
-
-    @Test
     fun `export and import round-trip preserves group settings`() {
         val card = Card(
             id = 1, question = "Test Card", answer = "Test Answer",
@@ -390,30 +260,6 @@ class GroupSettingsExportTest {
     }
 
     // ==================== Retention settings export/import TESTS ====================
-
-    @Test
-    fun `parseGroupSettingsLine - parses fsrsRetention`() {
-        val line = "#GROUP_SETTINGS:RetentionGroup\tfsrsRetention=85"
-
-        val result = CardImportExport.parseGroupSettingsLine(line)
-
-        assertNotNull(result)
-        val (name, settings) = result!!
-        assertEquals("RetentionGroup", name)
-        assertEquals("85", settings["fsrsRetention"])
-    }
-
-    @Test
-    fun `parseGroupSettingsLine - parses retention alongside other settings`() {
-        val line = "#GROUP_SETTINGS:MyGroup\tcardsPerSession=5\tmaximumInterval=365\tfsrsRetention=90"
-
-        val result = CardImportExport.parseGroupSettingsLine(line)!!
-        val (_, settings) = result
-
-        assertEquals("5",   settings["cardsPerSession"])
-        assertEquals("365", settings["maximumInterval"])
-        assertEquals("90",  settings["fsrsRetention"])
-    }
 
     @Test
     fun `applyLearningGroupSettings - applies fsrsRetention`() {

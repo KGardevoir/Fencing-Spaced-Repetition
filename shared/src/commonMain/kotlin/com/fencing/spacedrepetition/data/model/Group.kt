@@ -45,6 +45,12 @@ data class LearningGroup(
     val maximumInterval: Int? = null,
     val fsrsRetention: Int? = null,         // integer percent 70–97, e.g. 90 for 90 %
     val fsrsEnableFuzzing: Boolean? = null,  // override FSRS interval fuzzing setting
+    /**
+     * Whether this learning group schedules tagged cards by their learning
+     * concepts. Off -- the default -- keeps card-by-card scheduling.
+     */
+    @ColumnInfo(defaultValue = "0")
+    val useConcepts: Boolean = false,
     /** Stable identifier, unique and kept for life; see docs/DESIGN.md, "Identity". */
     @ColumnInfo(defaultValue = "''")
     val uid: String = newUid()

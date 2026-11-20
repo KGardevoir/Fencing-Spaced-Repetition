@@ -207,15 +207,29 @@ private class SelectedGroup(
     val title: String,
     val subtitle: String,
     val summary: RetentionSummary,
-    val cards: List<CardRetention>
+    val cards: List<CardRetention>,
+    /** Concept scheduling is on here: the concepts are what is learnt. */
+    val conceptScheduling: Boolean = false,
+    val conceptSummary: RetentionSummary? = null,
+    val concepts: List<CardRetention> = emptyList()
 )
 
 private fun resolve(report: RetentionReport, selection: GroupSelection?): SelectedGroup? {
     when (selection) {
         is GroupSelection.CardGroup -> report.cardGroups.firstOrNull { it.groupId == selection.groupId }
-            ?.let { return SelectedGroup(selection, it.name, "Card group · learns in ${it.learningContextName}", it.summary, it.cards) }
+            ?.let {
+                return SelectedGroup(
+                    selection, it.name, "Card group · learns in ${it.learningContextName}", it.summary, it.cards,
+                    it.conceptScheduling, it.conceptSummary, it.concepts
+                )
+            }
         is GroupSelection.LearningContext -> report.learningContexts.firstOrNull { it.learningGroupId == selection.learningGroupId }
-            ?.let { return SelectedGroup(selection, it.name, "Learning group · " + contextSubtitle(it), it.summary, it.cards) }
+            ?.let {
+                return SelectedGroup(
+                    selection, it.name, "Learning group · " + contextSubtitle(it), it.summary, it.cards,
+                    it.conceptScheduling, it.conceptSummary, it.concepts
+                )
+            }
         null -> {}
     }
     // Nothing chosen yet, or the chosen group was deleted: the first card group, else Global.
@@ -237,9 +251,15 @@ private fun GroupsTab(
     var query by rememberSaveable { mutableStateOf("") }
     var expandedCard by remember { mutableStateOf<Long?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
+    // Where concepts schedule, the concepts are shown; this switches to the cards.
+    var showCards by rememberSaveable { mutableStateOf(false) }
 
     val selected = resolve(report, selectionFromKey(selectedKey)) ?: return
-    val shown = selected.cards
+    val byConcept = selected.conceptScheduling && !showCards
+    val noun = if (byConcept) "concept" else "card"
+    val rows = if (byConcept) selected.concepts else selected.cards
+    val summary = if (byConcept) selected.conceptSummary ?: selected.summary else selected.summary
+    val shown = rows
         .filter { query.isBlank() || it.question.contains(query, ignoreCase = true) }
         .let { cards ->
             when (metric) {
@@ -310,41 +330,49 @@ private fun GroupsTab(
             SummaryCard(
                 title = selected.title,
                 subtitle = selected.subtitle,
-                summary = selected.summary,
+                summary = summary,
                 period = period,
                 metric = metric
             )
         }
         item {
-            Text(
-                "Cards",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(top = 8.dp)
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                Text(
+                    if (byConcept) "Concepts" else "Cards",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                if (selected.conceptScheduling) {
+                    Text("Individual cards", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.width(8.dp))
+                    Switch(checked = showCards, onCheckedChange = { showCards = it; expandedCard = null })
+                }
+            }
         }
         item {
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Search cards") },
+                placeholder = { Text("Search ${noun}s") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 singleLine = true
             )
         }
         item {
             Text(
-                "${selected.summary.learnedCount} of ${selected.summary.cardCount} cards learned · weakest first",
+                "${summary.learnedCount} of ${summary.cardCount} ${noun}s learned · weakest first",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         if (shown.isEmpty()) {
-            item { EmptyNote(if (selected.cards.isEmpty()) "No cards in ${selected.title}." else "No matching cards.") }
+            item { EmptyNote(if (rows.isEmpty()) "No ${noun}s in ${selected.title}." else "No matching ${noun}s.") }
         }
-        items(shown, key = { "card-${selected.selection.key()}-${it.cardId}" }) { card ->
+        items(shown, key = { "$noun-${selected.selection.key()}-${it.cardId}" }) { card ->
             CardRow(
                 card = card,
+                noun = noun,
                 metric = metric,
                 expanded = expandedCard == card.cardId,
                 onClick = { expandedCard = if (expandedCard == card.cardId) null else card.cardId }
@@ -378,7 +406,7 @@ private fun MenuPercent(value: Double?) {
 }
 
 @Composable
-private fun CardRow(card: CardRetention, metric: TrendMetric, expanded: Boolean, onClick: () -> Unit) {
+private fun CardRow(card: CardRetention, noun: String = "card", metric: TrendMetric, expanded: Boolean, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -436,12 +464,18 @@ private fun CardRow(card: CardRetention, metric: TrendMetric, expanded: Boolean,
                     TrendMetric.RECALL -> if (card.history.isEmpty()) {
                         DetailNote("No graded reviews here yet.")
                     } else {
-                        Text("Recall over this card's reviews", style = MaterialTheme.typography.labelLarge)
+                        Text(
+                            if (noun == "card") "Recall over this card's reviews" else "Recall over its cards' reviews",
+                            style = MaterialTheme.typography.labelLarge
+                        )
                         CardHistoryChart(card)
                         GradeLegend()
                     }
                     TrendMetric.STABILITY -> if (card.stabilityHistory.isEmpty()) {
-                        DetailNote("No stability recorded here yet.")
+                        DetailNote(
+                            if (noun == "card") "No stability recorded here yet."
+                            else "A concept's stability is derived from its cards; there is no per-review record."
+                        )
                     } else {
                         Text("Stability after each review", style = MaterialTheme.typography.labelLarge)
                         CardStabilityChart(card)
@@ -722,8 +756,13 @@ private fun TrendChart(points: List<RetentionPoint>, period: RetentionPeriod) {
  * The card's own recall as it has gone so far: after each review, the share
  * of its reviews up to then that were not Again, with a 95 % error bar -- the
  * per-card counterpart of the group recall trend. Each dot is coloured by the
- * grade of that review, so the review that moved the line is visible, and
- * FSRS's prediction just before each review is the dashed line.
+ * grade of that review, so the review that moved the line is visible.
+ *
+ * The dashed line is what FSRS expected of those same reviews: the mean of its
+ * predicted recall just before each, up to then. Running, like the measured
+ * line, so the two can be compared point for point. A single review's
+ * prediction swings with the time since the one before -- and, for a
+ * concept, with which of its cards was reviewed.
  *
  * With a handful of reviews the bars are long, and that is the point: two
  * passes out of two is not evidence of a well-known card.
@@ -738,13 +777,18 @@ private fun CardHistoryChart(card: CardRetention) {
     val labelStyle = MaterialTheme.typography.labelSmall
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
 
-    // Running recall and its interval after each review.
+    // Running recall and its interval after each review, and the running mean
+    // of the predictions so far (null until a review has one).
     val running = remember(history) {
         var recalled = 0
+        var predictedSum = 0.0
+        var predictedCount = 0
         history.mapIndexed { i, p ->
             if (p.grade >= 2) recalled++
+            p.predicted?.let { predictedSum += it; predictedCount++ }
             val n = i + 1
-            Triple(recalled.toDouble() / n, wilsonInterval(recalled, n)!!, p)
+            val expected = if (predictedCount == 0) null else predictedSum / predictedCount
+            Triple(recalled.toDouble() / n, wilsonInterval(recalled, n)!!, p.copy(predicted = expected))
         }
     }
     val lowest = running.minOf { (_, interval, p) -> minOf(interval.start, p.predicted ?: 1.0) }

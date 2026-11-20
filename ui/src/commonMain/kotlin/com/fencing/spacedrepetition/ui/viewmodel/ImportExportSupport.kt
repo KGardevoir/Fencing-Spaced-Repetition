@@ -14,9 +14,11 @@ import com.fencing.spacedrepetition.data.model.Card
 import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.repository.CardRepository
+import com.fencing.spacedrepetition.data.repository.ConceptRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.ui.ImportFile
 import com.fencing.spacedrepetition.util.CardImportExport
+import com.fencing.spacedrepetition.util.CardWithGroupStates
 import com.fencing.spacedrepetition.util.ExportResult
 import com.fencing.spacedrepetition.util.ImageReader
 import com.fencing.spacedrepetition.util.ImageStore
@@ -25,6 +27,7 @@ import com.fencing.spacedrepetition.util.Time
 import com.fencing.spacedrepetition.util.exportImageKeys
 import com.fencing.spacedrepetition.util.ioDispatcher
 import com.fencing.spacedrepetition.util.storeImages
+import com.fencing.spacedrepetition.util.parsedCardToCard
 import kotlinx.coroutines.withContext
 
 /** What reading a chosen archive produced: cards to import, or a reason not to. */
@@ -114,7 +117,14 @@ internal suspend fun GroupRepository.groupsForImport(parsedCards: List<ParsedCar
         // so one with none in the file has none.
         getLearningGroupById(id)?.let { learningGroup ->
             val settings = CardImportExport.lastParsedLearningGroupSettings[name].orEmpty()
-            updateLearningGroup(CardImportExport.applyLearningGroupSettings(learningGroup, settings))
+            updateLearningGroup(
+                CardImportExport.applyLearningGroupSettings(learningGroup, settings).copy(
+                    // Its description and whether it schedules by concept are
+                    // the file's too: an import updates everything but progress.
+                    description = description,
+                    useConcepts = name in CardImportExport.lastParsedConceptLearningGroups
+                )
+            )
         }
     }
     // An older file keeps learning settings on the groups. Each goes to the
@@ -150,6 +160,61 @@ internal suspend fun GroupRepository.groupsForImport(parsedCards: List<ParsedCar
         }
     }
     return ImportTargets(groupIds, learningGroupIds)
+}
+
+/**
+ * Creates the learning concepts an import carries or names, with their states,
+ * and tags the imported cards with them. After the cards, which are found by
+ * question.
+ */
+/**
+ * Brings an archive's cards in: the groups and learning groups it names
+ * first, then the cards, then their concepts. Returns how many cards.
+ * History and opponents are the caller's to restore, if at all.
+ */
+internal suspend fun importArchiveCards(
+    parsedCards: List<ParsedCard>,
+    cards: CardRepository,
+    groups: GroupRepository,
+    concepts: ConceptRepository,
+    images: ImageStore
+): Int {
+    val targets = groups.groupsForImport(parsedCards)
+    val imported = cards.archive.importCards(parsedCards, targets.groupIds, targets.learningGroupIds) {
+        CardImportExport.parsedCardToCard(it, images)
+    }
+    importConceptsAndLinks(parsedCards, cards, concepts, groups)
+    return imported
+}
+
+internal suspend fun importConceptsAndLinks(
+    parsedCards: List<ParsedCard>,
+    cards: CardRepository,
+    concepts: ConceptRepository,
+    groups: GroupRepository
+) {
+    val namedOnCards = parsedCards.flatMap { it.conceptNames }.toSet()
+    val parsedConcepts = CardImportExport.lastParsedConcepts
+    if (namedOnCards.isEmpty() && parsedConcepts.isEmpty() && parsedCards.none { it.conceptsStated }) return
+    val conceptIds = concepts.importConcepts(parsedConcepts, namedOnCards) { groups.ensureLearningGroup(it) }
+    cards.archive.linkImportedConcepts(parsedCards, conceptIds)
+}
+
+/** [cardsWithStates] with each card's concept names filled in, for an export. */
+internal suspend fun ConceptRepository.withConceptNames(
+    cardsWithStates: List<CardWithGroupStates>
+): List<CardWithGroupStates> {
+    val names = getAllConceptsSync().associate { it.id to it.name }
+    val links = getAllCardConceptCrossRefsSync()
+    val byCard = links
+        .groupBy({ it.cardId }, { names[it.conceptId] })
+        .mapValues { (_, n) -> n.filterNotNull().sorted() }
+    val weightsByCard = links.filter { it.weight != 1.0 }
+        .groupBy { it.cardId }
+        .mapValues { (_, l) -> l.mapNotNull { link -> names[link.conceptId]?.let { it to link.weight } }.toMap() }
+    return cardsWithStates.map {
+        it.copy(conceptNames = byCard[it.card.id].orEmpty(), conceptWeights = weightsByCard[it.card.id].orEmpty())
+    }
 }
 
 /**

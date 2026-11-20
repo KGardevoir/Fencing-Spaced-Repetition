@@ -3,6 +3,7 @@
 
 package com.fencing.spacedrepetition.ui.screen
 
+import com.fencing.spacedrepetition.data.model.LearningContexts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -18,7 +19,11 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.FightDifficulty
@@ -26,8 +31,8 @@ import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
-import com.fencing.spacedrepetition.data.repository.GROUP_NAME_CARD_EDIT
 import com.fencing.spacedrepetition.ui.components.CardImagesDisplay
+import com.fencing.spacedrepetition.ui.components.GradeBadge
 import com.fencing.spacedrepetition.ui.components.CardImagesEdit
 import com.fencing.spacedrepetition.ui.components.MarkdownDescriptionField
 import com.fencing.spacedrepetition.ui.components.MergeOpponentsDialog
@@ -42,6 +47,7 @@ import com.fencing.spacedrepetition.ui.image.LocalImagePicker
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryItem
 import com.fencing.spacedrepetition.ui.viewmodel.OPPONENT_FILTER_NONE
 import com.fencing.spacedrepetition.ui.viewmodel.ReviewLogWithCard
+import com.fencing.spacedrepetition.ui.viewmodel.TestedConcept
 import com.fencing.spacedrepetition.util.formatDate
 import com.fencing.spacedrepetition.util.formatDateAndTime
 import com.fencing.spacedrepetition.util.formatTimeOfDay
@@ -586,29 +592,6 @@ private fun QuickGradeCard(
     val grade = Grade.fromValue(log.grade)
     var showNoteEditor by remember { mutableStateOf(false) }
 
-    val gradeColor = when (grade) {
-        Grade.AGAIN -> MaterialTheme.colorScheme.errorContainer
-        Grade.HARD -> MaterialTheme.colorScheme.tertiaryContainer
-        Grade.GOOD -> MaterialTheme.colorScheme.secondaryContainer
-        Grade.EASY -> MaterialTheme.colorScheme.primaryContainer
-        else -> MaterialTheme.colorScheme.surfaceVariant
-    }
-    val gradeLabel = when (grade) {
-        Grade.AGAIN -> "Again"
-        Grade.HARD -> "Hard"
-        Grade.GOOD -> "Good"
-        Grade.EASY -> "Easy"
-        Grade.SKIP -> "Skip"
-        null -> "?"
-    }
-    val gradeContentColor = when (grade) {
-        Grade.AGAIN -> MaterialTheme.colorScheme.onErrorContainer
-        Grade.HARD -> MaterialTheme.colorScheme.onTertiaryContainer
-        Grade.GOOD -> MaterialTheme.colorScheme.onSecondaryContainer
-        Grade.EASY -> MaterialTheme.colorScheme.onPrimaryContainer
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-
     val noteImages = remember(log.imagePaths) {
         log.imagePaths.split(",").filter { it.isNotBlank() }
     }
@@ -628,14 +611,7 @@ private fun QuickGradeCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Surface(shape = MaterialTheme.shapes.small, color = gradeColor) {
-                    Text(
-                        text = gradeLabel,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = gradeContentColor
-                    )
-                }
+                GradeBadge(grade)
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -644,7 +620,8 @@ private fun QuickGradeCard(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
-                    val groupLabel = log.groupName?.takeIf { it != GROUP_NAME_CARD_EDIT }
+                    ConceptsUnderTest(logWithCard.concepts)
+                    val groupLabel = log.groupName?.takeIf { it != LearningContexts.CARD_EDITOR }
                     Text(
                         text = buildString {
                             append("Quick Grade")
@@ -772,29 +749,6 @@ private fun ReviewLogRow(
     val log = logWithCard.reviewLog
     val grade = Grade.fromValue(log.grade)
 
-    val gradeColor = when (grade) {
-        Grade.AGAIN -> MaterialTheme.colorScheme.errorContainer
-        Grade.HARD -> MaterialTheme.colorScheme.tertiaryContainer
-        Grade.GOOD -> MaterialTheme.colorScheme.secondaryContainer
-        Grade.EASY -> MaterialTheme.colorScheme.primaryContainer
-        else -> MaterialTheme.colorScheme.surfaceVariant
-    }
-    val gradeLabel = when (grade) {
-        Grade.AGAIN -> "Again"
-        Grade.HARD -> "Hard"
-        Grade.GOOD -> "Good"
-        Grade.EASY -> "Easy"
-        Grade.SKIP -> "Skip"
-        null -> "?"
-    }
-    val gradeContentColor = when (grade) {
-        Grade.AGAIN -> MaterialTheme.colorScheme.onErrorContainer
-        Grade.HARD -> MaterialTheme.colorScheme.onTertiaryContainer
-        Grade.GOOD -> MaterialTheme.colorScheme.onSecondaryContainer
-        Grade.EASY -> MaterialTheme.colorScheme.onPrimaryContainer
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-
     val opponentLabel = opponentLabel(log.opponentId, opponents)
     val fightLabel = fightDifficultyLabel(log.fightDifficulty)
     val multiplierLabel = stabilityMultiplierLabel(log.stabilityMultiplier)
@@ -805,18 +759,7 @@ private fun ReviewLogRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Surface(
-                shape = MaterialTheme.shapes.small,
-                color = gradeColor,
-                modifier = Modifier.width(52.dp)
-            ) {
-                Text(
-                    text = gradeLabel,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = gradeContentColor
-                )
-            }
+            GradeBadge(grade, Modifier.width(52.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -825,7 +768,8 @@ private fun ReviewLogRow(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                val groupLabel = log.groupName?.takeIf { it != GROUP_NAME_CARD_EDIT }
+                ConceptsUnderTest(logWithCard.concepts)
+                val groupLabel = log.groupName?.takeIf { it != LearningContexts.CARD_EDITOR }
                 val metaText = buildString {
                     if (groupLabel != null) append(groupLabel)
                     if (opponentLabel != null) {
@@ -859,6 +803,40 @@ private fun ReviewLogRow(
             // Nothing to edit on a row: its notes, opponent and fight are the
             // session's, and are edited on the session.
         }
+    }
+}
+
+/**
+ * The concepts a review tested, on one line: the one that triggered the
+ * draw marked ★ and in bold, the others it was drawn for in full colour,
+ * and the card's other concepts -- which the grade counts towards too --
+ * dimmed.
+ */
+@Composable
+private fun ConceptsUnderTest(concepts: List<TestedConcept>) {
+    if (concepts.isEmpty()) return
+    val strong = MaterialTheme.colorScheme.primary
+    val dim = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+        Icon(Icons.Default.Lightbulb, contentDescription = "Concepts tested", modifier = Modifier.size(14.dp), tint = strong)
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = buildAnnotatedString {
+                concepts.forEachIndexed { i, concept ->
+                    if (i > 0) withStyle(SpanStyle(color = dim)) { append(" · ") }
+                    when {
+                        concept.trigger -> withStyle(SpanStyle(color = strong, fontWeight = FontWeight.Bold)) {
+                            append("★ "); append(concept.name)
+                        }
+                        concept.drawnFor -> withStyle(SpanStyle(color = strong)) { append(concept.name) }
+                        else -> withStyle(SpanStyle(color = dim)) { append(concept.name) }
+                    }
+                }
+            },
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

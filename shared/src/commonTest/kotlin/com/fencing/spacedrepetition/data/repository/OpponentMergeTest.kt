@@ -41,11 +41,10 @@ class OpponentMergeTest {
         override suspend fun deleteOpponentById(id: Long) {
             rows.value = rows.value - id
         }
-        override suspend fun reassignReviewLogs(fromId: Long, toId: Long) {
+        override suspend fun reassignReviewLogs(fromId: Long, toId: Long, fromUid: String, toUid: String) {
             // MutableMap.replaceAll is JVM-only; this runs on wasm too.
             logOpponents.keys.filter { logOpponents[it] == fromId }.forEach { logOpponents[it] = toId }
         }
-        override fun getOpponentCount(): Flow<Int> = rows.map { it.size }
     }
 
     @Test

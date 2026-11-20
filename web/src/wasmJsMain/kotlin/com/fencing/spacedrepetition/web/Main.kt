@@ -15,6 +15,7 @@ import com.fencing.spacedrepetition.data.AppDatabase
 import com.fencing.spacedrepetition.data.getDatabase
 import com.fencing.spacedrepetition.data.preferences.LocalStoragePreferences
 import com.fencing.spacedrepetition.data.repository.CardRepository
+import com.fencing.spacedrepetition.data.repository.ConceptRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
 import com.fencing.spacedrepetition.ui.App
@@ -30,6 +31,7 @@ import com.fencing.spacedrepetition.ui.viewmodel.GroupViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.HistoryViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.RetentionReportViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.OpponentViewModel
+import com.fencing.spacedrepetition.ui.viewmodel.ConceptViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.PracticeViewModel
 import com.fencing.spacedrepetition.ui.viewmodel.SettingsViewModel
 import com.fencing.spacedrepetition.util.OpfsImageStore
@@ -55,8 +57,10 @@ fun main() {
         reviewLogDao = database.reviewLogDao(),
         groupDao = database.groupDao(),
         opponentDao = database.opponentDao(),
-        preferences = preferences
+        preferences = preferences,
+        conceptDao = database.conceptDao()
     )
+    val conceptRepository = ConceptRepository(database.conceptDao())
     val groupRepository = GroupRepository(database.groupDao(), database.cardDao())
     val opponentRepository = OpponentRepository(database.opponentDao())
 
@@ -70,17 +74,18 @@ fun main() {
 
     ComposeViewport(viewportContainerId = "app") {
         val cardViewModel = remember {
-            CardViewModel(cardRepository, groupRepository, opponentRepository, OpfsImageStore)
+            CardViewModel(cardRepository, groupRepository, opponentRepository, OpfsImageStore, conceptRepository)
         }
         val groupViewModel = remember {
-            GroupViewModel(groupRepository, cardRepository, OpfsImageStore)
+            GroupViewModel(groupRepository, cardRepository, OpfsImageStore, conceptRepository)
         }
         val practiceViewModel = remember {
             PracticeViewModel(cardRepository, opponentRepository)
         }
-        val historyViewModel = remember { HistoryViewModel(cardRepository, opponentRepository) }
+        val historyViewModel = remember { HistoryViewModel(cardRepository, opponentRepository, conceptRepository) }
         val opponentViewModel = remember { OpponentViewModel(opponentRepository) }
-        val retentionReportViewModel = remember { RetentionReportViewModel(cardRepository, groupRepository) }
+        val retentionReportViewModel = remember { RetentionReportViewModel(cardRepository, groupRepository, conceptRepository, preferences.globalConceptScheduling) }
+        val conceptViewModel = remember { ConceptViewModel(conceptRepository, cardRepository, groupRepository) }
         // The browser's answer to "back up now" is a download, and it needs
         // the card view model to produce one -- so the settings view model is
         // created after it rather than beside the others.
@@ -104,6 +109,7 @@ fun main() {
                     historyViewModel = historyViewModel,
                     opponentViewModel = opponentViewModel,
                     retentionReportViewModel = retentionReportViewModel,
+                    conceptViewModel = conceptViewModel,
                     buildInfo = webBuildInfo(),
                     transfer = remember {
                         browserFileTransfer(scope, cardViewModel, groupViewModel)

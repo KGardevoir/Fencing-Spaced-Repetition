@@ -1,0 +1,4 @@
+# Room's exported schemas and the schema variants kept for upgrade tests are
+# generated: collapse them in diffs and leave them out of language stats.
+shared/schemas/** linguist-generated=true
+shared/src/jvmTest/resources/released-v18/** linguist-generated=true

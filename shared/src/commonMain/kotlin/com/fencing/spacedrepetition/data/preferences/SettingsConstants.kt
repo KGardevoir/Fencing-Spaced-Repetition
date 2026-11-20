@@ -32,10 +32,6 @@ object SettingsConstants {
     const val MIN_MAXIMUM_INTERVAL = 7
     const val MAX_MAXIMUM_INTERVAL = 3650
 
-    const val DEFAULT_PRACTICES_PER_WEEK = 7
-    const val MIN_PRACTICES_PER_WEEK = 1
-    const val MAX_PRACTICES_PER_WEEK = 7
-
     const val DEFAULT_RANDOMIZE_BUCKET_HOURS = 24
 
     /** ISO-8601 weekdays, 1 = Monday. Every day, by default. */
@@ -44,6 +40,7 @@ object SettingsConstants {
     const val DEFAULT_FSRS_RETENTION = 90
 
     const val DEFAULT_FSRS_ENABLE_FUZZING = false
+    const val DEFAULT_GLOBAL_CONCEPT_SCHEDULING = false
 
     const val DEFAULT_AUTO_BACKUP_ENABLED = false
     const val DEFAULT_AUTO_BACKUP_INTERVAL_DAYS = 1

@@ -4,6 +4,10 @@
 package com.fencing.spacedrepetition.ui.components
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
@@ -129,5 +133,81 @@ private fun ActionItem(action: SelectionAction, enabled: Boolean, close: () -> U
         leadingIcon = {
             Icon(action.icon, contentDescription = null, tint = if (action.destructive) color else LocalContentColor.current)
         }
+    )
+}
+
+/**
+ * A list screen's top bar: [title] with Back and a ⋮ menu that offers
+ * "[selectLabel]" (start selecting) and then [menu]; [actions] go before the
+ * ⋮. While [selection] is active it is the [SelectionTopBar] instead, with
+ * [selectionActions], and Select all selecting [selectableIds].
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SelectableListTopBar(
+    title: String,
+    selection: SelectionState,
+    selectableIds: Collection<Long>,
+    selectLabel: String,
+    selectionActions: List<SelectionAction>,
+    onNavigateBack: () -> Unit,
+    menu: List<SelectionAction> = emptyList(),
+    actions: @Composable RowScope.() -> Unit = {}
+) {
+    if (selection.active) {
+        SelectionTopBar(selection.selected.size, selection::exit, { selection.selectAll(selectableIds) }, selectionActions)
+        return
+    }
+    var showMenu by remember { mutableStateOf(false) }
+    TopAppBar(
+        title = { Text(title) },
+        navigationIcon = {
+            IconButton(onClick = onNavigateBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            }
+        },
+        actions = {
+            actions()
+            Box {
+                IconButton(onClick = { showMenu = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                }
+                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    DropdownMenuItem(
+                        text = { Text(selectLabel) },
+                        onClick = { showMenu = false; selection.start() },
+                        enabled = selectableIds.isNotEmpty(),
+                        leadingIcon = { Icon(Icons.Default.CheckBox, contentDescription = null) }
+                    )
+                    menu.forEach { item ->
+                        DropdownMenuItem(
+                            text = { Text(item.label) },
+                            onClick = { showMenu = false; item.onClick() },
+                            enabled = item.enabled,
+                            leadingIcon = { Icon(item.icon, contentDescription = null) }
+                        )
+                    }
+                }
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    )
+}
+
+/** "Delete …?" with Delete in the error colour and Cancel; [text] says what is lost and what is kept. */
+@Composable
+fun ConfirmDeleteDialog(title: String, text: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.Delete, contentDescription = null) },
+        title = { Text(title) },
+        text = { Text(text) },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+            ) { Text("Delete") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }

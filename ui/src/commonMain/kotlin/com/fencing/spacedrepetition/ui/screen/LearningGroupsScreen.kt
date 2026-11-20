@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,10 +24,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.LearningContexts
 import com.fencing.spacedrepetition.data.model.LearningGroup
+import com.fencing.spacedrepetition.ui.components.ConfirmDeleteDialog
 import com.fencing.spacedrepetition.ui.components.AppIcons
+import com.fencing.spacedrepetition.ui.components.SelectableListTopBar
 import com.fencing.spacedrepetition.ui.components.SelectionAction
-import com.fencing.spacedrepetition.ui.components.SelectionTopBar
 import com.fencing.spacedrepetition.ui.components.rememberSelectionState
 
 /**
@@ -41,61 +44,39 @@ import com.fencing.spacedrepetition.ui.components.rememberSelectionState
  * @param onEditLearningGroup opens the learning group editor; a learning
  *   group with id 0 is a new one.
  * @param onEditGlobal opens the Global settings.
+ * @param globalConceptScheduling whether Global schedules by learning concept;
+ *   each learning group carries its own switch. Shown on the rows, changed on
+ *   the settings screens.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LearningGroupsScreen(
     learningGroups: List<LearningGroup>,
     groups: List<Group>,
+    globalConceptScheduling: Boolean,
     onEditLearningGroup: (LearningGroup) -> Unit,
     onEditGlobal: () -> Unit,
     onDeleteLearningGroups: (List<LearningGroup>) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     var deleting by remember { mutableStateOf<List<LearningGroup>?>(null) }
-    var showMenu by remember { mutableStateOf(false) }
     val selection = rememberSelectionState(learningGroups.map { it.id })
 
-    val globalGroups = groups.filter { group -> learningGroups.none { it.id == group.learningGroupId } }
+    val globalGroups = LearningContexts(groups, learningGroups).let { contexts -> groups.filter { contexts.of(it) == null } }
 
     Scaffold(
         topBar = {
-            if (selection.active) {
-                SelectionTopBar(
-                    selectedCount = selection.selected.size,
-                    onExit = selection::exit,
-                    onSelectAll = { selection.selectAll(learningGroups.map { it.id }) },
-                    actions = listOf(
-                        SelectionAction("Delete", Icons.Default.Delete, destructive = true) {
-                            deleting = learningGroups.filter { it.id in selection.selected }
-                        }
-                    )
-                )
-            } else TopAppBar(
-                title = { Text("Learning Groups") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            SelectableListTopBar(
+                title = "Learning Groups",
+                selection = selection,
+                selectableIds = learningGroups.map { it.id },
+                selectLabel = "Select Learning Groups",
+                selectionActions = listOf(
+                    SelectionAction("Delete", Icons.Default.Delete, destructive = true) {
+                        deleting = learningGroups.filter { it.id in selection.selected }
                     }
-                },
-                actions = {
-                    Box {
-                        IconButton(onClick = { showMenu = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "More options")
-                        }
-                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text("Select Learning Groups") },
-                                onClick = { showMenu = false; selection.start() },
-                                enabled = learningGroups.isNotEmpty(),
-                                leadingIcon = { Icon(Icons.Default.CheckBox, contentDescription = null) }
-                            )
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
+                ),
+                onNavigateBack = onNavigateBack
             )
         },
         floatingActionButton = {
@@ -125,6 +106,7 @@ fun LearningGroupsScreen(
                     description = "",
                     members = globalGroups,
                     isGlobal = true,
+                    useConcepts = globalConceptScheduling,
                     // Global is not a row anywhere: it cannot be selected or deleted.
                     onClick = { if (!selection.active) onEditGlobal() }
                 )
@@ -135,6 +117,7 @@ fun LearningGroupsScreen(
                     description = learningGroup.description,
                     members = groups.filter { it.learningGroupId == learningGroup.id },
                     isGlobal = false,
+                    useConcepts = learningGroup.useConcepts,
                     selecting = selection.active,
                     selected = learningGroup.id in selection.selected,
                     onClick = {
@@ -151,32 +134,15 @@ fun LearningGroupsScreen(
     deleting?.let { doomed ->
         val memberCount = groups.count { group -> doomed.any { it.id == group.learningGroupId } }
         val what = doomed.singleOrNull()?.let { "\"${it.name}\"" } ?: "${doomed.size} learning groups"
-        AlertDialog(
-            onDismissRequest = { deleting = null },
-            icon = { Icon(Icons.Default.Delete, contentDescription = null) },
-            title = { Text(if (doomed.size == 1) "Delete Learning Group" else "Delete Learning Groups") },
-            text = {
-                Text(
-                    "Delete $what? " +
-                        (if (memberCount > 0) "$memberCount card group${if (memberCount == 1) "" else "s"} " +
-                            "will go back to Global, and " else "") +
-                        "the learning progress kept in ${if (doomed.size == 1) "it" else "them"} will be lost. " +
-                        "Cards are not deleted."
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onDeleteLearningGroups(doomed)
-                        deleting = null
-                        selection.exit()
-                    },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) { Text("Delete") }
-            },
-            dismissButton = {
-                TextButton(onClick = { deleting = null }) { Text("Cancel") }
-            }
+        ConfirmDeleteDialog(
+            title = if (doomed.size == 1) "Delete Learning Group" else "Delete Learning Groups",
+            text = "Delete $what? " +
+                (if (memberCount > 0) "$memberCount card group${if (memberCount == 1) "" else "s"} " +
+                    "will go back to Global, and " else "") +
+                "the learning progress kept in ${if (doomed.size == 1) "it" else "them"} will be lost. " +
+                "Cards are not deleted.",
+            onConfirm = { onDeleteLearningGroups(doomed); deleting = null; selection.exit() },
+            onDismiss = { deleting = null }
         )
     }
 }
@@ -188,6 +154,7 @@ private fun LearningGroupRow(
     description: String,
     members: List<Group>,
     isGlobal: Boolean,
+    useConcepts: Boolean,
     selecting: Boolean = false,
     selected: Boolean = false,
     onClick: () -> Unit = {},
@@ -235,6 +202,21 @@ private fun LearningGroupRow(
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis
                 )
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                    Icon(
+                        Icons.Default.Lightbulb,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = if (useConcepts) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        if (useConcepts) "By concept" else "By card",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }

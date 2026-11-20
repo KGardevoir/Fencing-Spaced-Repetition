@@ -24,8 +24,6 @@ class GroupRepository(
 
     suspend fun getGroupById(groupId: Long): Group? = groupDao.getGroupById(groupId)
 
-    fun getGroupByIdFlow(groupId: Long): Flow<Group?> = groupDao.getGroupByIdFlow(groupId)
-
     suspend fun insertGroup(group: Group): Long = groupDao.insertGroup(group)
 
     suspend fun updateGroup(group: Group) = groupDao.updateGroup(group)
@@ -39,42 +37,19 @@ class GroupRepository(
 
     suspend fun getGroupsForCardSync(cardId: Long): List<Group> = groupDao.getGroupsForCardSync(cardId)
 
-    suspend fun setGroupsForCard(cardId: Long, groupIds: List<Long>) {
-        // Remove existing associations
-        groupDao.deleteAllGroupsForCard(cardId)
-        // Add new associations
-        groupIds.forEach { groupId ->
-            groupDao.insertCardGroupCrossRef(CardGroupCrossRef(cardId, groupId))
-        }
-    }
-
     suspend fun addCardToGroup(cardId: Long, groupId: Long) {
         groupDao.insertCardGroupCrossRef(CardGroupCrossRef(cardId, groupId))
     }
 
-    suspend fun removeCardFromGroup(cardId: Long, groupId: Long) {
-        groupDao.deleteCardGroupCrossRef(CardGroupCrossRef(cardId, groupId))
-    }
-
     // Cards by group
-    fun getCardsByGroup(groupId: Long): Flow<List<Card>> = cardDao.getCardsByGroup(groupId)
-
     suspend fun getCardsByGroupSync(groupId: Long): List<Card> = cardDao.getCardsByGroupSync(groupId)
 
     suspend fun getDueCardsByGroup(groupId: Long, limit: Int = 100): List<Card> =
         cardDao.getDueCardsByGroup(groupId, limit = limit)
 
-    fun getDueCardCountByGroup(groupId: Long): Flow<Int> = cardDao.getDueCardCountByGroup(groupId)
-
-    fun getGroupWithCards(groupId: Long): Flow<GroupWithCards?> = groupDao.getGroupWithCards(groupId)
-
     fun getAllGroupsWithCards(): Flow<List<GroupWithCards>> = groupDao.getAllGroupsWithCards()
 
     suspend fun getAllGroupsSync(): List<Group> = getAllGroups().first()
-
-    suspend fun getGroupNameMap(): Map<String, Long> {
-        return getAllGroupsSync().associate { it.name to it.id }
-    }
 
     suspend fun getCardsByGroupWithGroupNames(groupId: Long): List<Pair<Card, List<String>>> {
         val cards = getCardsByGroupSync(groupId)
@@ -147,9 +122,6 @@ class GroupRepository(
 
     fun getAllLearningStatesForCard(cardId: Long): Flow<List<CardLearningState>> =
         groupDao.getAllLearningStatesForCardFlow(cardId)
-
-    suspend fun getAllLearningStatesForCardSync(cardId: Long): List<CardLearningState> =
-        groupDao.getAllLearningStatesForCard(cardId)
 
     /** Every card's state in every learning group. */
     fun getAllLearningStates(): Flow<List<CardLearningState>> = groupDao.getAllLearningStates()
@@ -224,6 +196,9 @@ class GroupRepository(
      * same learning group holds it -- keeps it: that is the progress being
      * shared.
      */
+    suspend fun setLearningGroupUseConcepts(learningGroupId: Long, useConcepts: Boolean) =
+        groupDao.setLearningGroupUseConcepts(learningGroupId, useConcepts)
+
     suspend fun setLearningGroup(groupId: Long, learningGroupId: Long?) {
         groupDao.setLearningGroupForGroup(groupId, learningGroupId)
         if (learningGroupId == null) return

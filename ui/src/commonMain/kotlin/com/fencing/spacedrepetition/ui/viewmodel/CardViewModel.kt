@@ -8,14 +8,22 @@ import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.algorithm.RetentionPlanner
 import com.fencing.spacedrepetition.algorithm.ScheduleEstimate
 import com.fencing.spacedrepetition.data.model.Card
+import com.fencing.spacedrepetition.data.model.CardFilter
+import com.fencing.spacedrepetition.data.model.CardConceptCrossRef
+import com.fencing.spacedrepetition.data.model.Concept
 import com.fencing.spacedrepetition.data.model.CardLearningState
 import com.fencing.spacedrepetition.data.model.CardWithGroups
+import com.fencing.spacedrepetition.data.model.FsrsState
 import com.fencing.spacedrepetition.data.model.Grade
 import com.fencing.spacedrepetition.data.model.Group
+import com.fencing.spacedrepetition.data.model.LearningContexts
+import com.fencing.spacedrepetition.data.model.ConceptOffer
+import com.fencing.spacedrepetition.data.model.LearningGroup
 import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.repository.CardRepository
+import com.fencing.spacedrepetition.data.repository.ConceptRepository
 import com.fencing.spacedrepetition.data.repository.GroupRepository
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
 import com.fencing.spacedrepetition.ui.BinaryExportFile
@@ -30,7 +38,6 @@ import com.fencing.spacedrepetition.util.exportImageKeys
 import com.fencing.spacedrepetition.util.photoArchiveEntries
 import com.fencing.spacedrepetition.util.zipArchive
 import com.fencing.spacedrepetition.util.Time
-import com.fencing.spacedrepetition.util.parsedCardToCard
 import com.fencing.spacedrepetition.util.parsedReviewLogsToEntities
 import com.fencing.spacedrepetition.util.parsedSessionToSession
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -51,20 +58,55 @@ import kotlinx.coroutines.launch
  * images and stores them; an export reads them back. Both are asynchronous in
  * a browser and neither is a file path any more.
  */
+/** What the card editor loads for a card it edits; empty for a new one. */
+data class EditedCard(
+    val groups: List<Group> = emptyList(),
+    val learningStates: List<CardLearningState> = emptyList(),
+    val concepts: List<Concept> = emptyList(),
+    /** How much of each concept the card contains, where that is not 1. */
+    val conceptWeights: Map<Long, Double> = emptyMap()
+)
+
+/**
+ * What the card list shows: the cards that pass its filters, in its order,
+ * and the filters, sorting and selection themselves.
+ */
+data class CardListState(
+    /** The cards shown: filtered and sorted. */
+    val cards: List<Card> = emptyList(),
+    /** Every card with its groups, filtered or not. */
+    val cardsWithGroups: List<CardWithGroups> = emptyList(),
+    val groups: List<Group> = emptyList(),
+    val learningGroups: List<LearningGroup> = emptyList(),
+    val concepts: List<Concept> = emptyList(),
+    /** Each card's concepts with how much of each it contains, by card id. */
+    val conceptsByCard: Map<Long, List<Pair<Concept, Double>>> = emptyMap(),
+    val cardCount: Int = 0,
+    val groupFilters: Set<Long> = emptySet(),
+    val conceptFilters: Set<Long> = emptySet(),
+    val showDisabled: Boolean = false,
+    val searchQuery: String = "",
+    val sortOption: CardSortOption = CardSortOption.DUE_DATE,
+    val sortDirection: SortDirection = SortDirection.ASCENDING,
+    val selectionMode: Boolean = false,
+    val selectedCardIds: Set<Long> = emptySet()
+)
+
 class CardViewModel(
     private val repository: CardRepository,
     private val groupRepository: GroupRepository,
     private val opponentRepository: OpponentRepository,
-    private val imageStore: ImageStore
+    private val imageStore: ImageStore,
+    private val conceptRepository: ConceptRepository
 ) : ViewModel() {
 
     val allCards: StateFlow<List<Card>> = repository.getAllCards()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val allCardsWithGroups: StateFlow<List<CardWithGroups>> = repository.getAllCardsWithGroups()
+    private val allCardsWithGroups: StateFlow<List<CardWithGroups>> = repository.getAllCardsWithGroups()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val dueCardCount: StateFlow<Int> = repository.getDueCardCount()
+    val dueCardCount: StateFlow<Int> = repository.drawing.getDueCardCount()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     val cardCount: StateFlow<Int> = repository.getCardCount()
@@ -92,29 +134,49 @@ class CardViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    fun getCardCountForGroup(groupId: Long): Flow<Int> = repository.getCardCountByGroup(groupId)
-
     // Groups for filtering
-    val allGroups: StateFlow<List<Group>> = groupRepository.getAllGroups()
+    private val allGroups: StateFlow<List<Group>> = groupRepository.getAllGroups()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _selectedGroupFilter = MutableStateFlow<Group?>(null)
-    val selectedGroupFilter: StateFlow<Group?> = _selectedGroupFilter.asStateFlow()
-
     private val _selectedGroupFilters = MutableStateFlow<Set<Long>>(emptySet())
-    val selectedGroupFilters: StateFlow<Set<Long>> = _selectedGroupFilters.asStateFlow()
+    private val selectedGroupFilters: StateFlow<Set<Long>> = _selectedGroupFilters.asStateFlow()
+
+    /** Concepts to filter the card list by: a card carrying any of them is shown. */
+    private val _selectedConceptFilters = MutableStateFlow<Set<Long>>(emptySet())
+    private val selectedConceptFilters: StateFlow<Set<Long>> = _selectedConceptFilters.asStateFlow()
+
+    fun toggleConceptFilter(conceptId: Long) {
+        _selectedConceptFilters.update { if (conceptId in it) it - conceptId else it + conceptId }
+    }
+
+    // A filter on a concept or group that has since been deleted has no chip
+    // to turn it off by, and would go on filtering: drop it with the record.
+    init {
+        viewModelScope.launch {
+            conceptRepository.getAllConcepts().collect { concepts ->
+                val ids = concepts.map { it.id }.toSet()
+                _selectedConceptFilters.update { it intersect ids }
+            }
+        }
+        viewModelScope.launch {
+            groupRepository.getAllGroups().collect { groups ->
+                val ids = groups.map { it.id }.toSet()
+                _selectedGroupFilters.update { it intersect ids }
+            }
+        }
+    }
 
     private val _showDisabledFilter = MutableStateFlow(false)
-    val showDisabledFilter: StateFlow<Boolean> = _showDisabledFilter.asStateFlow()
+    private val showDisabledFilter: StateFlow<Boolean> = _showDisabledFilter.asStateFlow()
 
     private val _searchQuery = MutableStateFlow("")
-    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+    private val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
     private val _cardSortOption = MutableStateFlow(CardSortOption.DUE_DATE)
-    val cardSortOption: StateFlow<CardSortOption> = _cardSortOption.asStateFlow()
+    private val cardSortOption: StateFlow<CardSortOption> = _cardSortOption.asStateFlow()
 
     private val _sortDirection = MutableStateFlow(SortDirection.ASCENDING)
-    val sortDirection: StateFlow<SortDirection> = _sortDirection.asStateFlow()
+    private val sortDirection: StateFlow<SortDirection> = _sortDirection.asStateFlow()
 
     fun setCardSortOption(option: CardSortOption) {
         _cardSortOption.value = option
@@ -130,27 +192,15 @@ class CardViewModel(
     // flatMapLatest is still experimental, and this is the second place in the
     // class that uses it -- the other one is annotated a few dozen lines up.
     @OptIn(ExperimentalCoroutinesApi::class)
-    val filteredCards: StateFlow<List<Card>> = _showDisabledFilter.flatMapLatest { showDisabled ->
+    private val filteredCards: StateFlow<List<Card>> = _showDisabledFilter.flatMapLatest { showDisabled ->
         combine(
-            allCardsWithGroups,
-            _selectedGroupFilters,
+            combine(allCardsWithGroups, conceptRepository.getAllCardConceptCrossRefs()) { cards, refs -> cards to refs },
+            combine(_selectedGroupFilters, _selectedConceptFilters) { groups, concepts -> groups to concepts },
             searchQuery,
             _cardSortOption,
             _sortDirection
-        ) { cardsWithGroups, groupIds, query, sortOption, direction ->
-            var filtered = cardsWithGroups
-                .filter { it.card.isDisabled == showDisabled }
-                .filter { groupIds.isEmpty() || it.groups.any { g -> g.id in groupIds } }
-                .map { it.card }
-
-            // Apply search filter
-            if (query.isNotBlank()) {
-                val searchLower = query.lowercase()
-                filtered = filtered.filter { card ->
-                    card.question.lowercase().contains(searchLower) ||
-                    card.answer.lowercase().contains(searchLower)
-                }
-            }
+        ) { (cardsWithGroups, conceptRefs), (groupIds, conceptIds), query, sortOption, direction ->
+            val filtered = CardFilter(groupIds, conceptIds, showDisabled, query).apply(cardsWithGroups, conceptRefs)
 
             // Apply sort with direction
             val sorted = when (sortOption) {
@@ -164,10 +214,6 @@ class CardViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun selectGroupFilter(group: Group?) {
-        _selectedGroupFilter.value = group
-    }
-
     fun toggleGroupFilter(groupId: Long) {
         _selectedGroupFilters.value = if (groupId in _selectedGroupFilters.value) {
             _selectedGroupFilters.value - groupId
@@ -178,18 +224,12 @@ class CardViewModel(
 
     fun clearGroupFilters() {
         _selectedGroupFilters.value = emptySet()
+        _selectedConceptFilters.value = emptySet()
         _showDisabledFilter.value = false
     }
 
     fun toggleDisabledFilter() {
         _showDisabledFilter.value = !_showDisabledFilter.value
-    }
-
-    fun toggleCardDisabled(cardId: Long) {
-        viewModelScope.launch {
-            val card = repository.getCardById(cardId) ?: return@launch
-            repository.updateCard(card.copy(isDisabled = !card.isDisabled, modified = Time.now()))
-        }
     }
 
     fun setSelectedCardsDisabled(disabled: Boolean, onComplete: () -> Unit = {}) {
@@ -215,24 +255,79 @@ class CardViewModel(
     fun getLearningStatesForCard(cardId: Long): Flow<List<CardLearningState>> =
         groupRepository.getAllLearningStatesForCard(cardId)
 
-    fun updateLearningState(learningState: CardLearningState, onComplete: () -> Unit = {}) {
-        viewModelScope.launch {
-            repository.updateLearningState(learningState)
-            onComplete()
-        }
+    fun saveLearningState(learningState: CardLearningState) {
+        viewModelScope.launch { repository.saveLearningState(learningState) }
     }
 
     fun getDueCardCountByGroup(groupId: Long): Flow<Int> =
-        repository.getDueCardCountByGroup(groupId)
+        repository.drawing.getDueCardCountByGroup(groupId)
 
     fun getCardCountByGroup(groupId: Long): Flow<Int> =
         repository.getCardCountByGroup(groupId)
+
+    fun getConceptsForCard(cardId: Long): Flow<List<Concept>> = conceptRepository.getConceptsForCard(cardId)
+
+    /** A card's concept tags, with how much of each concept it contains. */
+    fun getConceptLinksForCard(cardId: Long): Flow<List<CardConceptCrossRef>> =
+        conceptRepository.getConceptLinksForCard(cardId)
+
+    val allConcepts: StateFlow<List<Concept>> = conceptRepository.getAllConcepts()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /**
+     * Each card's concepts with how much of each it contains, by card id,
+     * sorted by name -- for showing them on the card list.
+     */
+    private val conceptsByCard: StateFlow<Map<Long, List<Pair<Concept, Double>>>> = combine(
+        conceptRepository.getAllConcepts(),
+        conceptRepository.getAllCardConceptCrossRefs()
+    ) { concepts, refs ->
+        val byId = concepts.associateBy { it.id }
+        refs.groupBy({ it.cardId }, { ref -> byId[ref.conceptId]?.let { it to ref.weight } })
+            .mapValues { (_, list) -> list.filterNotNull().sortedBy { it.first.name.lowercase() } }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    /** What the card editor offers a card: see [ConceptOffer]. */
+    val conceptOffer: StateFlow<ConceptOffer> = combine(
+        groupRepository.getAllGroups(),
+        groupRepository.getAllLearningGroups(),
+        conceptRepository.getAllConcepts(),
+        conceptRepository.getAllConceptLearningGroups()
+    ) { groups, learningGroups, concepts, links ->
+        ConceptOffer(LearningContexts(groups, learningGroups), concepts, links)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ConceptOffer.NONE)
+
+    /** What the card editor loads for [cardId]: its groups, learning-group progress and concepts. */
+    fun editedCard(cardId: Long): Flow<EditedCard> = combine(
+        getGroupsForCard(cardId),
+        getLearningStatesForCard(cardId),
+        getConceptsForCard(cardId),
+        getConceptLinksForCard(cardId)
+    ) { groups, states, concepts, links ->
+        EditedCard(groups, states, concepts, links.filter { it.weight != 1.0 }.associate { it.conceptId to it.weight })
+    }
+
+    /**
+     * Create a concept from the card editor -- or find the one of that name --
+     * available in [contexts], the card's learning contexts that schedule by
+     * concept, so it can be picked for the card. [onCreated] gets its id.
+     */
+    fun createConcept(name: String, contexts: Set<Long?>, onCreated: (Long) -> Unit) {
+        viewModelScope.launch {
+            try {
+                onCreated(conceptRepository.getOrCreateConceptIn(name, contexts))
+            } catch (e: Exception) {
+                // A blank name: nothing to create
+            }
+        }
+    }
 
     fun addCard(
         question: String,
         answer: String,
         groupIds: List<Long>,
         imagePaths: List<String> = emptyList(),
+        concepts: Map<Long, Double> = emptyMap(),
         onSuccess: () -> Unit
     ) {
         viewModelScope.launch {
@@ -242,7 +337,8 @@ class CardViewModel(
                     answer = answer,
                     imagePaths = imagePaths
                 )
-                repository.insertCardWithGroups(card, groupIds)
+                val cardId = repository.insertCardWithGroups(card, groupIds)
+                if (concepts.isNotEmpty()) repository.conceptDerivation.setCardConcepts(cardId, concepts.keys, concepts)
                 onSuccess()
             } catch (e: Exception) {
                 // Handle error
@@ -250,30 +346,56 @@ class CardViewModel(
         }
     }
 
-    fun updateCard(card: Card, groupIds: List<Long>, onSuccess: () -> Unit) {
+    /** [concepts]: each concept the card carries and how much of it; null leaves them as they are. */
+    /** Saves [card]; [groupIds] and [concepts] are left as they are when null. */
+    fun updateCard(card: Card, groupIds: List<Long>?, concepts: Map<Long, Double>?, onSuccess: () -> Unit) {
         viewModelScope.launch {
             try {
                 repository.updateCard(card.copy(modified = Time.now()))
-                repository.updateCardGroups(card.id, groupIds)
+                groupIds?.let { repository.updateCardGroups(card.id, it) }
+                concepts?.let { repository.conceptDerivation.setCardConcepts(card.id, it.keys, it) }
                 onSuccess()
             } catch (e: Exception) {
                 // Handle error
             }
-        }
-    }
-
-    fun deleteCard(card: Card) {
-        viewModelScope.launch {
-            repository.deleteCard(card)
         }
     }
 
     // Selection state for bulk operations
     private val _selectedCardIds = MutableStateFlow<Set<Long>>(emptySet())
-    val selectedCardIds: StateFlow<Set<Long>> = _selectedCardIds.asStateFlow()
+    private val selectedCardIds: StateFlow<Set<Long>> = _selectedCardIds.asStateFlow()
 
     private val _isSelectionMode = MutableStateFlow(false)
-    val isSelectionMode: StateFlow<Boolean> = _isSelectionMode.asStateFlow()
+    private val isSelectionMode: StateFlow<Boolean> = _isSelectionMode.asStateFlow()
+
+    /** Everything the card list shows, as one value. */
+    val cardListState: StateFlow<CardListState> = combine(
+        combine(filteredCards, allCardsWithGroups, allGroups, groupRepository.getAllLearningGroups(), cardCount) {
+                cards, withGroups, groups, learningGroups, count ->
+            CardListState(cards, withGroups, groups, learningGroups, cardCount = count)
+        },
+        combine(allConcepts, conceptsByCard, _selectedGroupFilters, _selectedConceptFilters, _showDisabledFilter) {
+                concepts, byCard, groupFilters, conceptFilters, showDisabled ->
+            CardListState(
+                concepts = concepts, conceptsByCard = byCard, groupFilters = groupFilters,
+                conceptFilters = conceptFilters, showDisabled = showDisabled
+            )
+        },
+        combine(_searchQuery, _cardSortOption, _sortDirection, _isSelectionMode, _selectedCardIds) {
+                query, sortOption, direction, selecting, selected ->
+            CardListState(
+                searchQuery = query, sortOption = sortOption, sortDirection = direction,
+                selectionMode = selecting, selectedCardIds = selected
+            )
+        }
+    ) { content, filters, view ->
+        content.copy(
+            concepts = filters.concepts, conceptsByCard = filters.conceptsByCard, groupFilters = filters.groupFilters,
+            conceptFilters = filters.conceptFilters, showDisabled = filters.showDisabled,
+            searchQuery = view.searchQuery, sortOption = view.sortOption, sortDirection = view.sortDirection,
+            selectionMode = view.selectionMode, selectedCardIds = view.selectedCardIds
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), CardListState())
 
     fun toggleSelectionMode() {
         _isSelectionMode.value = !_isSelectionMode.value
@@ -303,10 +425,6 @@ class CardViewModel(
             else _selectedCardIds.value + shown
     }
 
-    fun clearSelection() {
-        _selectedCardIds.value = emptySet()
-    }
-
     // Bulk operations
     fun deleteSelectedCards(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
@@ -325,18 +443,6 @@ class CardViewModel(
             val idsToUpdate = _selectedCardIds.value.toList()
             idsToUpdate.forEach { cardId ->
                 repository.updateCardGroups(cardId, groupIds)
-            }
-            _selectedCardIds.value = emptySet()
-            _isSelectionMode.value = false
-            onComplete()
-        }
-    }
-
-    fun resetSelectedCardsState(onComplete: () -> Unit = {}) {
-        viewModelScope.launch {
-            val idsToReset = _selectedCardIds.value.toList()
-            idsToReset.forEach { cardId ->
-                repository.resetCardState(cardId)
             }
             _selectedCardIds.value = emptySet()
             _isSelectionMode.value = false
@@ -388,10 +494,10 @@ class CardViewModel(
         }
     }
 
-    fun resetCardState(cardId: Long, resetGroupStates: Boolean = false, onComplete: () -> Unit = {}) {
+    /** Resets [cardId]'s Global progress (and every learning group's, if asked); [onComplete] gets the card as reset. */
+    fun resetCardState(cardId: Long, resetGroupStates: Boolean = false, onComplete: (Card) -> Unit = {}) {
         viewModelScope.launch {
-            repository.resetCardState(cardId, resetGroupStates)
-            onComplete()
+            repository.resetCardState(cardId, resetGroupStates)?.let(onComplete)
         }
     }
 
@@ -402,27 +508,15 @@ class CardViewModel(
         }
     }
 
-    fun gradeCard(cardId: Long, grade: Grade, groupId: Long? = null, onComplete: (Card) -> Unit = {}) {
+    /**
+     * Logs a grade staged in the card editor, without changing any progress:
+     * [before] and [after] are the progress where it was graded, in [groupId]'s
+     * learning context (Global for none).
+     */
+    fun recordGradeFromEdit(cardId: Long, before: FsrsState, after: FsrsState, grade: Grade, groupId: Long?) {
         viewModelScope.launch {
             try {
-                val card = repository.getCardById(cardId) ?: return@launch
-                val updatedCard = if (groupId != null) {
-                    repository.reviewCardWithGroup(card, grade, groupId)
-                } else {
-                    repository.reviewCard(card, grade)
-                }
-                onComplete(updatedCard)
-            } catch (e: Exception) {
-                // Handle error
-            }
-        }
-    }
-
-    /** Records a review log for a grade applied from the Add/Edit card screen, without updating card state. */
-    fun recordGradeFromEdit(cardBefore: Card, cardAfter: Card, grade: Grade, groupId: Long? = null) {
-        viewModelScope.launch {
-            try {
-                repository.logGradeFromEdit(cardBefore, cardAfter, grade, groupId)
+                repository.grading.logGradeFromEdit(cardId, before, after, grade, groupId)
             } catch (e: Exception) {
                 // Non-fatal: history logging should not break the save flow
             }
@@ -435,9 +529,9 @@ class CardViewModel(
             try {
                 val card = repository.getCardById(cardId) ?: return@launch
                 val computed = if (groupId != null) {
-                    repository.computeReviewWithGroup(card, grade, groupId)
+                    repository.grading.computeReviewWithGroup(card, grade, groupId)
                 } else {
-                    repository.computeReview(card, grade)
+                    repository.grading.computeReview(card, grade)
                 }
                 onComplete(computed)
             } catch (e: Exception) {
@@ -472,29 +566,11 @@ class CardViewModel(
                 }
                 val (parsedCards, parseErrors) = contents as ArchiveContents.Cards
 
-                val targets = groupRepository.groupsForImport(parsedCards)
-                val groupIds = targets.groupIds
-
-                val importedCount = when {
-                    // V2/V3, where a card can hold one learning state per group.
-                    parsedCards.any { it.isGroupSpecificState } ->
-                        repository.importCardsWithGroupStates(parsedCards, groupIds, targets.learningGroupIds) {
-                            CardImportExport.parsedCardToCard(it, imageStore)
-                        }
-                    // V1, which has full state but only one of it per card.
-                    parsedCards.any { it.hasFullState } ->
-                        repository.importFullCards(
-                            parsedCards.map { CardImportExport.parsedCardToCard(it, imageStore) },
-                            parsedCards.map { it.groupNames },
-                            groupIds
-                        )
-                    // Question and answer, and nothing else.
-                    else -> repository.importCards(
-                        parsedCards.map { it.concept to it.answer }
-                    )
-                }
-
+                val importedCount = importArchiveCards(parsedCards, repository, groupRepository, conceptRepository, imageStore)
                 importOpponentsAndHistory()
+                // With the history in, concepts are derived from it -- except
+                // those with none, which keep the state the file brought.
+                repository.conceptDerivation.rederiveConcepts(onlyWithHistory = true)
 
                 _importExportState.value = ImportExportState.ImportSuccess(
                     importedCount = importedCount,
@@ -512,8 +588,8 @@ class CardViewModel(
      *
      * After the cards, and only after them: a log is linked to its card by
      * question text, so the cards have to be in the database to be found.
-     * Opponents already known by name keep their local skill multiplier --
-     * someone else's opinion of an opponent does not overwrite yours.
+     * Opponents already here take the file's name, notes and multiplier:
+     * an import updates everything but progress.
      */
     private suspend fun importOpponentsAndHistory() {
         val parsedOpponents = CardImportExport.lastParsedOpponents
@@ -532,7 +608,7 @@ class CardViewModel(
         }
 
         val questionToCardId = repository.getAllCardsSync().associate { it.question to it.id }
-        val cardIdByUid = repository.cardIdsByUid()
+        val cardIdByUid = repository.archive.cardIdsByUid()
         // A review's card: by stable identifier where the file has one.
         val cardIdOf = { log: CardImportExport.ParsedReviewLog ->
             log.cardUid?.let { cardIdByUid[it] } ?: questionToCardId[log.cardQuestion]
@@ -545,7 +621,7 @@ class CardViewModel(
             sessionIdByUid = sessionIds.byUid
         )
         // Reviews already in the history are left out, so nothing counts twice.
-        if (reviewLogs.isNotEmpty()) repository.importReviewLogs(reviewLogs)
+        if (reviewLogs.isNotEmpty()) repository.archive.importReviewLogs(reviewLogs)
         // Each review's opponent: the identifier the file gave, pointed at
         // whoever has it here; a review the file named only by name gets the
         // identifier of the opponent that name found.
@@ -583,7 +659,7 @@ class CardViewModel(
                 grades = reviews.map { it.grade },
                 images = imageStore
             )
-            val id = repository.ensureSession(session)
+            val id = repository.archive.ensureSession(session)
             byStart[parsed.startTime] = id
             parsed.uid?.let { byUid[it] = id }
         }
@@ -629,7 +705,7 @@ class CardViewModel(
         file: ExportFile,
         includeHistory: Boolean
     ): ImportExportState = try {
-        val cardsWithStates = repository.getAllCardsWithGroupStates()
+        val cardsWithStates = repository.archive.getAllCardsWithGroupStates()
         if (cardsWithStates.isEmpty()) {
             ImportExportState.Error("No cards to export")
         } else {
@@ -671,7 +747,7 @@ class CardViewModel(
                 }
 
                 val groupNames = groups.map { it.name }.toSet()
-                val cardsWithStates = repository.getAllCardsWithGroupStates()
+                val cardsWithStates = repository.archive.getAllCardsWithGroupStates()
                     .filter { cardWithState -> cardWithState.groupNames.any { it in groupNames } }
                 if (cardsWithStates.isEmpty()) {
                     _importExportState.value =
@@ -729,6 +805,7 @@ class CardViewModel(
         }
         val images = imageStore.exportReader(cardsWithStates.map { it.card }, reviewLogs, sessions)
         val learningGroups = groupRepository.getAllLearningGroupsSync()
+        val concepts = repository.archive.getAllConceptsWithStates()
 
         return file.write { out ->
             CardImportExport.exportCardsWithGroupStates(
@@ -741,7 +818,8 @@ class CardViewModel(
                 cardQuestions = cardQuestions,
                 opponents = opponents,
                 opponentNamesById = opponents.associate { it.id to it.name },
-                sessions = sessions
+                sessions = sessions,
+                concepts = concepts
             )
         }.asImportExportState()
     }
@@ -847,7 +925,7 @@ class CardViewModel(
         viewModelScope.launch {
             _importExportState.value = ImportExportState.Loading
             try {
-                val cardsWithGroups = repository.getAllCardsWithGroupNames()
+                val cardsWithGroups = repository.archive.getAllCardsWithGroupNames()
                     .map { (card, groupNames) -> CardWithGroupNames(card, groupNames) }
 
                 if (cardsWithGroups.isEmpty()) {
@@ -876,7 +954,7 @@ class CardViewModel(
                     return@launch
                 }
 
-                val cardsWithGroups = repository.getAllCardsWithGroupNames()
+                val cardsWithGroups = repository.archive.getAllCardsWithGroupNames()
                     .map { (card, names) -> CardWithGroupNames(card, names) }
                     .filter { cardWithGroups -> cardWithGroups.groupNames.any { it in groupNames } }
 

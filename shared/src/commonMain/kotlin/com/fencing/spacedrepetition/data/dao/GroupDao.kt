@@ -25,13 +25,6 @@ interface GroupDao {
     @Query("SELECT * FROM groups WHERE id = :groupId")
     suspend fun getGroupById(groupId: Long): Group?
 
-    @Query("SELECT * FROM groups WHERE id = :groupId")
-    fun getGroupByIdFlow(groupId: Long): Flow<Group?>
-
-    @Transaction
-    @Query("SELECT * FROM groups WHERE id = :groupId")
-    fun getGroupWithCards(groupId: Long): Flow<GroupWithCards?>
-
     @Transaction
     @Query("SELECT * FROM groups ORDER BY name ASC")
     fun getAllGroupsWithCards(): Flow<List<GroupWithCards>>
@@ -52,14 +45,8 @@ interface GroupDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertCardGroupCrossRef(crossRef: CardGroupCrossRef)
 
-    @Delete
-    suspend fun deleteCardGroupCrossRef(crossRef: CardGroupCrossRef)
-
     @Query("DELETE FROM card_group_cross_ref WHERE cardId = :cardId")
     suspend fun deleteAllGroupsForCard(cardId: Long)
-
-    @Query("DELETE FROM card_group_cross_ref WHERE groupId = :groupId")
-    suspend fun deleteAllCardsForGroup(groupId: Long)
 
     @Query("SELECT COUNT(*) FROM groups")
     fun getGroupCount(): Flow<Int>
@@ -112,6 +99,9 @@ interface GroupDao {
     @Query("SELECT COUNT(DISTINCT cardId) FROM card_group_cross_ref WHERE groupId IN (:groupIds)")
     suspend fun countDistinctCardsInGroups(groupIds: List<Long>): Int
 
+    @Query("UPDATE learning_groups SET useConcepts = :useConcepts WHERE id = :learningGroupId")
+    suspend fun setLearningGroupUseConcepts(learningGroupId: Long, useConcepts: Boolean)
+
     @Query("UPDATE groups SET learningGroupId = :learningGroupId WHERE id = :groupId")
     suspend fun setLearningGroupForGroup(groupId: Long, learningGroupId: Long?)
 
@@ -136,9 +126,6 @@ interface GroupDao {
 
     @Query("SELECT * FROM card_learning_state WHERE cardId = :cardId")
     fun getAllLearningStatesForCardFlow(cardId: Long): Flow<List<CardLearningState>>
-
-    @Query("DELETE FROM card_learning_state WHERE cardId = :cardId")
-    suspend fun deleteAllLearningStatesForCard(cardId: Long)
 
     // Whole-table reads, for reports that look at every card in every group
     @Query("SELECT * FROM card_learning_state")

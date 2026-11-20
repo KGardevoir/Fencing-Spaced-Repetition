@@ -3,21 +3,57 @@
 
 package com.fencing.spacedrepetition.ui.viewmodel
 
+import com.fencing.spacedrepetition.data.model.LearningContexts
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fencing.spacedrepetition.data.model.Opponent
 import com.fencing.spacedrepetition.data.model.PracticeSession
 import com.fencing.spacedrepetition.data.model.ReviewLog
 import com.fencing.spacedrepetition.data.repository.CardRepository
-import com.fencing.spacedrepetition.data.repository.GROUP_NAME_CARD_EDIT
+import com.fencing.spacedrepetition.data.repository.ConceptRepository
 import com.fencing.spacedrepetition.data.repository.OpponentRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 class HistoryViewModel(
     private val repository: CardRepository,
-    private val opponentRepository: OpponentRepository
+    private val opponentRepository: OpponentRepository,
+    conceptRepository: ConceptRepository? = null
 ) : ViewModel() {
+
+    /** Concept names by uid and id, and which concepts each card carries now. */
+    private class ConceptIndex(
+        val nameByUid: Map<String, String> = emptyMap(),
+        val nameById: Map<Long, String> = emptyMap(),
+        val conceptIdsByCard: Map<Long, List<Long>> = emptyMap()
+    ) {
+        /**
+         * What [log] tested: the concepts it was drawn for (the trigger first),
+         * then the card's other concepts as it carries them now. A concept
+         * since deleted is left out.
+         */
+        fun testedBy(log: ReviewLog): List<TestedConcept> {
+            val recorded = log.selectionConceptUids.mapNotNull { uid ->
+                nameByUid[uid]?.let { TestedConcept(it, drawnFor = true, trigger = uid == log.selectionTrigger) }
+            }.sortedWith(compareByDescending<TestedConcept> { it.trigger }.thenBy { it.name.lowercase() })
+            val recordedNames = recorded.map { it.name }.toSet()
+            val current = conceptIdsByCard[log.cardId].orEmpty()
+                .mapNotNull { nameById[it] }
+                .filter { it !in recordedNames }
+                .sortedBy { it.lowercase() }
+                .map { TestedConcept(it) }
+            return recorded + current
+        }
+    }
+
+    private val conceptIndex: Flow<ConceptIndex> = if (conceptRepository == null) flowOf(ConceptIndex()) else
+        combine(conceptRepository.getAllConcepts(), conceptRepository.getAllCardConceptCrossRefs()) { concepts, links ->
+            ConceptIndex(
+                nameByUid = concepts.associate { it.uid to it.name },
+                nameById = concepts.associate { it.id to it.name },
+                conceptIdsByCard = links.groupBy({ it.cardId }, { it.conceptId })
+            )
+        }
 
     val opponents: StateFlow<List<Opponent>> = opponentRepository.getAllOpponents()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -41,20 +77,22 @@ class HistoryViewModel(
      * noted.
      */
     private val allLogsWithCards: Flow<List<ReviewLogWithCard>> =
-        combine(repository.getAllReviewLogs(), repository.getAllGroups()) { logs, groups -> logs to groups }
-            .transform { (logs, groups) ->
+        combine(repository.getAllReviewLogs(), repository.getAllGroups(), conceptIndex) { logs, groups, index ->
+            Triple(logs, groups, index)
+        }
+            .transform { (logs, groups, index) ->
                 val currentNames = groups.associate { it.uid to it.name }
                 emit(logs.map { log ->
                     val card = repository.getCardById(log.cardId)
                     val named = log.groupUid?.let { currentNames[it] }?.let { log.copy(groupName = it) } ?: log
-                    ReviewLogWithCard(named, card?.question ?: "Deleted Card")
+                    ReviewLogWithCard(named, card?.question ?: "Deleted Card", index.testedBy(log))
                 })
             }
 
     val availableGroups: StateFlow<List<String>> = allLogsWithCards
         .map { logs ->
             logs.mapNotNull { lwc ->
-                lwc.reviewLog.groupName?.takeIf { it.isNotBlank() && it != GROUP_NAME_CARD_EDIT }
+                lwc.reviewLog.groupName?.takeIf { it.isNotBlank() && it != LearningContexts.CARD_EDITOR }
             }.distinct().sorted()
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -78,9 +116,7 @@ class HistoryViewModel(
             sessions.forEach { session ->
                 val sessionLogs = logsBySession[session.id] ?: emptyList()
                 val matchesGroup = group == null || sessionLogs.any { it.reviewLog.groupName == group }
-                val matchesText = query.isBlank() || sessionLogs.any {
-                    it.cardQuestion.contains(query, ignoreCase = true)
-                }
+                val matchesText = query.isBlank() || sessionLogs.any { it.matches(query) }
                 val matchesOpponent = opponentFilter == null || sessionLogs.any {
                     matchesOpponentFilter(it.reviewLog.opponentId, opponentFilter)
                 }
@@ -91,7 +127,7 @@ class HistoryViewModel(
 
             quickGradeLogs.forEach { lwc ->
                 val matchesGroup = group == null || lwc.reviewLog.groupName == group
-                val matchesText = query.isBlank() || lwc.cardQuestion.contains(query, ignoreCase = true)
+                val matchesText = query.isBlank() || lwc.matches(query)
                 val matchesOpponent = opponentFilter == null ||
                     matchesOpponentFilter(lwc.reviewLog.opponentId, opponentFilter)
                 if (matchesGroup && matchesText && matchesOpponent) {
@@ -107,20 +143,22 @@ class HistoryViewModel(
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** A search finds a review by its card's question or by a concept it tested. */
+    private fun ReviewLogWithCard.matches(query: String): Boolean =
+        cardQuestion.contains(query, ignoreCase = true) || concepts.any { it.name.contains(query, ignoreCase = true) }
+
     private fun matchesOpponentFilter(logOpponentId: Long?, filter: Long): Boolean =
         if (filter == OPPONENT_FILTER_NONE) logOpponentId == null else logOpponentId == filter
 
     fun getReviewLogsForSession(sessionId: Long): Flow<List<ReviewLogWithCard>> =
-        repository.getReviewLogsBySession(sessionId).transform { logs ->
-            val logsWithCards = logs.map { log ->
-                val card = repository.getCardById(log.cardId)
-                ReviewLogWithCard(log, card?.question ?: "Deleted Card")
+        combine(repository.getReviewLogsBySession(sessionId), conceptIndex) { logs, index -> logs to index }
+            .transform { (logs, index) ->
+                val logsWithCards = logs.map { log ->
+                    val card = repository.getCardById(log.cardId)
+                    ReviewLogWithCard(log, card?.question ?: "Deleted Card", index.testedBy(log))
+                }
+                emit(logsWithCards)
             }
-            emit(logsWithCards)
-        }
-
-    fun getReviewLogsForCard(cardId: Long): Flow<List<ReviewLog>> =
-        repository.getReviewLogsByCard(cardId)
 
     fun updateReviewLogNotes(reviewLog: ReviewLog, notes: String, imagePaths: List<String>) {
         viewModelScope.launch {
